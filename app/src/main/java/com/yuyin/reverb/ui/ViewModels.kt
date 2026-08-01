@@ -47,6 +47,14 @@ val DISCOVER_CATEGORIES = listOf(
     Category("comedy", R.string.cat_comedy, 1303),
     Category("health", R.string.cat_health, 1512),
     Category("history", R.string.cat_history, 1487),
+    Category("sports", R.string.cat_sports, 1545),
+    Category("food", R.string.cat_food, 1306),
+    Category("travel", R.string.cat_travel, 1320),
+    Category("anime", R.string.cat_anime, 1499),
+    Category("relationship", R.string.cat_relationship, 1517),
+    Category("arts", R.string.cat_arts, 1301),
+    Category("music", R.string.cat_music, 1310),
+    Category("kids", R.string.cat_kids, 1305),
     Category("tv", R.string.cat_tv, 1309)
 )
 

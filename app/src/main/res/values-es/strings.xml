@@ -46,6 +46,14 @@
     <string name="cat_comedy">Comedia</string>
     <string name="cat_health">Salud</string>
     <string name="cat_history">Historia</string>
+    <string name="cat_sports">Deportes</string>
+    <string name="cat_food">Gastronomía</string>
+    <string name="cat_travel">Viajes</string>
+    <string name="cat_anime">Anime y manga</string>
+    <string name="cat_relationship">Relaciones</string>
+    <string name="cat_arts">Arte</string>
+    <string name="cat_music">Música</string>
+    <string name="cat_kids">Infantil y familia</string>
     <string name="cat_tv">TV y Cine</string>
 
     <string name="filter_all">Todos</string>

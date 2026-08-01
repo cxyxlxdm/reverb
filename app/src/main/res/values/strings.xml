@@ -49,6 +49,14 @@
     <string name="cat_comedy">喜剧</string>
     <string name="cat_health">健康</string>
     <string name="cat_history">历史</string>
+    <string name="cat_sports">体育</string>
+    <string name="cat_food">美食</string>
+    <string name="cat_travel">旅行</string>
+    <string name="cat_anime">动漫</string>
+    <string name="cat_relationship">情感</string>
+    <string name="cat_arts">艺术</string>
+    <string name="cat_music">音乐</string>
+    <string name="cat_kids">亲子</string>
     <string name="cat_tv">影视</string>
 
     <!-- 音阁分类筛选（library genre chips） -->
