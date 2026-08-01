@@ -23,6 +23,8 @@
     <string name="search_tab_shows">Émissions</string>
     <string name="search_empty_episodes">Aucun épisode correspondant</string>
     <string name="search_empty_shows">Aucune émission correspondante</string>
+    <string name="download_delete_title">Supprimer le téléchargement</string>
+    <string name="download_delete_message">Le fichier hors ligne de « %1$s » sera supprimé. Action irréversible.</string>
     <string name="discover_featured">Sélection du jour · pour vous</string>
     <string name="discover_source">Source · %s</string>
     <string name="discover_daily_hot">Top du jour · %s</string>

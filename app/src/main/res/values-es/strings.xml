@@ -23,6 +23,8 @@
     <string name="search_tab_shows">Programas</string>
     <string name="search_empty_episodes">Sin episodios relacionados</string>
     <string name="search_empty_shows">Sin programas relacionados</string>
+    <string name="download_delete_title">Eliminar descarga</string>
+    <string name="download_delete_message">Se eliminará el archivo sin conexión de «%1$s». No se puede deshacer.</string>
     <string name="discover_featured">Selección diaria · para ti</string>
     <string name="discover_source">Fuente · %s</string>
     <string name="discover_daily_hot">Top de hoy · %s</string>

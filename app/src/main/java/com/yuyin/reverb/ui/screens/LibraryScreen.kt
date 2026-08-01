@@ -17,6 +17,7 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -28,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -41,6 +43,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.DownloadStatus
+import com.yuyin.reverb.data.model.DownloadedEpisode
 import com.yuyin.reverb.data.model.Genres
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.playback.DownloadManager
@@ -171,6 +174,8 @@ private fun DownloadsSection() {
     val downloads by container.downloadStore.downloads.collectAsStateWithLifecycle()
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
+    // 删除是不可逆操作，点对号后先弹确认，避免误删
+    var pendingDelete by remember { mutableStateOf<DownloadedEpisode?>(null) }
 
     if (downloads.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_downloads))
@@ -187,9 +192,26 @@ private fun DownloadsSection() {
                 isPlaying = isPlaying,
                 onPlay = { PlayerController.playOrToggle(d.episode) },
                 downloadStatus = DownloadStatus.Completed,
-                onDeleteDownload = { DownloadManager.delete(d.episode.id) }
+                onDeleteDownload = { pendingDelete = d }
             )
         }
+    }
+
+    pendingDelete?.let { d ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.download_delete_title)) },
+            text = { Text(stringResource(R.string.download_delete_message, d.episode.title)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    DownloadManager.delete(d.episode.id)
+                    pendingDelete = null
+                }) { Text(stringResource(R.string.action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
     }
 }
 

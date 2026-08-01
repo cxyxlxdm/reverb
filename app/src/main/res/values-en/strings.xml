@@ -23,6 +23,8 @@
     <string name="search_tab_shows">Shows</string>
     <string name="search_empty_episodes">No matching episodes</string>
     <string name="search_empty_shows">No matching shows</string>
+    <string name="download_delete_title">Delete download</string>
+    <string name="download_delete_message">This removes the offline file for “%1$s”. It can’t be undone.</string>
     <string name="discover_featured">Daily picks · for you</string>
     <string name="discover_source">Source · %s</string>
     <string name="discover_daily_hot">Top today · %s</string>
