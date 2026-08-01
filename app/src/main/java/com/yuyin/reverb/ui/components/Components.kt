@@ -132,7 +132,8 @@ fun EpisodeListItem(
     onPlay: () -> Unit,
     downloadStatus: DownloadStatus? = null,
     onDownload: (() -> Unit)? = null,
-    onDeleteDownload: (() -> Unit)? = null
+    onDeleteDownload: (() -> Unit)? = null,
+    showPodcastTitle: Boolean = false // 搜索结果里同列多个不同播客的单集，需标出所属频道
 ) {
     Row(
         modifier = Modifier
@@ -154,7 +155,29 @@ fun EpisodeListItem(
             val meta = listOf(episode.pubDate.take(16), formatDurationSec(episode.durationSec))
                 .filter { it.isNotBlank() }
                 .joinToString("  ·  ")
-            if (meta.isNotBlank()) {
+            val showTitle = showPodcastTitle && episode.podcastTitle.isNotBlank()
+            // 搜索结果：同一行内 频道名靠左（最多 10 字符，超出前 9 字 + 省略号）、时间靠右
+            // （时间宽度固定，右缘天然整齐）；其它场景保持时间单独左对齐。
+            if (showTitle) {
+                val name = episode.podcastTitle
+                val shown = if (name.length > 10) name.take(9) + "…" else name
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        shown,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        maxLines = 1
+                    )
+                    if (meta.isNotBlank()) {
+                        Text(
+                            meta,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+            } else if (meta.isNotBlank()) {
                 Text(
                     meta,
                     style = MaterialTheme.typography.labelSmall,

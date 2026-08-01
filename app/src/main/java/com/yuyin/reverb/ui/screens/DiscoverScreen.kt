@@ -401,7 +401,8 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
                             episode = ep,
                             isCurrent = current?.id == ep.id,
                             isPlaying = isPlaying,
-                            onPlay = { PlayerController.playOrToggle(ep) }
+                            onPlay = { PlayerController.playOrToggle(ep) },
+                            showPodcastTitle = true
                         )
                     }
                 }
