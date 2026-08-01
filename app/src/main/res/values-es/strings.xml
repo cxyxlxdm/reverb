@@ -1,0 +1,218 @@
+<resources>
+    <string name="app_name">Reverb</string>
+    <string name="slogan">Cada eco perdura.</string>
+
+    <string name="nav_discover">Descubrir</string>
+    <string name="nav_library">Biblioteca</string>
+
+    <string name="action_cancel">Cancelar</string>
+    <string name="action_know">Entendido</string>
+    <string name="action_expand">Más</string>
+    <string name="action_collapse">Menos</string>
+    <string name="action_clear">Borrar</string>
+    <string name="action_delete">Eliminar</string>
+    <string name="action_clear_confirm">Borrar</string>
+    <string name="action_done">Hecho</string>
+    <string name="a11y_back">Atrás</string>
+    <string name="a11y_settings">Ajustes</string>
+    <string name="loading">Escuchando…</string>
+    <string name="size_calculating">Calculando…</string>
+
+    <string name="search_hint">Buscar · o pega una URL RSS</string>
+    <string name="discover_featured">Selección diaria · para ti</string>
+    <string name="discover_source">Fuente · %s</string>
+    <string name="discover_daily_hot">Top de hoy · %s</string>
+    <string name="discover_empty_category">Nada en «%s» — prueba otra categoría</string>
+    <string name="empty_discover">Busca un pódcast y Reverb lo encontrará</string>
+    <string name="load_failed">Sin resultados — prueba otra palabra o más tarde</string>
+    <string name="reorder_title">Reordenar categorías</string>
+    <string name="reorder_hint">Mantén pulsado y arrastra para reordenar</string>
+    <string name="region_short_auto">Auto</string>
+    <string name="source_rss">RSS directo</string>
+
+    <string name="cat_recommend">Para ti</string>
+    <string name="cat_news">Noticias</string>
+    <string name="cat_business">Negocios</string>
+    <string name="cat_tech">Tecnología</string>
+    <string name="cat_culture">Cultura</string>
+    <string name="cat_knowledge">Ciencia</string>
+    <string name="cat_education">Educación</string>
+    <string name="cat_comedy">Comedia</string>
+    <string name="cat_health">Salud</string>
+    <string name="cat_history">Historia</string>
+    <string name="cat_tv">TV y Cine</string>
+
+    <string name="filter_all">Todos</string>
+    <string name="genre_arts">Arte</string>
+    <string name="genre_business">Negocios</string>
+    <string name="genre_comedy">Comedia</string>
+    <string name="genre_education">Educación</string>
+    <string name="genre_fiction">Ficción</string>
+    <string name="genre_government">Gobierno</string>
+    <string name="genre_health">Salud</string>
+    <string name="genre_history">Historia</string>
+    <string name="genre_kids">Niños y familia</string>
+    <string name="genre_leisure">Ocio</string>
+    <string name="genre_music">Música</string>
+    <string name="genre_news">Noticias</string>
+    <string name="genre_religion">Religión</string>
+    <string name="genre_science">Ciencia</string>
+    <string name="genre_society">Cultura</string>
+    <string name="genre_sports">Deportes</string>
+    <string name="genre_tech">Tecnología</string>
+    <string name="genre_truecrime">Crimen real</string>
+    <string name="genre_tv">TV y Cine</string>
+
+    <string name="region_auto">Automática (dispositivo)</string>
+    <string name="region_cn">China continental</string>
+    <string name="region_hk">Hong Kong, China</string>
+    <string name="region_tw">Taiwán, China</string>
+    <string name="region_us">Estados Unidos</string>
+    <string name="region_jp">Japón</string>
+    <string name="region_kr">Corea del Sur</string>
+    <string name="region_gb">Reino Unido</string>
+    <string name="region_sg">Singapur</string>
+    <string name="region_au">Australia</string>
+    <string name="region_ca">Canadá</string>
+    <string name="region_de">Alemania</string>
+
+    <string name="lib_subscriptions">Suscripciones</string>
+    <string name="lib_downloads">Descargas</string>
+    <string name="lib_history">Historial</string>
+    <string name="empty_library">Biblioteca vacía — suscríbete desde Descubrir</string>
+    <string name="empty_downloads">Sin descargas. Toca el botón de descarga de un episodio para escucharlo sin conexión</string>
+    <string name="empty_history">Sin historial aún — reproduce un episodio</string>
+
+    <string name="action_subscribe">Suscribirse</string>
+    <string name="action_subscribed">Suscrito</string>
+    <string name="paid_badge">Programa de pago</string>
+    <string name="paid_tag">De pago</string>
+    <string name="funding_default">Membresía / Apoyo</string>
+    <string name="episode_count">%d episodios</string>
+
+    <string name="player_not_playing">Nada en reproducción</string>
+    <string name="shownotes">Notas del episodio</string>
+    <string name="shownotes_empty">Sin notas</string>
+    <string name="sleep">Temporizador</string>
+    <string name="sleep_current">Episodio</string>
+    <string name="sleep_end_of_episode">Fin del episodio</string>
+    <string name="sleep_off">Desactivado</string>
+    <string name="sleep_minutes">%d min</string>
+    <string name="a11y_play">Reproducir</string>
+    <string name="a11y_pause">Pausa</string>
+    <string name="a11y_collapse_player">Contraer</string>
+    <string name="a11y_skip_back">Retroceder %d s</string>
+    <string name="a11y_skip_fwd">Avanzar %d s</string>
+    <string name="a11y_downloaded">Descargado — toca para eliminar</string>
+    <string name="a11y_download">Descargar</string>
+
+    <string name="settings">Ajustes</string>
+    <string name="sec_content">Contenido</string>
+    <string name="sec_appearance">Apariencia</string>
+    <string name="sec_playback">Reproducción y descargas</string>
+    <string name="sec_reminder">Notificaciones</string>
+    <string name="sec_storage">Almacenamiento</string>
+    <string name="sec_backup">Suscripciones y copia</string>
+    <string name="sec_about">Acerca de</string>
+
+    <string name="set_region">Región</string>
+    <string name="set_export_opml">Exportar suscripciones (OPML)</string>
+    <string name="set_export_opml_sub">Formato estándar, importable por otras apps</string>
+    <string name="set_import_opml">Importar suscripciones (OPML)</string>
+    <string name="set_import_opml_sub">Importar un OPML de otra app</string>
+    <string name="set_full_backup">Copia completa</string>
+    <string name="set_full_backup_sub">Suscripciones · descargas · historial · ajustes</string>
+    <string name="set_restore">Restaurar</string>
+    <string name="set_restore_sub">Importar desde un archivo de copia de Reverb</string>
+
+    <string name="set_theme">Modo oscuro</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Claro</string>
+    <string name="theme_dark">Oscuro</string>
+    <string name="set_font">Tamaño del texto</string>
+    <string name="font_small">Pequeño</string>
+    <string name="font_normal">Estándar</string>
+    <string name="font_large">Grande</string>
+    <string name="font_xlarge">Muy grande</string>
+    <string name="set_accent">Color de acento</string>
+    <string name="accent_celadon">Celadón</string>
+    <string name="accent_blue">Índigo</string>
+    <string name="accent_red">Carmesí</string>
+    <string name="accent_green">Bambú</string>
+    <string name="set_language">Idioma</string>
+    <string name="lang_system">Sistema</string>
+
+    <string name="set_default_speed">Velocidad predeterminada</string>
+    <string name="set_skip_back">Retroceder</string>
+    <string name="set_skip_fwd">Avanzar</string>
+    <string name="unit_seconds">%d s</string>
+    <string name="set_wifi_only">Descargar solo con Wi-Fi</string>
+    <string name="set_wifi_only_sub">Desactívalo para permitir datos móviles</string>
+    <string name="set_updates">Nuevos episodios</string>
+    <string name="set_updates_sub">Avisarme cuando haya un nuevo episodio</string>
+
+    <string name="set_clear_cache">Borrar caché</string>
+    <string name="set_clear_cache_sub">Listas e imágenes · %s</string>
+    <string name="set_clear_downloads">Borrar descargas</string>
+    <string name="set_clear_downloads_sub">Audio descargado · %s</string>
+    <string name="set_clear_history">Borrar historial</string>
+
+    <string name="set_about">Acerca de Reverb</string>
+    <string name="set_licenses">Licencias de código abierto</string>
+    <string name="set_version">Versión</string>
+    <string name="version_name">1.0.0</string>
+
+    <string name="dlg_region_title">Elegir región</string>
+    <string name="dlg_theme_title">Modo oscuro</string>
+    <string name="dlg_font_title">Tamaño del texto</string>
+    <string name="dlg_accent_title">Color de acento</string>
+    <string name="dlg_speed_title">Velocidad predeterminada</string>
+    <string name="dlg_skip_back_title">Retroceder</string>
+    <string name="dlg_skip_fwd_title">Avanzar</string>
+    <string name="dlg_language_title">Idioma</string>
+
+    <string name="confirm_clear_cache">Borra listas y caché de imágenes. Las suscripciones y descargas no se ven afectadas.</string>
+    <string name="confirm_clear_downloads">Elimina todos los audios descargados. No se puede deshacer.</string>
+    <string name="confirm_clear_history">Borra todo el historial y las posiciones de reanudación.</string>
+
+    <string name="opml_importing_title">Importando</string>
+    <string name="opml_importing_msg">Analizando OPML y obteniendo suscripciones…</string>
+    <string name="opml_done_title">Importación completa</string>
+    <string name="opml_done_n">%d suscripciones importadas</string>
+    <string name="opml_done_none">No se encontraron suscripciones</string>
+
+    <string name="backup_export_title">Crear copia</string>
+    <string name="backup_confirm">Copia</string>
+    <string name="backup_restore_title">Restaurar</string>
+    <string name="restore_confirm">Restaurar</string>
+    <string name="backup_row_subscriptions">Suscripciones</string>
+    <string name="backup_row_downloads">Descargas (solo enlaces)</string>
+    <string name="backup_row_history">Historial</string>
+    <string name="backup_row_settings">Ajustes</string>
+    <string name="backup_done">Copia completada</string>
+    <string name="backup_failed">Error en la copia</string>
+    <string name="restore_done">Restauración completada</string>
+    <string name="backup_invalid">Archivo de copia no reconocido</string>
+
+    <string name="about_app">Reverb · 余音</string>
+    <string name="about_version">Versión 1.0.0</string>
+    <string name="about_h_what">Qué es esto</string>
+    <string name="about_p_what">Reverb es un cliente de pódcast ligero con estética de tinta china. Descubre, suscríbete, descarga sin conexión y reanuda cuando quieras — centrado en escuchar.</string>
+    <string name="about_h_features">Funciones</string>
+    <string name="about_p_features">· Descubrir: listas diarias por región y categoría; reordenar y deslizar\n· Buscar: por nombre o URL RSS\n· Biblioteca: Suscripciones, Descargas e Historial\n· Sin conexión: cachear mientras escuchas, solo Wi-Fi opcional\n· Reproducción: velocidad, saltos, temporizador, reanudar, controles en segundo plano\n· Notas del episodio: desliza en el reproductor\n· Avisos de nuevos episodios\n· Apariencia: oscuro/claro/sistema, tamaño, color, idiomas</string>
+    <string name="about_h_philosophy">Diseño</string>
+    <string name="about_p_philosophy">La estética se inspira en la tinta, el celadón y el oro de las vigas — el nombre y el icono evocan «un eco girando entre las vigas».\n\nLas fuentes son totalmente gratuitas, sin cuenta ni clave API: busca en directorios públicos (Apple, fyyd, gpodder) y siempre vuelve al RSS original del editor para reproducir el audio — sin problemas de derechos, coste cero.\n\nEn cuanto a privacidad, suscripciones, historial y descargas solo viven en tu dispositivo — nunca se suben ni se rastrean.</string>
+
+    <string name="licenses_title">Licencias de código abierto</string>
+    <string name="licenses_intro">Reverb usa el siguiente software de código abierto, con agradecimiento.</string>
+    <string name="licenses_h_libs">Bibliotecas</string>
+    <string name="licenses_h_sources">Fuentes de datos</string>
+    <string name="licenses_sources_note">Directorios/API públicos, usados solo para búsqueda y listas; el audio siempre proviene del RSS original del editor. La app no lo aloja ni lo redirige.</string>
+
+    <string name="notif_channel_name">Nuevos episodios</string>
+    <string name="notif_channel_desc">Avisar cuando una suscripción tenga un nuevo episodio</string>
+    <string name="notif_title">Reverb · Nuevos episodios</string>
+    <string name="notif_one">«%s» tiene un nuevo episodio</string>
+    <string name="notif_multi">%1$d programas actualizados: %2$s</string>
+    <string name="notif_multi_more">y más</string>
+</resources>

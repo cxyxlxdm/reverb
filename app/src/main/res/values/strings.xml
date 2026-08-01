@@ -1,0 +1,234 @@
+<resources>
+    <string name="app_name">余音</string>
+    <string name="slogan">余音绕梁，隽永悠长</string>
+
+    <string name="nav_discover">发现</string>
+    <string name="nav_library">音阁</string>
+
+    <!-- 通用 -->
+    <string name="action_cancel">取消</string>
+    <string name="action_know">知道了</string>
+    <string name="action_expand">展开</string>
+    <string name="action_collapse">收起</string>
+    <string name="action_clear">清除</string>
+    <string name="action_delete">删除</string>
+    <string name="action_clear_confirm">清空</string>
+    <string name="action_done">完成</string>
+    <string name="a11y_back">返回</string>
+    <string name="a11y_settings">设置</string>
+    <string name="loading">正在循声…</string>
+    <string name="size_calculating">计算中…</string>
+
+    <!-- 发现 -->
+    <string name="search_hint">搜索播客 · 或粘贴 RSS 地址</string>
+    <string name="discover_featured">每日热门 · 循声而来</string>
+    <string name="discover_source">来源 · %s</string>
+    <string name="discover_daily_hot">每日热门 · %s</string>
+    <string name="discover_empty_category">「%s」暂无内容，换个分类看看</string>
+    <string name="empty_discover">搜索你想听的播客，余音为你循声而来</string>
+    <string name="load_failed">没能取到声音，换个词或稍后再试</string>
+    <string name="reorder_title">自定义分类排序</string>
+    <string name="reorder_hint">长按拖动排序</string>
+    <string name="region_short_auto">自动</string>
+    <string name="source_rss">RSS 直连</string>
+
+    <!-- 分类 -->
+    <string name="cat_recommend">推荐</string>
+    <string name="cat_news">新闻</string>
+    <string name="cat_business">商业</string>
+    <string name="cat_tech">科技</string>
+    <string name="cat_culture">文化</string>
+    <string name="cat_knowledge">知识</string>
+    <string name="cat_education">教育</string>
+    <string name="cat_comedy">喜剧</string>
+    <string name="cat_health">健康</string>
+    <string name="cat_history">历史</string>
+    <string name="cat_tv">影视</string>
+
+    <!-- 音阁分类筛选（library genre chips） -->
+    <string name="filter_all">全部</string>
+    <string name="genre_arts">艺术</string>
+    <string name="genre_business">商业</string>
+    <string name="genre_comedy">喜剧</string>
+    <string name="genre_education">教育</string>
+    <string name="genre_fiction">小说</string>
+    <string name="genre_government">时政</string>
+    <string name="genre_health">健康</string>
+    <string name="genre_history">历史</string>
+    <string name="genre_kids">亲子</string>
+    <string name="genre_leisure">休闲</string>
+    <string name="genre_music">音乐</string>
+    <string name="genre_news">新闻</string>
+    <string name="genre_religion">宗教</string>
+    <string name="genre_science">知识</string>
+    <string name="genre_society">文化</string>
+    <string name="genre_sports">体育</string>
+    <string name="genre_tech">科技</string>
+    <string name="genre_truecrime">犯罪纪实</string>
+    <string name="genre_tv">影视</string>
+
+    <!-- 地区 -->
+    <string name="region_auto">自动（跟随设备）</string>
+    <string name="region_cn">中国大陆</string>
+    <string name="region_hk">中国香港</string>
+    <string name="region_tw">中国台湾</string>
+    <string name="region_us">美国</string>
+    <string name="region_jp">日本</string>
+    <string name="region_kr">韩国</string>
+    <string name="region_gb">英国</string>
+    <string name="region_sg">新加坡</string>
+    <string name="region_au">澳大利亚</string>
+    <string name="region_ca">加拿大</string>
+    <string name="region_de">德国</string>
+
+    <!-- 音阁 -->
+    <string name="lib_subscriptions">订阅</string>
+    <string name="lib_downloads">下载</string>
+    <string name="lib_history">历史</string>
+    <string name="empty_library">音阁尚空，先去「发现」订阅几档好节目</string>
+    <string name="empty_downloads">还没有下载。在节目详情里点下载按钮，即可离线收听</string>
+    <string name="empty_history">还没有收听记录，去听一集吧</string>
+
+    <!-- 播客详情 -->
+    <string name="action_subscribe">订阅</string>
+    <string name="action_subscribed">已订阅</string>
+    <string name="paid_badge">付费节目</string>
+    <string name="paid_tag">付费</string>
+    <string name="funding_default">会员 / 支持</string>
+    <string name="episode_count">共 %d 集</string>
+
+    <!-- 播放页 -->
+    <string name="player_not_playing">未在播放</string>
+    <string name="shownotes">节目笔记</string>
+    <string name="shownotes_empty">暂无节目笔记</string>
+    <string name="sleep">睡眠</string>
+    <string name="sleep_current">本集</string>
+    <string name="sleep_end_of_episode">本集结束</string>
+    <string name="sleep_off">关闭</string>
+    <string name="sleep_minutes">%d 分钟</string>
+    <string name="a11y_play">播放</string>
+    <string name="a11y_pause">暂停</string>
+    <string name="a11y_collapse_player">收起</string>
+    <string name="a11y_skip_back">快退 %d 秒</string>
+    <string name="a11y_skip_fwd">快进 %d 秒</string>
+    <string name="a11y_downloaded">已下载，点击删除</string>
+    <string name="a11y_download">下载</string>
+
+    <!-- 设置 -->
+    <string name="settings">设置</string>
+    <string name="sec_content">内容</string>
+    <string name="sec_appearance">外观</string>
+    <string name="sec_playback">播放与下载</string>
+    <string name="sec_reminder">提醒</string>
+    <string name="sec_storage">存储</string>
+    <string name="sec_backup">订阅与备份</string>
+    <string name="sec_about">关于</string>
+
+    <string name="set_region">地区</string>
+    <string name="set_export_opml">导出订阅（OPML）</string>
+    <string name="set_export_opml_sub">标准格式，可导入其他播客 App</string>
+    <string name="set_import_opml">导入订阅（OPML）</string>
+    <string name="set_import_opml_sub">从其他 App 的 OPML 导入</string>
+    <string name="set_full_backup">完整备份</string>
+    <string name="set_full_backup_sub">订阅 · 下载 · 历史 · 设置，用于换机 / 备份</string>
+    <string name="set_restore">恢复备份</string>
+    <string name="set_restore_sub">从余音备份文件导入</string>
+
+    <string name="set_theme">深色模式</string>
+    <string name="theme_system">跟随系统</string>
+    <string name="theme_light">浅色</string>
+    <string name="theme_dark">深色</string>
+    <string name="set_font">字号</string>
+    <string name="font_small">小</string>
+    <string name="font_normal">标准</string>
+    <string name="font_large">大</string>
+    <string name="font_xlarge">特大</string>
+    <string name="set_accent">主题配色</string>
+    <string name="accent_celadon">青瓷</string>
+    <string name="accent_blue">黛蓝</string>
+    <string name="accent_red">绯红</string>
+    <string name="accent_green">竹青</string>
+    <string name="set_language">语言</string>
+    <string name="lang_system">跟随系统</string>
+
+    <string name="set_default_speed">默认播放速度</string>
+    <string name="set_skip_back">快退秒数</string>
+    <string name="set_skip_fwd">快进秒数</string>
+    <string name="unit_seconds">%d 秒</string>
+    <string name="set_wifi_only">仅在 Wi-Fi 下载</string>
+    <string name="set_wifi_only_sub">关闭后蜂窝网络也允许下载</string>
+    <string name="set_updates">订阅更新提醒</string>
+    <string name="set_updates_sub">订阅有新一期时通知你</string>
+
+    <string name="set_clear_cache">清除缓存</string>
+    <string name="set_clear_cache_sub">热门榜与图片缓存 · %s</string>
+    <string name="set_clear_downloads">清除下载</string>
+    <string name="set_clear_downloads_sub">已下载音频 · %s</string>
+    <string name="set_clear_history">清空播放历史</string>
+
+    <string name="set_about">关于余音</string>
+    <string name="set_licenses">开源许可</string>
+    <string name="set_version">版本</string>
+    <string name="version_name">1.0.0</string>
+
+    <!-- 设置对话框标题 -->
+    <string name="dlg_region_title">选择地区</string>
+    <string name="dlg_theme_title">深色模式</string>
+    <string name="dlg_font_title">字号</string>
+    <string name="dlg_accent_title">主题配色</string>
+    <string name="dlg_speed_title">默认播放速度</string>
+    <string name="dlg_skip_back_title">快退秒数</string>
+    <string name="dlg_skip_fwd_title">快进秒数</string>
+    <string name="dlg_language_title">语言</string>
+
+    <!-- 清理确认 -->
+    <string name="confirm_clear_cache">将清除热门榜与图片缓存，不影响订阅与下载。</string>
+    <string name="confirm_clear_downloads">将删除全部已下载的音频文件，无法恢复。</string>
+    <string name="confirm_clear_history">将清空全部收听记录与续播位置。</string>
+
+    <!-- OPML -->
+    <string name="opml_importing_title">正在导入</string>
+    <string name="opml_importing_msg">正在解析 OPML 并抓取订阅…</string>
+    <string name="opml_done_title">导入完成</string>
+    <string name="opml_done_n">已导入 %d 个订阅</string>
+    <string name="opml_done_none">未找到可导入的订阅</string>
+
+    <!-- 备份 -->
+    <string name="backup_export_title">备份数据</string>
+    <string name="backup_confirm">备份</string>
+    <string name="backup_restore_title">恢复数据</string>
+    <string name="restore_confirm">恢复</string>
+    <string name="backup_row_subscriptions">订阅</string>
+    <string name="backup_row_downloads">下载（仅节目链接）</string>
+    <string name="backup_row_history">历史</string>
+    <string name="backup_row_settings">设置</string>
+    <string name="backup_done">备份完成</string>
+    <string name="backup_failed">备份失败</string>
+    <string name="restore_done">恢复完成</string>
+    <string name="backup_invalid">无法识别的备份文件</string>
+
+    <!-- 关于 -->
+    <string name="about_app">余音 · Reverb</string>
+    <string name="about_version">版本 1.0.0</string>
+    <string name="about_h_what">这是什么</string>
+    <string name="about_p_what">余音是一款轻量、古风质感的播客客户端。发现好节目、订阅收听、离线下载、随时续播，专注「听」本身。</string>
+    <string name="about_h_features">主要功能</string>
+    <string name="about_p_features">· 发现：按地区与分类浏览每日热门，可自定义分类排序、横滑切换\n· 搜索：按名字或直接粘贴 RSS 地址\n· 订阅与「音阁」：订阅、下载、历史三栏管理\n· 离线下载：边听边缓存，可仅 Wi-Fi 下载\n· 播放：倍速、快进快退、睡眠定时、自动续播、后台与锁屏控制\n· 节目笔记：播放页横滑查看\n· 订阅更新提醒：有新一期时通知\n· 外观：深色/浅色/跟随系统、字号、主题配色、多语言</string>
+    <string name="about_h_philosophy">设计理念</string>
+    <string name="about_p_philosophy">美学上取「水墨 + 青瓷 + 梁金」的古风底色，名字与图标呼应「余音绕梁」——声波环绕横梁，余韵不散。\n\n取源上坚持全链路免费、无需登录、无需任何 API Key：以 Apple、fyyd、gpodder 等公开目录做检索，最终始终回到发布方自己的 RSS，直接流式播放原始音频——版权干净、成本为零。\n\n隐私上，订阅、历史、下载全部只存在你的设备本地，不上传、不追踪。</string>
+
+    <!-- 开源许可 -->
+    <string name="licenses_title">开源许可</string>
+    <string name="licenses_intro">余音使用了以下开源软件，谨致谢意。</string>
+    <string name="licenses_h_libs">开源库</string>
+    <string name="licenses_h_sources">数据来源</string>
+    <string name="licenses_sources_note">以下为公开的播客目录/检索接口，仅用于检索与榜单；音频始终来自发布方原始 RSS，本应用不转存、不代理。</string>
+
+    <!-- 通知 -->
+    <string name="notif_channel_name">订阅更新</string>
+    <string name="notif_channel_desc">订阅的播客有新一期时提醒</string>
+    <string name="notif_title">余音 · 订阅更新</string>
+    <string name="notif_one">《%s》更新了新一期</string>
+    <string name="notif_multi">%1$d 档播客有更新：%2$s</string>
+    <string name="notif_multi_more">等</string>
+</resources>

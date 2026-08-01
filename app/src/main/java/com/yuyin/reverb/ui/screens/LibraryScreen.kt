@@ -1,0 +1,212 @@
+package com.yuyin.reverb.ui.screens
+
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.yuyin.reverb.R
+import com.yuyin.reverb.ReverbApp
+import com.yuyin.reverb.data.model.DownloadStatus
+import com.yuyin.reverb.data.model.Genres
+import com.yuyin.reverb.data.model.Podcast
+import com.yuyin.reverb.playback.DownloadManager
+import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.PodcastListItem
+import kotlinx.coroutines.launch
+
+private const val ALL = "__all__"
+
+@Composable
+fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
+    var section by remember { mutableIntStateOf(0) }
+    val sections = listOf(
+        stringResource(R.string.lib_subscriptions),
+        stringResource(R.string.lib_downloads),
+        stringResource(R.string.lib_history)
+    )
+
+    Column(Modifier.fillMaxSize()) {
+        ScreenHeader(
+            title = stringResource(R.string.nav_library),
+            action = {
+                IconButton(onClick = onOpenSettings) {
+                    Icon(Icons.Rounded.Settings, contentDescription = "设置", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        )
+
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
+            itemsIndexed(sections) { i, s ->
+                FilterChip(
+                    selected = section == i,
+                    onClick = { section = i },
+                    label = { Text(s) },
+                    modifier = Modifier.padding(end = 8.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                    )
+                )
+            }
+        }
+
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            when (section) {
+                0 -> SubscriptionsSection(onOpen)
+                1 -> DownloadsSection()
+                else -> HistorySection()
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SubscriptionsSection(onOpen: (Podcast) -> Unit) {
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
+    val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+
+    if (subs.isEmpty()) {
+        EmptyHint(stringResource(R.string.empty_library))
+        return
+    }
+
+    val genres = subs.map { Genres.key(it.genre) }.filter { it.isNotBlank() }.distinct()
+    val pages = listOf(ALL) + genres
+    val pagerState = rememberPagerState(pageCount = { pages.size })
+    val chipsState = rememberLazyListState()
+    val selected = pagerState.currentPage.coerceIn(0, pages.lastIndex)
+
+    Column(Modifier.fillMaxSize()) {
+        if (pages.size > 1) {
+            LaunchedEffect(selected) { chipsState.animateScrollToItem(selected) }
+            LazyRow(
+                state = chipsState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
+            ) {
+                itemsIndexed(pages) { i, g ->
+                    FilterChip(
+                        selected = i == selected,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
+                        label = { Text(if (g == ALL) stringResource(R.string.filter_all) else Genres.labelRes(g)?.let { stringResource(it) } ?: g) },
+                        modifier = Modifier.padding(end = 8.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        )
+                    )
+                }
+            }
+        }
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth().weight(1f)
+        ) { page ->
+            val g = pages[page]
+            val shown = if (g == ALL) subs else subs.filter { Genres.key(it.genre) == g }
+            LazyColumn(
+                Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = 24.dp)
+            ) {
+                items(shown) { p -> PodcastListItem(p) { onOpen(p) } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DownloadsSection() {
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
+    val downloads by container.downloadStore.downloads.collectAsStateWithLifecycle()
+    val current by PlayerController.current.collectAsStateWithLifecycle()
+    val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
+
+    if (downloads.isEmpty()) {
+        EmptyHint(stringResource(R.string.empty_downloads))
+        return
+    }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        items(downloads) { d ->
+            EpisodeListItem(
+                episode = d.episode,
+                isCurrent = current?.id == d.episode.id,
+                isPlaying = isPlaying,
+                onPlay = { PlayerController.playOrToggle(d.episode) },
+                downloadStatus = DownloadStatus.Completed,
+                onDeleteDownload = { DownloadManager.delete(d.episode.id) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun HistorySection() {
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
+    val history by container.historyStore.history.collectAsStateWithLifecycle()
+    val current by PlayerController.current.collectAsStateWithLifecycle()
+    val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
+
+    if (history.isEmpty()) {
+        EmptyHint(stringResource(R.string.empty_history))
+        return
+    }
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.End
+        ) {
+            TextButton(onClick = { container.historyStore.clear() }) { Text(stringResource(R.string.action_clear_confirm)) }
+        }
+        LazyColumn(
+            Modifier.fillMaxWidth().weight(1f),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            items(history) { h ->
+                EpisodeListItem(
+                    episode = h.episode,
+                    isCurrent = current?.id == h.episode.id,
+                    isPlaying = isPlaying,
+                    onPlay = { PlayerController.playOrToggle(h.episode) }
+                )
+            }
+        }
+    }
+}
