@@ -54,7 +54,7 @@ private data class TopDest(val route: String, val label: String, val icon: Image
  * 跳转这些页面时整个 tab 外壳作为一个整体转场，不存在底部栏占位变化 → 无上下闪动。
  */
 @Composable
-fun ReverbRoot() {
+fun ReverbRoot(openPlayerSignal: Int = 0) {
     val rootNav = rememberNavController()
 
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -62,6 +62,13 @@ fun ReverbRoot() {
             ActivityResultContracts.RequestPermission()
         ) { }
         LaunchedEffect(Unit) { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }
+    }
+
+    // 通知栏点击进来（openPlayerSignal 自增）时打开播放页
+    LaunchedEffect(openPlayerSignal) {
+        if (openPlayerSignal > 0 && PlayerController.current.value != null) {
+            rootNav.navigate("player") { launchSingleTop = true }
+        }
     }
 
     NavHost(navController = rootNav, startDestination = "main") {
