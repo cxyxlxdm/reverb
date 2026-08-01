@@ -19,6 +19,10 @@
     <string name="size_calculating">Calculating…</string>
 
     <string name="search_hint">Search podcasts · or paste an RSS URL</string>
+    <string name="search_tab_episodes">Episodes</string>
+    <string name="search_tab_shows">Shows</string>
+    <string name="search_empty_episodes">No matching episodes</string>
+    <string name="search_empty_shows">No matching shows</string>
     <string name="discover_featured">Daily picks · for you</string>
     <string name="discover_source">Source · %s</string>
     <string name="discover_daily_hot">Top today · %s</string>

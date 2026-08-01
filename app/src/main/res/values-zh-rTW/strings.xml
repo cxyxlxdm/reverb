@@ -19,6 +19,10 @@
     <string name="size_calculating">計算中…</string>
 
     <string name="search_hint">搜尋播客 · 或貼上 RSS 位址</string>
+    <string name="search_tab_episodes">單集</string>
+    <string name="search_tab_shows">節目</string>
+    <string name="search_empty_episodes">沒有找到相關單集</string>
+    <string name="search_empty_shows">沒有找到相關節目</string>
     <string name="discover_featured">每日熱門 · 循聲而來</string>
     <string name="discover_source">來源 · %s</string>
     <string name="discover_daily_hot">每日熱門 · %s</string>

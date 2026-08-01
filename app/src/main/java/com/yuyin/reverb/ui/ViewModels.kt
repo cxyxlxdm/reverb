@@ -16,6 +16,8 @@ import com.yuyin.reverb.data.local.CategoryStore
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.data.remote.PodcastRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 // ---------- 发现（检索）----------
@@ -24,7 +26,11 @@ sealed interface DiscoverState {
     data object Idle : DiscoverState
     data object Loading : DiscoverState
     data object Empty : DiscoverState
-    data class Success(val podcasts: List<Podcast>, val source: String) : DiscoverState
+    data class Success(
+        val podcasts: List<Podcast>,
+        val episodes: List<Episode>,
+        val source: String
+    ) : DiscoverState
 }
 
 /** 发现页分类。key 为稳定标识(用于持久化/身份)，labelRes 为本地化显示名，genreId 对应 Apple 分类。 */
@@ -117,11 +123,19 @@ class DiscoverViewModel(
         }
         viewModelScope.launch {
             state = DiscoverState.Loading
-            val outcome = repo.search(q, region)
-            state = if (outcome.podcasts.isEmpty()) {
+            // 频道与单集并行检索，切换分段时不再重复请求
+            val outcome: PodcastRepository.SearchOutcome
+            val episodes: List<Episode>
+            coroutineScope {
+                val podsJob = async { repo.search(q, region) }
+                val epsJob = async { repo.searchEpisodes(q, region) }
+                outcome = podsJob.await()
+                episodes = epsJob.await()
+            }
+            state = if (outcome.podcasts.isEmpty() && episodes.isEmpty()) {
                 DiscoverState.Empty
             } else {
-                DiscoverState.Success(outcome.podcasts, outcome.sourceLabel)
+                DiscoverState.Success(outcome.podcasts, episodes, outcome.sourceLabel)
             }
         }
     }

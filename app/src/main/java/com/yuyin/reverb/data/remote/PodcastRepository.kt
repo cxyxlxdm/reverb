@@ -1,5 +1,6 @@
 package com.yuyin.reverb.data.remote
 
+import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.FeedResult
 import com.yuyin.reverb.data.model.Podcast
 
@@ -49,6 +50,13 @@ class PodcastRepository(
         gpodder.search(q).let { if (it.isNotEmpty()) return SearchOutcome(it, "gpodder.net") }
 
         return SearchOutcome(emptyList(), "", failed = true)
+    }
+
+    /** 按关键字检索单集（可直接播放）。URL 输入直接指向频道，不参与单集检索。 */
+    suspend fun searchEpisodes(query: String, region: String = ""): List<Episode> {
+        val q = query.trim()
+        if (q.isBlank() || q.startsWith("http", true)) return emptyList()
+        return itunes.searchEpisodes(q, region)
     }
 
     // 发现页热门推荐：磁盘缓存(按 地区+分类) + 每日刷新。cachedPopular 立即返回上次结果，refreshPopular 走网络并回写。

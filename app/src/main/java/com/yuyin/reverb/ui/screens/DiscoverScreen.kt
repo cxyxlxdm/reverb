@@ -4,6 +4,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -82,6 +83,8 @@ import com.yuyin.reverb.ui.Category
 import com.yuyin.reverb.ui.DiscoverState
 import com.yuyin.reverb.ui.DiscoverViewModel
 import com.yuyin.reverb.ui.REGION_OPTIONS
+import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.PodcastListItem
 import com.yuyin.reverb.ui.discoverViewModel
 import java.util.Locale
@@ -174,11 +177,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             when (val s = vm.state) {
                 DiscoverState.Loading -> LoadingBox()
                 DiscoverState.Empty -> EmptyHint(stringResource(R.string.load_failed))
-                is DiscoverState.Success -> PodcastResultList(
-                    header = stringResource(R.string.discover_source, s.source),
-                    podcasts = s.podcasts,
-                    onOpen = onOpen
-                )
+                is DiscoverState.Success -> SearchResults(s = s, onOpen = onOpen)
                 DiscoverState.Idle -> Unit
             }
         }
@@ -362,6 +361,75 @@ private fun ReorderCategoriesDialog(
         },
         confirmButton = { TextButton(onClick = { onSave(items.toList()) }) { Text(stringResource(R.string.action_done)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
+    )
+}
+
+/** 搜索结果：单集 / 节目 两个分段。单集点击即播，节目点进详情。 */
+@Composable
+private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
+    val current by PlayerController.current.collectAsStateWithLifecycle()
+    val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
+    // 默认停在「单集」；若本次无单集则落到「节目」，避免进来一片空白
+    var tab by remember(s) { mutableIntStateOf(if (s.episodes.isNotEmpty()) 0 else 1) }
+
+    Column(Modifier.fillMaxSize()) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            SearchTabChip(
+                selected = tab == 0,
+                text = "${stringResource(R.string.search_tab_episodes)} (${s.episodes.size})",
+                onClick = { tab = 0 }
+            )
+            SearchTabChip(
+                selected = tab == 1,
+                text = "${stringResource(R.string.search_tab_shows)} (${s.podcasts.size})",
+                onClick = { tab = 1 }
+            )
+        }
+        if (tab == 0) {
+            if (s.episodes.isEmpty()) {
+                EmptyHint(stringResource(R.string.search_empty_episodes))
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 24.dp)
+                ) {
+                    items(s.episodes) { ep ->
+                        EpisodeListItem(
+                            episode = ep,
+                            isCurrent = current?.id == ep.id,
+                            isPlaying = isPlaying,
+                            onPlay = { PlayerController.playOrToggle(ep) }
+                        )
+                    }
+                }
+            }
+        } else {
+            if (s.podcasts.isEmpty()) {
+                EmptyHint(stringResource(R.string.search_empty_shows))
+            } else {
+                PodcastResultList(
+                    header = stringResource(R.string.discover_source, s.source),
+                    podcasts = s.podcasts,
+                    onOpen = onOpen
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SearchTabChip(selected: Boolean, text: String, onClick: () -> Unit) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(text) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+        )
     )
 }
 

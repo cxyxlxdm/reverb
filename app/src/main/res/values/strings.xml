@@ -21,6 +21,10 @@
 
     <!-- 发现 -->
     <string name="search_hint">搜索播客 · 或粘贴 RSS 地址</string>
+    <string name="search_tab_episodes">单集</string>
+    <string name="search_tab_shows">节目</string>
+    <string name="search_empty_episodes">没有找到相关单集</string>
+    <string name="search_empty_shows">没有找到相关节目</string>
     <string name="discover_featured">每日热门 · 循声而来</string>
     <string name="discover_source">来源 · %s</string>
     <string name="discover_daily_hot">每日热门 · %s</string>

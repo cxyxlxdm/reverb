@@ -1,5 +1,6 @@
 package com.yuyin.reverb.data.remote
 
+import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.Genres
 import com.yuyin.reverb.data.model.Podcast
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,17 @@ class ITunesSource(private val client: OkHttpClient) {
         val c = if (country.isNotBlank()) "&country=$country" else ""
         val url = "https://itunes.apple.com/search?media=podcast&term=${enc(term)}$c&limit=$limit"
         parsePodcasts(get(url))
+    }
+
+    /**
+     * 单集检索：entity=podcastEpisode，结果直接携带音频直链(episodeUrl)与所属频道，
+     * 可直接构造 [Episode] 播放，无需再解析该频道 RSS。
+     */
+    suspend fun searchEpisodes(term: String, country: String = "", limit: Int = 50): List<Episode> = withContext(Dispatchers.IO) {
+        if (term.isBlank()) return@withContext emptyList()
+        val c = if (country.isNotBlank()) "&country=$country" else ""
+        val url = "https://itunes.apple.com/search?media=podcast&entity=podcastEpisode&term=${enc(term)}$c&limit=$limit"
+        parseEpisodes(get(url))
     }
 
     suspend fun lookup(collectionId: String): Podcast? = withContext(Dispatchers.IO) {
@@ -74,6 +86,53 @@ class ITunesSource(private val client: OkHttpClient) {
         } catch (e: Exception) {
             emptyList()
         }
+    }
+
+    private fun parseEpisodes(json: String?): List<Episode> {
+        if (json.isNullOrBlank()) return emptyList()
+        return try {
+            val arr = JSONObject(json).optJSONArray("results") ?: return emptyList()
+            val out = ArrayList<Episode>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                // 结果里首条常是 collection(频道)包装，只取真正的单集
+                val isEpisode = o.optString("wrapperType") == "podcastEpisode" ||
+                    o.optString("kind") == "podcast-episode"
+                if (!isEpisode) continue
+                val audio = o.optString("episodeUrl").ifBlank { o.optString("previewUrl") }
+                if (audio.isBlank()) continue
+                val durMs = o.optLong("trackTimeMillis", 0L)
+                out.add(
+                    Episode(
+                        id = o.optString("trackId").ifBlank { audio },
+                        title = o.optString("trackName"),
+                        description = stripHtml(o.optString("description")),
+                        audioUrl = audio,
+                        artworkUrl = o.optString("artworkUrl600")
+                            .ifBlank { o.optString("artworkUrl160") }
+                            .ifBlank { o.optString("artworkUrl100") },
+                        podcastTitle = o.optString("collectionName"),
+                        durationSec = if (durMs > 0) durMs / 1000 else 0,
+                        pubDate = o.optString("releaseDate").take(10)
+                    )
+                )
+            }
+            out
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /** iTunes 单集简介可能夹带简单 HTML，去标签后展示到播放页 shownotes。 */
+    private fun stripHtml(s: String): String {
+        if (s.isBlank()) return ""
+        return s.replace(Regex("(?i)<br\\s*/?>"), "\n")
+            .replace(Regex("(?i)</p>"), "\n\n")
+            .replace(Regex("<[^>]*>"), "")
+            .replace("&nbsp;", " ").replace("&amp;", "&")
+            .replace("&lt;", "<").replace("&gt;", ">")
+            .replace("&quot;", "\"").replace("&#39;", "'")
+            .trim()
     }
 
     private fun enc(s: String): String = URLEncoder.encode(s, "UTF-8")

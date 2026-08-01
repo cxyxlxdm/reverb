@@ -19,6 +19,10 @@
     <string name="size_calculating">Calculando…</string>
 
     <string name="search_hint">Buscar · o pega una URL RSS</string>
+    <string name="search_tab_episodes">Episodios</string>
+    <string name="search_tab_shows">Programas</string>
+    <string name="search_empty_episodes">Sin episodios relacionados</string>
+    <string name="search_empty_shows">Sin programas relacionados</string>
     <string name="discover_featured">Selección diaria · para ti</string>
     <string name="discover_source">Fuente · %s</string>
     <string name="discover_daily_hot">Top de hoy · %s</string>

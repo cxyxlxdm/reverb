@@ -1,11 +1,10 @@
 package com.yuyin.reverb.ui.screens
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -32,10 +31,12 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
@@ -52,6 +53,8 @@ private const val ALL = "__all__"
 
 @Composable
 fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
+    val history by container.historyStore.history.collectAsStateWithLifecycle()
     var section by remember { mutableIntStateOf(0) }
     val sections = listOf(
         stringResource(R.string.lib_subscriptions),
@@ -69,18 +72,31 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
             }
         )
 
-        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
-            itemsIndexed(sections) { i, s ->
-                FilterChip(
-                    selected = section == i,
-                    onClick = { section = i },
-                    label = { Text(s) },
-                    modifier = Modifier.padding(end = 8.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+        // 分段切换栏。清空历史按钮浮在同一行右侧（zIndex 更高、不占 chips 流式布局），
+        // 这样以后要在右侧再加按钮也不会影响左侧 chips 排布。
+        Box(Modifier.fillMaxWidth()) {
+            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
+                itemsIndexed(sections) { i, s ->
+                    FilterChip(
+                        selected = section == i,
+                        onClick = { section = i },
+                        label = { Text(s) },
+                        modifier = Modifier.padding(end = 8.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                        )
                     )
-                )
+                }
+            }
+            if (section == 2 && history.isNotEmpty()) {
+                TextButton(
+                    onClick = { container.historyStore.clear() },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .zIndex(1f)
+                        .background(MaterialTheme.colorScheme.background)
+                ) { Text(stringResource(R.string.action_clear_confirm)) }
             }
         }
 
@@ -88,7 +104,7 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
             when (section) {
                 0 -> SubscriptionsSection(onOpen)
                 1 -> DownloadsSection()
-                else -> HistorySection()
+                else -> HistorySection(history)
             }
         }
     }
@@ -178,9 +194,7 @@ private fun DownloadsSection() {
 }
 
 @Composable
-private fun HistorySection() {
-    val container = (LocalContext.current.applicationContext as ReverbApp).container
-    val history by container.historyStore.history.collectAsStateWithLifecycle()
+private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntry>) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
 
@@ -188,25 +202,17 @@ private fun HistorySection() {
         EmptyHint(stringResource(R.string.empty_history))
         return
     }
-    Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-            horizontalArrangement = Arrangement.End
-        ) {
-            TextButton(onClick = { container.historyStore.clear() }) { Text(stringResource(R.string.action_clear_confirm)) }
-        }
-        LazyColumn(
-            Modifier.fillMaxWidth().weight(1f),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            items(history) { h ->
-                EpisodeListItem(
-                    episode = h.episode,
-                    isCurrent = current?.id == h.episode.id,
-                    isPlaying = isPlaying,
-                    onPlay = { PlayerController.playOrToggle(h.episode) }
-                )
-            }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        items(history) { h ->
+            EpisodeListItem(
+                episode = h.episode,
+                isCurrent = current?.id == h.episode.id,
+                isPlaying = isPlaying,
+                onPlay = { PlayerController.playOrToggle(h.episode) }
+            )
         }
     }
 }
