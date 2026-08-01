@@ -33,6 +33,9 @@ import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
@@ -58,8 +61,10 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -80,6 +85,9 @@ import com.yuyin.reverb.ui.REGION_OPTIONS
 import com.yuyin.reverb.ui.components.PodcastListItem
 import com.yuyin.reverb.ui.discoverViewModel
 import java.util.Locale
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -188,24 +196,53 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CategoryPage(vm: DiscoverViewModel, category: Category, region: String, onOpen: (Podcast) -> Unit) {
     // 先展示缓存，秒开；再后台刷新，数据回来替换。地区变化时按新地区重载。
     var list by remember(category.key, region) { mutableStateOf(vm.cachedCategory(category, region)) }
     var loading by remember(category.key, region) { mutableStateOf(list.isEmpty()) }
+    val pullState = rememberPullToRefreshState()
+
     LaunchedEffect(category.key, region) {
         val fresh = vm.refreshCategory(category, region)
         if (fresh.isNotEmpty()) list = fresh
         loading = false
     }
-    when {
-        list.isNotEmpty() -> PodcastResultList(
-            header = stringResource(R.string.discover_daily_hot, stringResource(category.labelRes)),
-            podcasts = list,
-            onOpen = onOpen
-        )
-        loading -> LoadingBox()
-        else -> EmptyHint(stringResource(R.string.discover_empty_category, stringResource(category.labelRes)))
+    // 下拉刷新：强制重新拉取最新榜单。分类榜单接口很快（~0.4s），加一个最短可见时长，
+    // 让每个分类都有可感知的“刷新中”过程，而非一闪而过（finally 兜底，异常也收起）。
+    if (pullState.isRefreshing) {
+        LaunchedEffect(true) {
+            try {
+                coroutineScope {
+                    val fetch = async { vm.refreshCategory(category, region) }
+                    delay(600)
+                    val fresh = fetch.await()
+                    if (fresh.isNotEmpty()) list = fresh
+                }
+            } finally {
+                pullState.endRefresh()
+            }
+        }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clipToBounds() // 裁掉静止态越界露出的指示器（分类栏下方的白块）
+            .nestedScroll(pullState.nestedScrollConnection)
+    ) {
+        when {
+            list.isNotEmpty() -> PodcastResultList(
+                header = stringResource(R.string.discover_daily_hot, stringResource(category.labelRes)),
+                podcasts = list,
+                onOpen = onOpen
+            )
+            loading -> LoadingBox()
+            else -> EmptyHint(stringResource(R.string.discover_empty_category, stringResource(category.labelRes)))
+        }
+        // 跟手下拉指示器；静止态越界部分被 clipToBounds 裁掉，不残留
+        PullToRefreshContainer(state = pullState, modifier = Modifier.align(Alignment.TopCenter))
     }
 }
 
