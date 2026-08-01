@@ -151,9 +151,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                 categories = categories,
                 selectedIndex = selectedIndex,
                 onSelect = { i -> scope.launch { pagerState.animateScrollToPage(i) } },
-                onEdit = { showReorder = true },
-                regionOverride = regionOverride,
-                onPickRegion = { container.regionStore.setOverride(it) }
+                onEdit = { showReorder = true }
             )
             // 横滑左右切换分类
             HorizontalPager(
@@ -217,16 +215,13 @@ private fun CategoryChipsRow(
     categories: List<Category>,
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
-    onEdit: () -> Unit,
-    regionOverride: String?,
-    onPickRegion: (String?) -> Unit
+    onEdit: () -> Unit
 ) {
     LazyRow(
         state = state,
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        item { RegionChip(regionOverride = regionOverride, onPick = onPickRegion) }
         itemsIndexed(categories) { i, cat ->
             FilterChip(
                 selected = i == selectedIndex,
@@ -245,47 +240,6 @@ private fun CategoryChipsRow(
                     Icons.Rounded.Tune,
                     contentDescription = stringResource(R.string.reorder_title),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun RegionChip(regionOverride: String?, onPick: (String?) -> Unit) {
-    var open by remember { mutableStateOf(false) }
-    val label = if (regionOverride == null) stringResource(R.string.region_short_auto)
-    else REGION_OPTIONS.firstOrNull { it.code == regionOverride }?.let { stringResource(it.labelRes) }
-        ?: regionOverride.uppercase()
-    Box(Modifier.padding(end = 8.dp)) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.clickable { open = true }
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Icon(
-                    Icons.Rounded.Public,
-                    contentDescription = stringResource(R.string.set_region),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(16.dp)
-                )
-                Text(
-                    label,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 4.dp)
-                )
-            }
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            REGION_OPTIONS.forEach { opt ->
-                DropdownMenuItem(
-                    text = { Text(stringResource(opt.labelRes)) },
-                    onClick = { onPick(opt.code); open = false }
                 )
             }
         }
