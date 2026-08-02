@@ -10,7 +10,7 @@ import org.json.JSONObject
  * 或从 JSON 选择性导入。每一项都可单独选择是否备份/恢复。
  */
 object BackupManager {
-    enum class Section { SUBSCRIPTIONS, FAVORITES, DOWNLOADS, HISTORY, SETTINGS }
+    enum class Section { SUBSCRIPTIONS, FAVORITES, STAMPS, DOWNLOADS, HISTORY, SETTINGS }
 
     fun build(container: AppContainer, include: Set<Section>): String {
         val root = JSONObject().put("version", 1)
@@ -24,6 +24,17 @@ object BackupManager {
             val arr = JSONArray()
             container.favoriteStore.favorites.value.forEach { arr.put(EpisodeJson.toJson(it)) }
             root.put("favorites", arr)
+        }
+        if (Section.STAMPS in include) {
+            val arr = JSONArray()
+            container.stampStore.stamps.value.forEach { s ->
+                arr.put(
+                    JSONObject()
+                        .put("episodeId", s.episodeId).put("seal", s.seal)
+                        .put("title", s.title).put("podcastTitle", s.podcastTitle).put("createdAt", s.createdAt)
+                )
+            }
+            root.put("stamps", arr)
         }
         if (Section.DOWNLOADS in include) {
             // 只备份节目元数据/链接，不含音频文件
@@ -67,6 +78,7 @@ object BackupManager {
         buildSet {
             if (root.has("subscriptions")) add(Section.SUBSCRIPTIONS)
             if (root.has("favorites")) add(Section.FAVORITES)
+            if (root.has("stamps")) add(Section.STAMPS)
             if (root.has("downloads")) add(Section.DOWNLOADS)
             if (root.has("history")) add(Section.HISTORY)
             if (root.has("settings")) add(Section.SETTINGS)
@@ -87,6 +99,14 @@ object BackupManager {
             // 备份即「新在前」顺序;addAll 尾部追加,按原序并入即可保持该顺序
             val list = (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let(EpisodeJson::fromJson) }
             if (list.isNotEmpty()) container.favoriteStore.addAll(list)
+        }
+        if (Section.STAMPS in include) root.optJSONArray("stamps")?.let { arr ->
+            val list = (0 until arr.length()).mapNotNull { i ->
+                arr.optJSONObject(i)?.let {
+                    Stamp(it.optString("episodeId"), it.optString("seal"), it.optString("title"), it.optString("podcastTitle"), it.optLong("createdAt"))
+                }
+            }
+            if (list.isNotEmpty()) container.stampStore.addAll(list)
         }
         if (Section.DOWNLOADS in include) root.optJSONArray("downloads")?.let { arr ->
             for (i in 0 until arr.length()) {

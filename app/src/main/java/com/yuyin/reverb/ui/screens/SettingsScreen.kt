@@ -72,7 +72,7 @@ private val SKIP_FWD_OPTIONS = listOf(15, 30, 45, 60)
 private val LANG_TAGS = listOf("", "zh-CN", "zh-TW", "en", "fr", "es")
 
 @Composable
-fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: () -> Unit) {
+fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: () -> Unit, onOpenFootprint: () -> Unit = {}) {
     val context = LocalContext.current
     val container = (context.applicationContext as ReverbApp).container
     val settings = container.settingsStore
@@ -179,6 +179,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 stringResource(R.string.set_region),
                 stringResource(REGION_OPTIONS.firstOrNull { it.code == regionOverride }?.labelRes ?: R.string.region_auto)
             ) { dlg = Dlg.REGION }
+            SettingRow(stringResource(R.string.set_footprint), stringResource(R.string.set_footprint_sub)) { onOpenFootprint() }
 
             SectionLabel(stringResource(R.string.sec_appearance))
             SettingRow(stringResource(R.string.set_theme), stringResource(THEME_LABEL_RES.getOrElse(themeMode) { THEME_LABEL_RES[0] })) { dlg = Dlg.THEME }
@@ -553,6 +554,7 @@ private fun ConfirmDialog(
 private val SECTION_ROWS = listOf(
     BackupManager.Section.SUBSCRIPTIONS to R.string.backup_row_subscriptions,
     BackupManager.Section.FAVORITES to R.string.backup_row_favorites,
+    BackupManager.Section.STAMPS to R.string.backup_row_stamps,
     BackupManager.Section.DOWNLOADS to R.string.backup_row_downloads,
     BackupManager.Section.HISTORY to R.string.backup_row_history,
     BackupManager.Section.SETTINGS to R.string.backup_row_settings

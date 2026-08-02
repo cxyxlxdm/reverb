@@ -13,6 +13,7 @@ import com.yuyin.reverb.data.local.HistoryStore
 import com.yuyin.reverb.data.local.PopularCacheStore
 import com.yuyin.reverb.data.local.RegionStore
 import com.yuyin.reverb.data.local.SettingsStore
+import com.yuyin.reverb.data.local.StampStore
 import com.yuyin.reverb.data.local.SubscriptionStore
 import com.yuyin.reverb.data.local.UpdateStore
 import com.yuyin.reverb.data.remote.PodcastRepository
@@ -42,6 +43,7 @@ class AppContainer(app: Application) {
     val downloadStore = DownloadStore(app)
     val historyStore = HistoryStore(app)
     val favoriteStore = FavoriteStore(app)
+    val stampStore = StampStore(app)
     val updateStore = UpdateStore(app)
     val regionStore = RegionStore(app)
     val settingsStore = SettingsStore(app)

@@ -26,6 +26,7 @@ import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay
@@ -38,6 +39,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -63,6 +65,9 @@ import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.InkWave
 import com.yuyin.reverb.ui.components.formatTime
 import com.yuyin.reverb.ui.components.rememberSpectrumState
+import com.yuyin.reverb.ui.share.ShareCards
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -98,6 +103,12 @@ fun PlayerScreen(onBack: () -> Unit) {
 
     val isFavorite = favorites.any { it.id == episode.id }
 
+    val stamps by container.stampStore.stamps.collectAsStateWithLifecycle()
+    val currentSeal = stamps.firstOrNull { it.episodeId == episode.id }?.seal
+    val scope = rememberCoroutineScope()
+    val ctx = LocalContext.current
+    var sealDialogOpen by remember { mutableStateOf(false) }
+
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
     val sliderValue = if (dragging) dragValue else position.toFloat()
@@ -130,6 +141,16 @@ fun PlayerScreen(onBack: () -> Unit) {
                 FavoriteButton(
                     favorited = isFavorite,
                     onToggle = { container.favoriteStore.toggle(episode) }
+                )
+                MoreMenu(
+                    stamped = currentSeal != null,
+                    onClip = {
+                        scope.launch {
+                            val bmp = ShareCards.momentCard(ctx, episode, position)
+                            ShareCards.share(ctx, bmp, "reverb-moment-${kotlin.math.abs(episode.id.hashCode())}.png", ctx.getString(R.string.clip_share))
+                        }
+                    },
+                    onStamp = { sealDialogOpen = true }
                 )
             }
         }
@@ -241,6 +262,18 @@ fun PlayerScreen(onBack: () -> Unit) {
             SkipButton(seconds = fwdSec, forward = true) { PlayerController.skipForward() }
         }
     }
+
+    if (sealDialogOpen) {
+        SealDialog(
+            current = currentSeal,
+            onPick = { seal ->
+                container.stampStore.set(episode.id, seal, episode.title, episode.podcastTitle, System.currentTimeMillis())
+                sealDialogOpen = false
+            },
+            onRemove = { container.stampStore.remove(episode.id); sealDialogOpen = false },
+            onDismiss = { sealDialogOpen = false }
+        )
+    }
 }
 
 @Composable
@@ -334,6 +367,68 @@ private fun SpeedChip(speed: Float) {
             }
         }
     }
+}
+
+/** 更多:剪藏(分享此刻)与盖章(听觉印记)收进溢出菜单,避免顶栏按钮过多。 */
+@Composable
+private fun MoreMenu(stamped: Boolean, onClip: () -> Unit, onStamp: () -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.more), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.clip_moment)) },
+                onClick = { open = false; onClip() }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(if (stamped) R.string.stamp_edit else R.string.stamp_add)) },
+                onClick = { open = false; onStamp() }
+            )
+        }
+    }
+}
+
+/** 盖章选择:一排水墨印字,已盖可改或撤。 */
+@Composable
+private fun SealDialog(current: String?, onPick: (String) -> Unit, onRemove: () -> Unit, onDismiss: () -> Unit) {
+    val seals = listOf("静", "思", "暖", "燃", "悟", "叹")
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.stamp_title)) },
+        text = {
+            Column {
+                Text(stringResource(R.string.stamp_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    seals.forEach { s ->
+                        val sel = s == current
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                            modifier = Modifier
+                                .size(46.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onPick(s) }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Text(
+                                    s,
+                                    style = MaterialTheme.typography.titleLarge,
+                                    color = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (current != null) TextButton(onClick = onRemove) { Text(stringResource(R.string.stamp_remove)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
+    )
 }
 
 /** 收藏当前单集:填充心表示已收藏,描边心表示未收藏。 */

@@ -2,6 +2,21 @@
     <string name="app_name">余音</string>
     <string name="slogan">余音绕梁，隽永悠长</string>
     <string name="radio_start">随机电台</string>
+    <string name="radio_contextual">情境电台</string>
+    <string name="more">更多</string>
+    <string name="clip_moment">剪藏 · 分享此刻</string>
+    <string name="clip_share">分享此刻</string>
+    <string name="stamp_add">盖章 · 听觉印记</string>
+    <string name="stamp_edit">改章 · 听觉印记</string>
+    <string name="stamp_title">盖一枚印记</string>
+    <string name="stamp_hint">为这一集盖下此刻的心境</string>
+    <string name="stamp_remove">撤章</string>
+    <string name="backup_row_stamps">听觉印记</string>
+    <string name="set_footprint">听觉足迹</string>
+    <string name="set_footprint_sub">你盖下的所有印记，汇成一张足迹图</string>
+    <string name="footprint_title">听觉足迹</string>
+    <string name="footprint_share">分享足迹</string>
+    <string name="footprint_empty">还没有印记。听完一集，在播放页「更多」里盖一枚吧</string>
     <string name="radio_next">下一首</string>
     <string name="radio_empty">暂时没找到可播放的节目，稍后再试</string>
 
@@ -156,7 +171,7 @@
     <string name="set_restore">恢复备份</string>
     <string name="set_restore_sub">从余音备份文件导入</string>
 
-    <string name="set_theme">深色模式</string>
+    <string name="set_theme">主题</string>
     <string name="theme_system">跟随系统</string>
     <string name="theme_light">浅色</string>
     <string name="theme_dark">深色</string>
@@ -198,7 +213,7 @@
 
     <!-- 设置对话框标题 -->
     <string name="dlg_region_title">选择地区</string>
-    <string name="dlg_theme_title">深色模式</string>
+    <string name="dlg_theme_title">主题</string>
     <string name="dlg_font_title">字号</string>
     <string name="dlg_accent_title">主题配色</string>
     <string name="dlg_speed_title">默认播放速度</string>

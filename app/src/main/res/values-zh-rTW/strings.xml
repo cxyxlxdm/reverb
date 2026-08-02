@@ -2,6 +2,21 @@
     <string name="app_name">餘音</string>
     <string name="slogan">餘音繞梁，雋永悠長</string>
     <string name="radio_start">隨機電台</string>
+    <string name="radio_contextual">情境電台</string>
+    <string name="more">更多</string>
+    <string name="clip_moment">剪藏 · 分享此刻</string>
+    <string name="clip_share">分享此刻</string>
+    <string name="stamp_add">蓋章 · 聽覺印記</string>
+    <string name="stamp_edit">改章 · 聽覺印記</string>
+    <string name="stamp_title">蓋一枚印記</string>
+    <string name="stamp_hint">為這一集蓋下此刻的心境</string>
+    <string name="stamp_remove">撤章</string>
+    <string name="backup_row_stamps">聽覺印記</string>
+    <string name="set_footprint">聽覺足跡</string>
+    <string name="set_footprint_sub">你蓋下的所有印記，匯成一張足跡圖</string>
+    <string name="footprint_title">聽覺足跡</string>
+    <string name="footprint_share">分享足跡</string>
+    <string name="footprint_empty">還沒有印記。聽完一集，在播放頁「更多」裡蓋一枚吧</string>
     <string name="radio_next">下一首</string>
     <string name="radio_empty">暫時沒找到可播放的節目，稍後再試</string>
 
@@ -147,7 +162,7 @@
     <string name="set_restore">還原備份</string>
     <string name="set_restore_sub">從餘音備份檔匯入</string>
 
-    <string name="set_theme">深色模式</string>
+    <string name="set_theme">主題</string>
     <string name="theme_system">跟隨系統</string>
     <string name="theme_light">淺色</string>
     <string name="theme_dark">深色</string>
@@ -188,7 +203,7 @@
     <string name="version_name">1.0.0</string>
 
     <string name="dlg_region_title">選擇地區</string>
-    <string name="dlg_theme_title">深色模式</string>
+    <string name="dlg_theme_title">主題</string>
     <string name="dlg_font_title">字級</string>
     <string name="dlg_accent_title">主題配色</string>
     <string name="dlg_speed_title">預設播放速度</string>

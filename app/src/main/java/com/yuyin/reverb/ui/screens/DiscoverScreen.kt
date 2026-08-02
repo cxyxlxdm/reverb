@@ -34,6 +34,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Public
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Tune
@@ -116,6 +117,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
     val categories = vm.orderedCategories
     val radioMode by PlayerController.radioMode.collectAsStateWithLifecycle()
     val radioPreparing by RadioStation.preparing.collectAsStateWithLifecycle()
+    val radioKind by RadioStation.mode.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showReorder by remember { mutableStateOf(false) }
     val browsing = vm.state is DiscoverState.Idle
@@ -127,19 +129,34 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             title = stringResource(R.string.app_name),
             subtitle = stringResource(R.string.slogan),
             action = {
-                // 随机电台:短按开台/换下一首,长按停止;抓取首集时转圈
-                RadioActionButton(
-                    active = radioMode,
-                    preparing = radioPreparing,
-                    onShort = {
-                        RadioStation.configure(container.repository, region, categories.map { it.genreId })
-                        scope.launch {
-                            val ok = if (radioMode) RadioStation.skip() else RadioStation.start()
-                            if (!ok) Toast.makeText(context, R.string.radio_empty, Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    onLong = { if (radioMode) RadioStation.stop() }
-                )
+                // 两个电台入口:🔀随机(全分类) / 🕐情境(按时段)。短按开台/换下一首,长按停止。
+                val genreIds = categories.map { it.genreId }
+                fun launchRadio(mode: RadioStation.Mode) {
+                    RadioStation.configure(container.repository, region, genreIds)
+                    scope.launch {
+                        val sameMode = radioMode && radioKind == mode
+                        val ok = if (sameMode) RadioStation.skip() else RadioStation.start(mode)
+                        if (!ok) Toast.makeText(context, R.string.radio_empty, Toast.LENGTH_SHORT).show()
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioActionButton(
+                        icon = Icons.Rounded.Shuffle,
+                        desc = stringResource(if (radioMode && radioKind == RadioStation.Mode.RANDOM) R.string.radio_next else R.string.radio_start),
+                        active = radioMode && radioKind == RadioStation.Mode.RANDOM,
+                        preparing = radioPreparing,
+                        onShort = { launchRadio(RadioStation.Mode.RANDOM) },
+                        onLong = { if (radioMode) RadioStation.stop() }
+                    )
+                    RadioActionButton(
+                        icon = Icons.Rounded.Schedule,
+                        desc = stringResource(R.string.radio_contextual),
+                        active = radioMode && radioKind == RadioStation.Mode.CONTEXTUAL,
+                        preparing = radioPreparing,
+                        onShort = { launchRadio(RadioStation.Mode.CONTEXTUAL) },
+                        onLong = { if (radioMode) RadioStation.stop() }
+                    )
+                }
             }
         )
 
@@ -220,10 +237,12 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
     }
 }
 
-/** 随机电台按钮:关台态灰、在台态高亮,抓取中转圈;短按开台/换台,长按停止。 */
+/** 电台按钮:关台态灰、在台态高亮,抓取中转圈;短按开台/换台,长按停止。 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RadioActionButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    desc: String,
     active: Boolean,
     preparing: Boolean,
     onShort: () -> Unit,
@@ -235,7 +254,7 @@ private fun RadioActionButton(
             .clip(CircleShape)
             .combinedClickable(
                 enabled = !preparing,
-                onClickLabel = stringResource(if (active) R.string.radio_next else R.string.radio_start),
+                onClickLabel = desc,
                 onClick = onShort,
                 onLongClick = onLong
             ),
@@ -249,8 +268,8 @@ private fun RadioActionButton(
             )
         } else {
             Icon(
-                Icons.Rounded.Shuffle,
-                contentDescription = stringResource(if (active) R.string.radio_next else R.string.radio_start),
+                icon,
+                contentDescription = desc,
                 tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

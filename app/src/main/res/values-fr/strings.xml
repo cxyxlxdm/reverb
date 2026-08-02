@@ -2,6 +2,21 @@
     <string name="app_name">Reverb</string>
     <string name="slogan">Chaque écho persiste.</string>
     <string name="radio_start">Radio aléatoire</string>
+    <string name="radio_contextual">Radio contextuelle</string>
+    <string name="more">Plus</string>
+    <string name="clip_moment">Extrait · Partager cet instant</string>
+    <string name="clip_share">Partager cet instant</string>
+    <string name="stamp_add">Sceau · Empreinte d\'écoute</string>
+    <string name="stamp_edit">Modifier le sceau · Empreinte d\'écoute</string>
+    <string name="stamp_title">Laisser un sceau</string>
+    <string name="stamp_hint">Marquez le ressenti de cet épisode</string>
+    <string name="stamp_remove">Retirer</string>
+    <string name="backup_row_stamps">Empreintes d\'écoute</string>
+    <string name="set_footprint">Empreinte d\'écoute</string>
+    <string name="set_footprint_sub">Tous vos sceaux réunis en une affiche</string>
+    <string name="footprint_title">Empreinte d\'écoute</string>
+    <string name="footprint_share">Partager l\'empreinte</string>
+    <string name="footprint_empty">Aucun sceau. Terminez un épisode et scellez-le depuis le menu Plus du lecteur</string>
     <string name="radio_next">Suivant</string>
     <string name="radio_empty">Aucun épisode lisible trouvé, réessayez plus tard</string>
 
@@ -147,7 +162,7 @@
     <string name="set_restore">Restaurer</string>
     <string name="set_restore_sub">Importer depuis un fichier de sauvegarde Reverb</string>
 
-    <string name="set_theme">Mode sombre</string>
+    <string name="set_theme">Thème</string>
     <string name="theme_system">Système</string>
     <string name="theme_light">Clair</string>
     <string name="theme_dark">Sombre</string>
@@ -188,7 +203,7 @@
     <string name="version_name">1.0.0</string>
 
     <string name="dlg_region_title">Choisir la région</string>
-    <string name="dlg_theme_title">Mode sombre</string>
+    <string name="dlg_theme_title">Thème</string>
     <string name="dlg_font_title">Taille du texte</string>
     <string name="dlg_accent_title">Couleur d\'accent</string>
     <string name="dlg_speed_title">Vitesse par défaut</string>

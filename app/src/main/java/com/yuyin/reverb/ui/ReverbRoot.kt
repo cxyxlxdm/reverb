@@ -46,6 +46,7 @@ import com.yuyin.reverb.ui.screens.LicensesScreen
 import com.yuyin.reverb.ui.screens.PlayerScreen
 import com.yuyin.reverb.ui.screens.PodcastDetailScreen
 import com.yuyin.reverb.ui.screens.SettingsScreen
+import com.yuyin.reverb.ui.screens.StampsScreen
 
 private data class TopDest(val route: String, val label: String, val icon: ImageVector)
 
@@ -79,10 +80,12 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
                 SettingsScreen(
                     onBack = { rootNav.popBackStack() },
                     onOpenAbout = { rootNav.navigate("about") },
-                    onOpenLicenses = { rootNav.navigate("licenses") }
+                    onOpenLicenses = { rootNav.navigate("licenses") },
+                    onOpenFootprint = { rootNav.navigate("footprint") }
                 )
             }
         }
+        composable("footprint") { FullScreen { StampsScreen(onBack = { rootNav.popBackStack() }) } }
         composable("about") { FullScreen { AboutScreen(onBack = { rootNav.popBackStack() }) } }
         composable("licenses") { FullScreen { LicensesScreen(onBack = { rootNav.popBackStack() }) } }
     }

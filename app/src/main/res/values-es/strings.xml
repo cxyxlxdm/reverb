@@ -2,6 +2,21 @@
     <string name="app_name">Reverb</string>
     <string name="slogan">Cada eco perdura.</string>
     <string name="radio_start">Radio aleatoria</string>
+    <string name="radio_contextual">Radio contextual</string>
+    <string name="more">Más</string>
+    <string name="clip_moment">Recorte · Compartir este momento</string>
+    <string name="clip_share">Compartir este momento</string>
+    <string name="stamp_add">Sello · Marca de escucha</string>
+    <string name="stamp_edit">Editar sello · Marca de escucha</string>
+    <string name="stamp_title">Deja un sello</string>
+    <string name="stamp_hint">Marca cómo se sintió este episodio</string>
+    <string name="stamp_remove">Quitar</string>
+    <string name="backup_row_stamps">Marcas de escucha</string>
+    <string name="set_footprint">Huella de escucha</string>
+    <string name="set_footprint_sub">Todos tus sellos, reunidos en un póster</string>
+    <string name="footprint_title">Huella de escucha</string>
+    <string name="footprint_share">Compartir huella</string>
+    <string name="footprint_empty">Aún no hay sellos. Termina un episodio y séllalo desde el menú Más del reproductor</string>
     <string name="radio_next">Siguiente</string>
     <string name="radio_empty">No se encontró ningún episodio reproducible, inténtalo más tarde</string>
 
@@ -147,7 +162,7 @@
     <string name="set_restore">Restaurar</string>
     <string name="set_restore_sub">Importar desde un archivo de copia de Reverb</string>
 
-    <string name="set_theme">Modo oscuro</string>
+    <string name="set_theme">Tema</string>
     <string name="theme_system">Sistema</string>
     <string name="theme_light">Claro</string>
     <string name="theme_dark">Oscuro</string>
@@ -188,7 +203,7 @@
     <string name="version_name">1.0.0</string>
 
     <string name="dlg_region_title">Elegir región</string>
-    <string name="dlg_theme_title">Modo oscuro</string>
+    <string name="dlg_theme_title">Tema</string>
     <string name="dlg_font_title">Tamaño del texto</string>
     <string name="dlg_accent_title">Color de acento</string>
     <string name="dlg_speed_title">Velocidad predeterminada</string>
