@@ -1,59 +1,81 @@
 import SwiftUI
 
-/// 频道详情:头部(封面/标题/作者/订阅)+ 分集列表。
+/// 频道详情:大头部(封面 / 标题 / 作者 / 订阅 / 简介)+ 宽松分集列表。
 struct PodcastDetailView: View {
     let podcast: Podcast
 
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
+    @EnvironmentObject var settings: SettingsStore
 
     @State private var episodes: [Episode] = []
     @State private var loaded: Podcast?
     @State private var loading = false
 
     private var display: Podcast { loaded ?? podcast }
+    private var accent: Color { Theme.accent(settings.accentIndex) }
 
     var body: some View {
-        List {
-            Section {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
                 header
-                    .listRowInsets(EdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16))
-                    .listRowSeparator(.hidden)
-            }
-            if loading && episodes.isEmpty {
-                ContentUnavailableViewCompat(loading: true, text: "")
-            } else if episodes.isEmpty {
-                ContentUnavailableViewCompat(loading: false, text: "暂无单集")
-            } else {
-                Section("单集") {
-                    ForEach(episodes) { ep in
-                        EpisodeRow(episode: ep,
-                                   isCurrent: player.current?.id == ep.id,
-                                   isPlaying: player.isPlaying,
-                                   onPlay: { player.playOrToggle(ep, queue: episodes) })
+                    .padding(24)
+                Divider()
+
+                if loading && episodes.isEmpty {
+                    StateView(loading: true, text: "").frame(minHeight: 280)
+                } else if episodes.isEmpty {
+                    StateView(symbol: "waveform.slash", text: "暂无单集").frame(minHeight: 280)
+                } else {
+                    Text("单集")
+                        .font(.title3).fontWeight(.bold)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 20)
+                        .padding(.bottom, 4)
+                    LazyVStack(spacing: 0) {
+                        ForEach(episodes) { ep in
+                            RoomyEpisodeRow(
+                                episode: ep,
+                                isCurrent: player.current?.id == ep.id,
+                                isPlaying: player.isPlaying,
+                                accent: accent,
+                                onPlay: { player.playOrToggle(ep, queue: episodes) })
+                                .padding(.horizontal, 24)
+                            Divider().padding(.leading, 24)
+                        }
                     }
+                    .padding(.bottom, 24)
                 }
             }
         }
-        .listStyle(.inset)
         .navigationTitle(display.title)
         .task { await load() }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Artwork(url: display.artworkUrl, size: 120, corner: 14)
-            VStack(alignment: .leading, spacing: 8) {
-                Text(display.title).font(.title2.bold()).lineLimit(3)
+        HStack(alignment: .top, spacing: 24) {
+            Artwork(url: display.artworkUrl, size: 180, corner: 18)
+                .shadow(color: .black.opacity(0.2), radius: 12, y: 6)
+            VStack(alignment: .leading, spacing: 10) {
+                Text(display.title)
+                    .font(.largeTitle).fontWeight(.bold)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
                 if !display.author.isEmpty {
-                    Text(display.author).font(.callout).foregroundStyle(.secondary).lineLimit(2)
+                    Text(display.author)
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
                 }
                 subscribeButton
+                    .padding(.top, 2)
                 if !display.description.isEmpty {
                     Text(display.description)
-                        .font(.caption)
+                        .font(.body)
                         .foregroundStyle(.secondary)
-                        .lineLimit(4)
+                        .lineLimit(6)
+                        .textSelection(.enabled)
+                        .padding(.top, 4)
                 }
                 Spacer(minLength: 0)
             }
@@ -68,9 +90,10 @@ struct PodcastDetailView: View {
         } label: {
             Label(subscribed ? "已订阅" : "订阅",
                   systemImage: subscribed ? "checkmark" : "plus")
+                .frame(minWidth: 84)
         }
         .buttonStyle(.borderedProminent)
-        .controlSize(.regular)
+        .controlSize(.large)
     }
 
     private func load() async {

@@ -36,6 +36,7 @@ struct DiscoverCategory: Identifiable, Hashable {
 struct DiscoverView: View {
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
+    @EnvironmentObject var settings: SettingsStore
 
     @State private var selected: DiscoverCategory = DiscoverCategory.all[0]
     @State private var popular: [Podcast] = []
@@ -47,54 +48,76 @@ struct DiscoverView: View {
     @State private var searchEpisodes: [Episode] = []
     @State private var searching = false
 
+    private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
 
+    private let columns = [GridItem(.adaptive(minimum: 170, maximum: 220), spacing: 20)]
+
     var body: some View {
-        NavigationStack {
-            Group {
-                if isSearchActive {
-                    searchResults
-                } else {
-                    popularList
-                }
+        Group {
+            if isSearchActive {
+                searchContent
+            } else {
+                popularContent
             }
-            .navigationTitle("发现")
-            .navigationDestination(for: Podcast.self) { PodcastDetailView(podcast: $0) }
-            .searchable(text: $searchText, placement: .toolbar, prompt: "搜索节目、单集或粘贴 RSS 链接")
-            .onSubmit(of: .search) { runSearch() }
-            .onChange(of: searchText) { v in
-                if v.trimmingCharacters(in: .whitespaces).isEmpty {
-                    submittedQuery = ""
-                    searchPodcasts = []
-                    searchEpisodes = []
-                }
+        }
+        .navigationTitle("余音")
+        .searchable(text: $searchText, placement: .toolbar,
+                    prompt: "搜索节目、单集或粘贴 RSS 链接")
+        .onSubmit(of: .search) { runSearch() }
+        .onChange(of: searchText) { v in
+            if v.trimmingCharacters(in: .whitespaces).isEmpty {
+                submittedQuery = ""
+                searchPodcasts = []
+                searchEpisodes = []
             }
-            .toolbar {
-                ToolbarItem(placement: .primaryAction) { radioButton }
-            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) { radioButton }
         }
         .task { await loadPopular(initial: true) }
     }
 
     // MARK: - 榜单
 
-    private var popularList: some View {
+    private var popularContent: some View {
         VStack(spacing: 0) {
-            categoryChips
+            categoryPills
             Divider()
-            List {
-                ForEach(popular) { p in
-                    NavigationLink(value: p) { PodcastRow(podcast: p) }
-                }
-                if popular.isEmpty {
-                    ContentUnavailableViewCompat(loading: loading, text: "暂无内容")
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 8) {
+                        Text("每日热门")
+                            .font(.title2).fontWeight(.bold)
+                        Text("·").foregroundStyle(.secondary)
+                        Text(selected.name)
+                            .font(.title2).fontWeight(.bold)
+                            .foregroundStyle(accent)
+                        if loading { ProgressView().controlSize(.small).padding(.leading, 4) }
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.top, 20)
+
+                    if popular.isEmpty {
+                        StateView(loading: loading, symbol: "square.stack.3d.up.slash",
+                                  text: "暂无内容")
+                            .frame(minHeight: 320)
+                    } else {
+                        LazyVGrid(columns: columns, spacing: 20) {
+                            ForEach(popular) { p in
+                                NavigationLink(value: p) { PodcastCard(podcast: p) }
+                                    .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 28)
+                    }
                 }
             }
-            .listStyle(.inset)
         }
     }
 
-    private var categoryChips: some View {
+    private var categoryPills: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(DiscoverCategory.all) { c in
@@ -105,18 +128,18 @@ struct DiscoverView: View {
                         Task { await loadPopular(initial: false) }
                     } label: {
                         Text(c.name)
-                            .font(.callout)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(active ? Theme.accent(env.settings.accentIndex).opacity(0.18) : Color.gray.opacity(0.12),
+                            .font(.callout).fontWeight(active ? .semibold : .regular)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(active ? accent.opacity(0.18) : Color.primary.opacity(0.06),
                                         in: Capsule())
-                            .foregroundStyle(active ? Theme.accent(env.settings.accentIndex) : Color.primary)
+                            .foregroundStyle(active ? accent : Color.primary)
                     }
                     .buttonStyle(.plain)
                 }
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
         }
     }
 
@@ -126,7 +149,6 @@ struct DiscoverView: View {
         popular = env.repository.cachedPopular(genreId: genreId, region: region)
         loading = true
         let fresh = await env.repository.refreshPopular(genreId: genreId, region: region)
-        // 若期间用户切换了分类,忽略过期结果。
         guard selected.genreId == genreId else { return }
         if !fresh.isEmpty { popular = fresh }
         loading = false
@@ -134,35 +156,53 @@ struct DiscoverView: View {
 
     // MARK: - 搜索
 
-    private var searchResults: some View {
-        List {
+    private var searchContent: some View {
+        ScrollView {
             if searching {
-                ContentUnavailableViewCompat(loading: true, text: "搜索中…")
+                StateView(loading: true, text: "搜索中…").frame(minHeight: 360)
+            } else if searchPodcasts.isEmpty && searchEpisodes.isEmpty {
+                StateView(symbol: "magnifyingglass",
+                          text: "没有找到「\(submittedQuery)」").frame(minHeight: 360)
             } else {
-                if !searchEpisodes.isEmpty {
-                    Section("单集") {
-                        ForEach(searchEpisodes) { ep in
-                            EpisodeRow(episode: ep,
-                                       isCurrent: player.current?.id == ep.id,
-                                       isPlaying: player.isPlaying,
-                                       showPodcast: true,
-                                       onPlay: { player.playOrToggle(ep, queue: searchEpisodes) })
+                VStack(alignment: .leading, spacing: 24) {
+                    if !searchPodcasts.isEmpty {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("节目").font(.title3).fontWeight(.bold)
+                                .padding(.horizontal, 24)
+                            LazyVGrid(columns: columns, spacing: 20) {
+                                ForEach(searchPodcasts) { p in
+                                    NavigationLink(value: p) { PodcastCard(podcast: p) }
+                                        .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.horizontal, 24)
+                        }
+                    }
+                    if !searchEpisodes.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("单集").font(.title3).fontWeight(.bold)
+                                .padding(.horizontal, 24)
+                                .padding(.bottom, 6)
+                            ForEach(searchEpisodes) { ep in
+                                VStack(spacing: 0) {
+                                    RoomyEpisodeRow(
+                                        episode: ep,
+                                        isCurrent: player.current?.id == ep.id,
+                                        isPlaying: player.isPlaying,
+                                        showPodcast: true,
+                                        accent: accent,
+                                        onPlay: { player.playOrToggle(ep, queue: searchEpisodes) })
+                                        .padding(.horizontal, 24)
+                                    Divider().padding(.leading, 24)
+                                }
+                            }
                         }
                     }
                 }
-                if !searchPodcasts.isEmpty {
-                    Section("节目") {
-                        ForEach(searchPodcasts) { p in
-                            NavigationLink(value: p) { PodcastRow(podcast: p) }
-                        }
-                    }
-                }
-                if searchEpisodes.isEmpty && searchPodcasts.isEmpty {
-                    ContentUnavailableViewCompat(loading: false, text: "没有找到「\(submittedQuery)」")
-                }
+                .padding(.top, 20)
+                .padding(.bottom, 28)
             }
         }
-        .listStyle(.inset)
     }
 
     private func runSearch() {
@@ -186,15 +226,12 @@ struct DiscoverView: View {
 
     private var radioButton: some View {
         Button {
-            if player.radioMode {
-                player.next()
-            } else {
-                startRadio()
-            }
+            if player.radioMode { player.next() } else { startRadio() }
         } label: {
             Image(systemName: radioIcon)
         }
-        .help(player.radioMode ? "下一集(长按停止电台)" : (env.settings.contextualRadio ? "情境电台" : "随机电台"))
+        .help(player.radioMode ? "下一集(右键停止电台)"
+              : (settings.contextualRadio ? "情境电台" : "随机电台"))
         .contextMenu {
             if player.radioMode {
                 Button("停止电台", role: .destructive) { player.stopRadio() }
@@ -203,13 +240,13 @@ struct DiscoverView: View {
     }
 
     private var radioIcon: String {
-        guard env.settings.contextualRadio else { return "shuffle" }
+        guard settings.contextualRadio else { return "shuffle" }
         let h = Calendar.current.component(.hour, from: Date())
         switch h {
-        case 5...8: return "sunrise"
-        case 9...16: return "sun.max"
-        case 17...20: return "sunset"
-        default: return "moon"
+        case 5...10: return "sunrise"
+        case 11...16: return "sun.max"
+        case 17...19: return "sunset"
+        default: return "moon.stars"
         }
     }
 
@@ -230,7 +267,7 @@ struct DiscoverView: View {
 
     private func startRadio() {
         let region = env.region
-        let genreIds = env.settings.contextualRadio ? contextualGenreIds() : DiscoverCategory.allGenreIds
+        let genreIds = settings.contextualRadio ? contextualGenreIds() : DiscoverCategory.allGenreIds
         let repo = env.repository
         player.startRadio { await repo.randomEpisode(region: region, genreIds: genreIds, exclude: []) }
         Task {
@@ -240,25 +277,5 @@ struct DiscoverView: View {
                 player.stopRadio()
             }
         }
-    }
-}
-
-/// macOS 13 兼容的空/加载态占位。
-struct ContentUnavailableViewCompat: View {
-    var loading: Bool
-    var text: String
-    var body: some View {
-        HStack {
-            Spacer()
-            VStack(spacing: 10) {
-                if loading { ProgressView() }
-                Text(loading ? "加载中…" : text)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.vertical, 40)
-            Spacer()
-        }
-        .listRowSeparator(.hidden)
     }
 }

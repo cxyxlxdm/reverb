@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 音阁:订阅 / 收藏 / 历史。
+/// 音阁:订阅 / 收藏 / 历史。分段控制置于内容顶部,内容区宽松展示。
 struct LibraryView: View {
     enum Segment: String, CaseIterable, Identifiable {
         case subscriptions = "订阅"
@@ -11,37 +11,40 @@ struct LibraryView: View {
 
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
+    @EnvironmentObject var settings: SettingsStore
     @State private var segment: Segment = .subscriptions
 
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                Picker("", selection: $segment) {
-                    ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                Divider()
+    private var accent: Color { Theme.accent(settings.accentIndex) }
+    private let columns = [GridItem(.adaptive(minimum: 170, maximum: 220), spacing: 20)]
 
-                Group {
-                    switch segment {
-                    case .subscriptions: subscriptionsList
-                    case .favorites: favoritesList
-                    case .history: historyList
-                    }
+    var body: some View {
+        VStack(spacing: 0) {
+            Picker("", selection: $segment) {
+                ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 360)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 12)
+            Divider()
+
+            Group {
+                switch segment {
+                case .subscriptions: subscriptionsGrid
+                case .favorites: favoritesList
+                case .history: historyList
                 }
             }
-            .navigationTitle("音阁")
-            .navigationDestination(for: Podcast.self) { PodcastDetailView(podcast: $0) }
-            .toolbar {
-                if segment == .history && !env.history.history.isEmpty {
-                    ToolbarItem(placement: .primaryAction) {
-                        Button(role: .destructive) { env.history.clear() } label: {
-                            Label("清空", systemImage: "trash")
-                        }
+        }
+        .navigationTitle("余音")
+        .toolbar {
+            if segment == .history && !env.history.history.isEmpty {
+                ToolbarItem(placement: .primaryAction) {
+                    Button(role: .destructive) { env.history.clear() } label: {
+                        Label("清空", systemImage: "trash")
                     }
+                    .help("清空播放历史")
                 }
             }
         }
@@ -49,17 +52,20 @@ struct LibraryView: View {
 
     // MARK: - 订阅
 
-    private var subscriptionsList: some View {
+    private var subscriptionsGrid: some View {
         Group {
             if env.subscriptions.subscriptions.isEmpty {
-                emptyState("还没有订阅任何节目")
+                StateView(symbol: "books.vertical", text: "还没有订阅任何节目")
             } else {
-                List {
-                    ForEach(env.subscriptions.subscriptions) { p in
-                        NavigationLink(value: p) { PodcastRow(podcast: p) }
+                ScrollView {
+                    LazyVGrid(columns: columns, spacing: 20) {
+                        ForEach(env.subscriptions.subscriptions) { p in
+                            NavigationLink(value: p) { PodcastCard(podcast: p) }
+                                .buttonStyle(.plain)
+                        }
                     }
+                    .padding(24)
                 }
-                .listStyle(.inset)
             }
         }
     }
@@ -69,27 +75,32 @@ struct LibraryView: View {
     private var favoritesList: some View {
         Group {
             if env.favorites.favorites.isEmpty {
-                emptyState("还没有收藏的单集")
+                StateView(symbol: "heart", text: "还没有收藏的单集")
             } else {
                 let items = env.favorites.favorites
-                List {
-                    ForEach(items) { ep in
-                        HStack {
-                            EpisodeRow(episode: ep,
-                                       isCurrent: player.current?.id == ep.id,
-                                       isPlaying: player.isPlaying,
-                                       showPodcast: true,
-                                       onPlay: { player.playOrToggle(ep, queue: items) })
-                            Button {
-                                env.favorites.toggle(ep)
-                            } label: {
-                                Image(systemName: "heart.fill").foregroundStyle(Theme.accent(env.settings.accentIndex))
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(items) { ep in
+                            HStack(spacing: 8) {
+                                RoomyEpisodeRow(
+                                    episode: ep,
+                                    isCurrent: player.current?.id == ep.id,
+                                    isPlaying: player.isPlaying,
+                                    showPodcast: true,
+                                    accent: accent,
+                                    onPlay: { player.playOrToggle(ep, queue: items) })
+                                Button { env.favorites.toggle(ep) } label: {
+                                    Image(systemName: "heart.fill").foregroundStyle(accent)
+                                }
+                                .buttonStyle(.plain)
+                                .help("取消收藏")
                             }
-                            .buttonStyle(.plain)
+                            .padding(.horizontal, 24)
+                            Divider().padding(.leading, 24)
                         }
                     }
+                    .padding(.vertical, 8)
                 }
-                .listStyle(.inset)
             }
         }
     }
@@ -99,28 +110,26 @@ struct LibraryView: View {
     private var historyList: some View {
         Group {
             if env.history.history.isEmpty {
-                emptyState("暂无播放历史")
+                StateView(symbol: "clock.arrow.circlepath", text: "暂无播放历史")
             } else {
                 let items = env.history.history.map { $0.episode }
-                List {
-                    ForEach(items) { ep in
-                        EpisodeRow(episode: ep,
-                                   isCurrent: player.current?.id == ep.id,
-                                   isPlaying: player.isPlaying,
-                                   showPodcast: true,
-                                   onPlay: { player.playOrToggle(ep, queue: items) })
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(items) { ep in
+                            RoomyEpisodeRow(
+                                episode: ep,
+                                isCurrent: player.current?.id == ep.id,
+                                isPlaying: player.isPlaying,
+                                showPodcast: true,
+                                accent: accent,
+                                onPlay: { player.playOrToggle(ep, queue: items) })
+                                .padding(.horizontal, 24)
+                            Divider().padding(.leading, 24)
+                        }
                     }
+                    .padding(.vertical, 8)
                 }
-                .listStyle(.inset)
             }
         }
-    }
-
-    private func emptyState(_ text: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: "tray").font(.system(size: 34)).foregroundStyle(.tertiary)
-            Text(text).font(.callout).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

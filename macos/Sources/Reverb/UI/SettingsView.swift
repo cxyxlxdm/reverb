@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 设置:外观 / 内容 / 播放。
+/// 设置(标准 macOS 设置窗口):外观 / 内容 / 播放。
 struct SettingsView: View {
     @EnvironmentObject var env: AppEnvironment
     var body: some View {
@@ -31,12 +31,12 @@ private struct SettingsForm: View {
                         Text(Theme.accents[i].name).tag(i)
                     }
                 }
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("字号")
                         Spacer()
                         Text(String(format: "%.0f%%", settings.fontScale * 100))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.secondary).monospacedDigit()
                     }
                     Slider(value: $settings.fontScale, in: 0.85...1.3, step: 0.05)
                 }
@@ -70,6 +70,8 @@ private struct SettingsForm: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("设置")
+        .frame(width: 460, height: 420)
+        .tint(Theme.accent(settings.accentIndex))
+        .preferredColorScheme(Theme.colorScheme(settings.themeMode))
     }
 }

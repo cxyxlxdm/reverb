@@ -9,17 +9,17 @@ struct ReverbApp: App {
             RootView()
                 .environmentObject(env)
                 .environmentObject(env.player)
-                .frame(minWidth: 960, minHeight: 640)
-                .preferredColorScheme(colorScheme(env.settings.themeMode))
+                .environmentObject(env.settings)
         }
+        .defaultSize(width: 1240, height: 860)
         .windowToolbarStyle(.unified)
-    }
 
-    private func colorScheme(_ mode: Int) -> ColorScheme? {
-        switch mode {
-        case 1, 3: return .light   // 浅色 / 纯白
-        case 2: return .dark       // 深色
-        default: return nil        // 跟随系统
+        // 标准 macOS 设置场景:⌘, 及 App 菜单打开,齿轮按钮亦指向此处。
+        Settings {
+            SettingsView()
+                .environmentObject(env)
+                .environmentObject(env.player)
+                .environmentObject(env.settings)
         }
     }
 }
