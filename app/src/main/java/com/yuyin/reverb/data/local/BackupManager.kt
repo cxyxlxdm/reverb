@@ -116,12 +116,18 @@ object BackupManager {
             }
         }
         if (Section.HISTORY in include) root.optJSONArray("history")?.let { arr ->
+            // 合并策略:同一集在两边都存在时,按 updatedAt 取更新的那条,避免用旧备份把当前进度倒退。
+            // 快照恢复前的状态用于比较(边并入边比较会失真)。
+            val existing = container.historyStore.history.value.associateBy { it.episode.id }
             // 倒序导入，使原本较新的记录最终位于前列
             for (i in arr.length() - 1 downTo 0) {
                 val o = arr.optJSONObject(i) ?: continue
                 val epObj = o.optJSONObject("episode") ?: continue
                 val ep = EpisodeJson.fromJson(epObj)
-                container.historyStore.record(ep, o.optLong("updatedAt"))
+                val updatedAt = o.optLong("updatedAt")
+                val cur = existing[ep.id]
+                if (cur != null && cur.updatedAt >= updatedAt) continue // 当前记录更新,保留不覆盖
+                container.historyStore.record(ep, updatedAt)
                 container.historyStore.updatePosition(ep.id, o.optLong("positionMs"), o.optLong("durationMs"))
             }
         }
