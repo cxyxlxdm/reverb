@@ -146,10 +146,10 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                     preparing = radioPreparingMode != null,
                     onShort = {
                         RadioStation.configure(container.repository, region, categories.map { it.genreId })
-                        scope.launch {
-                            val sameMode = radioMode && radioKind == mode
-                            val ok = if (sameMode) RadioStation.skip() else RadioStation.start(mode)
-                            if (!ok) Toast.makeText(context, R.string.radio_empty, Toast.LENGTH_SHORT).show()
+                        if (radioMode && radioKind == mode) {
+                            RadioStation.skip() // 已在同模式电台:下一首
+                        } else scope.launch {
+                            if (!RadioStation.start(mode)) Toast.makeText(context, R.string.radio_empty, Toast.LENGTH_SHORT).show()
                         }
                     },
                     onLong = {
@@ -497,7 +497,7 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
                             episode = ep,
                             isCurrent = current?.id == ep.id,
                             isPlaying = isPlaying,
-                            onPlay = { PlayerController.playOrToggle(ep) },
+                            onPlay = { PlayerController.playOrToggle(ep, s.episodes) },
                             showPodcastTitle = true
                         )
                     }

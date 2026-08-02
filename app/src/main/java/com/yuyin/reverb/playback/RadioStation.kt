@@ -42,22 +42,20 @@ object RadioStation {
     /** 开台:抓第一首并播放;成功返回 true,抓不到返回 false(不进入电台模式)。 */
     suspend fun start(mode: Mode): Boolean {
         _mode.value = mode
+        // 先登记 provider 并进入电台模式(会清空上次历史),再抓首集播放
+        PlayerController.startRadio { fetchNext() }
         val ep = fetchNext()
         if (ep == null) {
-            if (!PlayerController.radioMode.value) _mode.value = null
+            PlayerController.stopRadio()
+            _mode.value = null
             return false
         }
-        PlayerController.startRadio { fetchNext() }
-        PlayerController.play(ep, isRadio = true)
+        PlayerController.playRadioEpisode(ep)
         return true
     }
 
-    /** 换台:立刻切到下一首(沿用当前电台类型);抓不到返回 false(保持当前播放)。 */
-    suspend fun skip(): Boolean {
-        val ep = fetchNext() ?: return false
-        PlayerController.play(ep, isRadio = true)
-        return true
-    }
+    /** 换台/下一首:交给 PlayerController(电台会前进历史或抓新随机)。 */
+    fun skip() = PlayerController.next()
 
     fun stop() {
         PlayerController.stopRadio()

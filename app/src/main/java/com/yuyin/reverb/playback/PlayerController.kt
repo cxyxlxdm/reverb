@@ -46,6 +46,29 @@ object PlayerController {
     private val _radioMode = MutableStateFlow(false)
     val radioMode: StateFlow<Boolean> = _radioMode
 
+    // 播放队列(上下文):从哪个列表点开播放,该列表即为队列,决定上/下一集。
+    private var queue: List<Episode> = emptyList()
+    private var queueIndex = 0
+    // 随机电台的播放历史:上一个=回退到刚听过的那期,超出末尾则抓新的随机。
+    private val radioHistory = ArrayList<Episode>()
+    private var radioPos = -1
+    private val radioHistoryCap = 100
+
+    private val _hasNext = MutableStateFlow(false)
+    val hasNext: StateFlow<Boolean> = _hasNext
+    private val _hasPrev = MutableStateFlow(false)
+    val hasPrev: StateFlow<Boolean> = _hasPrev
+
+    private fun updateNavFlags() {
+        if (_radioMode.value) {
+            _hasPrev.value = radioPos > 0
+            _hasNext.value = true // 电台随时可抓下一个
+        } else {
+            _hasPrev.value = queueIndex > 0
+            _hasNext.value = queueIndex in 0 until (queue.size - 1)
+        }
+    }
+
     private val _current = MutableStateFlow<Episode?>(null)
     val current: StateFlow<Episode?> = _current
 
@@ -91,7 +114,7 @@ object PlayerController {
                 val c = future.get()
                 controller = c
                 c.addListener(playerListener)
-                pending?.let { ep -> pending = null; play(ep) }
+                pending?.let { ep -> pending = null; queue = listOf(ep); queueIndex = 0; updateNavFlags(); playEpisode(ep) }
                 syncOnce()
             } catch (e: Exception) {
             }
@@ -126,7 +149,49 @@ object PlayerController {
         }
     }
 
-    fun play(episode: Episode, isRadio: Boolean = false) {
+    /** 播放单集(单条,无上下文):等价于队列只有它自己,无上/下一集。 */
+    fun play(episode: Episode) = playQueue(listOf(episode), 0)
+
+    /** 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。 */
+    fun playQueue(episodes: List<Episode>, startIndex: Int) {
+        if (episodes.isEmpty()) return
+        if (_radioMode.value) stopRadio() // 进入列表上下文即退出电台
+        queue = episodes
+        queueIndex = startIndex.coerceIn(0, episodes.lastIndex)
+        updateNavFlags()
+        playEpisode(episodes[queueIndex], isRadio = false)
+    }
+
+    /** 电台首集/续播用:计入电台历史后播放。 */
+    fun playRadioEpisode(episode: Episode) {
+        radioHistory.add(episode)
+        while (radioHistory.size > radioHistoryCap) radioHistory.removeAt(0)
+        radioPos = radioHistory.lastIndex
+        updateNavFlags()
+        playEpisode(episode, isRadio = true)
+    }
+
+    /** 下一集:列表按顺序,电台优先回放历史前进、到末尾则抓新的随机。 */
+    fun next() {
+        if (_radioMode.value) {
+            if (radioPos in 0 until radioHistory.lastIndex) {
+                radioPos++; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true)
+            } else advanceRadio()
+        } else if (queueIndex in 0 until (queue.size - 1)) {
+            queueIndex++; updateNavFlags(); playEpisode(queue[queueIndex], isRadio = false)
+        }
+    }
+
+    /** 上一集:列表回退一集;电台回退到刚听过的那期。 */
+    fun previous() {
+        if (_radioMode.value) {
+            if (radioPos > 0) { radioPos--; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true) }
+        } else if (queueIndex > 0) {
+            queueIndex--; updateNavFlags(); playEpisode(queue[queueIndex], isRadio = false)
+        }
+    }
+
+    private fun playEpisode(episode: Episode, isRadio: Boolean = false) {
         // 手动播放任意单集即退出电台;电台内部续播/换台传 isRadio=true 保持在台
         if (!isRadio && _radioMode.value) stopRadio()
         _current.value = episode
@@ -188,16 +253,25 @@ object PlayerController {
         if (_current.value?.id == episode.id && controller != null) togglePlayPause() else play(episode)
     }
 
+    /** 队列版:同一集则暂停/继续,否则以该列表为队列从此集起播。 */
+    fun playOrToggle(episode: Episode, queue: List<Episode>) {
+        if (_current.value?.id == episode.id && controller != null) togglePlayPause()
+        else playQueue(queue, queue.indexOfFirst { it.id == episode.id }.coerceAtLeast(0))
+    }
+
     // ---- 随机电台 ----
-    /** 开启电台:登记「下一首」provider 并进入电台模式。首集播放由调用方另行触发。 */
+    /** 开启电台:登记「下一首」provider 并进入电台模式,清空上次电台历史。 */
     fun startRadio(next: suspend () -> Episode?) {
         radioNext = next
+        radioHistory.clear()
+        radioPos = -1
         _radioMode.value = true
     }
 
     fun stopRadio() {
         radioNext = null
         _radioMode.value = false
+        updateNavFlags()
     }
 
     /** 本集播完:抓下一首随机节目续播;抓不到则自动关台。 */
@@ -205,7 +279,7 @@ object PlayerController {
         val next = radioNext ?: return
         scope.launch {
             val ep = try { next() } catch (e: Exception) { null }
-            if (ep != null && _radioMode.value) play(ep, isRadio = true) else stopRadio()
+            if (ep != null && _radioMode.value) playRadioEpisode(ep) else stopRadio()
         }
     }
 

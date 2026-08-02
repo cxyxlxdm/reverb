@@ -145,6 +145,8 @@
     <string name="sleep_off">關閉</string>
     <string name="sleep_minutes">%d 分鐘</string>
     <string name="a11y_play">播放</string>
+    <string name="a11y_next">下一集</string>
+    <string name="a11y_prev">上一集</string>
     <string name="a11y_pause">暫停</string>
     <string name="a11y_collapse_player">收起</string>
     <string name="a11y_skip_back">快退 %d 秒</string>

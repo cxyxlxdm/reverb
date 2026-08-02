@@ -145,6 +145,8 @@
     <string name="sleep_off">Desactivado</string>
     <string name="sleep_minutes">%d min</string>
     <string name="a11y_play">Reproducir</string>
+    <string name="a11y_next">Episodio siguiente</string>
+    <string name="a11y_prev">Episodio anterior</string>
     <string name="a11y_pause">Pausa</string>
     <string name="a11y_collapse_player">Contraer</string>
     <string name="a11y_skip_back">Retroceder %d s</string>

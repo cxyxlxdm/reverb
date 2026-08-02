@@ -115,6 +115,7 @@ private fun MainShell(rootNav: NavHostController) {
     val buffering by PlayerController.buffering.collectAsStateWithLifecycle()
     val position by PlayerController.position.collectAsStateWithLifecycle()
     val duration by PlayerController.duration.collectAsStateWithLifecycle()
+    val hasNext by PlayerController.hasNext.collectAsStateWithLifecycle()
 
     val backStackEntry by tabNav.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
@@ -141,7 +142,9 @@ private fun MainShell(rootNav: NavHostController) {
                             isPlaying = isPlaying,
                             buffering = buffering,
                             progress = progress,
+                            hasNext = hasNext,
                             onToggle = { PlayerController.togglePlayPause() },
+                            onNext = { PlayerController.next() },
                             onExpand = { rootNav.navigate("player") }
                         )
                     }

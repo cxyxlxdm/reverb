@@ -23,6 +23,7 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -272,7 +273,9 @@ fun MiniPlayer(
     isPlaying: Boolean,
     buffering: Boolean,
     progress: Float,
+    hasNext: Boolean,
     onToggle: () -> Unit,
+    onNext: () -> Unit,
     onExpand: () -> Unit
 ) {
     Surface(
@@ -325,6 +328,13 @@ fun MiniPlayer(
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
+                }
+                IconButton(onClick = onNext, enabled = hasNext) {
+                    Icon(
+                        Icons.Rounded.SkipNext,
+                        contentDescription = stringResource(R.string.a11y_next),
+                        tint = if (hasNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    )
                 }
             }
         }

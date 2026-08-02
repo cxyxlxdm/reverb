@@ -190,7 +190,7 @@ private fun FavoritesSection() {
                 episode = ep,
                 isCurrent = current?.id == ep.id,
                 isPlaying = isPlaying,
-                onPlay = { PlayerController.playOrToggle(ep) },
+                onPlay = { PlayerController.playOrToggle(ep, favorites) },
                 showPodcastTitle = true,
                 isFavorite = true,
                 onToggleFavorite = { container.favoriteStore.toggle(ep) }
@@ -221,7 +221,7 @@ private fun DownloadsSection() {
                 episode = d.episode,
                 isCurrent = current?.id == d.episode.id,
                 isPlaying = isPlaying,
-                onPlay = { PlayerController.playOrToggle(d.episode) },
+                onPlay = { PlayerController.playOrToggle(d.episode, downloads.map { it.episode }) },
                 downloadStatus = DownloadStatus.Completed,
                 onDeleteDownload = { pendingDelete = d }
             )
@@ -264,7 +264,7 @@ private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntr
                 episode = h.episode,
                 isCurrent = current?.id == h.episode.id,
                 isPlaying = isPlaying,
-                onPlay = { PlayerController.playOrToggle(h.episode) }
+                onPlay = { PlayerController.playOrToggle(h.episode, history.map { it.episode }) }
             )
         }
     }

@@ -145,6 +145,8 @@
     <string name="sleep_off">Désactivé</string>
     <string name="sleep_minutes">%d min</string>
     <string name="a11y_play">Lire</string>
+    <string name="a11y_next">Épisode suivant</string>
+    <string name="a11y_prev">Épisode précédent</string>
     <string name="a11y_pause">Pause</string>
     <string name="a11y_collapse_player">Réduire</string>
     <string name="a11y_skip_back">Reculer de %d s</string>

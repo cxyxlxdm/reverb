@@ -101,7 +101,7 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                             episode = ep,
                             isCurrent = current?.id == ep.id,
                             isPlaying = isPlaying,
-                            onPlay = { PlayerController.playOrToggle(ep) },
+                            onPlay = { PlayerController.playOrToggle(ep, s.episodes) },
                             downloadStatus = downloadStates[ep.id],
                             onDownload = { DownloadManager.download(ep) },
                             onDeleteDownload = { DownloadManager.delete(ep.id) }

@@ -30,6 +30,8 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -84,6 +86,8 @@ fun PlayerScreen(onBack: () -> Unit) {
     val backSec by container.settingsStore.skipBackSec.collectAsStateWithLifecycle()
     val fwdSec by container.settingsStore.skipForwardSec.collectAsStateWithLifecycle()
     val favorites by container.favoriteStore.favorites.collectAsStateWithLifecycle()
+    val hasNext by PlayerController.hasNext.collectAsStateWithLifecycle()
+    val hasPrev by PlayerController.hasPrev.collectAsStateWithLifecycle()
     val spectrumEnabled by container.settingsStore.spectrumEnabled.collectAsStateWithLifecycle()
     val appContext = LocalContext.current.applicationContext
     val hasAudioPerm = remember {
@@ -137,12 +141,12 @@ fun PlayerScreen(onBack: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                SleepChip(remainingMs = sleepRemaining, endOfEpisode = sleepEnd)
                 SpeedChip(speed = speed)
                 FavoriteButton(
                     favorited = isFavorite,
                     onToggle = { container.favoriteStore.toggle(episode) }
                 )
+                SleepChip(remainingMs = sleepRemaining, endOfEpisode = sleepEnd)
                 MoreMenu(
                     stamped = currentSeal != null,
                     onClip = {
@@ -240,15 +244,16 @@ fun PlayerScreen(onBack: () -> Unit) {
         }
 
         Spacer(Modifier.height(20.dp))
+        // 主控制行:快退 · 上一集 · 播放 · 下一集 · 快进
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(bottom = 28.dp),
-            horizontalArrangement = Arrangement.Center,
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
             SkipButton(seconds = backSec, forward = false) { PlayerController.skipBackward() }
-            Spacer(Modifier.size(24.dp))
+            PrevNextButton(next = false, enabled = hasPrev) { PlayerController.previous() }
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primary,
@@ -265,7 +270,7 @@ fun PlayerScreen(onBack: () -> Unit) {
                     )
                 }
             }
-            Spacer(Modifier.size(24.dp))
+            PrevNextButton(next = true, enabled = hasNext) { PlayerController.next() }
             SkipButton(seconds = fwdSec, forward = true) { PlayerController.skipForward() }
         }
     }
@@ -498,6 +503,19 @@ private fun FavoriteButton(favorited: Boolean, onToggle: () -> Unit) {
 
 private fun formatSpeed(speed: Float): String =
     "%.2f".format(speed).trimEnd('0').trimEnd('.')
+
+/** 上一集 / 下一集按钮:不可用时置灰。 */
+@Composable
+private fun PrevNextButton(next: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.size(52.dp)) {
+        Icon(
+            if (next) Icons.Rounded.SkipNext else Icons.Rounded.SkipPrevious,
+            contentDescription = stringResource(if (next) R.string.a11y_next else R.string.a11y_prev),
+            tint = if (enabled) MaterialTheme.colorScheme.onBackground else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.35f),
+            modifier = Modifier.size(34.dp)
+        )
+    }
+}
 
 @Composable
 private fun SkipButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
