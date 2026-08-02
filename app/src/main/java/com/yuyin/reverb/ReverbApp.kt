@@ -8,6 +8,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import com.yuyin.reverb.data.local.CategoryStore
 import com.yuyin.reverb.data.local.DownloadStore
+import com.yuyin.reverb.data.local.FavoriteStore
 import com.yuyin.reverb.data.local.HistoryStore
 import com.yuyin.reverb.data.local.PopularCacheStore
 import com.yuyin.reverb.data.local.RegionStore
@@ -40,6 +41,7 @@ class AppContainer(app: Application) {
     val categoryStore = CategoryStore(app)
     val downloadStore = DownloadStore(app)
     val historyStore = HistoryStore(app)
+    val favoriteStore = FavoriteStore(app)
     val updateStore = UpdateStore(app)
     val regionStore = RegionStore(app)
     val settingsStore = SettingsStore(app)

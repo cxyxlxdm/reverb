@@ -61,6 +61,7 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
     var section by remember { mutableIntStateOf(0) }
     val sections = listOf(
         stringResource(R.string.lib_subscriptions),
+        stringResource(R.string.lib_favorites),
         stringResource(R.string.lib_downloads),
         stringResource(R.string.lib_history)
     )
@@ -92,7 +93,7 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
                     )
                 }
             }
-            if (section == 2 && history.isNotEmpty()) {
+            if (section == 3 && history.isNotEmpty()) {
                 TextButton(
                     onClick = { container.historyStore.clear() },
                     modifier = Modifier
@@ -106,7 +107,8 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when (section) {
                 0 -> SubscriptionsSection(onOpen)
-                1 -> DownloadsSection()
+                1 -> FavoritesSection()
+                2 -> DownloadsSection()
                 else -> HistorySection(history)
             }
         }
@@ -164,6 +166,35 @@ private fun SubscriptionsSection(onOpen: (Podcast) -> Unit) {
             ) {
                 items(shown) { p -> PodcastListItem(p) { onOpen(p) } }
             }
+        }
+    }
+}
+
+@Composable
+private fun FavoritesSection() {
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
+    val favorites by container.favoriteStore.favorites.collectAsStateWithLifecycle()
+    val current by PlayerController.current.collectAsStateWithLifecycle()
+    val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
+
+    if (favorites.isEmpty()) {
+        EmptyHint(stringResource(R.string.empty_favorites))
+        return
+    }
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        items(favorites, key = { it.id }) { ep ->
+            EpisodeListItem(
+                episode = ep,
+                isCurrent = current?.id == ep.id,
+                isPlaying = isPlaying,
+                onPlay = { PlayerController.playOrToggle(ep) },
+                showPodcastTitle = true,
+                isFavorite = true,
+                onToggleFavorite = { container.favoriteStore.toggle(ep) }
+            )
         }
     }
 }

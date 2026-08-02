@@ -18,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -133,7 +135,9 @@ fun EpisodeListItem(
     downloadStatus: DownloadStatus? = null,
     onDownload: (() -> Unit)? = null,
     onDeleteDownload: (() -> Unit)? = null,
-    showPodcastTitle: Boolean = false // 搜索结果里同列多个不同播客的单集，需标出所属频道
+    showPodcastTitle: Boolean = false, // 搜索结果里同列多个不同播客的单集，需标出所属频道
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null
 ) {
     Row(
         modifier = Modifier
@@ -183,6 +187,15 @@ fun EpisodeListItem(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1
+                )
+            }
+        }
+        if (onToggleFavorite != null) {
+            IconButton(onClick = onToggleFavorite) {
+                Icon(
+                    if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                    contentDescription = stringResource(if (isFavorite) R.string.a11y_unfavorite else R.string.a11y_favorite),
+                    tint = if (isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

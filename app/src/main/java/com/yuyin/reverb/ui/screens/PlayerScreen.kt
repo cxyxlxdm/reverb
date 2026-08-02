@@ -21,7 +21,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -56,6 +59,7 @@ import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.Artwork
+import com.yuyin.reverb.ui.components.InkWave
 import com.yuyin.reverb.ui.components.formatTime
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -72,6 +76,7 @@ fun PlayerScreen(onBack: () -> Unit) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val backSec by container.settingsStore.skipBackSec.collectAsStateWithLifecycle()
     val fwdSec by container.settingsStore.skipForwardSec.collectAsStateWithLifecycle()
+    val favorites by container.favoriteStore.favorites.collectAsStateWithLifecycle()
 
     val episode = current
     if (episode == null) {
@@ -80,6 +85,8 @@ fun PlayerScreen(onBack: () -> Unit) {
         }
         return
     }
+
+    val isFavorite = favorites.any { it.id == episode.id }
 
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
@@ -109,7 +116,11 @@ fun PlayerScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SleepChip(remainingMs = sleepRemaining, endOfEpisode = sleepEnd)
-                SpeedChip(speed = speed, onClick = { PlayerController.cycleSpeed() })
+                SpeedChip(speed = speed)
+                FavoriteButton(
+                    favorited = isFavorite,
+                    onToggle = { container.favoriteStore.toggle(episode) }
+                )
             }
         }
 
@@ -122,6 +133,11 @@ fun PlayerScreen(onBack: () -> Unit) {
         ) { page ->
             when (page) {
                 0 -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    InkWave(
+                        playing = isPlaying,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.fillMaxSize()
+                    )
                     Artwork(episode.artworkUrl, size = 260, corner = 24)
                 }
                 else -> ShownotesPage(episode)
@@ -263,18 +279,65 @@ private fun PagerDots(current: Int, count: Int) {
     }
 }
 
+/** 倍速:点开下拉框选择,替代过去点一下换一档。 */
 @Composable
-private fun SpeedChip(speed: Float, onClick: () -> Unit) {
+private fun SpeedChip(speed: Float) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.clickable { open = true }
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(start = 14.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
+            ) {
+                Text(
+                    "${formatSpeed(speed)}×",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Icon(
+                    Icons.Rounded.ArrowDropDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            PlayerController.speedSteps.forEach { s ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            "${formatSpeed(s)}×",
+                            color = if (kotlin.math.abs(s - speed) < 0.01f) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.onSurface
+                        )
+                    },
+                    onClick = { PlayerController.setSpeed(s); open = false }
+                )
+            }
+        }
+    }
+}
+
+/** 收藏当前单集:填充心表示已收藏,描边心表示未收藏。 */
+@Composable
+private fun FavoriteButton(favorited: Boolean, onToggle: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.clickable(onClick = onClick)
+        modifier = Modifier.clickable(onClick = onToggle)
     ) {
-        Text(
-            "${formatSpeed(speed)}×",
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+        Icon(
+            if (favorited) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+            contentDescription = stringResource(if (favorited) R.string.a11y_unfavorite else R.string.a11y_favorite),
+            tint = if (favorited) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .padding(8.dp)
+                .size(20.dp)
         )
     }
 }

@@ -94,6 +94,11 @@
     <string name="region_de">德國</string>
 
     <string name="lib_subscriptions">訂閱</string>
+    <string name="lib_favorites">收藏</string>
+    <string name="empty_favorites">還沒有收藏的單集。在播放頁點心形按鈕即可收藏</string>
+    <string name="a11y_favorite">收藏</string>
+    <string name="a11y_unfavorite">取消收藏</string>
+    <string name="backup_row_favorites">收藏</string>
     <string name="lib_downloads">下載</string>
     <string name="lib_history">歷史</string>
     <string name="empty_library">音閣尚空，先去「發現」訂閱幾檔好節目</string>
@@ -146,6 +151,7 @@
     <string name="theme_system">跟隨系統</string>
     <string name="theme_light">淺色</string>
     <string name="theme_dark">深色</string>
+    <string name="theme_white">純白</string>
     <string name="set_font">字級</string>
     <string name="font_small">小</string>
     <string name="font_normal">標準</string>

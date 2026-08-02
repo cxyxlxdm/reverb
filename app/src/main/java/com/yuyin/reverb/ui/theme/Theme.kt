@@ -59,6 +59,21 @@ private fun darkScheme(a: AccentPalette) = darkColorScheme(
     outline = lerp(Color(0xFF33413F), a.primaryDark, 0.15f)
 )
 
+// 纯白主题:白底 + 冷灰中性色,区别于暖调「宣纸」浅色
+private fun whiteScheme(a: AccentPalette) = lightColorScheme(
+    primary = a.primaryLight,
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFF9A7A2E),
+    onSecondary = Color(0xFFFFFFFF),
+    background = Color(0xFFFFFFFF),
+    onBackground = Color(0xFF1A1C1E),
+    surface = Color(0xFFFFFFFF),
+    onSurface = Color(0xFF1A1C1E),
+    surfaceVariant = Color(0xFFEEF1F3),
+    onSurfaceVariant = Color(0xFF5A6169),
+    outline = Color(0xFFD5DADE)
+)
+
 private fun lightScheme(a: AccentPalette) = lightColorScheme(
     primary = a.primaryLight,
     onPrimary = Color(0xFFFFFFFF),
@@ -74,7 +89,7 @@ private fun lightScheme(a: AccentPalette) = lightColorScheme(
 )
 
 /**
- * @param mode 0 跟随系统 / 1 浅色 / 2 深色
+ * @param mode 0 跟随系统 / 1 浅色（宣纸）/ 2 深色（水墨）/ 3 纯白
  * @param fontScale 字号倍率（作用于全局 sp 文本）
  * @param accentIndex [ACCENTS] 索引
  */
@@ -88,10 +103,15 @@ fun ReverbTheme(
     val dark = when (mode) {
         1 -> false
         2 -> true
+        3 -> false
         else -> isSystemInDarkTheme()
     }
     val accent = ACCENTS.getOrElse(accentIndex) { ACCENTS[0] }
-    val scheme = if (dark) darkScheme(accent) else lightScheme(accent)
+    val scheme = when {
+        mode == 3 -> whiteScheme(accent)
+        dark -> darkScheme(accent)
+        else -> lightScheme(accent)
+    }
 
     // 状态栏/导航栏图标随主题反色：浅色主题用深色图标，深色主题用浅色图标
     val view = LocalView.current

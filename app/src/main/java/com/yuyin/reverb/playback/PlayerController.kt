@@ -37,6 +37,10 @@ object PlayerController {
     private var tickCount = 0
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
+    // 音频淡入淡出:新集播放音量渐入,睡眠定时结束前渐弱
+    private val fadeInMs = 900L
+    private val sleepFadeMs = 8_000L // 睡眠定时最后 8 秒渐弱
+
     // 随机电台:开启后本集播完自动接下一首(下一首由外部 provider 提供,与数据层解耦)
     private var radioNext: (suspend () -> Episode?)? = null
     private val _radioMode = MutableStateFlow(false)
@@ -57,7 +61,7 @@ object PlayerController {
     private val _buffering = MutableStateFlow(false)
     val buffering: StateFlow<Boolean> = _buffering
 
-    private val speedSteps = listOf(0.8f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
+    val speedSteps = listOf(0.8f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
     private val _speed = MutableStateFlow(1.0f)
     val speed: StateFlow<Float> = _speed
 
@@ -155,8 +159,30 @@ object PlayerController {
         c.setMediaItem(item)
         c.prepare()
         c.setPlaybackSpeed(_speed.value)
+        c.volume = 0f
         c.play()
+        fadeVolume(from = 0f, to = 1f, durationMs = fadeInMs)
     }
+
+    // 分步渐变音量(主线程 handler 驱动),用于淡入淡出
+    private val fadeStepMs = 50L
+    private fun fadeVolume(from: Float, to: Float, durationMs: Long, onEnd: (() -> Unit)? = null) {
+        val c = controller ?: return
+        handler.removeCallbacks(fadeRunnable)
+        val steps = (durationMs / fadeStepMs).coerceAtLeast(1)
+        var i = 0
+        fadeRunnable = object : Runnable {
+            override fun run() {
+                i++
+                val t = (i.toFloat() / steps).coerceIn(0f, 1f)
+                c.volume = (from + (to - from) * t).coerceIn(0f, 1f)
+                if (i < steps) handler.postDelayed(this, fadeStepMs) else onEnd?.invoke()
+            }
+        }
+        c.volume = from.coerceIn(0f, 1f)
+        handler.postDelayed(fadeRunnable, fadeStepMs)
+    }
+    private var fadeRunnable: Runnable = Runnable {}
 
     fun playOrToggle(episode: Episode) {
         if (_current.value?.id == episode.id && controller != null) togglePlayPause() else play(episode)
@@ -228,8 +254,10 @@ object PlayerController {
 
     fun cancelSleep() {
         handler.removeCallbacks(sleepTicker)
+        handler.removeCallbacks(fadeRunnable)
         _sleepRemainingMs.value = 0
         _sleepEndOfEpisode.value = false
+        controller?.volume = 1f // 取消定时后恢复音量,避免停在渐弱中途
     }
 
     private val sleepTicker = object : Runnable {
@@ -237,9 +265,15 @@ object PlayerController {
             val remain = _sleepRemainingMs.value - 1000
             if (remain <= 0) {
                 _sleepRemainingMs.value = 0
+                // 最后阶段已渐弱到接近 0,这里收尾:暂停并恢复音量供下次播放
                 controller?.pause()
+                controller?.volume = 1f
             } else {
                 _sleepRemainingMs.value = remain
+                // 进入最后 sleepFadeMs 窗口:按剩余比例线性渐弱
+                if (remain <= sleepFadeMs) {
+                    controller?.volume = (remain.toFloat() / sleepFadeMs).coerceIn(0f, 1f)
+                }
                 handler.postDelayed(this, 1000)
             }
         }

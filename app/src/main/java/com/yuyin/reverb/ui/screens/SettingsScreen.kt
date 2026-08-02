@@ -62,7 +62,7 @@ private enum class Dlg { NONE, REGION, THEME, FONT, ACCENT, SPEED, SKIP_BACK, SK
 
 private val FONT_SCALES = listOf(0.85f, 1.0f, 1.15f, 1.3f)
 private val FONT_LABEL_RES = listOf(R.string.font_small, R.string.font_normal, R.string.font_large, R.string.font_xlarge)
-private val THEME_LABEL_RES = listOf(R.string.theme_system, R.string.theme_light, R.string.theme_dark)
+private val THEME_LABEL_RES = listOf(R.string.theme_system, R.string.theme_light, R.string.theme_dark, R.string.theme_white)
 private val ACCENT_LABEL_RES = listOf(R.string.accent_celadon, R.string.accent_blue, R.string.accent_red, R.string.accent_green)
 private val SPEED_VALUES = listOf(0.8f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
 private val SKIP_BACK_OPTIONS = listOf(5, 10, 15, 30)
@@ -536,6 +536,7 @@ private fun ConfirmDialog(
 
 private val SECTION_ROWS = listOf(
     BackupManager.Section.SUBSCRIPTIONS to R.string.backup_row_subscriptions,
+    BackupManager.Section.FAVORITES to R.string.backup_row_favorites,
     BackupManager.Section.DOWNLOADS to R.string.backup_row_downloads,
     BackupManager.Section.HISTORY to R.string.backup_row_history,
     BackupManager.Section.SETTINGS to R.string.backup_row_settings

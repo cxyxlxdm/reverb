@@ -94,6 +94,11 @@
     <string name="region_de">Allemagne</string>
 
     <string name="lib_subscriptions">Abonnements</string>
+    <string name="lib_favorites">Favoris</string>
+    <string name="empty_favorites">Aucun épisode favori pour l\'instant. Touchez le cœur dans le lecteur pour en enregistrer un</string>
+    <string name="a11y_favorite">Ajouter aux favoris</string>
+    <string name="a11y_unfavorite">Retirer des favoris</string>
+    <string name="backup_row_favorites">Favoris</string>
     <string name="lib_downloads">Téléchargements</string>
     <string name="lib_history">Historique</string>
     <string name="empty_library">Bibliothèque vide — abonnez-vous depuis Découvrir</string>
@@ -146,6 +151,7 @@
     <string name="theme_system">Système</string>
     <string name="theme_light">Clair</string>
     <string name="theme_dark">Sombre</string>
+    <string name="theme_white">Blanc pur</string>
     <string name="set_font">Taille du texte</string>
     <string name="font_small">Petit</string>
     <string name="font_normal">Standard</string>
