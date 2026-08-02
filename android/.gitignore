@@ -1,0 +1,14 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/app/build
+# 签名密钥与口令不入库
+keystore.properties
+*.jks
+*.keystore
+/captures
+.externalNativeBuild
+.cxx

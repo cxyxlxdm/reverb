@@ -49,17 +49,32 @@ playback/       PlaybackService(MediaSessionService) · PlayerController(门面/
 ui/             ReverbRoot(导航) · theme/ · components/ · screens/(Discover/Library/PodcastDetail/Player) · ViewModels
 ```
 
-## 构建
+## 仓库结构
+
+- `android/` — Android 版(Kotlin / Jetpack Compose)
+- `macos/` — macOS 版(Swift / SwiftUI)
+- `FEATURES.md` — 全平台功能清单
+
+## 构建 · Android
 
 ```bash
+cd android
 # JDK 17 + Android SDK（platform 34, build-tools 34）
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./gradlew :app:assembleDebug
 ```
 
-产物：`app/build/outputs/apk/debug/app-debug.apk`
+产物：`android/app/build/outputs/apk/debug/app-debug.apk`
+安装到设备：`adb install -r android/app/build/outputs/apk/debug/app-debug.apk`
 
-安装到设备：`adb install -r app/build/outputs/apk/debug/app-debug.apk`
+## 构建 · macOS
+
+```bash
+cd macos
+./package.sh   # swift build → 组装 .app → ad-hoc 签名 → 打 dmg
+```
+
+产物：`macos/build/余音-Reverb.dmg`
 
 ## 配置项
 - 版本：minSdk 26 / targetSdk 34 / compileSdk 34

@@ -3,3 +3,6 @@ build/
 *.dmg
 .DS_Store
 Package.resolved
+# 图标中间产物(保留 tools/make_icon.swift 与 Resources/AppIcon.icns)
+tools/*.png
+tools/*.iconset

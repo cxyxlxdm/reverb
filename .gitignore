@@ -1,14 +1,4 @@
-*.iml
-.gradle
-/local.properties
-/.idea
+# 仓库根:平台各自的忽略规则见 android/.gitignore 与 macos/.gitignore
 .DS_Store
-/build
-/app/build
-# 签名密钥与口令不入库
-keystore.properties
-*.jks
-*.keystore
-/captures
-.externalNativeBuild
-.cxx
+*.iml
+/.idea
