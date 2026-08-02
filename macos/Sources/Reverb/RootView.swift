@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 骨架:侧栏(发现/音阁/设置)+ 内容区。后续逐步填充功能。
+/// 根视图:侧栏(发现/音阁/设置)+ 内容区,底部常驻播放条。
 struct RootView: View {
     enum Tab: String, CaseIterable, Identifiable {
         case discover = "发现"
@@ -16,6 +16,8 @@ struct RootView: View {
         }
     }
 
+    @EnvironmentObject var env: AppEnvironment
+    @EnvironmentObject var player: PlayerController
     @State private var tab: Tab = .discover
 
     var body: some View {
@@ -26,24 +28,23 @@ struct RootView: View {
             .navigationSplitViewColumnWidth(min: 160, ideal: 180, max: 220)
             .listStyle(.sidebar)
         } detail: {
-            switch tab {
-            case .discover: PlaceholderView(title: "发现", subtitle: "余音绕梁，隽永悠长")
-            case .library: PlaceholderView(title: "音阁", subtitle: "订阅 · 收藏 · 下载 · 历史")
-            case .settings: PlaceholderView(title: "设置", subtitle: "主题 · 播放 · 备份")
+            VStack(spacing: 0) {
+                Group {
+                    switch tab {
+                    case .discover: DiscoverView()
+                    case .library: LibraryView()
+                    case .settings: SettingsView()
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if player.current != nil {
+                    Divider()
+                    NowPlayingBar()
+                }
             }
         }
         .navigationTitle("余音")
-    }
-}
-
-private struct PlaceholderView: View {
-    let title: String
-    let subtitle: String
-    var body: some View {
-        VStack(spacing: 10) {
-            Text(title).font(.system(size: 34, weight: .semibold))
-            Text(subtitle).font(.title3).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .tint(Theme.accent(env.settings.accentIndex))
     }
 }

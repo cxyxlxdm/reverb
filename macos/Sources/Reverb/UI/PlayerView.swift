@@ -1,0 +1,277 @@
+import SwiftUI
+
+/// 全屏播放页:水墨波纹背景 + 封面 + 进度 + 控制 + 倍速/收藏/睡眠/印记。
+struct PlayerView: View {
+    @EnvironmentObject var env: AppEnvironment
+    @EnvironmentObject var player: PlayerController
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var dragging = false
+    @State private var dragValue: Double = 0
+    @State private var showStamps = false
+
+    private let sleepMinutes = [15, 30, 45, 60]
+    private let seals: [(seal: String, label: String)] = [
+        ("喜", "开心"), ("暖", "治愈"), ("燃", "热血"),
+        ("惊", "震撼"), ("思", "沉思"), ("悟", "领悟"),
+        ("悲", "难过"), ("怒", "愤怒"), ("疲", "疲惫")
+    ]
+
+    private var accent: Color { Theme.accent(env.settings.accentIndex) }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            if let ep = player.current {
+                ScrollView {
+                    VStack(spacing: 24) {
+                        artwork(ep)
+                        titleBlock(ep)
+                        seekBar
+                        controls
+                        actionRow(ep)
+                    }
+                    .padding(28)
+                }
+            } else {
+                Spacer()
+                Text("没有正在播放的内容").foregroundStyle(.secondary)
+                Spacer()
+            }
+        }
+        .frame(minWidth: 420, minHeight: 560)
+    }
+
+    private var header: some View {
+        HStack {
+            Button { dismiss() } label: {
+                Image(systemName: "chevron.down").font(.system(size: 14, weight: .semibold))
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            Text("正在播放").font(.headline)
+            Spacer()
+            Image(systemName: "chevron.down").opacity(0) // 占位居中
+        }
+        .padding(.horizontal, 18)
+        .padding(.top, 16)
+    }
+
+    // MARK: - 封面 + 水墨波纹
+
+    private func artwork(_ ep: Episode) -> some View {
+        ZStack {
+            InkWave(color: accent, animating: player.isPlaying)
+                .frame(height: 300)
+            Artwork(url: ep.artworkUrl, size: 240, corner: 18)
+                .shadow(color: .black.opacity(0.25), radius: 18, y: 8)
+        }
+    }
+
+    private func titleBlock(_ ep: Episode) -> some View {
+        VStack(spacing: 6) {
+            Text(ep.title).font(.title3.bold()).multilineTextAlignment(.center).lineLimit(3)
+            Text(ep.podcastTitle).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+        }
+    }
+
+    // MARK: - 进度
+
+    private var seekBar: some View {
+        VStack(spacing: 4) {
+            Slider(
+                value: Binding(
+                    get: { dragging ? dragValue : Double(player.positionMs) },
+                    set: { dragValue = $0 }
+                ),
+                in: 0...Double(max(1, player.durationMs)),
+                onEditingChanged: { editing in
+                    if editing { dragging = true }
+                    else { player.seek(toMs: Int(dragValue)); dragging = false }
+                }
+            )
+            HStack {
+                Text(timeText(dragging ? Int(dragValue) : player.positionMs))
+                Spacer()
+                Text(timeText(player.durationMs))
+            }
+            .font(.caption.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: - 传输控制
+
+    private var controls: some View {
+        HStack(spacing: 26) {
+            controlButton("gobackward.\(min(env.settings.skipBackSec, 30))", size: 22) { player.skipBackward() }
+                .help("快退")
+            controlButton("backward.fill", size: 20) { player.previous() }
+                .disabled(!player.hasPrev)
+            Button { player.togglePlayPause() } label: {
+                Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 58))
+                    .foregroundStyle(accent)
+            }
+            .buttonStyle(.plain)
+            controlButton("forward.fill", size: 20) { player.next() }
+                .disabled(!player.hasNext)
+            controlButton("goforward.\(min(env.settings.skipForwardSec, 60))", size: 22) { player.skipForward() }
+                .help("快进")
+        }
+    }
+
+    private func controlButton(_ symbol: String, size: CGFloat, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: size))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - 动作行
+
+    private func actionRow(_ ep: Episode) -> some View {
+        HStack(spacing: 22) {
+            // 倍速
+            Menu {
+                ForEach(player.speedSteps, id: \.self) { s in
+                    Button {
+                        player.setSpeed(s)
+                    } label: {
+                        if abs(player.speed - s) < 0.001 { Label(speedText(s), systemImage: "checkmark") }
+                        else { Text(speedText(s)) }
+                    }
+                }
+            } label: {
+                Text(speedText(player.speed)).font(.callout.monospacedDigit())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
+            // 收藏
+            Button {
+                env.favorites.toggle(ep)
+            } label: {
+                Image(systemName: env.favorites.isFavorite(ep.id) ? "heart.fill" : "heart")
+                    .foregroundStyle(env.favorites.isFavorite(ep.id) ? accent : .primary)
+            }
+            .buttonStyle(.plain)
+            .help("收藏")
+
+            // 睡眠
+            Menu {
+                ForEach(sleepMinutes, id: \.self) { m in
+                    Button("\(m) 分钟") { player.setSleepTimer(minutes: m) }
+                }
+                Button("本集结束") { player.setSleepEndOfEpisode() }
+                Divider()
+                Button("关闭") { player.cancelSleep() }
+            } label: {
+                Image(systemName: sleepActive ? "moon.zzz.fill" : "moon.zzz")
+                    .foregroundStyle(sleepActive ? accent : .primary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .help("睡眠定时")
+
+            // 印记
+            Button {
+                showStamps = true
+            } label: {
+                Image(systemName: "seal")
+                    .foregroundStyle(currentSeal != nil ? accent : .primary)
+                    .overlay {
+                        if let s = currentSeal {
+                            Text(s).font(.system(size: 9, weight: .bold)).foregroundStyle(accent)
+                        }
+                    }
+            }
+            .buttonStyle(.plain)
+            .help("听觉印记")
+            .popover(isPresented: $showStamps, arrowEdge: .bottom) { stampGrid(ep) }
+        }
+        .padding(.top, 4)
+    }
+
+    private var sleepActive: Bool { player.sleepRemainingMs > 0 || player.sleepEndOfEpisode }
+
+    private var currentSeal: String? {
+        guard let ep = player.current else { return nil }
+        return env.stamps.sealFor(ep.id)
+    }
+
+    private func stampGrid(_ ep: Episode) -> some View {
+        let columns = Array(repeating: GridItem(.fixed(64), spacing: 10), count: 3)
+        return LazyVGrid(columns: columns, spacing: 10) {
+            ForEach(seals, id: \.seal) { item in
+                let active = currentSeal == item.seal
+                Button {
+                    if active {
+                        env.stamps.remove(ep.id)
+                    } else {
+                        env.stamps.set(episodeId: ep.id, seal: item.seal, title: ep.title,
+                                       podcastTitle: ep.podcastTitle, at: Date().timeIntervalSince1970)
+                    }
+                    showStamps = false
+                } label: {
+                    VStack(spacing: 4) {
+                        Text(item.seal).font(.system(size: 22, weight: .bold))
+                        Text(item.label).font(.caption2)
+                    }
+                    .frame(width: 60, height: 60)
+                    .background(active ? accent.opacity(0.2) : Color.gray.opacity(0.12),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .foregroundStyle(active ? accent : .primary)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+    }
+
+    // MARK: - 工具
+
+    private func timeText(_ ms: Int) -> String {
+        let total = max(0, ms) / 1000
+        let m = total / 60
+        let s = total % 60
+        return String(format: "%d:%02d", m, s)
+    }
+
+    private func speedText(_ s: Double) -> String {
+        String(format: "%.2g×", s)
+    }
+}
+
+/// 水墨波纹:多条正弦色带,仅在播放时流动。
+private struct InkWave: View {
+    let color: Color
+    let animating: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !animating)) { timeline in
+            Canvas { ctx, size in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let ribbons = 3
+                for r in 0..<ribbons {
+                    var path = Path()
+                    let amp = size.height * 0.06 * Double(r + 1)
+                    let yBase = size.height * (0.4 + 0.12 * Double(r))
+                    let phase = t * (0.6 + 0.25 * Double(r)) + Double(r)
+                    let wavelength = size.width / (1.2 + 0.4 * Double(r))
+                    path.move(to: CGPoint(x: 0, y: yBase))
+                    var x: CGFloat = 0
+                    while x <= size.width {
+                        let y = yBase + amp * sin(Double(x) / wavelength * 2 * .pi + phase)
+                        path.addLine(to: CGPoint(x: x, y: y))
+                        x += 6
+                    }
+                    ctx.stroke(path, with: .color(color.opacity(0.18 - 0.04 * Double(r))),
+                               lineWidth: 2.0 + Double(r))
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .blur(radius: 6)
+    }
+}
