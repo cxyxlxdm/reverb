@@ -1,6 +1,9 @@
 <resources>
     <string name="app_name">余音</string>
     <string name="slogan">余音绕梁，隽永悠长</string>
+    <string name="radio_start">随机电台</string>
+    <string name="radio_next">下一首</string>
+    <string name="radio_empty">暂时没找到可播放的节目，稍后再试</string>
 
     <string name="nav_discover">发现</string>
     <string name="nav_library">音阁</string>

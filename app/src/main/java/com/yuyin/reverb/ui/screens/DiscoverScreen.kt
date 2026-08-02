@@ -1,8 +1,10 @@
 package com.yuyin.reverb.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +25,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -32,8 +35,10 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -62,6 +67,7 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -84,6 +90,7 @@ import com.yuyin.reverb.ui.DiscoverState
 import com.yuyin.reverb.ui.DiscoverViewModel
 import com.yuyin.reverb.ui.REGION_OPTIONS
 import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.playback.RadioStation
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.PodcastListItem
 import com.yuyin.reverb.ui.discoverViewModel
@@ -107,6 +114,9 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
     }
 
     val categories = vm.orderedCategories
+    val radioMode by PlayerController.radioMode.collectAsStateWithLifecycle()
+    val radioPreparing by RadioStation.preparing.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var showReorder by remember { mutableStateOf(false) }
     val browsing = vm.state is DiscoverState.Idle
     val pagerState = rememberPagerState(pageCount = { categories.size })
@@ -115,7 +125,22 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
             title = stringResource(R.string.app_name),
-            subtitle = stringResource(R.string.slogan)
+            subtitle = stringResource(R.string.slogan),
+            action = {
+                // 随机电台:短按开台/换下一首,长按停止;抓取首集时转圈
+                RadioActionButton(
+                    active = radioMode,
+                    preparing = radioPreparing,
+                    onShort = {
+                        RadioStation.configure(container.repository, region, categories.map { it.genreId })
+                        scope.launch {
+                            val ok = if (radioMode) RadioStation.skip() else RadioStation.start()
+                            if (!ok) Toast.makeText(context, R.string.radio_empty, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onLong = { if (radioMode) RadioStation.stop() }
+                )
+            }
         )
 
         OutlinedTextField(
@@ -192,6 +217,43 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                 showReorder = false
             }
         )
+    }
+}
+
+/** 随机电台按钮:关台态灰、在台态高亮,抓取中转圈;短按开台/换台,长按停止。 */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun RadioActionButton(
+    active: Boolean,
+    preparing: Boolean,
+    onShort: () -> Unit,
+    onLong: () -> Unit
+) {
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(CircleShape)
+            .combinedClickable(
+                enabled = !preparing,
+                onClickLabel = stringResource(if (active) R.string.radio_next else R.string.radio_start),
+                onClick = onShort,
+                onLongClick = onLong
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        if (preparing) {
+            CircularProgressIndicator(
+                modifier = Modifier.size(22.dp),
+                strokeWidth = 2.dp,
+                color = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            Icon(
+                Icons.Rounded.Shuffle,
+                contentDescription = stringResource(if (active) R.string.radio_next else R.string.radio_start),
+                tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

@@ -14,8 +14,12 @@ import androidx.media3.session.SessionToken
 import com.yuyin.reverb.data.local.HistoryStore
 import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.Episode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import java.io.File
 
 /**
@@ -31,6 +35,12 @@ object PlayerController {
     private var settings: SettingsStore? = null
     private var pendingSeekMs: Long = 0
     private var tickCount = 0
+    private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
+    // 随机电台:开启后本集播完自动接下一首(下一首由外部 provider 提供,与数据层解耦)
+    private var radioNext: (suspend () -> Episode?)? = null
+    private val _radioMode = MutableStateFlow(false)
+    val radioMode: StateFlow<Boolean> = _radioMode
 
     private val _current = MutableStateFlow<Episode?>(null)
     val current: StateFlow<Episode?> = _current
@@ -103,13 +113,18 @@ object PlayerController {
                 pendingSeekMs = 0
             }
             if (playbackState == Player.STATE_ENDED) {
+                val stopAfterThis = _sleepEndOfEpisode.value // 睡眠「本集结束」优先于电台续播
                 _sleepEndOfEpisode.value = false
                 _current.value?.let { history?.updatePosition(it.id, 0, c?.duration ?: 0) }
+                // 电台模式:本集播完自动抓下一首随机节目续播
+                if (_radioMode.value && !stopAfterThis) advanceRadio()
             }
         }
     }
 
-    fun play(episode: Episode) {
+    fun play(episode: Episode, isRadio: Boolean = false) {
+        // 手动播放任意单集即退出电台;电台内部续播/换台传 isRadio=true 保持在台
+        if (!isRadio && _radioMode.value) stopRadio()
         _current.value = episode
         val c = controller
         if (c == null) {
@@ -145,6 +160,27 @@ object PlayerController {
 
     fun playOrToggle(episode: Episode) {
         if (_current.value?.id == episode.id && controller != null) togglePlayPause() else play(episode)
+    }
+
+    // ---- 随机电台 ----
+    /** 开启电台:登记「下一首」provider 并进入电台模式。首集播放由调用方另行触发。 */
+    fun startRadio(next: suspend () -> Episode?) {
+        radioNext = next
+        _radioMode.value = true
+    }
+
+    fun stopRadio() {
+        radioNext = null
+        _radioMode.value = false
+    }
+
+    /** 本集播完:抓下一首随机节目续播;抓不到则自动关台。 */
+    private fun advanceRadio() {
+        val next = radioNext ?: return
+        scope.launch {
+            val ep = try { next() } catch (e: Exception) { null }
+            if (ep != null && _radioMode.value) play(ep, isRadio = true) else stopRadio()
+        }
     }
 
     fun togglePlayPause() {

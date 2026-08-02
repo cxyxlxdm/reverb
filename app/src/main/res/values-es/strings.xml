@@ -1,6 +1,9 @@
 <resources>
     <string name="app_name">Reverb</string>
     <string name="slogan">Cada eco perdura.</string>
+    <string name="radio_start">Radio aleatoria</string>
+    <string name="radio_next">Siguiente</string>
+    <string name="radio_empty">No se encontró ningún episodio reproducible, inténtalo más tarde</string>
 
     <string name="nav_discover">Descubrir</string>
     <string name="nav_library">Biblioteca</string>

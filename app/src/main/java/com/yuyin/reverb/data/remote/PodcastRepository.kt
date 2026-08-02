@@ -3,6 +3,8 @@ package com.yuyin.reverb.data.remote
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.FeedResult
 import com.yuyin.reverb.data.model.Podcast
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 源获取的编排层：全链路 **零配置、无需任何 Key、无需登录**，打开即用。
@@ -77,4 +79,38 @@ class PodcastRepository(
     }
 
     suspend fun feed(feedUrl: String): FeedResult? = rss.fetch(feedUrl)
+
+    /**
+     * 随机电台：从热门榜单节目池里随机挑一档 → 解析其 RSS → 随机取一集可播放单集。
+     * 池子优先复用各分类已缓存的榜单(秒取、免联网);不足则补拉一次综合热门榜(冷启动亦可用)。
+     * @param genreIds 参与组池的分类(含 null 表示综合榜),一般取用户发现页的分类。
+     * @param exclude  最近已播过的单集 id,避免立刻重复。
+     */
+    suspend fun randomEpisode(
+        region: String,
+        genreIds: List<Int?>,
+        exclude: Set<String> = emptySet()
+    ): Episode? = withContext(Dispatchers.IO) {
+        // 1) 组建候选节目池:各分类缓存榜单去重(按 feedUrl)
+        val pool = LinkedHashMap<String, Podcast>()
+        for (g in genreIds.distinct()) {
+            cache.get(cacheKey(g, region)).forEach { if (it.feedUrl.isNotBlank()) pool.putIfAbsent(it.feedUrl, it) }
+        }
+        // 2) 池子太小 → 补拉综合热门榜
+        if (pool.size < 10) {
+            refreshPopular(null, region).forEach { if (it.feedUrl.isNotBlank()) pool.putIfAbsent(it.feedUrl, it) }
+        }
+        // 付费节目分集常为会员专享、拉不到直链,优先排除;全付费时再放开兜底
+        val all = pool.values.toList()
+        val candidates = all.filterNot { it.isPaid }.ifEmpty { all }
+        if (candidates.isEmpty()) return@withContext null
+
+        // 3) 随机挑节目 → 解析 RSS → 随机取一集,重试若干档兜底(某档拉不到就换下一档)
+        for (p in candidates.shuffled().take(6)) {
+            val feed = feed(p.feedUrl) ?: continue
+            val playable = feed.episodes.filter { it.audioUrl.isNotBlank() && it.id !in exclude }
+            if (playable.isNotEmpty()) return@withContext playable.random()
+        }
+        null
+    }
 }

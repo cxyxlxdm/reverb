@@ -1,6 +1,9 @@
 <resources>
     <string name="app_name">餘音</string>
     <string name="slogan">餘音繞梁，雋永悠長</string>
+    <string name="radio_start">隨機電台</string>
+    <string name="radio_next">下一首</string>
+    <string name="radio_empty">暫時沒找到可播放的節目，稍後再試</string>
 
     <string name="nav_discover">發現</string>
     <string name="nav_library">音閣</string>

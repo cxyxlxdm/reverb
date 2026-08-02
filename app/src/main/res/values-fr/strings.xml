@@ -1,6 +1,9 @@
 <resources>
     <string name="app_name">Reverb</string>
     <string name="slogan">Chaque écho persiste.</string>
+    <string name="radio_start">Radio aléatoire</string>
+    <string name="radio_next">Suivant</string>
+    <string name="radio_empty">Aucun épisode lisible trouvé, réessayez plus tard</string>
 
     <string name="nav_discover">Découvrir</string>
     <string name="nav_library">Bibliothèque</string>
