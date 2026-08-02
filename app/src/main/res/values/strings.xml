@@ -8,6 +8,9 @@
     <string name="more">更多</string>
     <string name="clip_moment">剪藏 · 分享此刻</string>
     <string name="clip_save">保存此刻到相册</string>
+    <string name="save_confirm_title">保存到相册</string>
+    <string name="save_confirm_msg">将当前图片保存到系统相册?</string>
+    <string name="action_save">保存</string>
     <string name="footprint_save">保存到相册</string>
     <string name="saved_ok">已保存到相册</string>
     <string name="saved_fail">保存失败</string>

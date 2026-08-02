@@ -386,12 +386,12 @@ private fun MoreMenu(stamped: Boolean, onClip: () -> Unit, onSave: () -> Unit, o
         }
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(
-                text = { Text(stringResource(R.string.clip_moment)) },
-                onClick = { open = false; onClip() }
-            )
-            DropdownMenuItem(
                 text = { Text(stringResource(R.string.clip_save)) },
                 onClick = { open = false; onSave() }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.clip_moment)) },
+                onClick = { open = false; onClip() }
             )
             DropdownMenuItem(
                 text = { Text(stringResource(if (stamped) R.string.stamp_edit else R.string.stamp_add)) },

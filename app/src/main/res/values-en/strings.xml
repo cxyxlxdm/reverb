@@ -8,6 +8,9 @@
     <string name="more">More</string>
     <string name="clip_moment">Clip · Share this moment</string>
     <string name="clip_save">Save this moment</string>
+    <string name="save_confirm_title">Save to gallery</string>
+    <string name="save_confirm_msg">Save this image to your gallery?</string>
+    <string name="action_save">Save</string>
     <string name="footprint_save">Save to gallery</string>
     <string name="saved_ok">Saved to gallery</string>
     <string name="saved_fail">Save failed</string>
