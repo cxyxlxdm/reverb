@@ -7,6 +7,10 @@
     <string name="radio_stopped">Stopped</string>
     <string name="more">More</string>
     <string name="clip_moment">Clip · Share this moment</string>
+    <string name="clip_save">Save this moment</string>
+    <string name="footprint_save">Save to gallery</string>
+    <string name="saved_ok">Saved to gallery</string>
+    <string name="saved_fail">Save failed</string>
     <string name="clip_share">Share this moment</string>
     <string name="stamp_add">Stamp · Listening mark</string>
     <string name="stamp_edit">Edit stamp · Listening mark</string>

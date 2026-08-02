@@ -65,6 +65,7 @@ import com.yuyin.reverb.ui.components.InkWave
 import com.yuyin.reverb.ui.components.formatTime
 import com.yuyin.reverb.ui.components.rememberSpectrumState
 import com.yuyin.reverb.ui.share.ShareCards
+import com.yuyin.reverb.ui.share.rememberImageSaver
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 
@@ -106,6 +107,7 @@ fun PlayerScreen(onBack: () -> Unit) {
     val currentSeal = stamps.firstOrNull { it.episodeId == episode.id }?.seal
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
+    val saveImage = rememberImageSaver()
     var sealDialogOpen by remember { mutableStateOf(false) }
 
     var dragging by remember { mutableStateOf(false) }
@@ -147,6 +149,12 @@ fun PlayerScreen(onBack: () -> Unit) {
                         scope.launch {
                             val bmp = ShareCards.momentCard(ctx, episode, position)
                             ShareCards.share(ctx, bmp, "reverb-moment-${kotlin.math.abs(episode.id.hashCode())}.png", ctx.getString(R.string.clip_share))
+                        }
+                    },
+                    onSave = {
+                        scope.launch {
+                            val bmp = ShareCards.momentCard(ctx, episode, position)
+                            saveImage(bmp, "reverb-moment-${kotlin.math.abs(episode.id.hashCode())}.png")
                         }
                     },
                     onStamp = { sealDialogOpen = true }
@@ -368,9 +376,9 @@ private fun SpeedChip(speed: Float) {
     }
 }
 
-/** 更多:剪藏(分享此刻)与盖章(听觉印记)收进溢出菜单,避免顶栏按钮过多。 */
+/** 更多:剪藏(分享此刻)、保存此刻、盖章(听觉印记)收进溢出菜单,避免顶栏按钮过多。 */
 @Composable
-private fun MoreMenu(stamped: Boolean, onClip: () -> Unit, onStamp: () -> Unit) {
+private fun MoreMenu(stamped: Boolean, onClip: () -> Unit, onSave: () -> Unit, onStamp: () -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
@@ -380,6 +388,10 @@ private fun MoreMenu(stamped: Boolean, onClip: () -> Unit, onStamp: () -> Unit) 
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.clip_moment)) },
                 onClick = { open = false; onClip() }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.clip_save)) },
+                onClick = { open = false; onSave() }
             )
             DropdownMenuItem(
                 text = { Text(stringResource(if (stamped) R.string.stamp_edit else R.string.stamp_add)) },

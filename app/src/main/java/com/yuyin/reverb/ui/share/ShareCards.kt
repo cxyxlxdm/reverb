@@ -115,6 +115,34 @@ object ShareCards {
         return bmp
     }
 
+    /** 保存位图到系统相册(Pictures/余音)。Android 10+ 免权限;9 及以下需调用方先取得写外存权限。返回是否成功。 */
+    fun saveToGallery(context: Context, bitmap: Bitmap, displayName: String): Boolean {
+        return try {
+            val resolver = context.contentResolver
+            val values = android.content.ContentValues().apply {
+                put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, displayName)
+                put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, android.os.Environment.DIRECTORY_PICTURES + "/余音")
+                    put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+                }
+            }
+            val collection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q)
+                android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            else android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI
+            val uri = resolver.insert(collection, values) ?: return false
+            resolver.openOutputStream(uri)?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } ?: return false
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+            }
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     /** 保存位图到 cacheDir/shares 并弹出系统分享。 */
     fun share(context: Context, bitmap: Bitmap, fileName: String, chooserTitle: String) {
         val dir = File(context.cacheDir, "shares").apply { mkdirs() }

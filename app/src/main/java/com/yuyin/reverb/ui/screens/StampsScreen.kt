@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.ui.share.ShareCards
+import com.yuyin.reverb.ui.share.rememberImageSaver
 
 /** 听觉足迹:把所有听觉印记以水墨印章网格呈现,可导出为海报分享。 */
 @Composable
@@ -63,6 +65,13 @@ fun StampsScreen(onBack: () -> Unit) {
                 modifier = Modifier.weight(1f).padding(start = 4.dp)
             )
             if (stamps.isNotEmpty()) {
+                val saveImage = rememberImageSaver()
+                IconButton(onClick = {
+                    val seals = stamps.map { Triple(it.seal, it.title, it.podcastTitle) }
+                    saveImage(ShareCards.footprintPoster(seals), "reverb-footprint.png")
+                }) {
+                    Icon(Icons.Rounded.Download, contentDescription = stringResource(R.string.footprint_save), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 IconButton(onClick = {
                     val seals = stamps.map { Triple(it.seal, it.title, it.podcastTitle) }
                     val bmp = ShareCards.footprintPoster(seals)

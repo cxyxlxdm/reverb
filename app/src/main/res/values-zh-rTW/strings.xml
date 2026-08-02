@@ -7,6 +7,10 @@
     <string name="radio_stopped">已停止</string>
     <string name="more">更多</string>
     <string name="clip_moment">剪藏 · 分享此刻</string>
+    <string name="clip_save">儲存此刻到相簿</string>
+    <string name="footprint_save">儲存到相簿</string>
+    <string name="saved_ok">已儲存到相簿</string>
+    <string name="saved_fail">儲存失敗</string>
     <string name="clip_share">分享此刻</string>
     <string name="stamp_add">蓋章 · 聽覺印記</string>
     <string name="stamp_edit">改章 · 聽覺印記</string>

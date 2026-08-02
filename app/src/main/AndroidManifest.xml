@@ -10,6 +10,10 @@
     <!-- 真实频谱可视化(默认关闭,用户在设置中主动开启后才请求) -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- 保存图片到相册:Android 10+ 用 MediaStore 免权限,仅 9 及以下需要写外存 -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
         android:name=".ReverbApp"
