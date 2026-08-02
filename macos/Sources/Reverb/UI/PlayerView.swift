@@ -26,14 +26,15 @@ struct PlayerView: View {
             header
             if let ep = player.current {
                 ScrollView {
-                    VStack(spacing: 24) {
+                    VStack(spacing: 28) {
                         artwork(ep)
                         titleBlock(ep)
                         seekBar
                         controls
                         actionRow(ep)
                     }
-                    .padding(28)
+                    .padding(.horizontal, 36)
+                    .padding(.vertical, 32)
                 }
             } else {
                 Spacer()

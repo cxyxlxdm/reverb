@@ -19,7 +19,8 @@ struct LibraryView: View {
     @State private var pendingDelete: Episode?
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
-    private let columns = [GridItem(.adaptive(minimum: 170, maximum: 220), spacing: 20)]
+    private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin, maximum: Metrics.cardMax),
+                                    spacing: Metrics.gridSpacing)]
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,9 +30,9 @@ struct LibraryView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
             .frame(maxWidth: 360)
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
-            Divider()
+            .padding(.horizontal, Metrics.pagePadding)
+            .padding(.top, Metrics.topPadding)
+            .padding(.bottom, 18)
 
             Group {
                 switch segment {
@@ -73,13 +74,17 @@ struct LibraryView: View {
                 StateView(symbol: "books.vertical", text: "还没有订阅任何节目")
             } else {
                 ScrollView {
-                    LazyVGrid(columns: columns, spacing: 20) {
+                    LazyVGrid(columns: columns, spacing: Metrics.gridSpacing) {
                         ForEach(env.subscriptions.subscriptions) { p in
                             NavigationLink(value: p) { PodcastCard(podcast: p) }
                                 .buttonStyle(.plain)
                         }
                     }
-                    .padding(24)
+                    .frame(maxWidth: Metrics.contentMaxWidth)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, Metrics.pagePadding)
+                    .padding(.top, 4)
+                    .padding(.bottom, Metrics.sectionSpacing)
                 }
             }
         }
@@ -96,7 +101,7 @@ struct LibraryView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(items) { ep in
-                            HStack(spacing: 8) {
+                            HStack(spacing: 12) {
                                 RoomyEpisodeRow(
                                     episode: ep,
                                     isCurrent: player.current?.id == ep.id,
@@ -110,10 +115,11 @@ struct LibraryView: View {
                                 .buttonStyle(.plain)
                                 .help("取消收藏")
                             }
-                            .padding(.horizontal, 24)
-                            Divider().padding(.leading, 24)
                         }
                     }
+                    .frame(maxWidth: Metrics.contentMaxWidth)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, Metrics.pagePadding)
                     .padding(.vertical, 8)
                 }
             }
@@ -138,10 +144,11 @@ struct LibraryView: View {
                                 showPodcast: true,
                                 accent: accent,
                                 onPlay: { player.playOrToggle(ep, queue: items) })
-                                .padding(.horizontal, 24)
-                            Divider().padding(.leading, 24)
                         }
                     }
+                    .frame(maxWidth: Metrics.contentMaxWidth)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, Metrics.pagePadding)
                     .padding(.vertical, 8)
                 }
             }
@@ -159,7 +166,7 @@ struct LibraryView: View {
                 ScrollView {
                     LazyVStack(spacing: 0) {
                         ForEach(items) { ep in
-                            HStack(spacing: 8) {
+                            HStack(spacing: 12) {
                                 RoomyEpisodeRow(
                                     episode: ep,
                                     isCurrent: player.current?.id == ep.id,
@@ -173,10 +180,11 @@ struct LibraryView: View {
                                 .buttonStyle(.plain)
                                 .help("删除下载")
                             }
-                            .padding(.horizontal, 24)
-                            Divider().padding(.leading, 24)
                         }
                     }
+                    .frame(maxWidth: Metrics.contentMaxWidth)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, Metrics.pagePadding)
                     .padding(.vertical, 8)
                 }
             }

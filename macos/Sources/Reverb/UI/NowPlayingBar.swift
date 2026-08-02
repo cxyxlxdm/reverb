@@ -66,8 +66,8 @@ struct NowPlayingBar: View {
                     }
                 }
             }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 12)
         }
         .frame(maxWidth: .infinity)
         .background(.regularMaterial)

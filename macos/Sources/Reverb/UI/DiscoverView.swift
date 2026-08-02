@@ -51,7 +51,8 @@ struct DiscoverView: View {
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
 
-    private let columns = [GridItem(.adaptive(minimum: 170, maximum: 220), spacing: 20)]
+    private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin, maximum: Metrics.cardMax),
+                                    spacing: Metrics.gridSpacing)]
 
     var body: some View {
         Group {
@@ -81,66 +82,60 @@ struct DiscoverView: View {
     // MARK: - 榜单
 
     private var popularContent: some View {
-        VStack(spacing: 0) {
-            categoryPills
-            Divider()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    HStack(spacing: 8) {
-                        Text("每日热门")
-                            .font(.title2).fontWeight(.bold)
-                        Text("·").foregroundStyle(.secondary)
-                        Text(selected.name)
-                            .font(.title2).fontWeight(.bold)
-                            .foregroundStyle(accent)
-                        if loading { ProgressView().controlSize(.small).padding(.leading, 4) }
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.top, 20)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
+                HStack(spacing: 12) {
+                    Text("每日热门")
+                        .font(.title2).fontWeight(.semibold)
+                    if loading { ProgressView().controlSize(.small) }
+                    Spacer(minLength: 12)
+                    categoryMenu
+                }
 
-                    if popular.isEmpty {
-                        StateView(loading: loading, symbol: "square.stack.3d.up.slash",
-                                  text: "暂无内容")
-                            .frame(minHeight: 320)
-                    } else {
-                        LazyVGrid(columns: columns, spacing: 20) {
-                            ForEach(popular) { p in
-                                NavigationLink(value: p) { PodcastCard(podcast: p) }
-                                    .buttonStyle(.plain)
-                            }
+                if popular.isEmpty {
+                    StateView(loading: loading, symbol: "square.stack.3d.up.slash",
+                              text: "暂无内容")
+                        .frame(minHeight: 320)
+                } else {
+                    LazyVGrid(columns: columns, spacing: Metrics.gridSpacing) {
+                        ForEach(popular) { p in
+                            NavigationLink(value: p) { PodcastCard(podcast: p) }
+                                .buttonStyle(.plain)
                         }
-                        .padding(.horizontal, 24)
-                        .padding(.bottom, 28)
                     }
                 }
             }
+            .frame(maxWidth: Metrics.contentMaxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Metrics.pagePadding)
+            .padding(.top, Metrics.topPadding)
+            .padding(.bottom, Metrics.sectionSpacing)
         }
     }
 
-    private var categoryPills: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(DiscoverCategory.all) { c in
-                    let active = c.id == selected.id
-                    Button {
-                        guard c.id != selected.id else { return }
-                        selected = c
-                        Task { await loadPopular(initial: false) }
-                    } label: {
-                        Text(c.name)
-                            .font(.callout).fontWeight(active ? .semibold : .regular)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 7)
-                            .background(active ? accent.opacity(0.18) : Color.primary.opacity(0.06),
-                                        in: Capsule())
-                            .foregroundStyle(active ? accent : Color.primary)
-                    }
-                    .buttonStyle(.plain)
+    /// 安静的分类下拉,取代原先密集的胶囊条。
+    private var categoryMenu: some View {
+        Menu {
+            ForEach(DiscoverCategory.all) { c in
+                Button {
+                    guard c.id != selected.id else { return }
+                    selected = c
+                    Task { await loadPopular(initial: false) }
+                } label: {
+                    if c.id == selected.id { Label(c.name, systemImage: "checkmark") }
+                    else { Text(c.name) }
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 12)
+        } label: {
+            HStack(spacing: 4) {
+                Text("分类").foregroundStyle(.secondary)
+                Text(selected.name).foregroundStyle(accent)
+                Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
+            }
+            .font(.callout)
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
     }
 
     private func loadPopular(initial: Bool) async {
@@ -164,43 +159,39 @@ struct DiscoverView: View {
                 StateView(symbol: "magnifyingglass",
                           text: "没有找到「\(submittedQuery)」").frame(minHeight: 360)
             } else {
-                VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
                     if !searchPodcasts.isEmpty {
-                        VStack(alignment: .leading, spacing: 14) {
-                            Text("节目").font(.title3).fontWeight(.bold)
-                                .padding(.horizontal, 24)
-                            LazyVGrid(columns: columns, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("节目").font(.title3).fontWeight(.semibold)
+                            LazyVGrid(columns: columns, spacing: Metrics.gridSpacing) {
                                 ForEach(searchPodcasts) { p in
                                     NavigationLink(value: p) { PodcastCard(podcast: p) }
                                         .buttonStyle(.plain)
                                 }
                             }
-                            .padding(.horizontal, 24)
                         }
                     }
                     if !searchEpisodes.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("单集").font(.title3).fontWeight(.bold)
-                                .padding(.horizontal, 24)
-                                .padding(.bottom, 6)
+                            Text("单集").font(.title3).fontWeight(.semibold)
+                                .padding(.bottom, 4)
                             ForEach(searchEpisodes) { ep in
-                                VStack(spacing: 0) {
-                                    RoomyEpisodeRow(
-                                        episode: ep,
-                                        isCurrent: player.current?.id == ep.id,
-                                        isPlaying: player.isPlaying,
-                                        showPodcast: true,
-                                        accent: accent,
-                                        onPlay: { player.playOrToggle(ep, queue: searchEpisodes) })
-                                        .padding(.horizontal, 24)
-                                    Divider().padding(.leading, 24)
-                                }
+                                RoomyEpisodeRow(
+                                    episode: ep,
+                                    isCurrent: player.current?.id == ep.id,
+                                    isPlaying: player.isPlaying,
+                                    showPodcast: true,
+                                    accent: accent,
+                                    onPlay: { player.playOrToggle(ep, queue: searchEpisodes) })
                             }
                         }
                     }
                 }
-                .padding(.top, 20)
-                .padding(.bottom, 28)
+                .frame(maxWidth: Metrics.contentMaxWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, Metrics.pagePadding)
+                .padding(.top, Metrics.topPadding)
+                .padding(.bottom, Metrics.sectionSpacing)
             }
         }
     }

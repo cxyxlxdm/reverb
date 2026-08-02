@@ -29,6 +29,18 @@ enum Theme {
     }
 }
 
+/// 统一的间距 / 版心尺度。以留白而非分隔线区隔内容。
+enum Metrics {
+    static let pagePadding: CGFloat = 32      // 页面水平内边距
+    static let topPadding: CGFloat = 24        // 页面顶部内边距
+    static let sectionSpacing: CGFloat = 28    // 区块之间的间距
+    static let gridSpacing: CGFloat = 24       // 网格卡片间距
+    static let rowSpacing: CGFloat = 14         // 行内元素间距
+    static let contentMaxWidth: CGFloat = 1080  // 宽窗下的最大版心
+    static let cardMin: CGFloat = 210           // 网格卡片最小宽度
+    static let cardMax: CGFloat = 260           // 网格卡片最大宽度
+}
+
 /// 通用格式化。
 enum Fmt {
     static func duration(_ sec: Int) -> String {
@@ -99,20 +111,20 @@ struct SquareArtwork: View {
     }
 }
 
-/// 频道网格卡片:大封面 + 标题 + 作者,悬停高亮。
+/// 频道网格卡片:大封面 + 单行标题 + 单行作者。无边框无底色,仅封面阴影随悬停微涨。
 struct PodcastCard: View {
     let podcast: Podcast
     @State private var hover = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             SquareArtwork(url: podcast.artworkUrl, corner: 14)
-                .shadow(color: .black.opacity(hover ? 0.28 : 0.14),
-                        radius: hover ? 12 : 6, y: 4)
+                .shadow(color: .black.opacity(hover ? 0.22 : 0.10),
+                        radius: hover ? 14 : 7, y: hover ? 6 : 3)
+                .scaleEffect(hover ? 1.01 : 1)
             Text(podcast.title)
-                .font(.headline)
-                .lineLimit(2)
-                .multilineTextAlignment(.leading)
+                .font(.headline).fontWeight(.medium)
+                .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if !podcast.author.isEmpty {
                 Text(podcast.author)
@@ -122,12 +134,9 @@ struct PodcastCard: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .padding(8)
-        .background(hover ? Color.primary.opacity(0.06) : .clear,
-                    in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .contentShape(Rectangle())
         .onHover { hover = $0 }
-        .animation(.easeOut(duration: 0.15), value: hover)
+        .animation(.easeOut(duration: 0.18), value: hover)
     }
 }
 
@@ -143,34 +152,34 @@ struct RoomyEpisodeRow: View {
 
     private var playing: Bool { isCurrent && isPlaying }
 
+    /// 最多两条安静的元信息:节目名(如需) + 时长,或 日期 + 时长。
     private var meta: String {
-        [showPodcast ? episode.podcastTitle : "",
-         Fmt.pubDate(episode.pubDate),
-         Fmt.duration(episode.durationSec)]
-            .filter { !$0.isEmpty }
-            .joined(separator: "  ·  ")
+        let items = showPodcast
+            ? [episode.podcastTitle, Fmt.duration(episode.durationSec)]
+            : [Fmt.pubDate(episode.pubDate), Fmt.duration(episode.durationSec)]
+        return items.filter { !$0.isEmpty }.prefix(2).joined(separator: "  ·  ")
     }
 
     var body: some View {
-        HStack(spacing: 14) {
+        HStack(spacing: Metrics.rowSpacing) {
             Button(action: onPlay) {
                 Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 32))
+                    .font(.system(size: 30))
                     .foregroundStyle(isCurrent ? accent : Color.secondary)
                     .symbolRenderingMode(.hierarchical)
             }
             .buttonStyle(.plain)
             .help(playing ? "暂停" : "播放")
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 5) {
                 Text(episode.title)
-                    .font(.headline)
-                    .fontWeight(.semibold)
+                    .font(.headline).fontWeight(.medium)
+                    .lineSpacing(2)
                     .lineLimit(2)
                     .foregroundStyle(isCurrent ? accent : Color.primary)
                 if !meta.isEmpty {
                     Text(meta)
-                        .font(.subheadline)
+                        .font(.footnote)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
@@ -179,8 +188,8 @@ struct RoomyEpisodeRow: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: onPlay)
         }
-        .padding(.vertical, 10)
-        .frame(minHeight: 56)
+        .padding(.vertical, 14)
+        .frame(minHeight: 64)
     }
 }
 

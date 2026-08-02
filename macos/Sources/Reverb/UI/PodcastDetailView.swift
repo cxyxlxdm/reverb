@@ -17,49 +17,49 @@ struct PodcastDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
                 header
-                    .padding(24)
-                Divider()
 
                 if loading && episodes.isEmpty {
                     StateView(loading: true, text: "").frame(minHeight: 280)
                 } else if episodes.isEmpty {
                     StateView(symbol: "waveform.slash", text: "暂无单集").frame(minHeight: 280)
                 } else {
-                    Text("单集")
-                        .font(.title3).fontWeight(.bold)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 20)
-                        .padding(.bottom, 4)
-                    LazyVStack(spacing: 0) {
-                        ForEach(episodes) { ep in
-                            HStack(spacing: 8) {
-                                RoomyEpisodeRow(
-                                    episode: ep,
-                                    isCurrent: player.current?.id == ep.id,
-                                    isPlaying: player.isPlaying,
-                                    accent: accent,
-                                    onPlay: { player.playOrToggle(ep, queue: episodes) })
-                                EpisodeDownloadButton(episode: ep, accent: accent)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("单集")
+                            .font(.title3).fontWeight(.semibold)
+                            .padding(.bottom, 4)
+                        LazyVStack(spacing: 0) {
+                            ForEach(episodes) { ep in
+                                HStack(spacing: 12) {
+                                    RoomyEpisodeRow(
+                                        episode: ep,
+                                        isCurrent: player.current?.id == ep.id,
+                                        isPlaying: player.isPlaying,
+                                        accent: accent,
+                                        onPlay: { player.playOrToggle(ep, queue: episodes) })
+                                    EpisodeDownloadButton(episode: ep, accent: accent)
+                                }
                             }
-                            .padding(.horizontal, 24)
-                            Divider().padding(.leading, 24)
                         }
                     }
-                    .padding(.bottom, 24)
                 }
             }
+            .frame(maxWidth: Metrics.contentMaxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Metrics.pagePadding)
+            .padding(.top, Metrics.topPadding)
+            .padding(.bottom, Metrics.sectionSpacing)
         }
         .navigationTitle(display.title)
         .task { await load() }
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 24) {
+        HStack(alignment: .top, spacing: Metrics.sectionSpacing) {
             Artwork(url: display.artworkUrl, size: 180, corner: 18)
-                .shadow(color: .black.opacity(0.2), radius: 12, y: 6)
-            VStack(alignment: .leading, spacing: 10) {
+                .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+            VStack(alignment: .leading, spacing: 12) {
                 Text(display.title)
                     .font(.largeTitle).fontWeight(.bold)
                     .lineLimit(3)
@@ -71,14 +71,16 @@ struct PodcastDetailView: View {
                         .lineLimit(2)
                 }
                 subscribeButton
-                    .padding(.top, 2)
+                    .padding(.top, 4)
                 if !display.description.isEmpty {
                     Text(display.description)
                         .font(.body)
                         .foregroundStyle(.secondary)
+                        .lineSpacing(3)
                         .lineLimit(6)
                         .textSelection(.enabled)
-                        .padding(.top, 4)
+                        .frame(maxWidth: 640, alignment: .leading)
+                        .padding(.top, 6)
                 }
                 Spacer(minLength: 0)
             }
