@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -142,11 +143,11 @@ fun PlayerScreen(onBack: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 SpeedChip(speed = speed)
+                SleepChip(remainingMs = sleepRemaining, endOfEpisode = sleepEnd)
                 FavoriteButton(
                     favorited = isFavorite,
                     onToggle = { container.favoriteStore.toggle(episode) }
                 )
-                SleepChip(remainingMs = sleepRemaining, endOfEpisode = sleepEnd)
                 MoreMenu(
                     stamped = currentSeal != null,
                     onClip = {
@@ -519,7 +520,8 @@ private fun PrevNextButton(next: Boolean, enabled: Boolean, onClick: () -> Unit)
 
 @Composable
 private fun SkipButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    // 图标居中(与播放/上一集/下一集图标对齐),秒数悬在图标下一行、不顶高图标
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.height(76.dp)) {
         IconButton(onClick = onClick, modifier = Modifier.size(52.dp)) {
             Icon(
                 Icons.Rounded.Replay,
@@ -533,7 +535,10 @@ private fun SkipButton(seconds: Int, forward: Boolean, onClick: () -> Unit) {
         Text(
             "$seconds",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .offset(y = 22.dp)
         )
     }
 }
