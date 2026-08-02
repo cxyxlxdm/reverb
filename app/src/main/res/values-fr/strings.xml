@@ -163,6 +163,8 @@
     <string name="accent_red">Carmin</string>
     <string name="accent_green">Bambou</string>
     <string name="set_language">Langue</string>
+    <string name="set_spectrum">Spectre réel</string>
+    <string name="set_spectrum_sub">La pochette réagit au son réel ; nécessite l\'autorisation micro. Désactivé, l\'animation à l\'encre est utilisée</string>
     <string name="lang_system">Système</string>
 
     <string name="set_default_speed">Vitesse par défaut</string>

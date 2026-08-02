@@ -120,7 +120,9 @@ private fun MainShell(rootNav: NavHostController) {
         TopDest("discover", stringResource(R.string.nav_discover), Icons.Rounded.Explore),
         TopDest("library", stringResource(R.string.nav_library), Icons.Rounded.LibraryMusic)
     )
-    val isTopLevel = tabs.any { it.route == route }
+    // route 在 tab 切换瞬间可能短暂为 null,若据此判定会让底部栏动画进出、内容上下跳动;
+    // 故 null 一律视作顶层(两个 tab 都带底部栏),消除切 tab 时偶发的上下闪动。
+    val isTopLevel = route == null || tabs.any { it.route == route }
     val showMini = current != null
 
     Scaffold(

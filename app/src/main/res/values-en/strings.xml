@@ -163,6 +163,8 @@
     <string name="accent_red">Crimson</string>
     <string name="accent_green">Bamboo</string>
     <string name="set_language">Language</string>
+    <string name="set_spectrum">Live spectrum</string>
+    <string name="set_spectrum_sub">Player artwork reacts to real audio; needs mic permission. Off uses the ink animation</string>
     <string name="lang_system">Follow system</string>
 
     <string name="set_default_speed">Default speed</string>

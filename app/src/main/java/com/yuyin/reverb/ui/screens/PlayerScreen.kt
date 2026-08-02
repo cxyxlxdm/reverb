@@ -49,6 +49,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.core.content.ContextCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,6 +62,7 @@ import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.InkWave
 import com.yuyin.reverb.ui.components.formatTime
+import com.yuyin.reverb.ui.components.rememberSpectrumState
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -77,6 +79,14 @@ fun PlayerScreen(onBack: () -> Unit) {
     val backSec by container.settingsStore.skipBackSec.collectAsStateWithLifecycle()
     val fwdSec by container.settingsStore.skipForwardSec.collectAsStateWithLifecycle()
     val favorites by container.favoriteStore.favorites.collectAsStateWithLifecycle()
+    val spectrumEnabled by container.settingsStore.spectrumEnabled.collectAsStateWithLifecycle()
+    val appContext = LocalContext.current.applicationContext
+    val hasAudioPerm = remember {
+        ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.RECORD_AUDIO) ==
+            android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
+    // 仅在开启真频谱、已授权且正在播放时采集,其余走程序化墨纹
+    val spectrum by rememberSpectrumState(active = spectrumEnabled && hasAudioPerm && isPlaying)
 
     val episode = current
     if (episode == null) {
@@ -136,7 +146,8 @@ fun PlayerScreen(onBack: () -> Unit) {
                     InkWave(
                         playing = isPlaying,
                         color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.fillMaxSize()
+                        modifier = Modifier.fillMaxSize(),
+                        amplitudes = spectrum
                     )
                     Artwork(episode.artworkUrl, size = 260, corner = 24)
                 }
@@ -287,7 +298,9 @@ private fun SpeedChip(speed: Float) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.clickable { open = true }
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .clickable { open = true }
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -329,7 +342,9 @@ private fun FavoriteButton(favorited: Boolean, onToggle: () -> Unit) {
     Surface(
         shape = CircleShape,
         color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.clickable(onClick = onToggle)
+        modifier = Modifier
+            .clip(CircleShape)
+            .clickable(onClick = onToggle)
     ) {
         Icon(
             if (favorited) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
@@ -380,7 +395,9 @@ private fun SleepChip(remainingMs: Long, endOfEpisode: Boolean) {
         Surface(
             shape = RoundedCornerShape(20.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
-            modifier = Modifier.clickable { open = true }
+            modifier = Modifier
+                .clip(RoundedCornerShape(20.dp))
+                .clickable { open = true }
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,

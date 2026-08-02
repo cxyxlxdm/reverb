@@ -163,6 +163,8 @@
     <string name="accent_red">緋紅</string>
     <string name="accent_green">竹青</string>
     <string name="set_language">語言</string>
+    <string name="set_spectrum">真實頻譜</string>
+    <string name="set_spectrum_sub">播放頁封面隨真實聲音起伏，需錄音權限；關閉則用水墨動效</string>
     <string name="lang_system">跟隨系統</string>
 
     <string name="set_default_speed">預設播放速度</string>

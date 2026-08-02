@@ -2,8 +2,10 @@ package com.yuyin.reverb.ui.screens
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.core.content.ContextCompat
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -86,7 +88,13 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     val skipBack by settings.skipBackSec.collectAsStateWithLifecycle()
     val skipFwd by settings.skipForwardSec.collectAsStateWithLifecycle()
     val language by settings.language.collectAsStateWithLifecycle()
+    val spectrumEnabled by settings.spectrumEnabled.collectAsStateWithLifecycle()
     val regionOverride by regionStore.override.collectAsStateWithLifecycle()
+
+    // 录音权限申请:仅在用户主动开启「真实频谱」时触发;授权成功才落地开关
+    val recordAudioLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        settings.setSpectrumEnabled(granted)
+    }
 
     // 语言显示名：跟随系统本地化，其余为各自母语写法
     val langLabels = listOf(
@@ -181,6 +189,14 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 trailing = { ColorSwatch(accentColor(accentIndex)) }
             ) { dlg = Dlg.ACCENT }
             SettingRow(stringResource(R.string.set_language), langLabels[LANG_TAGS.indexOf(language).coerceAtLeast(0)]) { dlg = Dlg.LANGUAGE }
+            SettingSwitch(stringResource(R.string.set_spectrum), stringResource(R.string.set_spectrum_sub), checked = spectrumEnabled) { on ->
+                if (on) {
+                    if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
+                        PackageManager.PERMISSION_GRANTED
+                    ) settings.setSpectrumEnabled(true)
+                    else recordAudioLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                } else settings.setSpectrumEnabled(false)
+            }
 
             SectionLabel(stringResource(R.string.sec_playback))
             SettingRow(stringResource(R.string.set_default_speed), speedLabel(defaultSpeed)) { dlg = Dlg.SPEED }

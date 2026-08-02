@@ -172,6 +172,8 @@
     <string name="accent_red">绯红</string>
     <string name="accent_green">竹青</string>
     <string name="set_language">语言</string>
+    <string name="set_spectrum">真实频谱</string>
+    <string name="set_spectrum_sub">播放页封面随真实声音起伏，需录音权限；关闭则用水墨动效</string>
     <string name="lang_system">跟随系统</string>
 
     <string name="set_default_speed">默认播放速度</string>

@@ -20,6 +20,7 @@ class SettingsStore(context: Context) {
     val skipBackSec = MutableStateFlow(prefs.getInt("skip_back", 10))
     val skipForwardSec = MutableStateFlow(prefs.getInt("skip_fwd", 30))
     val language = MutableStateFlow(prefs.getString("language", "") ?: "") // "" = 跟随系统
+    val spectrumEnabled = MutableStateFlow(prefs.getBoolean("spectrum_enabled", false)) // 真实频谱(需录音权限),默认关
 
     fun setThemeMode(v: Int) { prefs.edit().putInt("theme_mode", v).apply(); themeMode.value = v }
     fun setFontScale(v: Float) { prefs.edit().putFloat("font_scale", v).apply(); fontScale.value = v }
@@ -30,4 +31,5 @@ class SettingsStore(context: Context) {
     fun setSkipBackSec(v: Int) { prefs.edit().putInt("skip_back", v).apply(); skipBackSec.value = v }
     fun setSkipForwardSec(v: Int) { prefs.edit().putInt("skip_fwd", v).apply(); skipForwardSec.value = v }
     fun setLanguage(tag: String) { prefs.edit().putString("language", tag).apply(); language.value = tag }
+    fun setSpectrumEnabled(v: Boolean) { prefs.edit().putBoolean("spectrum_enabled", v).apply(); spectrumEnabled.value = v }
 }

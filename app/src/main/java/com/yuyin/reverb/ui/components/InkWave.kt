@@ -32,8 +32,21 @@ private val ribbons = listOf(
     Ribbon(ampFactor = 0.45f, freq = 3.1f, phase = 2.4f, dir = 1f, alpha = 0.11f)
 )
 
+/** 从频段能量数组按归一化横坐标 fx(0..1)线性插值取值。 */
+private fun bandAt(amps: FloatArray, fx: Float): Float {
+    if (amps.isEmpty()) return 0f
+    val pos = (fx * (amps.size - 1)).coerceIn(0f, (amps.size - 1).toFloat())
+    val i = pos.toInt()
+    val j = (i + 1).coerceAtMost(amps.size - 1)
+    val t = pos - i
+    return amps[i] * (1 - t) + amps[j] * t
+}
+
+/**
+ * @param amplitudes 真实频谱频段能量(0..1);为 null 时纯程序化流动,非 null 时墨纹随真实音频起伏。
+ */
 @Composable
-fun InkWave(playing: Boolean, color: Color, modifier: Modifier = Modifier) {
+fun InkWave(playing: Boolean, color: Color, modifier: Modifier = Modifier, amplitudes: FloatArray? = null) {
     val transition = rememberInfiniteTransition(label = "ink")
     val twoPi = (2 * PI).toFloat()
     // 两条不同速度的相位,叠加出更自然的流动感
@@ -75,7 +88,9 @@ fun InkWave(playing: Boolean, color: Color, modifier: Modifier = Modifier) {
             for (i in 0..steps) {
                 val fx = i / steps.toFloat()
                 val x = w * fx
-                val y = midY + amplitude * sin(r.freq * fx * twoPi + r.dir * phase + r.phase)
+                // 真频谱可用时:局部振幅随该频段能量起伏;否则恒定,回到纯程序化流动
+                val local = if (amplitudes != null) 0.25f + 1.5f * bandAt(amplitudes, fx) else 1f
+                val y = midY + amplitude * local * sin(r.freq * fx * twoPi + r.dir * phase + r.phase)
                 if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             drawPath(

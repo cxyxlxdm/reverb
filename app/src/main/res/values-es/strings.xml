@@ -163,6 +163,8 @@
     <string name="accent_red">Carmesí</string>
     <string name="accent_green">Bambú</string>
     <string name="set_language">Idioma</string>
+    <string name="set_spectrum">Espectro real</string>
+    <string name="set_spectrum_sub">La portada reacciona al audio real; requiere permiso de micrófono. Desactivado usa la animación de tinta</string>
     <string name="lang_system">Sistema</string>
 
     <string name="set_default_speed">Velocidad predeterminada</string>
