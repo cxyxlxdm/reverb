@@ -6,13 +6,17 @@ struct LibraryView: View {
         case subscriptions = "订阅"
         case favorites = "收藏"
         case history = "历史"
+        case downloads = "下载"
         var id: String { rawValue }
     }
 
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
+    @EnvironmentObject var downloads: DownloadStore
+    @EnvironmentObject var downloadManager: DownloadManager
     @State private var segment: Segment = .subscriptions
+    @State private var pendingDelete: Episode?
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private let columns = [GridItem(.adaptive(minimum: 170, maximum: 220), spacing: 20)]
@@ -34,10 +38,21 @@ struct LibraryView: View {
                 case .subscriptions: subscriptionsGrid
                 case .favorites: favoritesList
                 case .history: historyList
+                case .downloads: downloadsList
                 }
             }
         }
         .navigationTitle("余音")
+        .confirmationDialog("删除此单集的离线文件?", isPresented: Binding(
+            get: { pendingDelete != nil },
+            set: { if !$0 { pendingDelete = nil } }
+        ), titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                if let ep = pendingDelete { downloadManager.delete(ep.id) }
+                pendingDelete = nil
+            }
+            Button("取消", role: .cancel) { pendingDelete = nil }
+        }
         .toolbar {
             if segment == .history && !env.history.history.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
@@ -124,6 +139,41 @@ struct LibraryView: View {
                                 accent: accent,
                                 onPlay: { player.playOrToggle(ep, queue: items) })
                                 .padding(.horizontal, 24)
+                            Divider().padding(.leading, 24)
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+            }
+        }
+    }
+
+    // MARK: - 下载
+
+    private var downloadsList: some View {
+        Group {
+            if downloads.downloads.isEmpty {
+                StateView(symbol: "arrow.down.circle", text: "还没有离线下载的单集")
+            } else {
+                let items = downloads.downloads.map { $0.episode }
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(items) { ep in
+                            HStack(spacing: 8) {
+                                RoomyEpisodeRow(
+                                    episode: ep,
+                                    isCurrent: player.current?.id == ep.id,
+                                    isPlaying: player.isPlaying,
+                                    showPodcast: true,
+                                    accent: accent,
+                                    onPlay: { player.playOrToggle(ep, queue: items) })
+                                Button { pendingDelete = ep } label: {
+                                    Image(systemName: "trash").foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.plain)
+                                .help("删除下载")
+                            }
+                            .padding(.horizontal, 24)
                             Divider().padding(.leading, 24)
                         }
                     }

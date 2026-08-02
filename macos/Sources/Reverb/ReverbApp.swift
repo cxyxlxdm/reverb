@@ -10,6 +10,8 @@ struct ReverbApp: App {
                 .environmentObject(env)
                 .environmentObject(env.player)
                 .environmentObject(env.settings)
+                .environmentObject(env.downloads)
+                .environmentObject(env.downloadManager)
         }
         .defaultSize(width: 1240, height: 860)
         .windowToolbarStyle(.unified)
@@ -20,6 +22,8 @@ struct ReverbApp: App {
                 .environmentObject(env)
                 .environmentObject(env.player)
                 .environmentObject(env.settings)
+                .environmentObject(env.downloads)
+                .environmentObject(env.downloadManager)
         }
     }
 }

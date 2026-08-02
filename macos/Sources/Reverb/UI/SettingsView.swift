@@ -1,16 +1,27 @@
 import SwiftUI
+import AppKit
+import UniformTypeIdentifiers
 
-/// 设置(标准 macOS 设置窗口):外观 / 内容 / 播放。
+/// 设置(标准 macOS 设置窗口):外观 / 内容 / 播放 / 备份 / 足迹。
 struct SettingsView: View {
     @EnvironmentObject var env: AppEnvironment
     var body: some View {
-        SettingsForm(settings: env.settings, player: env.player)
+        SettingsForm(env: env, settings: env.settings, player: env.player)
     }
 }
 
 private struct SettingsForm: View {
+    let env: AppEnvironment
     @ObservedObject var settings: SettingsStore
     @ObservedObject var player: PlayerController
+    @ObservedObject var downloadStore: DownloadStore
+
+    init(env: AppEnvironment, settings: SettingsStore, player: PlayerController) {
+        self.env = env
+        self.settings = settings
+        self.player = player
+        self.downloadStore = env.downloads
+    }
 
     private let themeNames = ["跟随系统", "浅色", "深色", "纯白"]
     private let regions: [(code: String, name: String)] = [
@@ -19,6 +30,13 @@ private struct SettingsForm: View {
     ]
     private let skipBackOptions = [5, 10, 15, 30]
     private let skipForwardOptions = [15, 30, 45, 60]
+
+    @State private var showFootprint = false
+    @State private var showRestore = false
+    @State private var restoreJSON = ""
+    @State private var restoreSections: Set<BackupManager.Section> = []
+    @State private var restoreSelection: Set<BackupManager.Section> = []
+    @State private var confirmClearDownloads = false
 
     var body: some View {
         Form {
@@ -68,10 +86,173 @@ private struct SettingsForm: View {
                     ForEach(skipForwardOptions, id: \.self) { Text("\($0) 秒").tag($0) }
                 }
             }
+
+            Section("足迹") {
+                Button {
+                    showFootprint = true
+                } label: {
+                    HStack {
+                        Label("听觉足迹", systemImage: "seal")
+                        Spacer()
+                        Text("\(env.stamps.stamps.count) 枚").foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                }
+            }
+
+            Section("备份") {
+                Button { exportBackup() } label: {
+                    Label("导出备份", systemImage: "square.and.arrow.up")
+                }
+                Button { restoreBackup() } label: {
+                    Label("恢复备份", systemImage: "square.and.arrow.down")
+                }
+                Button { exportOPML() } label: {
+                    Label("导出 OPML", systemImage: "list.bullet.rectangle")
+                }
+                Button { importOPML() } label: {
+                    Label("导入 OPML", systemImage: "tray.and.arrow.down")
+                }
+            }
+
+            Section("存储") {
+                HStack {
+                    Label("离线下载", systemImage: "internaldrive")
+                    Spacer()
+                    Text("\(downloadStore.downloads.count) 集 · \(usageText)")
+                        .foregroundStyle(.secondary)
+                }
+                if !downloadStore.downloads.isEmpty {
+                    Button(role: .destructive) { confirmClearDownloads = true } label: {
+                        Label("清空下载", systemImage: "trash")
+                    }
+                }
+            }
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 420)
+        .frame(width: 460, height: 560)
         .tint(Theme.accent(settings.accentIndex))
         .preferredColorScheme(Theme.colorScheme(settings.themeMode))
+        .confirmationDialog("清空全部离线下载?", isPresented: $confirmClearDownloads, titleVisibility: .visible) {
+            Button("清空", role: .destructive) {
+                for d in downloadStore.downloads { env.downloadManager.delete(d.episode.id) }
+            }
+            Button("取消", role: .cancel) {}
+        }
+        .sheet(isPresented: $showFootprint) {
+            FootprintView()
+                .environmentObject(env)
+                .environmentObject(settings)
+        }
+        .sheet(isPresented: $showRestore) {
+            RestoreSheet(
+                sections: restoreSections,
+                selection: $restoreSelection,
+                onApply: {
+                    BackupManager.apply(env, restoreJSON, restoreSelection)
+                    showRestore = false
+                },
+                onCancel: { showRestore = false })
+            .tint(Theme.accent(settings.accentIndex))
+        }
+    }
+
+    private var usageText: String {
+        let bytes = env.downloadManager.usageBytes()
+        let f = ByteCountFormatter()
+        f.countStyle = .file
+        return f.string(fromByteCount: Int64(bytes))
+    }
+
+    // MARK: - 文件操作
+
+    private func exportBackup() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "reverb-backup.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let json = BackupManager.build(env, Set(BackupManager.Section.allCases))
+        Task.detached { try? json.data(using: .utf8)?.write(to: url) }
+    }
+
+    private func restoreBackup() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            guard let json = await readString(url) else { return }
+            let sections = BackupManager.sectionsIn(json)
+            guard !sections.isEmpty else { return }
+            restoreJSON = json
+            restoreSections = sections
+            restoreSelection = sections
+            showRestore = true
+        }
+    }
+
+    private func exportOPML() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "reverb.opml"
+        panel.allowedContentTypes = [UTType(filenameExtension: "opml") ?? .xml]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        let xml = BackupManager.exportOPML(env)
+        Task.detached { try? xml.data(using: .utf8)?.write(to: url) }
+    }
+
+    private func importOPML() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [UTType(filenameExtension: "opml") ?? .xml, .xml]
+        panel.allowsOtherFileTypes = true
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            if let xml = await readString(url) { BackupManager.importOPML(env, xml) }
+        }
+    }
+
+    private func readString(_ url: URL) async -> String? {
+        await Task.detached { try? String(contentsOf: url, encoding: .utf8) }.value
+    }
+}
+
+/// 恢复备份:勾选要合并的分区后应用。
+private struct RestoreSheet: View {
+    let sections: Set<BackupManager.Section>
+    @Binding var selection: Set<BackupManager.Section>
+    var onApply: () -> Void
+    var onCancel: () -> Void
+
+    private var available: [BackupManager.Section] {
+        BackupManager.Section.allCases.filter { sections.contains($0) }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("恢复备份").font(.headline).padding(20)
+            Divider()
+            Form {
+                Section("选择要合并的内容") {
+                    ForEach(available) { section in
+                        Toggle(section.label, isOn: Binding(
+                            get: { selection.contains(section) },
+                            set: { on in
+                                if on { selection.insert(section) } else { selection.remove(section) }
+                            }))
+                    }
+                }
+            }
+            .formStyle(.grouped)
+            Divider()
+            HStack {
+                Spacer()
+                Button("取消", role: .cancel, action: onCancel)
+                Button("恢复", action: onApply)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selection.isEmpty)
+            }
+            .padding(20)
+        }
+        .frame(width: 400, height: 460)
     }
 }

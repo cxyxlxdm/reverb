@@ -34,13 +34,16 @@ struct PodcastDetailView: View {
                         .padding(.bottom, 4)
                     LazyVStack(spacing: 0) {
                         ForEach(episodes) { ep in
-                            RoomyEpisodeRow(
-                                episode: ep,
-                                isCurrent: player.current?.id == ep.id,
-                                isPlaying: player.isPlaying,
-                                accent: accent,
-                                onPlay: { player.playOrToggle(ep, queue: episodes) })
-                                .padding(.horizontal, 24)
+                            HStack(spacing: 8) {
+                                RoomyEpisodeRow(
+                                    episode: ep,
+                                    isCurrent: player.current?.id == ep.id,
+                                    isPlaying: player.isPlaying,
+                                    accent: accent,
+                                    onPlay: { player.playOrToggle(ep, queue: episodes) })
+                                EpisodeDownloadButton(episode: ep, accent: accent)
+                            }
+                            .padding(.horizontal, 24)
                             Divider().padding(.leading, 24)
                         }
                     }
@@ -104,5 +107,45 @@ struct PodcastDetailView: View {
             episodes = result.episodes
         }
         loading = false
+    }
+}
+
+/// 单集下载控制:未下载(下载图标)→ 下载中(进度环)→ 已下载(勾选,点击删除需确认)。
+struct EpisodeDownloadButton: View {
+    let episode: Episode
+    var accent: Color = .accentColor
+
+    @EnvironmentObject var downloads: DownloadStore
+    @EnvironmentObject var downloadManager: DownloadManager
+    @State private var confirmDelete = false
+
+    var body: some View {
+        Group {
+            if downloads.contains(episode.id) {
+                Button { confirmDelete = true } label: {
+                    Image(systemName: "checkmark.circle.fill").foregroundStyle(accent)
+                }
+                .buttonStyle(.plain)
+                .help("已下载 · 点击删除")
+                .confirmationDialog("删除此单集的离线文件?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                    Button("删除", role: .destructive) { downloadManager.delete(episode.id) }
+                    Button("取消", role: .cancel) {}
+                }
+            } else if downloadManager.isDownloading(episode.id) {
+                ProgressView(value: downloadManager.progress[episode.id] ?? 0)
+                    .progressViewStyle(.circular)
+                    .controlSize(.small)
+                    .help("下载中")
+            } else {
+                Button { downloadManager.download(episode) } label: {
+                    Image(systemName: "arrow.down.circle").foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help("下载")
+                .disabled(episode.audioUrl.isEmpty)
+            }
+        }
+        .font(.system(size: 20))
+        .frame(width: 28, height: 28)
     }
 }

@@ -10,9 +10,13 @@ final class AppEnvironment: ObservableObject {
     let stamps = StampStore()
     let settings = SettingsStore()
     let player = PlayerController()
+    let downloads = DownloadStore()
+    let downloadManager: DownloadManager
 
     init() {
+        downloadManager = DownloadManager(store: downloads)
         player.bind(history: history, settings: settings)
+        player.localFileProvider = { [downloads] ep in downloads.localURL(ep.id) }
     }
 
     /// 当前生效地区:设置覆盖优先,否则跟随系统区域,再退化为 us。

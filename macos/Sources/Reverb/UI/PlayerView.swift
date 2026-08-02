@@ -9,6 +9,8 @@ struct PlayerView: View {
     @State private var dragging = false
     @State private var dragValue: Double = 0
     @State private var showStamps = false
+    @State private var momentURL: URL?
+    @State private var momentArtwork: NSImage?
 
     private let sleepMinutes = [15, 30, 45, 60]
     private let seals: [(seal: String, label: String)] = [
@@ -189,8 +191,38 @@ struct PlayerView: View {
             .buttonStyle(.plain)
             .help("听觉印记")
             .popover(isPresented: $showStamps, arrowEdge: .bottom) { stampGrid(ep) }
+
+            // 剪藏分享
+            if let momentURL {
+                ShareLink(item: momentURL) { Image(systemName: "square.and.arrow.up") }
+                    .help("分享剪藏")
+            } else {
+                Image(systemName: "square.and.arrow.up").foregroundStyle(.tertiary)
+            }
+
+            // 保存剪藏
+            Button { saveMoment(ep) } label: {
+                Image(systemName: "square.and.arrow.down")
+            }
+            .buttonStyle(.plain)
+            .help("保存剪藏")
         }
         .padding(.top, 4)
+        .task(id: ep.id) { await prepareMoment(ep) }
+    }
+
+    private func card(_ ep: Episode) -> MomentCard {
+        MomentCard(episode: ep, positionMs: player.positionMs, accent: accent, artwork: momentArtwork)
+    }
+
+    private func prepareMoment(_ ep: Episode) async {
+        momentURL = nil
+        momentArtwork = await loadNSImage(ep.artworkUrl)
+        momentURL = renderPNG(card(ep))
+    }
+
+    private func saveMoment(_ ep: Episode) {
+        saveWithPanel(card(ep), defaultName: "reverb-moment.png")
     }
 
     private var sleepActive: Bool { player.sleepRemainingMs > 0 || player.sleepEndOfEpisode }
