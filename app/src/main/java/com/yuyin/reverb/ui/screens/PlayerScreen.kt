@@ -39,7 +39,6 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -397,15 +396,27 @@ private val SEALS = listOf(
     "悲" to "难过", "怒" to "愤怒", "疲" to "疲惫"
 )
 
-/** 盖章选择:3×3 水墨情绪印章(附小字),已盖可改或撤。 */
+/** 盖章选择:3×3 水墨情绪印章(附小字)。点选即盖,再点同一枚即取消;点外部关闭。 */
 @Composable
 private fun SealDialog(current: String?, onPick: (String) -> Unit, onRemove: () -> Unit, onDismiss: () -> Unit) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.stamp_title)) },
+        title = {
+            Text(
+                stringResource(R.string.stamp_title),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center
+            )
+        },
         text = {
-            Column {
-                Text(stringResource(R.string.stamp_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    stringResource(R.string.stamp_hint),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth(),
+                    textAlign = TextAlign.Center
+                )
                 Spacer(Modifier.height(14.dp))
                 SEALS.chunked(3).forEach { row ->
                     Row(
@@ -425,7 +436,7 @@ private fun SealDialog(current: String?, onPick: (String) -> Unit, onRemove: () 
                                         .fillMaxWidth()
                                         .height(56.dp)
                                         .clip(RoundedCornerShape(12.dp))
-                                        .clickable { onPick(s) }
+                                        .clickable { if (sel) onRemove() else onPick(s) } // 再点同一枚即取消
                                 ) {
                                     Box(contentAlignment = Alignment.Center) {
                                         Text(
@@ -448,10 +459,7 @@ private fun SealDialog(current: String?, onPick: (String) -> Unit, onRemove: () 
                 }
             }
         },
-        confirmButton = {
-            if (current != null) TextButton(onClick = onRemove) { Text(stringResource(R.string.stamp_remove)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
+        confirmButton = {} // 无需按钮:点选即生效,点外部关闭
     )
 }
 
