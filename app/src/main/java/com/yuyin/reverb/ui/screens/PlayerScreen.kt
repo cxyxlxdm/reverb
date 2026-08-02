@@ -390,37 +390,61 @@ private fun MoreMenu(stamped: Boolean, onClip: () -> Unit, onStamp: () -> Unit) 
     }
 }
 
-/** 盖章选择:一排水墨印字,已盖可改或撤。 */
+// 以 Ekman 基本情绪为骨架、替换掉听播客用不上的「惧/厌」,凑成 3×3 情绪方阵;每枚附小字注明。
+private val SEALS = listOf(
+    "喜" to "开心", "暖" to "治愈", "燃" to "热血",
+    "惊" to "震撼", "思" to "沉思", "悟" to "领悟",
+    "悲" to "难过", "怒" to "愤怒", "疲" to "疲惫"
+)
+
+/** 盖章选择:3×3 水墨情绪印章(附小字),已盖可改或撤。 */
 @Composable
 private fun SealDialog(current: String?, onPick: (String) -> Unit, onRemove: () -> Unit, onDismiss: () -> Unit) {
-    val seals = listOf("静", "思", "暖", "燃", "悟", "叹")
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.stamp_title)) },
         text = {
             Column {
                 Text(stringResource(R.string.stamp_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    seals.forEach { s ->
-                        val sel = s == current
-                        Surface(
-                            shape = RoundedCornerShape(10.dp),
-                            color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .clickable { onPick(s) }
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
+                Spacer(Modifier.height(14.dp))
+                SEALS.chunked(3).forEach { row ->
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        row.forEach { (s, label) ->
+                            val sel = s == current
+                            Column(
+                                Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Surface(
+                                    shape = RoundedCornerShape(12.dp),
+                                    color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .clickable { onPick(s) }
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Text(
+                                            s,
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            color = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(4.dp))
                                 Text(
-                                    s,
-                                    style = MaterialTheme.typography.titleLarge,
-                                    color = if (sel) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
+                                    label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     }
+                    Spacer(Modifier.height(12.dp))
                 }
             }
         },
