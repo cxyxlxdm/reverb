@@ -1,0 +1,139 @@
+import Foundation
+
+/// 应用私有目录 + 通用 JSON 读写。持久化到 ~/Library/Application Support/Reverb/。
+enum AppSupport {
+    static let dir: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let d = base.appendingPathComponent("Reverb", isDirectory: true)
+        try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        return d
+    }()
+
+    static func load<T: Decodable>(_ file: String, as type: T.Type) -> T? {
+        let url = dir.appendingPathComponent(file)
+        guard let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
+    }
+
+    static func save<T: Encodable>(_ file: String, _ value: T) {
+        let url = dir.appendingPathComponent(file)
+        if let data = try? JSONEncoder().encode(value) {
+            try? data.write(to: url, options: .atomic)
+        }
+    }
+}
+
+/// 本地订阅。
+@MainActor final class SubscriptionStore: ObservableObject {
+    @Published private(set) var subscriptions: [Podcast]
+    init() { subscriptions = AppSupport.load("subscriptions.json", as: [Podcast].self) ?? [] }
+
+    func isSubscribed(_ id: String) -> Bool { subscriptions.contains { $0.id == id } }
+
+    func toggle(_ p: Podcast) {
+        if let i = subscriptions.firstIndex(where: { $0.id == p.id }) { subscriptions.remove(at: i) }
+        else { subscriptions.insert(p, at: 0) }
+        persist()
+    }
+
+    func addAll(_ items: [Podcast]) {
+        for p in items where !subscriptions.contains(where: { $0.id == p.id }) { subscriptions.append(p) }
+        persist()
+    }
+    private func persist() { AppSupport.save("subscriptions.json", subscriptions) }
+}
+
+/// 单集收藏,最近置顶。
+@MainActor final class FavoriteStore: ObservableObject {
+    @Published private(set) var favorites: [Episode]
+    init() { favorites = AppSupport.load("favorites.json", as: [Episode].self) ?? [] }
+
+    func isFavorite(_ id: String) -> Bool { favorites.contains { $0.id == id } }
+
+    func toggle(_ e: Episode) {
+        if let i = favorites.firstIndex(where: { $0.id == e.id }) { favorites.remove(at: i) }
+        else { favorites.insert(e, at: 0) }
+        persist()
+    }
+
+    func addAll(_ items: [Episode]) {
+        for e in items where !favorites.contains(where: { $0.id == e.id }) { favorites.append(e) }
+        persist()
+    }
+    private func persist() { AppSupport.save("favorites.json", favorites) }
+}
+
+/// 播放历史:最近置顶,记录续播进度,最多 100 条。
+@MainActor final class HistoryStore: ObservableObject {
+    @Published private(set) var history: [HistoryEntry]
+    private let maxCount = 100
+    init() { history = AppSupport.load("history.json", as: [HistoryEntry].self) ?? [] }
+
+    func positionFor(_ id: String) -> Int { history.first { $0.episode.id == id }?.positionMs ?? 0 }
+
+    func record(_ e: Episode, at now: Double) {
+        let existing = history.first { $0.episode.id == e.id }
+        history.removeAll { $0.episode.id == e.id }
+        history.insert(HistoryEntry(episode: e, positionMs: existing?.positionMs ?? 0,
+                                    durationMs: existing?.durationMs ?? 0, updatedAt: now), at: 0)
+        if history.count > maxCount { history = Array(history.prefix(maxCount)) }
+        persist()
+    }
+
+    func updatePosition(_ id: String, positionMs: Int, durationMs: Int) {
+        guard let i = history.firstIndex(where: { $0.episode.id == id }) else { return }
+        history[i].positionMs = positionMs
+        history[i].durationMs = durationMs
+        persist()
+    }
+
+    func clear() { history = []; persist() }
+    private func persist() { AppSupport.save("history.json", history) }
+}
+
+/// 听觉印记:每集最多一枚,最近置顶。
+@MainActor final class StampStore: ObservableObject {
+    @Published private(set) var stamps: [Stamp]
+    init() { stamps = AppSupport.load("stamps.json", as: [Stamp].self) ?? [] }
+
+    func sealFor(_ episodeId: String) -> String? { stamps.first { $0.episodeId == episodeId }?.seal }
+
+    func set(episodeId: String, seal: String, title: String, podcastTitle: String, at now: Double) {
+        stamps.removeAll { $0.episodeId == episodeId }
+        stamps.insert(Stamp(episodeId: episodeId, seal: seal, title: title, podcastTitle: podcastTitle, createdAt: now), at: 0)
+        persist()
+    }
+
+    func remove(_ episodeId: String) { stamps.removeAll { $0.episodeId == episodeId }; persist() }
+
+    func addAll(_ items: [Stamp]) {
+        for s in items where !stamps.contains(where: { $0.episodeId == s.episodeId }) { stamps.append(s) }
+        persist()
+    }
+    private func persist() { AppSupport.save("stamps.json", stamps) }
+}
+
+/// 应用设置(UserDefaults)。theme:0 跟随系统 /1 浅色 /2 深色 /3 纯白。
+@MainActor final class SettingsStore: ObservableObject {
+    private let d = UserDefaults.standard
+
+    @Published var themeMode: Int { didSet { d.set(themeMode, forKey: "theme_mode") } }
+    @Published var accentIndex: Int { didSet { d.set(accentIndex, forKey: "accent_index") } }
+    @Published var fontScale: Double { didSet { d.set(fontScale, forKey: "font_scale") } }
+    @Published var regionOverride: String { didSet { d.set(regionOverride, forKey: "region_override") } } // "" = 自动
+    @Published var defaultSpeed: Double { didSet { d.set(defaultSpeed, forKey: "default_speed") } }
+    @Published var skipBackSec: Int { didSet { d.set(skipBackSec, forKey: "skip_back") } }
+    @Published var skipForwardSec: Int { didSet { d.set(skipForwardSec, forKey: "skip_fwd") } }
+    @Published var contextualRadio: Bool { didSet { d.set(contextualRadio, forKey: "contextual_radio") } }
+
+    init() {
+        themeMode = d.object(forKey: "theme_mode") as? Int ?? 0
+        accentIndex = d.object(forKey: "accent_index") as? Int ?? 0
+        fontScale = d.object(forKey: "font_scale") as? Double ?? 1.0
+        regionOverride = d.string(forKey: "region_override") ?? ""
+        defaultSpeed = d.object(forKey: "default_speed") as? Double ?? 1.0
+        skipBackSec = d.object(forKey: "skip_back") as? Int ?? 10
+        skipForwardSec = d.object(forKey: "skip_fwd") as? Int ?? 30
+        contextualRadio = d.object(forKey: "contextual_radio") as? Bool ?? false
+    }
+}
