@@ -1,6 +1,8 @@
 import Foundation
 import AVFoundation
 import Combine
+import MediaPlayer
+import AppKit
 
 /// 播放门面:AVPlayer 播放 + 队列上下文(上/下一集)+ 随机电台 + 睡眠定时 + 音频淡入淡出。
 /// 与 Android 版 PlayerController 行为对齐。
@@ -29,6 +31,8 @@ final class PlayerController: ObservableObject {
 
     private var history: HistoryStore?
     private var settings: SettingsStore?
+    /// 下载模块注入:给定单集,若已离线下载则返回本地文件 URL,优先本地播放。
+    var localFileProvider: ((Episode) -> URL?)?
 
     // 队列上下文
     private var queue: [Episode] = []
@@ -59,7 +63,64 @@ final class PlayerController: ObservableObject {
                 self.buffering = (status == .waitingToPlayAtSpecifiedRate)
                 self.isPlaying = (status == .playing)
                 if self.tickCount % 10 == 0 { self.saveProgress() }
+                self.updateNowPlaying()
             }
+        setupRemoteCommands()
+    }
+
+    // MARK: - 系统 Now Playing 中心 + 媒体键/控制中心
+
+    private var artworkCacheURL = ""
+    private var artworkCache: MPMediaItemArtwork?
+
+    private func setupRemoteCommands() {
+        let c = MPRemoteCommandCenter.shared()
+        c.playCommand.addTarget { [weak self] _ in self?.togglePlayPause(); return .success }
+        c.pauseCommand.addTarget { [weak self] _ in self?.togglePlayPause(); return .success }
+        c.togglePlayPauseCommand.addTarget { [weak self] _ in self?.togglePlayPause(); return .success }
+        c.nextTrackCommand.addTarget { [weak self] _ in self?.next(); return .success }
+        c.previousTrackCommand.addTarget { [weak self] _ in self?.previous(); return .success }
+        c.skipForwardCommand.preferredIntervals = [NSNumber(value: Double(settings?.skipForwardSec ?? 30))]
+        c.skipForwardCommand.addTarget { [weak self] _ in self?.skipForward(); return .success }
+        c.skipBackwardCommand.preferredIntervals = [NSNumber(value: Double(settings?.skipBackSec ?? 10))]
+        c.skipBackwardCommand.addTarget { [weak self] _ in self?.skipBackward(); return .success }
+        c.changePlaybackPositionCommand.addTarget { [weak self] event in
+            guard let e = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
+            self?.seek(toMs: Int(e.positionTime * 1000)); return .success
+        }
+    }
+
+    private func updateNowPlaying() {
+        guard let ep = current else {
+            MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+            return
+        }
+        var info: [String: Any] = [
+            MPMediaItemPropertyTitle: ep.title,
+            MPMediaItemPropertyArtist: ep.podcastTitle,
+            MPNowPlayingInfoPropertyElapsedPlaybackTime: Double(positionMs) / 1000.0,
+            MPNowPlayingInfoPropertyPlaybackRate: isPlaying ? Double(speed) : 0.0
+        ]
+        if durationMs > 0 { info[MPMediaItemPropertyPlaybackDuration] = Double(durationMs) / 1000.0 }
+        if let art = artworkCache, artworkCacheURL == ep.artworkUrl { info[MPMediaItemPropertyArtwork] = art }
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        MPNowPlayingInfoCenter.default().playbackState = isPlaying ? .playing : .paused
+        loadArtworkIfNeeded(ep.artworkUrl)
+    }
+
+    private func loadArtworkIfNeeded(_ url: String) {
+        guard !url.isEmpty, url != artworkCacheURL, let u = URL(string: url) else { return }
+        artworkCacheURL = url
+        Task { [weak self] in
+            guard let data = try? await URLSession.shared.data(from: u).0,
+                  let img = NSImage(data: data) else { return }
+            let art = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+            await MainActor.run { [weak self] in
+                guard let self, self.current?.artworkUrl == url else { return }
+                self.artworkCache = art
+                self.updateNowPlaying()
+            }
+        }
     }
 
     func bind(history: HistoryStore, settings: SettingsStore) {
@@ -99,7 +160,7 @@ final class PlayerController: ObservableObject {
         history?.record(episode, at: Date().timeIntervalSince1970)
         let resumeMs = history?.positionFor(episode.id) ?? 0
 
-        guard let url = URL(string: episode.audioUrl) else { return }
+        guard let url = localFileProvider?(episode) ?? URL(string: episode.audioUrl) else { return }
         let item = AVPlayerItem(url: url)
         player.replaceCurrentItem(with: item)
         observeEnd(of: item)
@@ -108,6 +169,7 @@ final class PlayerController: ObservableObject {
         player.play()
         player.rate = Float(speed)
         fadeVolume(to: 1.0, durationMs: 900)
+        updateNowPlaying()
     }
 
     // MARK: - 队列导航
@@ -252,6 +314,7 @@ final class PlayerController: ObservableObject {
         }
         tickCount += 1
         if tickCount % 10 == 0 { saveProgress() }
+        if tickCount % 4 == 0 { updateNowPlaying() } // 约每 2 秒同步系统 Now Playing 进度
     }
 
     private func observeEnd(of item: AVPlayerItem) {
