@@ -3,6 +3,8 @@
     <string name="slogan">Every echo lingers.</string>
     <string name="radio_start">Shuffle radio</string>
     <string name="radio_contextual">Contextual radio</string>
+    <string name="set_radio_mode">Radio mode</string>
+    <string name="radio_stopped">Stopped</string>
     <string name="more">More</string>
     <string name="clip_moment">Clip · Share this moment</string>
     <string name="clip_share">Share this moment</string>

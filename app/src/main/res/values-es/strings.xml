@@ -3,6 +3,8 @@
     <string name="slogan">Cada eco perdura.</string>
     <string name="radio_start">Radio aleatoria</string>
     <string name="radio_contextual">Radio contextual</string>
+    <string name="set_radio_mode">Modo de radio</string>
+    <string name="radio_stopped">Detenida</string>
     <string name="more">Más</string>
     <string name="clip_moment">Recorte · Compartir este momento</string>
     <string name="clip_share">Compartir este momento</string>

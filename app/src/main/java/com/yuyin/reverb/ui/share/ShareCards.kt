@@ -124,6 +124,8 @@ object ShareCards {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "image/png"
             putExtra(Intent.EXTRA_STREAM, uri)
+            // 把 uri 放进 ClipData,分享面板预览缩略图才能拿到读权限正常显示(否则只见系统占位图)
+            clipData = android.content.ClipData.newUri(context.contentResolver, "Reverb", uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(

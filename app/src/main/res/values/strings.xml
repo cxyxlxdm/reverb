@@ -3,6 +3,8 @@
     <string name="slogan">余音绕梁，隽永悠长</string>
     <string name="radio_start">随机电台</string>
     <string name="radio_contextual">情境电台</string>
+    <string name="set_radio_mode">电台模式</string>
+    <string name="radio_stopped">已停止</string>
     <string name="more">更多</string>
     <string name="clip_moment">剪藏 · 分享此刻</string>
     <string name="clip_share">分享此刻</string>

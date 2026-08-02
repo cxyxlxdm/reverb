@@ -34,9 +34,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Public
-import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.DarkMode
+import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.WbSunny
+import androidx.compose.material.icons.rounded.WbTwilight
 import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -116,8 +119,9 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
 
     val categories = vm.orderedCategories
     val radioMode by PlayerController.radioMode.collectAsStateWithLifecycle()
-    val radioPreparing by RadioStation.preparing.collectAsStateWithLifecycle()
+    val radioPreparingMode by RadioStation.preparingMode.collectAsStateWithLifecycle()
     val radioKind by RadioStation.mode.collectAsStateWithLifecycle()
+    val contextualRadio by container.settingsStore.contextualRadio.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var showReorder by remember { mutableStateOf(false) }
     val browsing = vm.state is DiscoverState.Idle
@@ -129,34 +133,34 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             title = stringResource(R.string.app_name),
             subtitle = stringResource(R.string.slogan),
             action = {
-                // 两个电台入口:🔀随机(全分类) / 🕐情境(按时段)。短按开台/换下一首,长按停止。
-                val genreIds = categories.map { it.genreId }
-                fun launchRadio(mode: RadioStation.Mode) {
-                    RadioStation.configure(container.repository, region, genreIds)
-                    scope.launch {
-                        val sameMode = radioMode && radioKind == mode
-                        val ok = if (sameMode) RadioStation.skip() else RadioStation.start(mode)
-                        if (!ok) Toast.makeText(context, R.string.radio_empty, Toast.LENGTH_SHORT).show()
+                // 单个电台入口:模式在设置里切换(随机/情境)。短按开台/换下一首;长按显示名称,运行中长按则停止。
+                val mode = if (contextualRadio) RadioStation.Mode.CONTEXTUAL else RadioStation.Mode.RANDOM
+                val label = stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
+                val stopped = stringResource(R.string.radio_stopped)
+                // 情境模式下图标随时段变化(日出/白日/日落/月亮),随机模式固定为随机图标
+                val icon = if (!contextualRadio) Icons.Rounded.Shuffle else contextualRadioIcon()
+                RadioActionButton(
+                    icon = icon,
+                    desc = stringResource(if (radioMode && radioKind == mode) R.string.radio_next else R.string.radio_start),
+                    active = radioMode,
+                    preparing = radioPreparingMode != null,
+                    onShort = {
+                        RadioStation.configure(container.repository, region, categories.map { it.genreId })
+                        scope.launch {
+                            val sameMode = radioMode && radioKind == mode
+                            val ok = if (sameMode) RadioStation.skip() else RadioStation.start(mode)
+                            if (!ok) Toast.makeText(context, R.string.radio_empty, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    onLong = {
+                        if (radioMode) {
+                            RadioStation.stop()
+                            Toast.makeText(context, "$label · $stopped", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, label, Toast.LENGTH_SHORT).show()
+                        }
                     }
-                }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    RadioActionButton(
-                        icon = Icons.Rounded.Shuffle,
-                        desc = stringResource(if (radioMode && radioKind == RadioStation.Mode.RANDOM) R.string.radio_next else R.string.radio_start),
-                        active = radioMode && radioKind == RadioStation.Mode.RANDOM,
-                        preparing = radioPreparing,
-                        onShort = { launchRadio(RadioStation.Mode.RANDOM) },
-                        onLong = { if (radioMode) RadioStation.stop() }
-                    )
-                    RadioActionButton(
-                        icon = Icons.Rounded.Schedule,
-                        desc = stringResource(R.string.radio_contextual),
-                        active = radioMode && radioKind == RadioStation.Mode.CONTEXTUAL,
-                        preparing = radioPreparing,
-                        onShort = { launchRadio(RadioStation.Mode.CONTEXTUAL) },
-                        onLong = { if (radioMode) RadioStation.stop() }
-                    )
-                }
+                )
             }
         )
 
@@ -237,7 +241,18 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
     }
 }
 
-/** 电台按钮:关台态灰、在台态高亮,抓取中转圈;短按开台/换台,长按停止。 */
+/** 情境电台按钮图标:按当前时段呈现 日出 / 白日 / 日落 / 月亮。 */
+private fun contextualRadioIcon(): androidx.compose.ui.graphics.vector.ImageVector {
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    return when (hour) {
+        in 5..10 -> Icons.Rounded.WbTwilight   // 日出·晨曦
+        in 11..16 -> Icons.Rounded.WbSunny      // 白日
+        in 17..19 -> Icons.Rounded.WbTwilight   // 日落·黄昏
+        else -> Icons.Rounded.DarkMode          // 夜·月
+    }
+}
+
+/** 电台按钮:关台态灰、在台态高亮,抓取中转圈;短按开台/换台,长按显示名称或停止。 */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun RadioActionButton(

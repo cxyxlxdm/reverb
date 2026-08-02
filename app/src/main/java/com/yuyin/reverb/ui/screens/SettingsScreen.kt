@@ -60,7 +60,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class Dlg { NONE, REGION, THEME, FONT, ACCENT, SPEED, SKIP_BACK, SKIP_FWD, LANGUAGE }
+private enum class Dlg { NONE, REGION, THEME, FONT, ACCENT, SPEED, SKIP_BACK, SKIP_FWD, LANGUAGE, RADIO }
 
 private val FONT_SCALES = listOf(0.85f, 1.0f, 1.15f, 1.3f)
 private val FONT_LABEL_RES = listOf(R.string.font_small, R.string.font_normal, R.string.font_large, R.string.font_xlarge)
@@ -89,6 +89,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     val skipFwd by settings.skipForwardSec.collectAsStateWithLifecycle()
     val language by settings.language.collectAsStateWithLifecycle()
     val spectrumEnabled by settings.spectrumEnabled.collectAsStateWithLifecycle()
+    val contextualRadio by settings.contextualRadio.collectAsStateWithLifecycle()
     val regionOverride by regionStore.override.collectAsStateWithLifecycle()
 
     // 录音权限申请:仅在用户主动开启「真实频谱」时触发;授权成功才落地开关
@@ -180,6 +181,10 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 stringResource(REGION_OPTIONS.firstOrNull { it.code == regionOverride }?.labelRes ?: R.string.region_auto)
             ) { dlg = Dlg.REGION }
             SettingRow(stringResource(R.string.set_footprint), stringResource(R.string.set_footprint_sub)) { onOpenFootprint() }
+            SettingRow(
+                stringResource(R.string.set_radio_mode),
+                stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
+            ) { dlg = Dlg.RADIO }
 
             SectionLabel(stringResource(R.string.sec_appearance))
             SettingRow(stringResource(R.string.set_theme), stringResource(THEME_LABEL_RES.getOrElse(themeMode) { THEME_LABEL_RES[0] })) { dlg = Dlg.THEME }
@@ -251,6 +256,12 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
         Dlg.FONT -> ChoiceDialog(
             stringResource(R.string.dlg_font_title), FONT_LABEL_RES.map { stringResource(it) }, fontIndex(fontScale),
             onPick = { i -> settings.setFontScale(FONT_SCALES[i]); dlg = Dlg.NONE }, onDismiss = dismiss
+        )
+        Dlg.RADIO -> ChoiceDialog(
+            stringResource(R.string.set_radio_mode),
+            listOf(stringResource(R.string.radio_start), stringResource(R.string.radio_contextual)),
+            if (contextualRadio) 1 else 0,
+            onPick = { i -> settings.setContextualRadio(i == 1); dlg = Dlg.NONE }, onDismiss = dismiss
         )
         Dlg.ACCENT -> AccentDialog(accentIndex,
             onPick = { i -> settings.setAccentIndex(i); dlg = Dlg.NONE }, onDismiss = dismiss)

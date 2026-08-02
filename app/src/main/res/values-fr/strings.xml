@@ -3,6 +3,8 @@
     <string name="slogan">Chaque écho persiste.</string>
     <string name="radio_start">Radio aléatoire</string>
     <string name="radio_contextual">Radio contextuelle</string>
+    <string name="set_radio_mode">Mode radio</string>
+    <string name="radio_stopped">Arrêtée</string>
     <string name="more">Plus</string>
     <string name="clip_moment">Extrait · Partager cet instant</string>
     <string name="clip_share">Partager cet instant</string>

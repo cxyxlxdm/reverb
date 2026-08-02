@@ -24,9 +24,9 @@ object RadioStation {
     private val recent = ArrayDeque<String>()
     private const val RECENT_CAP = 40
 
-    private val _preparing = MutableStateFlow(false)
-    /** 正在抓取下一首(开台/换台时按钮转圈)。 */
-    val preparing: StateFlow<Boolean> = _preparing
+    // 正在抓取下一首的电台类型(为 null 表示未在抓取);仅让对应按钮转圈,避免两个按钮同时转
+    private val _preparingMode = MutableStateFlow<Mode?>(null)
+    val preparingMode: StateFlow<Mode?> = _preparingMode
 
     // 当前电台类型(供 UI 高亮对应按钮);电台是否开启以 PlayerController.radioMode 为准
     private val _mode = MutableStateFlow<Mode?>(null)
@@ -83,13 +83,13 @@ object RadioStation {
     /** 抓一首没在最近列表里的随机单集(同时记录进最近列表)。 */
     private suspend fun fetchNext(): Episode? {
         val r = repo ?: return null
-        _preparing.value = true
+        _preparingMode.value = _mode.value
         return try {
             r.randomEpisode(region, effectiveGenreIds(), recent.toSet())?.also { remember(it.id) }
         } catch (e: Exception) {
             null
         } finally {
-            _preparing.value = false
+            _preparingMode.value = null
         }
     }
 

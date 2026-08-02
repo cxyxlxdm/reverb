@@ -21,6 +21,7 @@ class SettingsStore(context: Context) {
     val skipForwardSec = MutableStateFlow(prefs.getInt("skip_fwd", 30))
     val language = MutableStateFlow(prefs.getString("language", "") ?: "") // "" = 跟随系统
     val spectrumEnabled = MutableStateFlow(prefs.getBoolean("spectrum_enabled", false)) // 真实频谱(需录音权限),默认关
+    val contextualRadio = MutableStateFlow(prefs.getBoolean("contextual_radio", false)) // 电台模式:false 随机 / true 情境,默认随机
 
     fun setThemeMode(v: Int) { prefs.edit().putInt("theme_mode", v).apply(); themeMode.value = v }
     fun setFontScale(v: Float) { prefs.edit().putFloat("font_scale", v).apply(); fontScale.value = v }
@@ -32,4 +33,5 @@ class SettingsStore(context: Context) {
     fun setSkipForwardSec(v: Int) { prefs.edit().putInt("skip_fwd", v).apply(); skipForwardSec.value = v }
     fun setLanguage(tag: String) { prefs.edit().putString("language", tag).apply(); language.value = tag }
     fun setSpectrumEnabled(v: Boolean) { prefs.edit().putBoolean("spectrum_enabled", v).apply(); spectrumEnabled.value = v }
+    fun setContextualRadio(v: Boolean) { prefs.edit().putBoolean("contextual_radio", v).apply(); contextualRadio.value = v }
 }
