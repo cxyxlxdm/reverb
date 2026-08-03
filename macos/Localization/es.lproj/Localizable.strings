@@ -1,0 +1,157 @@
+/* 余音 Reverb — Español (es) */
+
+/* App & navigation */
+"发现" = "Descubrir";
+"音阁" = "Biblioteca";
+"余音" = "Reverb";
+"设置" = "Ajustes";
+
+/* Discover categories */
+"推荐" = "Destacado";
+"新闻" = "Noticias";
+"商业" = "Negocios";
+"科技" = "Tecnología";
+"文化" = "Cultura";
+"知识" = "Conocimiento";
+"教育" = "Educación";
+"喜剧" = "Comedia";
+"健康" = "Salud";
+"历史" = "Historia";
+"体育" = "Deportes";
+"美食" = "Gastronomía";
+"旅行" = "Viajes";
+"动漫" = "Anime";
+"情感" = "Relaciones";
+"艺术" = "Arte";
+"音乐" = "Música";
+"亲子" = "Infantil";
+"影视" = "Cine y TV";
+
+/* Discover */
+"分类" = "Categoría";
+"每日热门" = "Tendencias del día";
+"暂无内容" = "Sin contenido";
+"搜索节目、单集或粘贴 RSS 链接" = "Busca programas, episodios o pega un enlace RSS";
+"搜索中…" = "Buscando…";
+"没有找到「%@」" = "Sin resultados para «%@»";
+"节目" = "Programas";
+"单集" = "Episodios";
+"下一集(右键停止电台)" = "Siguiente (clic derecho para detener la radio)";
+"情境电台" = "Radio contextual";
+"随机电台" = "Radio aleatoria";
+"停止电台" = "Detener radio";
+
+/* Library */
+"订阅" = "Suscribirse";
+"收藏" = "Favoritos";
+"下载" = "Descargas";
+"还没有订阅任何节目" = "Aún no tienes suscripciones";
+"还没有收藏的单集" = "Aún no tienes episodios favoritos";
+"暂无播放历史" = "Sin historial de reproducción";
+"还没有离线下载的单集" = "Aún no tienes descargas";
+"取消收藏" = "Quitar de favoritos";
+"删除下载" = "Eliminar descarga";
+"删除此单集的离线文件?" = "¿Eliminar el archivo sin conexión de este episodio?";
+"删除" = "Eliminar";
+"取消" = "Cancelar";
+"清空" = "Vaciar";
+"清空播放历史" = "Borrar historial";
+
+/* Player */
+"没有正在播放的内容" = "No hay nada en reproducción";
+"正在播放" = "Reproduciendo";
+"快退" = "Retroceder";
+"快进" = "Avanzar";
+"%lld 分钟" = "%lld min";
+"本集结束" = "Fin del episodio";
+"关闭" = "Desactivar";
+"睡眠定时" = "Temporizador";
+"听觉印记" = "Sello sonoro";
+"分享剪藏" = "Compartir recorte";
+"保存剪藏" = "Guardar recorte";
+
+/* Seal labels */
+"开心" = "Feliz";
+"治愈" = "Sanador";
+"热血" = "Vibrante";
+"震撼" = "Impactante";
+"沉思" = "Reflexivo";
+"领悟" = "Revelador";
+"难过" = "Triste";
+"愤怒" = "Enojado";
+"疲惫" = "Cansado";
+
+/* Now Playing bar */
+"打开播放页" = "Abrir reproductor";
+
+/* Podcast detail */
+"暂无单集" = "Sin episodios";
+"重试" = "Reintentar";
+"已订阅" = "Suscrito";
+"已下载 · 点击删除" = "Descargado · clic para eliminar";
+"下载中" = "Descargando";
+
+/* Settings */
+"外观" = "Apariencia";
+"主题" = "Tema";
+"配色" = "Color de acento";
+"字号" = "Tamaño de fuente";
+"内容" = "Contenido";
+"地区" = "Región";
+"电台模式" = "Modo radio";
+"随机" = "Aleatorio";
+"情境" = "Contextual";
+"播放" = "Reproducir";
+"默认倍速" = "Velocidad predet.";
+"足迹" = "Huellas";
+"听觉足迹" = "Huellas sonoras";
+"%lld 枚" = "%lld sellos";
+"备份" = "Copia de seguridad";
+"导出备份" = "Exportar copia";
+"恢复备份" = "Restaurar copia";
+"导出 OPML" = "Exportar OPML";
+"导入 OPML" = "Importar OPML";
+"存储" = "Almacenamiento";
+"离线下载" = "Descargas sin conexión";
+"清空下载" = "Vaciar descargas";
+"%lld 集 · %@" = "%lld episodios · %@";
+"清空全部离线下载?" = "¿Vaciar todas las descargas sin conexión?";
+"恢复" = "Restaurar";
+"选择要合并的内容" = "Elige qué combinar";
+"跟随系统" = "Sistema";
+"浅色" = "Claro";
+"深色" = "Oscuro";
+"纯白" = "Blanco puro";
+"自动" = "Auto";
+"中国大陆" = "China continental";
+"中国香港" = "Hong Kong";
+"中国台湾" = "Taiwán";
+"美国" = "Estados Unidos";
+"日本" = "Japón";
+"韩国" = "Corea del Sur";
+"英国" = "Reino Unido";
+"%lld 秒" = "%lld s";
+"语言" = "Idioma";
+"重启后生效" = "Se aplica al reiniciar";
+
+/* Share cards */
+"共 %lld 枚印记" = "%lld sellos en total";
+"余音 · 听觉足迹" = "Reverb · Huellas sonoras";
+"剪藏 · %@" = "Recorte · %@";
+"余音 · 每一段余音都值得留存" = "Reverb · Cada eco merece guardarse";
+
+/* Theme */
+"青瓷" = "Celadón";
+"黛蓝" = "Índigo";
+"绯红" = "Carmesí";
+"竹青" = "Bambú";
+"暂停" = "Pausa";
+"加载中…" = "Cargando…";
+"%lld 小时 %lld 分" = "%lld h %lld min";
+"yyyy年M月d日" = "d MMM yyyy";
+
+/* Footprints */
+"还没有留下听觉印记" = "Aún no hay sellos sonoros";
+"完成" = "Listo";
+"分享" = "Compartir";
+"保存" = "Guardar";

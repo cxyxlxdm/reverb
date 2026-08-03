@@ -47,7 +47,9 @@ enum Fmt {
     static func duration(_ sec: Int) -> String {
         guard sec > 0 else { return "" }
         let m = sec / 60
-        return m >= 60 ? "\(m / 60) 小时 \(m % 60) 分" : "\(m) 分钟"
+        return m >= 60
+            ? String(format: NSLocalizedString("%lld 小时 %lld 分", comment: ""), Int64(m / 60), Int64(m % 60))
+            : String(format: NSLocalizedString("%lld 分钟", comment: ""), Int64(m))
     }
 
     /// 去除 HTML 标签与常见实体,得到干净纯文本(RSS 简介常含 HTML)。
@@ -72,8 +74,8 @@ enum Fmt {
             parser.dateFormat = f
             if let d = parser.date(from: s) {
                 let out = DateFormatter()
-                out.locale = Locale(identifier: "zh_CN")
-                out.dateFormat = "yyyy年M月d日"
+                out.locale = Locale.autoupdatingCurrent
+                out.dateFormat = NSLocalizedString("yyyy年M月d日", comment: "date format")
                 return out.string(from: d)
             }
         }

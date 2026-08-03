@@ -4,6 +4,16 @@
 <dict>
     <key>CFBundleName</key>
     <string>余音</string>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh-Hans</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+        <string>en</string>
+        <string>fr</string>
+        <string>es</string>
+    </array>
     <key>CFBundleDisplayName</key>
     <string>余音 Reverb</string>
     <key>CFBundleExecutable</key>

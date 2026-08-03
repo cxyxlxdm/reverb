@@ -19,6 +19,9 @@ cp Info.plist "$BUNDLE/Contents/Info.plist"
 # 若有图标资源则带上
 [ -f "Resources/AppIcon.icns" ] && cp "Resources/AppIcon.icns" "$BUNDLE/Contents/Resources/AppIcon.icns" || true
 
+# 本地化资源:各语言 .lproj 拷入 Resources(zh-Hans 为基础语言,键即简体中文原文)
+cp -R Localization/*.lproj "$BUNDLE/Contents/Resources/"
+
 echo "==> ad-hoc codesign"
 codesign --force --deep --sign - "$BUNDLE"
 

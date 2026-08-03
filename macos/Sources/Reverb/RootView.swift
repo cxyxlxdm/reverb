@@ -27,7 +27,7 @@ struct RootView: View {
                 .toolbar {
                     ToolbarItem(placement: .principal) {
                         Picker("", selection: $section) {
-                            ForEach(Section.allCases) { Text($0.rawValue).tag($0) }
+                            ForEach(Section.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()

@@ -25,7 +25,7 @@ struct LibraryView: View {
     var body: some View {
         VStack(spacing: 0) {
             Picker("", selection: $segment) {
-                ForEach(Segment.allCases) { Text($0.rawValue).tag($0) }
+                ForEach(Segment.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
             }
             .pickerStyle(.segmented)
             .labelsHidden()

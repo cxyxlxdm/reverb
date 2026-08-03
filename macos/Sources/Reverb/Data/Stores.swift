@@ -125,6 +125,18 @@ enum AppSupport {
     @Published var skipBackSec: Int { didSet { d.set(skipBackSec, forKey: "skip_back") } }
     @Published var skipForwardSec: Int { didSet { d.set(skipForwardSec, forKey: "skip_fwd") } }
     @Published var contextualRadio: Bool { didSet { d.set(contextualRadio, forKey: "contextual_radio") } }
+    /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。
+    @Published var language: String {
+        didSet {
+            d.set(language, forKey: "app_language")
+            if language.isEmpty {
+                d.removeObject(forKey: "AppleLanguages")
+            } else {
+                d.set([language], forKey: "AppleLanguages")
+            }
+            d.synchronize()
+        }
+    }
 
     init() {
         themeMode = d.object(forKey: "theme_mode") as? Int ?? 0
@@ -135,5 +147,6 @@ enum AppSupport {
         skipBackSec = d.object(forKey: "skip_back") as? Int ?? 10
         skipForwardSec = d.object(forKey: "skip_fwd") as? Int ?? 30
         contextualRadio = d.object(forKey: "contextual_radio") as? Bool ?? false
+        language = d.string(forKey: "app_language") ?? ""
     }
 }

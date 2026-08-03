@@ -42,13 +42,24 @@ private struct SettingsForm: View {
         Form {
             Section("外观") {
                 Picker("主题", selection: $settings.themeMode) {
-                    ForEach(0..<themeNames.count, id: \.self) { Text(themeNames[$0]).tag($0) }
+                    ForEach(0..<themeNames.count, id: \.self) { Text(LocalizedStringKey(themeNames[$0])).tag($0) }
                 }
                 Picker("配色", selection: $settings.accentIndex) {
                     ForEach(0..<Theme.accents.count, id: \.self) { i in
-                        Text(Theme.accents[i].name).tag(i)
+                        Text(LocalizedStringKey(Theme.accents[i].name)).tag(i)
                     }
                 }
+                Picker("语言", selection: $settings.language) {
+                    Text("跟随系统").tag("")
+                    Text("简体中文").tag("zh-Hans")
+                    Text("繁體中文").tag("zh-Hant")
+                    Text(verbatim: "English").tag("en")
+                    Text(verbatim: "Français").tag("fr")
+                    Text(verbatim: "Español").tag("es")
+                }
+                Text("重启后生效")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text("字号")
@@ -62,7 +73,7 @@ private struct SettingsForm: View {
 
             Section("内容") {
                 Picker("地区", selection: $settings.regionOverride) {
-                    ForEach(regions, id: \.code) { Text($0.name).tag($0.code) }
+                    ForEach(regions, id: \.code) { Text(LocalizedStringKey($0.name)).tag($0.code) }
                 }
                 Picker("电台模式", selection: $settings.contextualRadio) {
                     Text("随机").tag(false)
@@ -234,7 +245,7 @@ private struct RestoreSheet: View {
             Form {
                 Section("选择要合并的内容") {
                     ForEach(available) { section in
-                        Toggle(section.label, isOn: Binding(
+                        Toggle(LocalizedStringKey(section.label), isOn: Binding(
                             get: { selection.contains(section) },
                             set: { on in
                                 if on { selection.insert(section) } else { selection.remove(section) }

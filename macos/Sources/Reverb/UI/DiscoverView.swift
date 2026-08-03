@@ -122,14 +122,14 @@ struct DiscoverView: View {
                     selected = c
                     Task { await loadPopular(initial: false) }
                 } label: {
-                    if c.id == selected.id { Label(c.name, systemImage: "checkmark") }
-                    else { Text(c.name) }
+                    if c.id == selected.id { Label(LocalizedStringKey(c.name), systemImage: "checkmark") }
+                    else { Text(LocalizedStringKey(c.name)) }
                 }
             }
         } label: {
             HStack(spacing: 4) {
                 Text("分类").foregroundStyle(.secondary)
-                Text(selected.name).foregroundStyle(accent)
+                Text(LocalizedStringKey(selected.name)).foregroundStyle(accent)
                 Image(systemName: "chevron.down").font(.caption2).foregroundStyle(.secondary)
             }
             .font(.callout)

@@ -249,7 +249,7 @@ struct PlayerView: View {
                 } label: {
                     VStack(spacing: 4) {
                         Text(item.seal).font(.system(size: 22, weight: .bold))
-                        Text(item.label).font(.caption2)
+                        Text(LocalizedStringKey(item.label)).font(.caption2)
                     }
                     .frame(width: 60, height: 60)
                     .background(active ? accent.opacity(0.2) : Color.gray.opacity(0.12),

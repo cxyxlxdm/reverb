@@ -1,0 +1,157 @@
+/* 余音 Reverb — English (en) */
+
+/* App & navigation */
+"发现" = "Discover";
+"音阁" = "Library";
+"余音" = "Reverb";
+"设置" = "Settings";
+
+/* Discover categories */
+"推荐" = "Featured";
+"新闻" = "News";
+"商业" = "Business";
+"科技" = "Tech";
+"文化" = "Culture";
+"知识" = "Knowledge";
+"教育" = "Education";
+"喜剧" = "Comedy";
+"健康" = "Health";
+"历史" = "History";
+"体育" = "Sports";
+"美食" = "Food";
+"旅行" = "Travel";
+"动漫" = "Anime";
+"情感" = "Relationships";
+"艺术" = "Arts";
+"音乐" = "Music";
+"亲子" = "Kids & Family";
+"影视" = "TV & Film";
+
+/* Discover */
+"分类" = "Category";
+"每日热门" = "Daily Trending";
+"暂无内容" = "No content";
+"搜索节目、单集或粘贴 RSS 链接" = "Search shows, episodes or paste an RSS link";
+"搜索中…" = "Searching…";
+"没有找到「%@」" = "No results for \"%@\"";
+"节目" = "Shows";
+"单集" = "Episodes";
+"下一集(右键停止电台)" = "Next (right-click to stop radio)";
+"情境电台" = "Contextual Radio";
+"随机电台" = "Shuffle Radio";
+"停止电台" = "Stop Radio";
+
+/* Library */
+"订阅" = "Subscribe";
+"收藏" = "Favorites";
+"下载" = "Downloads";
+"还没有订阅任何节目" = "No subscriptions yet";
+"还没有收藏的单集" = "No favorite episodes yet";
+"暂无播放历史" = "No play history";
+"还没有离线下载的单集" = "No offline downloads yet";
+"取消收藏" = "Remove from favorites";
+"删除下载" = "Delete download";
+"删除此单集的离线文件?" = "Delete the offline file for this episode?";
+"删除" = "Delete";
+"取消" = "Cancel";
+"清空" = "Clear";
+"清空播放历史" = "Clear play history";
+
+/* Player */
+"没有正在播放的内容" = "Nothing playing";
+"正在播放" = "Now Playing";
+"快退" = "Rewind";
+"快进" = "Forward";
+"%lld 分钟" = "%lld min";
+"本集结束" = "End of episode";
+"关闭" = "Off";
+"睡眠定时" = "Sleep Timer";
+"听觉印记" = "Sound Seal";
+"分享剪藏" = "Share clip";
+"保存剪藏" = "Save clip";
+
+/* Seal labels */
+"开心" = "Happy";
+"治愈" = "Soothing";
+"热血" = "Fired Up";
+"震撼" = "Awe";
+"沉思" = "Pensive";
+"领悟" = "Insight";
+"难过" = "Sad";
+"愤怒" = "Angry";
+"疲惫" = "Weary";
+
+/* Now Playing bar */
+"打开播放页" = "Open player";
+
+/* Podcast detail */
+"暂无单集" = "No episodes";
+"重试" = "Retry";
+"已订阅" = "Subscribed";
+"已下载 · 点击删除" = "Downloaded · click to delete";
+"下载中" = "Downloading";
+
+/* Settings */
+"外观" = "Appearance";
+"主题" = "Theme";
+"配色" = "Accent";
+"字号" = "Font size";
+"内容" = "Content";
+"地区" = "Region";
+"电台模式" = "Radio mode";
+"随机" = "Shuffle";
+"情境" = "Contextual";
+"播放" = "Play";
+"默认倍速" = "Default speed";
+"足迹" = "Footprints";
+"听觉足迹" = "Sound Footprints";
+"%lld 枚" = "%lld seals";
+"备份" = "Backup";
+"导出备份" = "Export backup";
+"恢复备份" = "Restore backup";
+"导出 OPML" = "Export OPML";
+"导入 OPML" = "Import OPML";
+"存储" = "Storage";
+"离线下载" = "Offline downloads";
+"清空下载" = "Clear downloads";
+"%lld 集 · %@" = "%lld episodes · %@";
+"清空全部离线下载?" = "Clear all offline downloads?";
+"恢复" = "Restore";
+"选择要合并的内容" = "Choose what to merge";
+"跟随系统" = "Follow System";
+"浅色" = "Light";
+"深色" = "Dark";
+"纯白" = "Pure White";
+"自动" = "Auto";
+"中国大陆" = "Mainland China";
+"中国香港" = "Hong Kong";
+"中国台湾" = "Taiwan";
+"美国" = "United States";
+"日本" = "Japan";
+"韩国" = "South Korea";
+"英国" = "United Kingdom";
+"%lld 秒" = "%lld s";
+"语言" = "Language";
+"重启后生效" = "Takes effect after restart";
+
+/* Share cards */
+"共 %lld 枚印记" = "%lld seals in total";
+"余音 · 听觉足迹" = "Reverb · Sound Footprints";
+"剪藏 · %@" = "Clip · %@";
+"余音 · 每一段余音都值得留存" = "Reverb · Every echo is worth keeping";
+
+/* Theme */
+"青瓷" = "Celadon";
+"黛蓝" = "Indigo";
+"绯红" = "Crimson";
+"竹青" = "Bamboo";
+"暂停" = "Pause";
+"加载中…" = "Loading…";
+"%lld 小时 %lld 分" = "%lld h %lld min";
+"yyyy年M月d日" = "MMM d, yyyy";
+
+/* Footprints */
+"还没有留下听觉印记" = "No sound seals yet";
+"完成" = "Done";
+"分享" = "Share";
+"保存" = "Save";
