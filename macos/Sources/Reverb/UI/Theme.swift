@@ -49,6 +49,16 @@ enum Fmt {
         return m >= 60 ? "\(m / 60) 小时 \(m % 60) 分" : "\(m) 分钟"
     }
 
+    /// 去除 HTML 标签与常见实体,得到干净纯文本(RSS 简介常含 HTML)。
+    static func plainText(_ raw: String) -> String {
+        var s = raw.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        let entities = ["&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">",
+                        "&quot;": "\"", "&#39;": "'", "&apos;": "'", "&mdash;": "—", "&hellip;": "…"]
+        for (k, v) in entities { s = s.replacingOccurrences(of: k, with: v) }
+        s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     /// 尽力把 RSS 的 pubDate 解析为中文短日期,失败则原样截断。
     static func pubDate(_ raw: String) -> String {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -161,17 +171,15 @@ struct RoomyEpisodeRow: View {
     }
 
     var body: some View {
-        HStack(spacing: Metrics.rowSpacing) {
-            Button(action: onPlay) {
-                Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(isCurrent ? accent : Color.secondary)
-                    .symbolRenderingMode(.hierarchical)
-            }
-            .buttonStyle(.plain)
-            .help(playing ? "暂停" : "播放")
+        HStack(spacing: 16) {
+            // 封面缩略图:为列表增添色彩,不再单调;当前播放态叠加高亮圈
+            Artwork(url: episode.artworkUrl, size: 54, corner: 10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(accent, lineWidth: isCurrent ? 2 : 0)
+                )
 
-            VStack(alignment: .leading, spacing: 5) {
+            VStack(alignment: .leading, spacing: 6) {
                 Text(episode.title)
                     .font(.headline).fontWeight(.medium)
                     .lineSpacing(2)
@@ -187,9 +195,18 @@ struct RoomyEpisodeRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
             .onTapGesture(perform: onPlay)
+
+            Button(action: onPlay) {
+                Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
+                    .font(.system(size: 30))
+                    .foregroundStyle(isCurrent ? accent : Color.secondary)
+                    .symbolRenderingMode(.hierarchical)
+            }
+            .buttonStyle(.plain)
+            .help(playing ? "暂停" : "播放")
         }
-        .padding(.vertical, 14)
-        .frame(minHeight: 64)
+        .padding(.vertical, 16)
+        .frame(minHeight: 74)
     }
 }
 

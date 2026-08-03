@@ -23,7 +23,12 @@ struct PodcastDetailView: View {
                 if loading && episodes.isEmpty {
                     StateView(loading: true, text: "").frame(minHeight: 280)
                 } else if episodes.isEmpty {
-                    StateView(symbol: "waveform.slash", text: "暂无单集").frame(minHeight: 280)
+                    VStack(spacing: 14) {
+                        StateView(symbol: "waveform.slash", text: "暂无单集")
+                        Button("重试") { Task { await load(force: true) } }
+                            .buttonStyle(.bordered)
+                    }
+                    .frame(minHeight: 280)
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("单集")
@@ -52,7 +57,7 @@ struct PodcastDetailView: View {
             .padding(.bottom, Metrics.sectionSpacing)
         }
         .navigationTitle(display.title)
-        .task { await load() }
+        .task(id: podcast.id) { await load() }
     }
 
     private var header: some View {
@@ -72,13 +77,15 @@ struct PodcastDetailView: View {
                 }
                 subscribeButton
                     .padding(.top, 4)
-                if !display.description.isEmpty {
-                    Text(display.description)
+                let desc = Fmt.plainText(display.description)
+                if !desc.isEmpty {
+                    Text(desc)
                         .font(.body)
                         .foregroundStyle(.secondary)
                         .lineSpacing(3)
-                        .lineLimit(6)
+                        .lineLimit(5)
                         .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: 640, alignment: .leading)
                         .padding(.top, 6)
                 }
@@ -101,12 +108,20 @@ struct PodcastDetailView: View {
         .controlSize(.large)
     }
 
-    private func load() async {
-        guard episodes.isEmpty else { return }
+    private func load(force: Bool = false) async {
+        if !force && !episodes.isEmpty { return }
         loading = true
-        if let result = await env.repository.feed(podcast.feedUrl) {
-            loaded = result.podcast
-            episodes = result.episodes
+        // 首次请求偶发失败(冷连接/重定向),重试至多 3 次再放弃
+        var result = await env.repository.feed(podcast.feedUrl)
+        var tries = 0
+        while (result == nil || result?.episodes.isEmpty == true) && tries < 2 {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            result = await env.repository.feed(podcast.feedUrl)
+            tries += 1
+        }
+        if let r = result {
+            loaded = r.podcast
+            if !r.episodes.isEmpty { episodes = r.episodes }
         }
         loading = false
     }
