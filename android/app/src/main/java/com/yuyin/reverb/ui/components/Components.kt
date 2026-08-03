@@ -147,7 +147,22 @@ fun EpisodeListItem(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        PlayCircle(isCurrent = isCurrent, isPlaying = isPlaying, onClick = onPlay)
+        // 封面缩略图 + 播放/暂停轻蒙层:更有色彩,并保留播放态与播放入口(整行可点)
+        Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+            Artwork(episode.artworkUrl, size = 52, corner = 10)
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.Black.copy(alpha = if (isCurrent) 0.42f else 0.28f))
+            )
+            Icon(
+                if (isCurrent && isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = stringResource(if (isPlaying && isCurrent) R.string.a11y_pause else R.string.a11y_play),
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(
