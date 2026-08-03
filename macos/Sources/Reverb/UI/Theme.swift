@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 配色方案:青瓷 / 黛蓝 / 绯红 / 竹青(梁金为强调)。与 Android 版一致。
 struct AccentPalette {
@@ -80,21 +81,50 @@ enum Fmt {
     }
 }
 
-/// 封面图:AsyncImage + 圆角 + 占位。固定尺寸,用于播放条 / 详情头部等。
+/// 带重试 + URLCache 缓存的远程图片加载。修复冷启动时 AsyncImage 偶发失败(不重试)导致封面空白。
+/// URLSession.shared 默认走内存/磁盘缓存,重开即命中;失败按 0.4s 退避重试至多 3 次。
+struct RemoteImage<Placeholder: View>: View {
+    let url: String
+    @ViewBuilder var placeholder: () -> Placeholder
+    @State private var image: NSImage?
+
+    var body: some View {
+        ZStack {
+            if let image {
+                Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+            } else {
+                placeholder()
+            }
+        }
+        .task(id: url) { await load() }
+    }
+
+    private func load() async {
+        if image != nil { return }
+        guard !url.isEmpty, let u = URL(string: url) else { return }
+        for attempt in 0..<3 {
+            if Task.isCancelled { return }
+            if let data = try? await URLSession.shared.data(from: u).0,
+               let img = NSImage(data: data) {
+                image = img
+                return
+            }
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            _ = attempt
+        }
+    }
+}
+
+/// 封面图:圆角 + 占位。固定尺寸,用于播放条 / 详情头部 / 单集行。
 struct Artwork: View {
     let url: String
     var size: CGFloat = 56
     var corner: CGFloat = 8
 
     var body: some View {
-        AsyncImage(url: URL(string: url)) { phase in
-            switch phase {
-            case .success(let img): img.resizable().aspectRatio(contentMode: .fill)
-            default: Rectangle().fill(.quaternary)
-            }
-        }
-        .frame(width: size, height: size)
-        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+        RemoteImage(url: url) { Rectangle().fill(.quaternary) }
+            .frame(width: size, height: size)
+            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
     }
 }
 
@@ -104,15 +134,10 @@ struct SquareArtwork: View {
     var corner: CGFloat = 14
 
     var body: some View {
-        AsyncImage(url: URL(string: url)) { phase in
-            switch phase {
-            case .success(let img): img.resizable().aspectRatio(contentMode: .fill)
-            default:
-                ZStack {
-                    Rectangle().fill(.quaternary)
-                    Image(systemName: "waveform").font(.system(size: 26))
-                        .foregroundStyle(.tertiary)
-                }
+        RemoteImage(url: url) {
+            ZStack {
+                Rectangle().fill(.quaternary)
+                Image(systemName: "waveform").font(.system(size: 26)).foregroundStyle(.tertiary)
             }
         }
         .aspectRatio(1, contentMode: .fit)
