@@ -74,6 +74,19 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
 
     NavHost(navController = rootNav, startDestination = "main") {
         composable("main") { MainShell(rootNav) }
+        // 频道详情作为全屏页(与播放页/设置同级),整体转场,避免进详情时底部栏收起导致的上下闪动;
+        // 仍在底部保留迷你播放条,不显示 tab。
+        composable("podcast/{feed}") { entry ->
+            val feed = entry.arguments?.getString("feed").orEmpty()
+            FullScreen {
+                Column(Modifier.fillMaxSize()) {
+                    Box(Modifier.weight(1f)) {
+                        PodcastDetailScreen(feedUrl = feed, onBack = { rootNav.popBackStack() })
+                    }
+                    MiniPlayerBar(onExpand = { rootNav.navigate("player") })
+                }
+            }
+        }
         composable("player") { FullScreen { PlayerScreen(onBack = { rootNav.popBackStack() }) } }
         composable("settings") {
             FullScreen {
@@ -111,11 +124,6 @@ private fun MainShell(rootNav: NavHostController) {
     val tabNav = rememberNavController()
 
     val current by PlayerController.current.collectAsStateWithLifecycle()
-    val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
-    val buffering by PlayerController.buffering.collectAsStateWithLifecycle()
-    val position by PlayerController.position.collectAsStateWithLifecycle()
-    val duration by PlayerController.duration.collectAsStateWithLifecycle()
-    val hasNext by PlayerController.hasNext.collectAsStateWithLifecycle()
 
     val backStackEntry by tabNav.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
@@ -134,21 +142,7 @@ private fun MainShell(rootNav: NavHostController) {
         bottomBar = {
             Column {
                 val cur = current
-                AnimatedVisibility(visible = showMini && cur != null) {
-                    val progress = if (duration > 0) position.toFloat() / duration else 0f
-                    if (cur != null) {
-                        MiniPlayer(
-                            episode = cur,
-                            isPlaying = isPlaying,
-                            buffering = buffering,
-                            progress = progress,
-                            hasNext = hasNext,
-                            onToggle = { PlayerController.togglePlayPause() },
-                            onNext = { PlayerController.next() },
-                            onExpand = { rootNav.navigate("player") }
-                        )
-                    }
-                }
+                MiniPlayerBar(onExpand = { rootNav.navigate("player") })
                 AnimatedVisibility(visible = isTopLevel) {
                     Column {
                         if (showMini && cur != null) {
@@ -191,18 +185,41 @@ private fun MainShell(rootNav: NavHostController) {
             modifier = Modifier.padding(padding)
         ) {
             composable("discover") {
-                DiscoverScreen(onOpen = { p -> tabNav.navigate("podcast/${Uri.encode(p.feedUrl)}") })
+                DiscoverScreen(onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") })
             }
             composable("library") {
                 LibraryScreen(
-                    onOpen = { p -> tabNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
+                    onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
                     onOpenSettings = { rootNav.navigate("settings") }
                 )
             }
-            composable("podcast/{feed}") { entry ->
-                val feed = entry.arguments?.getString("feed").orEmpty()
-                PodcastDetailScreen(feedUrl = feed, onBack = { tabNav.popBackStack() })
-            }
+        }
+    }
+}
+
+/** 底部迷你播放条(有正在播放的内容才显示)。供 tab 外壳与频道详情全屏页共用。 */
+@Composable
+private fun MiniPlayerBar(onExpand: () -> Unit) {
+    val current by PlayerController.current.collectAsStateWithLifecycle()
+    val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
+    val buffering by PlayerController.buffering.collectAsStateWithLifecycle()
+    val position by PlayerController.position.collectAsStateWithLifecycle()
+    val duration by PlayerController.duration.collectAsStateWithLifecycle()
+    val hasNext by PlayerController.hasNext.collectAsStateWithLifecycle()
+    val cur = current
+    AnimatedVisibility(visible = cur != null) {
+        if (cur != null) {
+            val progress = if (duration > 0) position.toFloat() / duration else 0f
+            MiniPlayer(
+                episode = cur,
+                isPlaying = isPlaying,
+                buffering = buffering,
+                progress = progress,
+                hasNext = hasNext,
+                onToggle = { PlayerController.togglePlayPause() },
+                onNext = { PlayerController.next() },
+                onExpand = onExpand
+            )
         }
     }
 }
