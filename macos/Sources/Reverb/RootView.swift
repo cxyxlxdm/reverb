@@ -45,6 +45,9 @@ struct RootView: View {
             }
         }
         .frame(minWidth: 1100, minHeight: 760)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // 全屏(尤其刘海屏)时用窗口底色铺满安全区,避免顶部菜单栏那条露出黑色背衬
+        .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .tint(Theme.accent(settings.accentIndex))
         .preferredColorScheme(Theme.colorScheme(settings.themeMode))
     }
