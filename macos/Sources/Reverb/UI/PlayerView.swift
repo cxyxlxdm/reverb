@@ -44,6 +44,7 @@ struct PlayerView: View {
             }
         }
         .frame(minWidth: 420, minHeight: 560)
+        .noFocusRing()
     }
 
     private var header: some View {

@@ -51,6 +51,7 @@ struct RootView: View {
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .tint(Theme.accent(settings.accentIndex))
         .preferredColorScheme(Theme.colorScheme(settings.themeMode))
+        .noFocusRing() // 整树去键盘焦点环
     }
 }
 
