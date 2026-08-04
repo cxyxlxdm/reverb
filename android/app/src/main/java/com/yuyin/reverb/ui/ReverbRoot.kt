@@ -87,7 +87,14 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
                 }
             }
         }
-        composable("player") { FullScreen { PlayerScreen(onBack = { rootNav.popBackStack() }) } }
+        composable("player") {
+            FullScreen {
+                PlayerScreen(
+                    onBack = { rootNav.popBackStack() },
+                    onOpenChannel = { feed -> rootNav.navigate("podcast/${Uri.encode(feed)}") }
+                )
+            }
+        }
         composable("settings") {
             FullScreen {
                 SettingsScreen(

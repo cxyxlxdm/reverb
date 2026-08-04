@@ -120,7 +120,8 @@ class ITunesSource(private val client: OkHttpClient) {
                             .ifBlank { o.optString("artworkUrl100") },
                         podcastTitle = o.optString("collectionName"),
                         durationSec = if (durMs > 0) durMs / 1000 else 0,
-                        pubDate = o.optString("releaseDate").take(10)
+                        pubDate = o.optString("releaseDate").take(10),
+                        feedUrl = o.optString("feedUrl", "")
                     )
                 )
             }

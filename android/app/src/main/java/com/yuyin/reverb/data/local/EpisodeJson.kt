@@ -14,6 +14,7 @@ object EpisodeJson {
         .put("podcastTitle", e.podcastTitle)
         .put("durationSec", e.durationSec)
         .put("pubDate", e.pubDate)
+        .put("feedUrl", e.feedUrl)
 
     fun fromJson(o: JSONObject): Episode = Episode(
         id = o.optString("id"),
@@ -23,6 +24,7 @@ object EpisodeJson {
         artworkUrl = o.optString("artworkUrl"),
         podcastTitle = o.optString("podcastTitle"),
         durationSec = o.optLong("durationSec"),
-        pubDate = o.optString("pubDate")
+        pubDate = o.optString("pubDate"),
+        feedUrl = o.optString("feedUrl")
     )
 }

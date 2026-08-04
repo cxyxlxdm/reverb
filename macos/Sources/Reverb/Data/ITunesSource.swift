@@ -46,7 +46,8 @@ final class ITunesSource {
                 artworkUrl: art,
                 podcastTitle: (item["collectionName"] as? String) ?? "",
                 durationSec: millis / 1000,
-                pubDate: (item["releaseDate"] as? String) ?? ""
+                pubDate: (item["releaseDate"] as? String) ?? "",
+                feedUrl: (item["feedUrl"] as? String) ?? ""
             )
         }
         Log.i("iTunes", "searchEpisodes term=\"\(term)\" 命中 \(episodes.count) 单集 \(Log.ms(t0))")

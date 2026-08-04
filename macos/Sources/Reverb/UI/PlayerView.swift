@@ -5,6 +5,7 @@ struct PlayerView: View {
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
     @Environment(\.dismiss) private var dismiss
+    var onOpenChannel: (Podcast) -> Void = { _ in }
 
     @State private var dragging = false
     @State private var dragValue: Double = 0
@@ -75,7 +76,25 @@ struct PlayerView: View {
     private func titleBlock(_ ep: Episode) -> some View {
         VStack(spacing: 6) {
             Text(ep.title).font(.title3.bold()).multilineTextAlignment(.center).lineLimit(3)
-            Text(ep.podcastTitle).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            // 频道名:有 feedUrl 时可点,跳转频道主页(随机电台尤其有用)
+            if ep.feedUrl.isEmpty {
+                Text(ep.podcastTitle).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            } else {
+                Button {
+                    onOpenChannel(Podcast(id: ep.feedUrl, title: ep.podcastTitle, author: "",
+                                          artworkUrl: ep.artworkUrl, feedUrl: ep.feedUrl))
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(ep.podcastTitle).lineLimit(1)
+                        Image(systemName: "chevron.right").font(.caption2)
+                    }
+                    .font(.callout)
+                    .foregroundStyle(accent)
+                }
+                .buttonStyle(.plain)
+                .noFocusRing()
+                .help("查看频道")
+            }
         }
     }
 

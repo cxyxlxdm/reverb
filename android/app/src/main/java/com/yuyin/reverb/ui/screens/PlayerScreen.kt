@@ -74,7 +74,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PlayerScreen(onBack: () -> Unit) {
+fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val position by PlayerController.position.collectAsStateWithLifecycle()
@@ -203,14 +203,22 @@ fun PlayerScreen(onBack: () -> Unit) {
             modifier = Modifier.fillMaxWidth()
         )
         Spacer(Modifier.height(6.dp))
+        // 频道名:有 feedUrl 时可点,跳转频道主页(随机电台尤其有用)
+        val canOpenChannel = episode.feedUrl.isNotBlank()
         Text(
             episode.podcastTitle,
             style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.secondary,
+            color = if (canOpenChannel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (canOpenChannel)
+                        Modifier.clickable { onOpenChannel(episode.feedUrl) }
+                    else Modifier
+                )
         )
 
         Spacer(Modifier.height(20.dp))

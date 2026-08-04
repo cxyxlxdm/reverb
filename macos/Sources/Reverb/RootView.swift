@@ -13,10 +13,11 @@ struct RootView: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
     @State private var section: Section = .discover
+    @State private var path = NavigationPath()
 
     var body: some View {
         VStack(spacing: 0) {
-            NavigationStack {
+            NavigationStack(path: $path) {
                 Group {
                     switch section {
                     case .discover: DiscoverView()
@@ -41,7 +42,7 @@ struct RootView: View {
 
             if player.current != nil {
                 Divider()
-                NowPlayingBar()
+                NowPlayingBar(onOpenChannel: { path.append($0) })
             }
         }
         .frame(minWidth: 1100, minHeight: 760)

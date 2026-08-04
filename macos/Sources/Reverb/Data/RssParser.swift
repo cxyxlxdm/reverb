@@ -59,7 +59,8 @@ final class RssParser {
                 artworkUrl: art,
                 podcastTitle: channelTitle,
                 durationSec: duration,
-                pubDate: (item["pubDate"] ?? "").trimmed
+                pubDate: (item["pubDate"] ?? "").trimmed,
+                feedUrl: feedUrl
             )
         }
 

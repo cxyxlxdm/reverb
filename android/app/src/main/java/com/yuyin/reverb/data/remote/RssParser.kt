@@ -138,7 +138,8 @@ class RssParser(private val client: OkHttpClient) {
                                                 artworkUrl = iImage.ifBlank { channelImage },
                                                 podcastTitle = channelTitle,
                                                 durationSec = parseDuration(iDur),
-                                                pubDate = iDate
+                                                pubDate = iDate,
+                                                feedUrl = feedUrl
                                             )
                                         )
                                     }

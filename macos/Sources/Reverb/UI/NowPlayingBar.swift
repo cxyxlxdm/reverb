@@ -6,6 +6,7 @@ struct NowPlayingBar: View {
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
+    var onOpenChannel: (Podcast) -> Void = { _ in }
     @State private var showPlayer = false
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
@@ -74,7 +75,7 @@ struct NowPlayingBar: View {
         .frame(maxWidth: .infinity)
         .background(.regularMaterial)
         .sheet(isPresented: $showPlayer) {
-            PlayerView()
+            PlayerView(onOpenChannel: { pod in showPlayer = false; onOpenChannel(pod) })
                 .environmentObject(env)
                 .environmentObject(player)
                 .environmentObject(settings)

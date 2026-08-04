@@ -24,6 +24,7 @@ struct Episode: Codable, Identifiable, Hashable {
     var podcastTitle: String
     var durationSec: Int = 0
     var pubDate: String = ""
+    var feedUrl: String = ""   // 所属频道的 RSS 地址,用于从播放页跳转频道主页
 }
 
 /// 解析 RSS 后的结果:频道元信息 + 分集列表。
