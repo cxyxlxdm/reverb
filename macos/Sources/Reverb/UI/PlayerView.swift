@@ -85,12 +85,10 @@ struct PlayerView: View {
                     onOpenChannel(Podcast(id: ep.feedUrl, title: ep.podcastTitle, author: "",
                                           artworkUrl: ep.artworkUrl, feedUrl: ep.feedUrl))
                 } label: {
-                    HStack(spacing: 4) {
-                        Text(ep.podcastTitle).lineLimit(1)
-                        Image(systemName: "chevron.right").font(.caption2)
-                    }
-                    .font(.callout)
-                    .foregroundStyle(accent)
+                    Text(ep.podcastTitle)
+                        .font(.callout)
+                        .foregroundStyle(accent)
+                        .lineLimit(1)
                 }
                 .buttonStyle(.plain)
                 .noFocusRing()
