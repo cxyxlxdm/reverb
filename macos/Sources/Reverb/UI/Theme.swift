@@ -105,16 +105,20 @@ struct RemoteImage<Placeholder: View>: View {
                 placeholder()
             }
         }
-        .task(id: url) { await load() }
+        // id 绑定 url:换集时重跑;先清空旧图,避免残留上一集封面(URLCache 使重载很快)
+        .task(id: url) {
+            image = nil
+            await load()
+        }
     }
 
     private func load() async {
-        if image != nil { return }
         guard !url.isEmpty, let u = URL(string: url) else { return }
         for attempt in 0..<3 {
             if Task.isCancelled { return }
             if let data = try? await URLSession.shared.data(from: u).0,
                let img = NSImage(data: data) {
+                if Task.isCancelled { return } // 换集后旧任务已取消,勿写回旧图
                 image = img
                 return
             }
