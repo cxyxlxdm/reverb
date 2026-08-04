@@ -15,6 +15,7 @@ class FeedUpdateWorker(
         val app = applicationContext as? ReverbApp ?: return Result.success()
         val container = app.container
         val subs = container.subscriptionStore.subscriptions.value
+        com.yuyin.reverb.util.Logger.i(TAG, "run start subs=${subs.size}")
         if (subs.isEmpty()) return Result.success()
 
         val updateStore = container.updateStore
@@ -24,6 +25,7 @@ class FeedUpdateWorker(
             val feed = try {
                 container.repository.feed(p.feedUrl)
             } catch (e: Exception) {
+                com.yuyin.reverb.util.Logger.e(TAG, "feed failed title='${p.title}' url=${p.feedUrl}", e)
                 null
             } ?: continue
             val latest = feed.episodes.firstOrNull() ?: continue
@@ -31,15 +33,19 @@ class FeedUpdateWorker(
             when {
                 prev == null -> updateStore.setLastSeen(p.feedUrl, latest.id) // 首次只记录
                 latest.id != prev -> {
+                    com.yuyin.reverb.util.Logger.i(TAG, "new episode title='${p.title}' latest=${latest.id}")
                     updatedTitles.add(p.title)
                     updateStore.setLastSeen(p.feedUrl, latest.id)
                 }
             }
         }
 
+        com.yuyin.reverb.util.Logger.i(TAG, "run done updated=${updatedTitles.size}")
         if (updatedTitles.isNotEmpty()) {
             Notifications.postUpdates(applicationContext, updatedTitles.size, updatedTitles)
         }
         return Result.success()
     }
+
+    private companion object { const val TAG = "FeedWorker" }
 }

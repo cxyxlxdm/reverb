@@ -39,13 +39,17 @@ object RadioStation {
         this.userGenreIds = genreIds
     }
 
+    private const val TAG = "Radio"
+
     /** 开台:抓第一首并播放;成功返回 true,抓不到返回 false(不进入电台模式)。 */
     suspend fun start(mode: Mode): Boolean {
+        com.yuyin.reverb.util.Logger.i(TAG, "start mode=$mode region='$region'")
         _mode.value = mode
         // 先登记 provider 并进入电台模式(会清空上次历史),再抓首集播放
         PlayerController.startRadio { fetchNext() }
         val ep = fetchNext()
         if (ep == null) {
+            com.yuyin.reverb.util.Logger.w(TAG, "start failed, no episode mode=$mode")
             PlayerController.stopRadio()
             _mode.value = null
             return false
@@ -85,6 +89,7 @@ object RadioStation {
         return try {
             r.randomEpisode(region, effectiveGenreIds(), recent.toSet())?.also { remember(it.id) }
         } catch (e: Exception) {
+            com.yuyin.reverb.util.Logger.e(TAG, "fetchNext failed", e)
             null
         } finally {
             _preparingMode.value = null

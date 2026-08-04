@@ -161,6 +161,12 @@
     <string name="sec_reminder">Notifications</string>
     <string name="sec_storage">Stockage</string>
     <string name="sec_backup">Abonnements &amp; sauvegarde</string>
+    <string name="set_logs">Journaux</string>
+    <string name="set_share_log">Partager les journaux</string>
+    <string name="set_share_log_sub">Envoyez les journaux au développeur pour aider à diagnostiquer les problèmes occasionnels</string>
+    <string name="set_clear_log">Effacer les journaux</string>
+    <string name="log_size">Journaux actuels %1$s</string>
+    <string name="log_clear_confirm">Effacer tous les journaux ?</string>
     <string name="sec_about">À propos</string>
 
     <string name="set_region">Région</string>

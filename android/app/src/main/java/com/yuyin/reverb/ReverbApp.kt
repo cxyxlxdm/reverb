@@ -59,16 +59,33 @@ class ReverbApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        com.yuyin.reverb.util.Logger.init(this)
         container = AppContainer(this)
 
         DownloadManager.init(this, container.httpClient, container.downloadStore, container.settingsStore)
         PlayerController.bindHistory(container.historyStore)
         PlayerController.bindSettings(container.settingsStore)
         Notifications.ensureChannel(this)
-        if (container.settingsStore.updatesEnabled.value) scheduleFeedUpdates(this) else cancelFeedUpdates(this)
+        val updatesEnabled = container.settingsStore.updatesEnabled.value
+        if (updatesEnabled) scheduleFeedUpdates(this) else cancelFeedUpdates(this)
+
+        try {
+            val region = container.regionStore.override.value ?: "auto"
+            val lang = container.settingsStore.language.value.ifBlank { "system" }
+            com.yuyin.reverb.util.Logger.i(
+                TAG,
+                "app launch v${BuildConfig.VERSION_NAME} region=$region lang=$lang " +
+                    "updatesScheduled=$updatesEnabled subs=${container.subscriptionStore.subscriptions.value.size} " +
+                    "favs=${container.favoriteStore.favorites.value.size} history=${container.historyStore.history.value.size} " +
+                    "stamps=${container.stampStore.stamps.value.size} downloads=${container.downloadStore.downloads.value.size}"
+            )
+        } catch (e: Exception) {
+            com.yuyin.reverb.util.Logger.e(TAG, "launch log failed", e)
+        }
     }
 
     companion object {
+        private const val TAG = "App"
         const val UPDATE_WORK = "feed-update"
 
         fun scheduleFeedUpdates(context: android.content.Context) {

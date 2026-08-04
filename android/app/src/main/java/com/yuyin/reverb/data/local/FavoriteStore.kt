@@ -23,9 +23,11 @@ class FavoriteStore(context: Context) {
         synchronized(lock) {
             val current = _favorites.value.toMutableList()
             val idx = current.indexOfFirst { it.id == episode.id }
-            if (idx >= 0) current.removeAt(idx) else current.add(0, episode)
+            val removed = idx >= 0
+            if (removed) current.removeAt(idx) else current.add(0, episode)
             _favorites.value = current
             persist(current)
+            com.yuyin.reverb.util.Logger.i("FavStore", "${if (removed) "remove" else "add"} id=${episode.id} total=${current.size}")
         }
     }
 

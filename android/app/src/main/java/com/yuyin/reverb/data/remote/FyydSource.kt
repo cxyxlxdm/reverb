@@ -14,16 +14,20 @@ import java.net.URLEncoder
  */
 class FyydSource(private val client: OkHttpClient) {
 
+    private val TAG = "fyyd"
+
     suspend fun search(term: String, limit: Int = 30): List<Podcast> = withContext(Dispatchers.IO) {
         if (term.isBlank()) return@withContext emptyList()
         val url = "https://api.fyyd.de/0.2/search/podcast?title=${enc(term)}&count=$limit"
-        parse(get(url))
+        com.yuyin.reverb.util.Logger.d(TAG, "search term='$term'")
+        parse(get(url)).also { com.yuyin.reverb.util.Logger.i(TAG, "search count=${it.size}") }
     }
 
     /** 热门播客（发现页推荐的兜底来源，无需 Key）。 */
     suspend fun hot(limit: Int = 30): List<Podcast> = withContext(Dispatchers.IO) {
         val url = "https://api.fyyd.de/0.2/feature/podcast/hot?count=$limit"
-        parse(get(url))
+        com.yuyin.reverb.util.Logger.d(TAG, "hot limit=$limit")
+        parse(get(url)).also { com.yuyin.reverb.util.Logger.i(TAG, "hot count=${it.size}") }
     }
 
     private fun get(url: String): String? = try {
@@ -32,9 +36,11 @@ class FyydSource(private val client: OkHttpClient) {
             .header("User-Agent", "Reverb/1.0 (Android podcast client)")
             .build()
         client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) com.yuyin.reverb.util.Logger.w(TAG, "http ${resp.code} url=$url")
             if (resp.isSuccessful) resp.body?.string() else null
         }
     } catch (e: Exception) {
+        com.yuyin.reverb.util.Logger.e(TAG, "http error url=$url", e)
         null
     }
 

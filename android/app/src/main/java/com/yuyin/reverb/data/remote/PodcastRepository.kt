@@ -27,6 +27,9 @@ class PodcastRepository(
     private val charts = AppleChartsSource(client, itunes)
     private val rss = RssParser(client)
 
+    private val log = com.yuyin.reverb.util.Logger
+    private val TAG = "Repo"
+
     data class SearchOutcome(
         val podcasts: List<Podcast>,
         val sourceLabel: String,
@@ -36,21 +39,32 @@ class PodcastRepository(
     suspend fun search(query: String, region: String = ""): SearchOutcome {
         val q = query.trim()
         if (q.isBlank()) return SearchOutcome(emptyList(), "")
+        log.i(TAG, "search query='$q' region='$region'")
 
         // 0) 直接是订阅源地址
         if (q.startsWith("http://", true) || q.startsWith("https://", true)) {
-            rss.fetch(q)?.let { return SearchOutcome(listOf(it.podcast), "RSS") }
+            rss.fetch(q)?.let {
+                log.i(TAG, "search via RSS ok title='${it.podcast.title}'")
+                return SearchOutcome(listOf(it.podcast), "RSS")
+            }
         }
 
         // 1) 默认源 Apple（按地区）
-        itunes.search(q, region).let { if (it.isNotEmpty()) return SearchOutcome(it, "Apple Podcasts") }
+        itunes.search(q, region).let {
+            if (it.isNotEmpty()) { log.i(TAG, "search via Apple count=${it.size}"); return SearchOutcome(it, "Apple Podcasts") }
+        }
 
         // 2) 兜底 fyyd.de（无需 Key）
-        fyyd.search(q).let { if (it.isNotEmpty()) return SearchOutcome(it, "fyyd.de") }
+        fyyd.search(q).let {
+            if (it.isNotEmpty()) { log.i(TAG, "search via fyyd count=${it.size}"); return SearchOutcome(it, "fyyd.de") }
+        }
 
         // 3) 兜底 gpodder.net（无需 Key）
-        gpodder.search(q).let { if (it.isNotEmpty()) return SearchOutcome(it, "gpodder.net") }
+        gpodder.search(q).let {
+            if (it.isNotEmpty()) { log.i(TAG, "search via gpodder count=${it.size}"); return SearchOutcome(it, "gpodder.net") }
+        }
 
+        log.w(TAG, "search failed, no result for '$q'")
         return SearchOutcome(emptyList(), "", failed = true)
     }
 
@@ -58,7 +72,8 @@ class PodcastRepository(
     suspend fun searchEpisodes(query: String, region: String = ""): List<Episode> {
         val q = query.trim()
         if (q.isBlank() || q.startsWith("http", true)) return emptyList()
-        return itunes.searchEpisodes(q, region)
+        log.i(TAG, "searchEpisodes query='$q' region='$region'")
+        return itunes.searchEpisodes(q, region).also { log.i(TAG, "searchEpisodes count=${it.size}") }
     }
 
     // 发现页热门推荐：磁盘缓存(按 地区+分类) + 每日刷新。cachedPopular 立即返回上次结果，refreshPopular 走网络并回写。
@@ -69,16 +84,22 @@ class PodcastRepository(
 
     /** 拉取最新榜单，成功则回写磁盘缓存并返回；失败返回空（保留旧缓存）。 */
     suspend fun refreshPopular(genreId: Int? = null, region: String = "us"): List<Podcast> {
+        log.i(TAG, "refreshPopular genre=${genreId ?: "all"} region='$region'")
         var list = if (genreId == null) charts.top(region, 30) else charts.topByGenre(region, genreId, 30)
         if (list.isEmpty() && genreId == null) {
             if (region != "us") list = charts.top("us", 30)
             if (list.isEmpty()) list = fyyd.hot(30)
         }
         if (list.isNotEmpty()) cache.put(cacheKey(genreId, region), list)
+        log.i(TAG, "refreshPopular result count=${list.size} genre=${genreId ?: "all"} region='$region'")
         return list
     }
 
-    suspend fun feed(feedUrl: String): FeedResult? = rss.fetch(feedUrl)
+    suspend fun feed(feedUrl: String): FeedResult? =
+        rss.fetch(feedUrl).also {
+            if (it == null) log.w(TAG, "feed empty/failed url=$feedUrl")
+            else log.i(TAG, "feed ok episodes=${it.episodes.size} title='${it.podcast.title}' url=$feedUrl")
+        }
 
     /**
      * 随机电台：从热门榜单节目池里随机挑一档 → 解析其 RSS → 随机取一集可播放单集。
@@ -103,14 +124,20 @@ class PodcastRepository(
         // 付费节目分集常为会员专享、拉不到直链,优先排除;全付费时再放开兜底
         val all = pool.values.toList()
         val candidates = all.filterNot { it.isPaid }.ifEmpty { all }
-        if (candidates.isEmpty()) return@withContext null
+        log.i(TAG, "randomEpisode pool=${all.size} candidates=${candidates.size} region='$region'")
+        if (candidates.isEmpty()) { log.w(TAG, "randomEpisode empty pool"); return@withContext null }
 
         // 3) 随机挑节目 → 解析 RSS → 随机取一集,重试若干档兜底(某档拉不到就换下一档)
         for (p in candidates.shuffled().take(6)) {
             val feed = feed(p.feedUrl) ?: continue
             val playable = feed.episodes.filter { it.audioUrl.isNotBlank() && it.id !in exclude }
-            if (playable.isNotEmpty()) return@withContext playable.random()
+            if (playable.isNotEmpty()) {
+                val picked = playable.random()
+                log.i(TAG, "randomEpisode picked podcast='${p.title}' episode='${picked.title}' id=${picked.id}")
+                return@withContext picked
+            }
         }
+        log.w(TAG, "randomEpisode none playable after retries")
         null
     }
 }

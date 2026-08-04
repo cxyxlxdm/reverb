@@ -46,8 +46,10 @@ object OpmlSupport {
                 }
                 event = parser.next()
             }
+            com.yuyin.reverb.util.Logger.i("OPML", "extractFeedUrls count=${urls.size}")
             urls.toList()
         } catch (e: Exception) {
+            com.yuyin.reverb.util.Logger.e("OPML", "extractFeedUrls failed", e)
             emptyList()
         }
     }

@@ -23,6 +23,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        com.yuyin.reverb.util.Logger.i("Service", "PlaybackService onCreate")
         val exo = ExoPlayer.Builder(this)
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK) // 锁屏/后台流式播放不因深睡中断
@@ -52,6 +53,7 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
     override fun onDestroy() {
+        com.yuyin.reverb.util.Logger.i("Service", "PlaybackService onDestroy")
         mediaSession?.run {
             player.release()
             release()

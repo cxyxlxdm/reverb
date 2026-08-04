@@ -28,6 +28,9 @@ import java.io.File
  */
 object PlayerController {
 
+    private const val TAG = "Player"
+    private val log = com.yuyin.reverb.util.Logger
+
     private var controller: MediaController? = null
     private val handler = Handler(Looper.getMainLooper())
     private var pending: Episode? = null
@@ -114,9 +117,11 @@ object PlayerController {
                 val c = future.get()
                 controller = c
                 c.addListener(playerListener)
+                log.i(TAG, "controller connected")
                 pending?.let { ep -> pending = null; queue = listOf(ep); queueIndex = 0; updateNavFlags(); playEpisode(ep) }
                 syncOnce()
             } catch (e: Exception) {
+                log.e(TAG, "controller connect failed", e)
             }
         }, ContextCompat.getMainExecutor(appCtx))
     }
@@ -130,6 +135,12 @@ object PlayerController {
         override fun onPlaybackStateChanged(playbackState: Int) {
             _buffering.value = playbackState == Player.STATE_BUFFERING
             val c = controller
+            when (playbackState) {
+                Player.STATE_BUFFERING -> log.d(TAG, "state BUFFERING id=${_current.value?.id}")
+                Player.STATE_READY -> log.d(TAG, "state READY dur=${c?.duration} id=${_current.value?.id}")
+                Player.STATE_ENDED -> log.i(TAG, "state ENDED id=${_current.value?.id}")
+                Player.STATE_IDLE -> log.d(TAG, "state IDLE")
+            }
             if (c != null && c.duration > 0) _duration.value = c.duration
 
             if (playbackState == Player.STATE_READY && pendingSeekMs > 0 && c != null) {
@@ -147,6 +158,10 @@ object PlayerController {
                 if (_radioMode.value && !stopAfterThis) advanceRadio()
             }
         }
+
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            log.e(TAG, "onPlayerError code=${error.errorCode} name=${error.errorCodeName} id=${_current.value?.id}", error)
+        }
     }
 
     /** 播放单集(单条,无上下文):等价于队列只有它自己,无上/下一集。 */
@@ -158,12 +173,14 @@ object PlayerController {
         if (_radioMode.value) stopRadio() // 进入列表上下文即退出电台
         queue = episodes
         queueIndex = startIndex.coerceIn(0, episodes.lastIndex)
+        log.i(TAG, "playQueue count=${episodes.size} index=$queueIndex")
         updateNavFlags()
         playEpisode(episodes[queueIndex], isRadio = false)
     }
 
     /** 电台首集/续播用:计入电台历史后播放。 */
     fun playRadioEpisode(episode: Episode) {
+        log.i(TAG, "playRadioEpisode id=${episode.id} title='${episode.title}'")
         radioHistory.add(episode)
         while (radioHistory.size > radioHistoryCap) radioHistory.removeAt(0)
         radioPos = radioHistory.lastIndex
@@ -173,6 +190,7 @@ object PlayerController {
 
     /** 下一集:列表按顺序,电台优先回放历史前进、到末尾则抓新的随机。 */
     fun next() {
+        log.i(TAG, "next radio=${_radioMode.value} queueIndex=$queueIndex radioPos=$radioPos")
         if (_radioMode.value) {
             if (radioPos in 0 until radioHistory.lastIndex) {
                 radioPos++; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true)
@@ -184,6 +202,7 @@ object PlayerController {
 
     /** 上一集:列表回退一集;电台回退到刚听过的那期。 */
     fun previous() {
+        log.i(TAG, "previous radio=${_radioMode.value} queueIndex=$queueIndex radioPos=$radioPos")
         if (_radioMode.value) {
             if (radioPos > 0) { radioPos--; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true) }
         } else if (queueIndex > 0) {
@@ -192,11 +211,13 @@ object PlayerController {
     }
 
     private fun playEpisode(episode: Episode, isRadio: Boolean = false) {
+        log.i(TAG, "play id=${episode.id} title='${episode.title}' radio=$isRadio")
         // 手动播放任意单集即退出电台;电台内部续播/换台传 isRadio=true 保持在台
         if (!isRadio && _radioMode.value) stopRadio()
         _current.value = episode
         val c = controller
         if (c == null) {
+            log.w(TAG, "controller not ready, pending id=${episode.id}")
             pending = episode
             return
         }
@@ -206,7 +227,9 @@ object PlayerController {
         pendingSeekMs = history?.positionFor(episode.id) ?: 0L
 
         val local = DownloadManager.localPath(episode.id)
-        val uri = if (local != null && File(local).exists()) Uri.fromFile(File(local)) else Uri.parse(episode.audioUrl)
+        val useLocal = local != null && File(local).exists()
+        log.d(TAG, "source ${if (useLocal) "local" else "stream"} seekTo=$pendingSeekMs id=${episode.id}")
+        val uri = if (useLocal) Uri.fromFile(File(local!!)) else Uri.parse(episode.audioUrl)
 
         val item = MediaItem.Builder()
             .setUri(uri)
@@ -262,6 +285,7 @@ object PlayerController {
     // ---- 随机电台 ----
     /** 开启电台:登记「下一首」provider 并进入电台模式,清空上次电台历史。 */
     fun startRadio(next: suspend () -> Episode?) {
+        log.i(TAG, "radio start")
         radioNext = next
         radioHistory.clear()
         radioPos = -1
@@ -269,6 +293,7 @@ object PlayerController {
     }
 
     fun stopRadio() {
+        log.i(TAG, "radio stop")
         radioNext = null
         _radioMode.value = false
         updateNavFlags()
@@ -277,19 +302,23 @@ object PlayerController {
     /** 本集播完:抓下一首随机节目续播;抓不到则自动关台。 */
     private fun advanceRadio() {
         val next = radioNext ?: return
+        log.i(TAG, "radio advance")
         scope.launch {
-            val ep = try { next() } catch (e: Exception) { null }
-            if (ep != null && _radioMode.value) playRadioEpisode(ep) else stopRadio()
+            val ep = try { next() } catch (e: Exception) { log.e(TAG, "radio advance fetch failed", e); null }
+            if (ep != null && _radioMode.value) playRadioEpisode(ep)
+            else { log.w(TAG, "radio advance no episode, stopping"); stopRadio() }
         }
     }
 
     fun togglePlayPause() {
         val c = controller ?: return
+        log.i(TAG, "togglePlayPause wasPlaying=${c.isPlaying} id=${_current.value?.id}")
         if (c.isPlaying) c.pause() else c.play()
     }
 
     fun seekTo(ms: Long) {
         val target = ms.coerceAtLeast(0)
+        log.d(TAG, "seekTo ${target}ms")
         controller?.seekTo(target)
         _position.value = target
     }
@@ -298,6 +327,7 @@ object PlayerController {
         val c = controller ?: return
         val target = (c.currentPosition + deltaMs)
             .coerceIn(0, if (c.duration > 0) c.duration else Long.MAX_VALUE)
+        log.d(TAG, "seekBy $deltaMs -> ${target}ms")
         c.seekTo(target)
         _position.value = target
     }
@@ -308,12 +338,14 @@ object PlayerController {
     }
 
     fun setSpeed(s: Float) {
+        log.i(TAG, "setSpeed $s")
         _speed.value = s
         controller?.setPlaybackSpeed(s)
     }
 
     // ---- 睡眠定时 ----
     fun setSleepTimer(minutes: Int) {
+        log.i(TAG, "sleep timer set $minutes min")
         _sleepEndOfEpisode.value = false
         _sleepRemainingMs.value = minutes * 60_000L
         handler.removeCallbacks(sleepTicker)
@@ -321,12 +353,14 @@ object PlayerController {
     }
 
     fun setSleepEndOfEpisode() {
+        log.i(TAG, "sleep timer set: end of episode")
         handler.removeCallbacks(sleepTicker)
         _sleepRemainingMs.value = 0
         _sleepEndOfEpisode.value = true
     }
 
     fun cancelSleep() {
+        log.i(TAG, "sleep timer cancel")
         handler.removeCallbacks(sleepTicker)
         handler.removeCallbacks(fadeRunnable)
         _sleepRemainingMs.value = 0
@@ -338,6 +372,7 @@ object PlayerController {
         override fun run() {
             val remain = _sleepRemainingMs.value - 1000
             if (remain <= 0) {
+                log.i(TAG, "sleep timer fired, pausing")
                 _sleepRemainingMs.value = 0
                 // 最后阶段已渐弱到接近 0,这里收尾:暂停并恢复音量供下次播放
                 controller?.pause()

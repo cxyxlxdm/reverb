@@ -33,6 +33,7 @@ class StampStore(context: Context) {
             list.add(0, Stamp(episodeId, seal, title, podcastTitle, now))
             _stamps.value = list
             persist(list)
+            com.yuyin.reverb.util.Logger.i("StampStore", "set seal='$seal' id=$episodeId total=${list.size}")
         }
     }
 
@@ -41,6 +42,7 @@ class StampStore(context: Context) {
             val list = _stamps.value.filterNot { it.episodeId == episodeId }
             _stamps.value = list
             persist(list)
+            com.yuyin.reverb.util.Logger.i("StampStore", "remove id=$episodeId total=${list.size}")
         }
     }
 

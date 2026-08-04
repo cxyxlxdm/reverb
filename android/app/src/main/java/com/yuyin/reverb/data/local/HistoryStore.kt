@@ -54,6 +54,7 @@ class HistoryStore(context: Context) {
 
     fun clear() {
         synchronized(lock) {
+            com.yuyin.reverb.util.Logger.i("HistoryStore", "clear (was ${_history.value.size})")
             _history.value = emptyList()
             persist(emptyList())
         }

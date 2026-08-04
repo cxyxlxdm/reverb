@@ -23,9 +23,11 @@ class SubscriptionStore(context: Context) {
         synchronized(lock) {
             val current = _subscriptions.value.toMutableList()
             val idx = current.indexOfFirst { it.id == podcast.id }
-            if (idx >= 0) current.removeAt(idx) else current.add(0, podcast)
+            val removed = idx >= 0
+            if (removed) current.removeAt(idx) else current.add(0, podcast)
             _subscriptions.value = current
             persist(current)
+            com.yuyin.reverb.util.Logger.i("SubStore", "${if (removed) "remove" else "add"} id=${podcast.id} total=${current.size}")
         }
     }
 
@@ -35,6 +37,7 @@ class SubscriptionStore(context: Context) {
             for (p in podcasts) if (current.none { it.id == p.id }) current.add(p)
             _subscriptions.value = current
             persist(current)
+            com.yuyin.reverb.util.Logger.i("SubStore", "addAll +${podcasts.size} total=${current.size}")
         }
     }
 

@@ -12,7 +12,10 @@ import org.json.JSONObject
 object BackupManager {
     enum class Section { SUBSCRIPTIONS, FAVORITES, STAMPS, DOWNLOADS, HISTORY, SETTINGS }
 
+    private const val TAG = "Backup"
+
     fun build(container: AppContainer, include: Set<Section>): String {
+        com.yuyin.reverb.util.Logger.i(TAG, "export sections=${include.joinToString(",")}")
         val root = JSONObject().put("version", 1)
 
         if (Section.SUBSCRIPTIONS in include) {
@@ -70,6 +73,14 @@ object BackupManager {
                 .put("categoryOrder", JSONArray(container.categoryStore.loadOrder()))
             root.put("settings", obj)
         }
+        com.yuyin.reverb.util.Logger.i(
+            TAG,
+            "export built subs=${root.optJSONArray("subscriptions")?.length() ?: 0} " +
+                "favs=${root.optJSONArray("favorites")?.length() ?: 0} " +
+                "stamps=${root.optJSONArray("stamps")?.length() ?: 0} " +
+                "downloads=${root.optJSONArray("downloads")?.length() ?: 0} " +
+                "history=${root.optJSONArray("history")?.length() ?: 0}"
+        )
         return root.toString(2)
     }
 
@@ -89,6 +100,7 @@ object BackupManager {
 
     /** 应用导入。返回 true 表示导入了「设置」(调用方可据此重排更新任务)。 */
     fun apply(container: AppContainer, json: String, include: Set<Section>): Boolean {
+        com.yuyin.reverb.util.Logger.i(TAG, "restore sections=${include.joinToString(",")}")
         val root = JSONObject(json)
 
         if (Section.SUBSCRIPTIONS in include) root.optJSONArray("subscriptions")?.let { arr ->
@@ -150,6 +162,7 @@ object BackupManager {
             }
             importedSettings = true
         }
+        com.yuyin.reverb.util.Logger.i(TAG, "restore done importedSettings=$importedSettings")
         return importedSettings
     }
 }

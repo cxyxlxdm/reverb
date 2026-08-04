@@ -25,6 +25,7 @@ object DownloadManager {
     private lateinit var appCtx: Context
     private var settings: SettingsStore? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private const val TAG = "Download"
 
     private val _states = MutableStateFlow<Map<String, DownloadStatus>>(emptyMap())
     val states: StateFlow<Map<String, DownloadStatus>> = _states
@@ -48,6 +49,7 @@ object DownloadManager {
 
     fun deleteAll() {
         if (!::store.isInitialized) return
+        com.yuyin.reverb.util.Logger.i(TAG, "deleteAll count=${store.downloads.value.size}")
         store.downloads.value.forEach { runCatching { File(it.localPath).delete() } }
         store.clearAll()
         _states.value = emptyMap()
@@ -73,10 +75,12 @@ object DownloadManager {
         if (cur is DownloadStatus.Downloading || cur is DownloadStatus.Queued) return
 
         if (blockedByCellular()) {
+            com.yuyin.reverb.util.Logger.w(TAG, "blocked by cellular id=$id")
             setState(id, DownloadStatus.Failed) // 蜂窝网络下已被拦截，连 WiFi 后重试
             return
         }
 
+        com.yuyin.reverb.util.Logger.i(TAG, "download start id=$id url=${episode.audioUrl}")
         setState(id, DownloadStatus.Queued)
         scope.launch {
             try {
@@ -88,11 +92,13 @@ object DownloadManager {
                 client.newCall(req).execute().use { resp ->
                     val body = resp.body
                     if (!resp.isSuccessful || body == null) {
+                        com.yuyin.reverb.util.Logger.w(TAG, "download http ${resp.code} id=$id")
                         setState(id, DownloadStatus.Failed)
                         return@launch
                     }
                     val total = body.contentLength()
                     var read = 0L
+                    var milestone = 0 // 已记录到的进度里程碑(25/50/75)
                     body.byteStream().use { input ->
                         target.outputStream().use { out ->
                             val buf = ByteArray(8192)
@@ -101,21 +107,29 @@ object DownloadManager {
                                 out.write(buf, 0, n)
                                 read += n
                                 if (total > 0) {
+                                    val pct = ((read.toFloat() / total) * 100).toInt()
+                                    if (pct >= milestone + 25 && milestone < 75) {
+                                        milestone = (pct / 25) * 25
+                                        com.yuyin.reverb.util.Logger.d(TAG, "download progress $milestone% id=$id")
+                                    }
                                     setState(id, DownloadStatus.Downloading((read.toFloat() / total).coerceIn(0f, 1f)))
                                 }
                             }
                         }
                     }
                     store.add(episode, target.absolutePath)
+                    com.yuyin.reverb.util.Logger.i(TAG, "download complete id=$id path=${target.absolutePath} bytes=$read")
                     setState(id, DownloadStatus.Completed)
                 }
             } catch (e: Exception) {
+                com.yuyin.reverb.util.Logger.e(TAG, "download failed id=$id", e)
                 setState(id, DownloadStatus.Failed)
             }
         }
     }
 
     fun delete(episodeId: String) {
+        com.yuyin.reverb.util.Logger.i(TAG, "delete id=$episodeId")
         store.get(episodeId)?.let { runCatching { File(it.localPath).delete() } }
         store.remove(episodeId)
         removeState(episodeId)

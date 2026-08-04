@@ -161,6 +161,12 @@
     <string name="sec_reminder">提醒</string>
     <string name="sec_storage">儲存</string>
     <string name="sec_backup">訂閱與備份</string>
+    <string name="set_logs">日誌</string>
+    <string name="set_share_log">分享日誌</string>
+    <string name="set_share_log_sub">把執行日誌傳給開發者協助排查偶發問題</string>
+    <string name="set_clear_log">清空日誌</string>
+    <string name="log_size">目前日誌 %1$s</string>
+    <string name="log_clear_confirm">確定清空日誌?</string>
     <string name="sec_about">關於</string>
 
     <string name="set_region">地區</string>

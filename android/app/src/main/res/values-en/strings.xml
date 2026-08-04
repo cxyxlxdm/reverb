@@ -161,6 +161,12 @@
     <string name="sec_reminder">Notifications</string>
     <string name="sec_storage">Storage</string>
     <string name="sec_backup">Subscriptions &amp; Backup</string>
+    <string name="set_logs">Logs</string>
+    <string name="set_share_log">Share logs</string>
+    <string name="set_share_log_sub">Send runtime logs to the developer to help diagnose rare issues</string>
+    <string name="set_clear_log">Clear logs</string>
+    <string name="log_size">Current logs %1$s</string>
+    <string name="log_clear_confirm">Clear all logs?</string>
     <string name="sec_about">About</string>
 
     <string name="set_region">Region</string>

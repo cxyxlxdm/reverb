@@ -17,11 +17,14 @@ import java.net.URLEncoder
  */
 class ITunesSource(private val client: OkHttpClient) {
 
+    private val TAG = "iTunes"
+
     suspend fun search(term: String, country: String = "", limit: Int = 50): List<Podcast> = withContext(Dispatchers.IO) {
         if (term.isBlank()) return@withContext emptyList()
         val c = if (country.isNotBlank()) "&country=$country" else ""
         val url = "https://itunes.apple.com/search?media=podcast&term=${enc(term)}$c&limit=$limit"
-        parsePodcasts(get(url))
+        com.yuyin.reverb.util.Logger.d(TAG, "search term='$term' country='$country'")
+        parsePodcasts(get(url)).also { com.yuyin.reverb.util.Logger.i(TAG, "search count=${it.size}") }
     }
 
     /**
@@ -32,7 +35,8 @@ class ITunesSource(private val client: OkHttpClient) {
         if (term.isBlank()) return@withContext emptyList()
         val c = if (country.isNotBlank()) "&country=$country" else ""
         val url = "https://itunes.apple.com/search?media=podcast&entity=podcastEpisode&term=${enc(term)}$c&limit=$limit"
-        parseEpisodes(get(url))
+        com.yuyin.reverb.util.Logger.d(TAG, "searchEpisodes term='$term' country='$country'")
+        parseEpisodes(get(url)).also { com.yuyin.reverb.util.Logger.i(TAG, "searchEpisodes count=${it.size}") }
     }
 
     suspend fun lookup(collectionId: String): Podcast? = withContext(Dispatchers.IO) {
@@ -45,7 +49,8 @@ class ITunesSource(private val client: OkHttpClient) {
         if (ids.isEmpty()) return@withContext emptyList()
         val c = if (country.isNotBlank()) "&country=$country" else ""
         val url = "https://itunes.apple.com/lookup?id=${ids.joinToString(",")}&entity=podcast$c"
-        parsePodcasts(get(url))
+        com.yuyin.reverb.util.Logger.d(TAG, "lookupBatch ids=${ids.size} country='$country'")
+        parsePodcasts(get(url)).also { com.yuyin.reverb.util.Logger.i(TAG, "lookupBatch count=${it.size}") }
     }
 
     private fun get(url: String): String? = try {
@@ -54,9 +59,11 @@ class ITunesSource(private val client: OkHttpClient) {
             .header("User-Agent", "Reverb/1.0 (Android podcast client)")
             .build()
         client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) com.yuyin.reverb.util.Logger.w(TAG, "http ${resp.code} url=$url")
             if (resp.isSuccessful) resp.body?.string() else null
         }
     } catch (e: Exception) {
+        com.yuyin.reverb.util.Logger.e(TAG, "http error url=$url", e)
         null
     }
 

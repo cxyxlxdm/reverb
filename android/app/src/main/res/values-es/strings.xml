@@ -161,6 +161,12 @@
     <string name="sec_reminder">Notificaciones</string>
     <string name="sec_storage">Almacenamiento</string>
     <string name="sec_backup">Suscripciones y copia</string>
+    <string name="set_logs">Registros</string>
+    <string name="set_share_log">Compartir registros</string>
+    <string name="set_share_log_sub">Envía los registros al desarrollador para ayudar a diagnosticar problemas ocasionales</string>
+    <string name="set_clear_log">Borrar registros</string>
+    <string name="log_size">Registros actuales %1$s</string>
+    <string name="log_clear_confirm">¿Borrar todos los registros?</string>
     <string name="sec_about">Acerca de</string>
 
     <string name="set_region">Región</string>

@@ -1,7 +1,9 @@
 package com.yuyin.reverb.ui.screens
 
 import android.app.Activity
+import android.content.ClipData
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -59,6 +61,7 @@ import com.yuyin.reverb.ui.REGION_OPTIONS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 private enum class Dlg { NONE, REGION, THEME, FONT, ACCENT, SPEED, SKIP_BACK, SKIP_FWD, LANGUAGE, RADIO }
 
@@ -106,9 +109,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     var confirmCache by remember { mutableStateOf(false) }
     var confirmDownloads by remember { mutableStateOf(false) }
     var confirmHistory by remember { mutableStateOf(false) }
+    var confirmClearLog by remember { mutableStateOf(false) }
 
     var cacheBytes by remember { mutableStateOf(-1L) }
     var dlBytes by remember { mutableStateOf(-1L) }
+    var logBytes by remember { mutableStateOf(-1L) }
     var refreshTick by remember { mutableStateOf(0) }
     LaunchedEffect(refreshTick) {
         cacheBytes = withContext(Dispatchers.IO) {
@@ -116,6 +121,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 runCatching { context.imageLoader.diskCache?.size ?: 0L }.getOrDefault(0L)
         }
         dlBytes = withContext(Dispatchers.IO) { DownloadManager.usageBytes() }
+        logBytes = withContext(Dispatchers.IO) { com.yuyin.reverb.util.Logger.sizeBytes() }
     }
 
     var importing by remember { mutableStateOf(false) }
@@ -233,6 +239,15 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             SettingRow(stringResource(R.string.set_full_backup), stringResource(R.string.set_full_backup_sub)) { backupExportOpen = true }
             SettingRow(stringResource(R.string.set_restore), stringResource(R.string.set_restore_sub)) { backupImportLauncher.launch(arrayOf("*/*")) }
 
+            SectionLabel(stringResource(R.string.set_logs))
+            SettingRow(stringResource(R.string.set_share_log), stringResource(R.string.set_share_log_sub)) {
+                scope.launch { shareLog(context) }
+            }
+            SettingRow(
+                stringResource(R.string.set_clear_log),
+                stringResource(R.string.log_size, if (logBytes < 0) stringResource(R.string.size_calculating) else human(logBytes))
+            ) { confirmClearLog = true }
+
             SectionLabel(stringResource(R.string.sec_about))
             SettingRow(stringResource(R.string.set_about), onClick = onOpenAbout)
             SettingRow(stringResource(R.string.set_licenses), onClick = onOpenLicenses)
@@ -313,6 +328,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
         stringResource(R.string.set_clear_history), stringResource(R.string.confirm_clear_history), stringResource(R.string.action_clear_confirm),
         onConfirm = { container.historyStore.clear(); confirmHistory = false },
         onDismiss = { confirmHistory = false }
+    )
+    if (confirmClearLog) ConfirmDialog(
+        stringResource(R.string.set_clear_log), stringResource(R.string.log_clear_confirm), stringResource(R.string.action_clear_confirm),
+        onConfirm = { com.yuyin.reverb.util.Logger.clear(); confirmClearLog = false; refreshTick++ },
+        onDismiss = { confirmClearLog = false }
     )
 
     if (importing) {
@@ -395,6 +415,31 @@ private suspend fun exportOpml(context: Context, container: AppContainer, uri: U
             val opml = OpmlSupport.buildOpml(container.subscriptionStore.subscriptions.value)
             context.contentResolver.openOutputStream(uri)?.use { it.write(opml.toByteArray(Charsets.UTF_8)) }
         }
+    }
+}
+
+/** 导出全部日志到 cacheDir/shares/ 并经系统分享面板发出(text/plain)。 */
+private suspend fun shareLog(context: Context) {
+    try {
+        val text = com.yuyin.reverb.util.Logger.allText().ifBlank { "(暂无日志)" }
+        val uri = withContext(Dispatchers.IO) {
+            val dir = File(context.cacheDir, "shares").apply { mkdirs() }
+            val file = File(dir, "reverb-log.txt")
+            file.writeText(text)
+            androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        }
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, "Reverb log")
+            clipData = ClipData.newRawUri("reverb-log", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(send, context.getString(R.string.set_share_log))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
+    } catch (e: Exception) {
+        com.yuyin.reverb.util.Logger.e("Settings", "share log failed", e)
     }
 }
 
