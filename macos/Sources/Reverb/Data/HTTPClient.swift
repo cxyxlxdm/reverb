@@ -14,14 +14,19 @@ enum HTTP {
 
     /// 拉取原始数据。任何错误(URL 非法、网络失败、非 2xx)均返回 nil。
     static func data(_ urlString: String) async -> Data? {
-        guard let url = URL(string: urlString) else { return nil }
+        guard let url = URL(string: urlString) else {
+            Log.w("HTTP", "非法 URL: \(urlString)")
+            return nil
+        }
         do {
             let (data, response) = try await session.data(from: url)
             if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+                Log.w("HTTP", "状态 \(http.statusCode) \(urlString)")
                 return nil
             }
             return data
         } catch {
+            Log.e("HTTP", "传输失败 \(urlString)", error: error)
             return nil
         }
     }

@@ -5,16 +5,27 @@ import Foundation
 final class RssParser {
     /// 拉取并解析 feed。频道 id 与 feedUrl 均记为传入的 feedUrl。
     func fetch(_ feedUrl: String) async -> FeedResult? {
-        guard let data = await HTTP.data(feedUrl), !data.isEmpty else { return nil }
+        let t0 = Date()
+        Log.d("RSS", "fetch \(feedUrl)")
+        guard let data = await HTTP.data(feedUrl), !data.isEmpty else {
+            Log.w("RSS", "fetch 空数据 \(feedUrl) \(Log.ms(t0))")
+            return nil
+        }
 
         let delegate = RssDelegate()
         let parser = XMLParser(data: data)
         parser.shouldProcessNamespaces = false
         parser.delegate = delegate
-        guard parser.parse() else { return nil }
+        guard parser.parse() else {
+            Log.e("RSS", "fetch 解析失败 \(feedUrl) \(Log.ms(t0))", error: parser.parserError)
+            return nil
+        }
 
         let channelTitle = delegate.channelTitle.trimmed
-        guard !channelTitle.isEmpty || !delegate.items.isEmpty else { return nil }
+        guard !channelTitle.isEmpty || !delegate.items.isEmpty else {
+            Log.w("RSS", "fetch 空频道 \(feedUrl) \(Log.ms(t0))")
+            return nil
+        }
 
         let channelImage = firstNonEmpty(delegate.channelImageHref, delegate.channelImageUrl)
         let author = firstNonEmpty(delegate.channelAuthor, delegate.channelManagingEditor)
@@ -52,7 +63,11 @@ final class RssParser {
             )
         }
 
-        guard !episodes.isEmpty || !channelTitle.isEmpty else { return nil }
+        guard !episodes.isEmpty || !channelTitle.isEmpty else {
+            Log.w("RSS", "fetch 无有效内容 \(feedUrl) \(Log.ms(t0))")
+            return nil
+        }
+        Log.i("RSS", "fetch \"\(channelTitle)\" → \(episodes.count) 单集 \(Log.ms(t0))")
         return FeedResult(podcast: podcast, episodes: episodes)
     }
 

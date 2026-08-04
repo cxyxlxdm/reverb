@@ -37,6 +37,9 @@ private struct SettingsForm: View {
     @State private var restoreSections: Set<BackupManager.Section> = []
     @State private var restoreSelection: Set<BackupManager.Section> = []
     @State private var confirmClearDownloads = false
+    @State private var confirmClearLog = false
+    @State private var logSizeText = ""
+    @State private var shareLogURL: URL?
 
     var body: some View {
         Form {
@@ -139,6 +142,34 @@ private struct SettingsForm: View {
                     }
                 }
             }
+
+            Section("日志") {
+                HStack {
+                    Label("日志", systemImage: "doc.text")
+                    Spacer()
+                    Text(logSizeText).foregroundStyle(.secondary)
+                }
+                Button { exportLog() } label: {
+                    Label("导出日志…", systemImage: "square.and.arrow.up")
+                }
+                if let url = shareLogURL {
+                    ShareLink(item: url) {
+                        Label("分享日志", systemImage: "square.and.arrow.up.on.square")
+                    }
+                }
+                Button(role: .destructive) { confirmClearLog = true } label: {
+                    Label("清空日志", systemImage: "trash")
+                }
+            }
+        }
+        .onAppear { refreshLogSize(); prepareShareLog() }
+        .confirmationDialog("确定清空日志?", isPresented: $confirmClearLog, titleVisibility: .visible) {
+            Button("清空日志", role: .destructive) {
+                Log.clear()
+                refreshLogSize()
+                prepareShareLog()
+            }
+            Button("取消", role: .cancel) {}
         }
         .formStyle(.grouped)
         .frame(width: 460, height: 560)
@@ -224,6 +255,36 @@ private struct SettingsForm: View {
 
     private func readString(_ url: URL) async -> String? {
         await Task.detached { try? String(contentsOf: url, encoding: .utf8) }.value
+    }
+
+    // MARK: - 日志
+
+    private func refreshLogSize() {
+        let bytes = Log.totalSizeBytes()
+        let f = ByteCountFormatter()
+        f.countStyle = .file
+        logSizeText = f.string(fromByteCount: Int64(bytes))
+    }
+
+    /// 将当前完整日志写入临时文件,供 ShareLink 分享。
+    private func prepareShareLog() {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("reverb-log.txt")
+        Task {
+            let text = await Task.detached { Log.allText() }.value
+            try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+            shareLogURL = url
+        }
+    }
+
+    private func exportLog() {
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = "reverb-log.txt"
+        panel.allowedContentTypes = [.plainText]
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        Task {
+            let text = await Task.detached { Log.allText() }.value
+            try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+        }
     }
 }
 

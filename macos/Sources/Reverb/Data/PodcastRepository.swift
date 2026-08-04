@@ -23,6 +23,7 @@ final class PodcastRepository {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return ([], "") }
 
+        Log.i("Repo", "search \"\(q)\" region=\(region.isEmpty ? "-" : region)")
         if q.hasPrefix("http://") || q.hasPrefix("https://") {
             if let result = await rss.fetch(q) {
                 return ([result.podcast], "RSS")
@@ -39,6 +40,7 @@ final class PodcastRepository {
         let gp = await gpodder.search(q)
         if !gp.isEmpty { return (gp, "gpodder.net") }
 
+        Log.w("Repo", "search \"\(q)\" 所有数据源均无结果")
         return ([], "")
     }
 
@@ -64,6 +66,8 @@ final class PodcastRepository {
 
     /// 拉取并刷新榜单。综合榜为空时依次回退到 us 综合榜、fyyd 热门。非空即写入缓存。
     func refreshPopular(genreId: Int?, region: String) async -> [Podcast] {
+        let t0 = Date()
+        Log.i("Repo", "refreshPopular region=\(region) genre=\(genreId.map(String.init) ?? "综合")")
         var list: [Podcast]
         if let genreId = genreId {
             list = await charts.topByGenre(region: region, genreId: genreId, limit: 30)
@@ -72,8 +76,10 @@ final class PodcastRepository {
         }
 
         if list.isEmpty && genreId == nil {
+            Log.w("Repo", "refreshPopular region=\(region) 综合榜为空,回退 us 综合榜")
             list = await charts.top(region: "us", limit: 30)
             if list.isEmpty {
+                Log.w("Repo", "refreshPopular us 综合榜仍为空,回退 fyyd 热门")
                 list = await fyyd.hot(30)
             }
         }
@@ -81,6 +87,7 @@ final class PodcastRepository {
         if !list.isEmpty {
             cache.put(cacheKey(genreId, region), list)
         }
+        Log.i("Repo", "refreshPopular region=\(region) genre=\(genreId.map(String.init) ?? "综合") → \(list.count) 频道 \(Log.ms(t0))")
         return list
     }
 
@@ -112,20 +119,26 @@ final class PodcastRepository {
             }
         }
 
-        guard !pool.isEmpty else { return nil }
+        guard !pool.isEmpty else {
+            Log.w("Radio", "randomEpisode region=\(region) 频道池为空")
+            return nil
+        }
 
         // 过滤付费频道;若全部付费则保留原池。
         let free = pool.filter { !$0.isPaid }
         let candidates = free.isEmpty ? pool : free
 
+        Log.i("Radio", "randomEpisode region=\(region) 池=\(pool.count) 候选=\(candidates.count) 排除=\(exclude.count)")
         let picks = candidates.shuffled().prefix(6)
         for podcast in picks {
             guard let result = await feed(podcast.feedUrl) else { continue }
             let playable = result.episodes.filter { !$0.audioUrl.isEmpty && !exclude.contains($0.id) }
             if let chosen = playable.randomElement() {
+                Log.i("Radio", "randomEpisode 选中 频道=\"\(podcast.title)\" 单集=\"\(chosen.title)\" id=\(chosen.id)")
                 return chosen
             }
         }
+        Log.w("Radio", "randomEpisode region=\(region) 无可播放单集")
         return nil
     }
 }

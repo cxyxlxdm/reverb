@@ -11,19 +11,34 @@ final class AppleChartsSource {
     /// 综合热门榜:marketingtools 榜单 → id 列表 → lookup。
     func top(region: String = "cn", limit: Int = 30) async -> [Podcast] {
         let url = "https://rss.marketingtools.apple.com/api/v2/\(region)/podcasts/top/\(limit)/podcasts.json"
+        let t0 = Date()
+        Log.d("Charts", "top region=\(region) limit=\(limit)")
         guard let json = await HTTP.json(url),
               let feed = json["feed"] as? [String: Any],
-              let results = feed["results"] as? [[String: Any]] else { return [] }
+              let results = feed["results"] as? [[String: Any]] else {
+            Log.w("Charts", "top region=\(region) 榜单为空 \(Log.ms(t0))")
+            return []
+        }
         let ids = results.compactMap { $0["id"] as? String }
-        guard !ids.isEmpty else { return [] }
-        return await itunes.lookupBatch(ids, country: region)
+        guard !ids.isEmpty else {
+            Log.w("Charts", "top region=\(region) 无 id \(Log.ms(t0))")
+            return []
+        }
+        let list = await itunes.lookupBatch(ids, country: region)
+        Log.i("Charts", "top region=\(region) → \(list.count) 频道 \(Log.ms(t0))")
+        return list
     }
 
     /// 分类热门榜:老版 rss toppodcasts 接口 → im:id → lookup。
     func topByGenre(region: String = "cn", genreId: Int, limit: Int = 30) async -> [Podcast] {
         let url = "https://itunes.apple.com/\(region)/rss/toppodcasts/limit=\(limit)/genre=\(genreId)/json"
+        let t0 = Date()
+        Log.d("Charts", "topByGenre region=\(region) genre=\(genreId) limit=\(limit)")
         guard let json = await HTTP.json(url),
-              let feed = json["feed"] as? [String: Any] else { return [] }
+              let feed = json["feed"] as? [String: Any] else {
+            Log.w("Charts", "topByGenre region=\(region) genre=\(genreId) 榜单为空 \(Log.ms(t0))")
+            return []
+        }
 
         // entry 可能是数组,也可能是单个对象(仅一条时)。
         let entries: [[String: Any]]
@@ -41,7 +56,12 @@ final class AppleChartsSource {
                   let imId = attrs["im:id"] as? String else { return nil }
             return imId
         }
-        guard !ids.isEmpty else { return [] }
-        return await itunes.lookupBatch(ids, country: region)
+        guard !ids.isEmpty else {
+            Log.w("Charts", "topByGenre region=\(region) genre=\(genreId) 无 id \(Log.ms(t0))")
+            return []
+        }
+        let list = await itunes.lookupBatch(ids, country: region)
+        Log.i("Charts", "topByGenre region=\(region) genre=\(genreId) → \(list.count) 频道 \(Log.ms(t0))")
+        return list
     }
 }

@@ -6,18 +6,30 @@ final class ITunesSource {
     func search(_ term: String, country: String = "", limit: Int = 50) async -> [Podcast] {
         var url = "https://itunes.apple.com/search?media=podcast&term=\(HTTP.encode(term))&limit=\(limit)"
         if !country.isEmpty { url += "&country=\(country)" }
+        let t0 = Date()
+        Log.d("iTunes", "search term=\"\(term)\" country=\(country.isEmpty ? "-" : country)")
         guard let json = await HTTP.json(url),
-              let results = json["results"] as? [[String: Any]] else { return [] }
-        return results.compactMap { parsePodcast($0) }
+              let results = json["results"] as? [[String: Any]] else {
+            Log.w("iTunes", "search 无结果 term=\"\(term)\" \(Log.ms(t0))")
+            return []
+        }
+        let list = results.compactMap { parsePodcast($0) }
+        Log.i("iTunes", "search term=\"\(term)\" 命中 \(list.count) 频道 \(Log.ms(t0))")
+        return list
     }
 
     /// 搜索单集。跳过没有音频直链的结果。
     func searchEpisodes(_ term: String, country: String = "", limit: Int = 50) async -> [Episode] {
         var url = "https://itunes.apple.com/search?media=podcast&entity=podcastEpisode&term=\(HTTP.encode(term))&limit=\(limit)"
         if !country.isEmpty { url += "&country=\(country)" }
+        let t0 = Date()
+        Log.d("iTunes", "searchEpisodes term=\"\(term)\" country=\(country.isEmpty ? "-" : country)")
         guard let json = await HTTP.json(url),
-              let results = json["results"] as? [[String: Any]] else { return [] }
-        return results.compactMap { item in
+              let results = json["results"] as? [[String: Any]] else {
+            Log.w("iTunes", "searchEpisodes 无结果 term=\"\(term)\" \(Log.ms(t0))")
+            return []
+        }
+        let episodes: [Episode] = results.compactMap { item in
             let kind = item["kind"] as? String
             let episodeUrl = item["episodeUrl"] as? String
             guard kind == "podcast-episode" || (episodeUrl?.isEmpty == false) else { return nil }
@@ -37,6 +49,8 @@ final class ITunesSource {
                 pubDate: (item["releaseDate"] as? String) ?? ""
             )
         }
+        Log.i("iTunes", "searchEpisodes term=\"\(term)\" 命中 \(episodes.count) 单集 \(Log.ms(t0))")
+        return episodes
     }
 
     /// 按 collectionId 批量查询频道。空 ID 列表直接返回空。
@@ -45,9 +59,16 @@ final class ITunesSource {
         guard !joined.isEmpty else { return [] }
         var url = "https://itunes.apple.com/lookup?id=\(joined)&entity=podcast"
         if !country.isEmpty { url += "&country=\(country)" }
+        let t0 = Date()
+        Log.d("iTunes", "lookupBatch ids=\(ids.count) country=\(country.isEmpty ? "-" : country)")
         guard let json = await HTTP.json(url),
-              let results = json["results"] as? [[String: Any]] else { return [] }
-        return results.compactMap { parsePodcast($0) }
+              let results = json["results"] as? [[String: Any]] else {
+            Log.w("iTunes", "lookupBatch 无结果 ids=\(ids.count) \(Log.ms(t0))")
+            return []
+        }
+        let list = results.compactMap { parsePodcast($0) }
+        Log.i("iTunes", "lookupBatch ids=\(ids.count) → \(list.count) 频道 \(Log.ms(t0))")
+        return list
     }
 
     // MARK: - 解析

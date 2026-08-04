@@ -26,18 +26,28 @@ enum AppSupport {
 /// 本地订阅。
 @MainActor final class SubscriptionStore: ObservableObject {
     @Published private(set) var subscriptions: [Podcast]
-    init() { subscriptions = AppSupport.load("subscriptions.json", as: [Podcast].self) ?? [] }
+    init() {
+        subscriptions = AppSupport.load("subscriptions.json", as: [Podcast].self) ?? []
+        Log.i("Store", "订阅加载 \(subscriptions.count) 条")
+    }
 
     func isSubscribed(_ id: String) -> Bool { subscriptions.contains { $0.id == id } }
 
     func toggle(_ p: Podcast) {
-        if let i = subscriptions.firstIndex(where: { $0.id == p.id }) { subscriptions.remove(at: i) }
-        else { subscriptions.insert(p, at: 0) }
+        if let i = subscriptions.firstIndex(where: { $0.id == p.id }) {
+            subscriptions.remove(at: i)
+            Log.i("Store", "取消订阅 id=\(p.id) title=\"\(p.title)\"")
+        } else {
+            subscriptions.insert(p, at: 0)
+            Log.i("Store", "订阅 id=\(p.id) title=\"\(p.title)\"")
+        }
         persist()
     }
 
     func addAll(_ items: [Podcast]) {
+        let before = subscriptions.count
         for p in items where !subscriptions.contains(where: { $0.id == p.id }) { subscriptions.append(p) }
+        Log.i("Store", "订阅批量合并 +\(subscriptions.count - before)(共 \(subscriptions.count))")
         persist()
     }
     private func persist() { AppSupport.save("subscriptions.json", subscriptions) }
@@ -46,18 +56,28 @@ enum AppSupport {
 /// 单集收藏,最近置顶。
 @MainActor final class FavoriteStore: ObservableObject {
     @Published private(set) var favorites: [Episode]
-    init() { favorites = AppSupport.load("favorites.json", as: [Episode].self) ?? [] }
+    init() {
+        favorites = AppSupport.load("favorites.json", as: [Episode].self) ?? []
+        Log.i("Store", "收藏加载 \(favorites.count) 条")
+    }
 
     func isFavorite(_ id: String) -> Bool { favorites.contains { $0.id == id } }
 
     func toggle(_ e: Episode) {
-        if let i = favorites.firstIndex(where: { $0.id == e.id }) { favorites.remove(at: i) }
-        else { favorites.insert(e, at: 0) }
+        if let i = favorites.firstIndex(where: { $0.id == e.id }) {
+            favorites.remove(at: i)
+            Log.i("Store", "取消收藏 id=\(e.id) title=\"\(e.title)\"")
+        } else {
+            favorites.insert(e, at: 0)
+            Log.i("Store", "收藏 id=\(e.id) title=\"\(e.title)\"")
+        }
         persist()
     }
 
     func addAll(_ items: [Episode]) {
+        let before = favorites.count
         for e in items where !favorites.contains(where: { $0.id == e.id }) { favorites.append(e) }
+        Log.i("Store", "收藏批量合并 +\(favorites.count - before)(共 \(favorites.count))")
         persist()
     }
     private func persist() { AppSupport.save("favorites.json", favorites) }
@@ -67,7 +87,10 @@ enum AppSupport {
 @MainActor final class HistoryStore: ObservableObject {
     @Published private(set) var history: [HistoryEntry]
     private let maxCount = 100
-    init() { history = AppSupport.load("history.json", as: [HistoryEntry].self) ?? [] }
+    init() {
+        history = AppSupport.load("history.json", as: [HistoryEntry].self) ?? []
+        Log.i("Store", "历史加载 \(history.count) 条")
+    }
 
     func positionFor(_ id: String) -> Int { history.first { $0.episode.id == id }?.positionMs ?? 0 }
 
@@ -87,27 +110,36 @@ enum AppSupport {
         persist()
     }
 
-    func clear() { history = []; persist() }
+    func clear() { Log.i("Store", "清空播放历史"); history = []; persist() }
     private func persist() { AppSupport.save("history.json", history) }
 }
 
 /// 听觉印记:每集最多一枚,最近置顶。
 @MainActor final class StampStore: ObservableObject {
     @Published private(set) var stamps: [Stamp]
-    init() { stamps = AppSupport.load("stamps.json", as: [Stamp].self) ?? [] }
+    init() {
+        stamps = AppSupport.load("stamps.json", as: [Stamp].self) ?? []
+        Log.i("Store", "印记加载 \(stamps.count) 条")
+    }
 
     func sealFor(_ episodeId: String) -> String? { stamps.first { $0.episodeId == episodeId }?.seal }
 
     func set(episodeId: String, seal: String, title: String, podcastTitle: String, at now: Double) {
         stamps.removeAll { $0.episodeId == episodeId }
         stamps.insert(Stamp(episodeId: episodeId, seal: seal, title: title, podcastTitle: podcastTitle, createdAt: now), at: 0)
+        Log.i("Store", "设置印记 id=\(episodeId) seal=\(seal)")
         persist()
     }
 
-    func remove(_ episodeId: String) { stamps.removeAll { $0.episodeId == episodeId }; persist() }
+    func remove(_ episodeId: String) {
+        Log.i("Store", "移除印记 id=\(episodeId)")
+        stamps.removeAll { $0.episodeId == episodeId }; persist()
+    }
 
     func addAll(_ items: [Stamp]) {
+        let before = stamps.count
         for s in items where !stamps.contains(where: { $0.episodeId == s.episodeId }) { stamps.append(s) }
+        Log.i("Store", "印记批量合并 +\(stamps.count - before)(共 \(stamps.count))")
         persist()
     }
     private func persist() { AppSupport.save("stamps.json", stamps) }

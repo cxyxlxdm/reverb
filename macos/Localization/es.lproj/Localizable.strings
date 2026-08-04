@@ -134,6 +134,13 @@
 "语言" = "Idioma";
 "重启后生效" = "Se aplica al reiniciar";
 
+/* Logs */
+"日志" = "Registros";
+"导出日志…" = "Exportar registro…";
+"分享日志" = "Compartir registro";
+"清空日志" = "Borrar registro";
+"确定清空日志?" = "¿Borrar el registro?";
+
 /* Share cards */
 "共 %lld 枚印记" = "%lld sellos en total";
 "余音 · 听觉足迹" = "Reverb · Huellas sonoras";

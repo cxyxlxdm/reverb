@@ -5,8 +5,13 @@ final class GpodderSource {
     /// 按关键词搜索。跳过没有 url 的结果。
     func search(_ term: String) async -> [Podcast] {
         let url = "https://gpodder.net/search.json?q=\(HTTP.encode(term))"
-        guard let arr = await HTTP.jsonArray(url) else { return [] }
-        return arr.compactMap { any in
+        let t0 = Date()
+        Log.d("gpodder", "search term=\"\(term)\"")
+        guard let arr = await HTTP.jsonArray(url) else {
+            Log.w("gpodder", "search 无结果 term=\"\(term)\" \(Log.ms(t0))")
+            return []
+        }
+        let list = arr.compactMap { any -> Podcast? in
             guard let item = any as? [String: Any],
                   let feedUrl = item["url"] as? String, !feedUrl.isEmpty else { return nil }
             return Podcast(
@@ -17,5 +22,7 @@ final class GpodderSource {
                 feedUrl: feedUrl
             )
         }
+        Log.i("gpodder", "search term=\"\(term)\" → \(list.count) 频道 \(Log.ms(t0))")
+        return list
     }
 }

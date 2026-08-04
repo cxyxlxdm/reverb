@@ -117,7 +117,10 @@ final class PlayerController: ObservableObject {
         artworkCacheURL = url
         Task { [weak self] in
             guard let data = try? await URLSession.shared.data(from: u).0,
-                  let img = NSImage(data: data) else { return }
+                  let img = NSImage(data: data) else {
+                Log.w("NowPlaying", "封面加载失败 \(url)")
+                return
+            }
             let art = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
             await MainActor.run { [weak self] in
                 guard let self, self.current?.artworkUrl == url else { return }
@@ -140,11 +143,15 @@ final class PlayerController: ObservableObject {
 
     /// 以列表为队列从 startIndex 起播。
     func playQueue(_ episodes: [Episode], startIndex: Int) {
-        guard !episodes.isEmpty else { return }
+        guard !episodes.isEmpty else {
+            Log.w("Player", "playQueue 空队列,忽略")
+            return
+        }
         loadRetries = 0
         if radioMode { stopRadio() }
         queue = episodes
         queueIndex = min(max(startIndex, 0), episodes.count - 1)
+        Log.i("Player", "playQueue count=\(episodes.count) index=\(queueIndex)")
         updateNavFlags()
         playEpisode(episodes[queueIndex])
     }
@@ -167,7 +174,13 @@ final class PlayerController: ObservableObject {
         history?.record(episode, at: Date().timeIntervalSince1970)
         let resumeMs = history?.positionFor(episode.id) ?? 0
 
-        guard let url = localFileProvider?(episode) ?? URL(string: episode.audioUrl) else { return }
+        let local = localFileProvider?(episode)
+        guard let url = local ?? URL(string: episode.audioUrl) else {
+            Log.e("Player", "playEpisode 无效音频 URL id=\(episode.id) title=\"\(episode.title)\" audioUrl=\(episode.audioUrl)")
+            playbackError = String(localized: "加载失败,请检查网络后重试")
+            return
+        }
+        Log.i("Player", "playEpisode id=\(episode.id) title=\"\(episode.title)\" feed=\"\(episode.podcastTitle)\" radio=\(isRadio) 源=\(local != nil ? "本地" : "网络") resume=\(resumeMs)ms")
         let item = AVPlayerItem(url: url)
         // 观察加载状态:失败(常见于睡眠唤醒后网络栈短暂异常)自动重试,仍失败则给出可见提示,避免静默卡死
         itemStatusObserver = item.publisher(for: \.status)
@@ -176,9 +189,11 @@ final class PlayerController: ObservableObject {
                 guard let self else { return }
                 switch status {
                 case .readyToPlay:
+                    Log.i("Player", "AVPlayerItem readyToPlay id=\(episode.id)")
                     self.loadRetries = 0
                     self.playbackError = nil
                 case .failed:
+                    Log.e("Player", "AVPlayerItem failed id=\(episode.id)", error: item.error)
                     self.handleLoadFailure(episode)
                 default:
                     break
@@ -200,12 +215,14 @@ final class PlayerController: ObservableObject {
         if loadRetries < 3 {
             loadRetries += 1
             let isRadio = lastIsRadio
+            Log.w("Player", "加载失败,自动重试 \(loadRetries)/3 id=\(episode.id)")
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 800_000_000)
                 if self.current?.id == episode.id { self.playEpisode(episode, isRadio: isRadio) }
             }
         } else {
             loadRetries = 0
+            Log.e("Player", "加载失败,重试耗尽,提示用户手动重试 id=\(episode.id)")
             playbackError = String(localized: "加载失败,请检查网络后重试")
         }
     }
@@ -213,6 +230,7 @@ final class PlayerController: ObservableObject {
     /// 手动重试当前集(供 UI 的「重试」用)。
     func retry() {
         guard let ep = current else { return }
+        Log.i("Player", "手动重试 id=\(ep.id)")
         loadRetries = 0
         playEpisode(ep, isRadio: lastIsRadio)
     }
@@ -221,6 +239,7 @@ final class PlayerController: ObservableObject {
 
     func next() {
         loadRetries = 0
+        Log.i("Player", "next radio=\(radioMode) index=\(queueIndex) radioPos=\(radioPos)")
         if radioMode {
             if radioPos >= 0 && radioPos < radioHistory.count - 1 {
                 radioPos += 1; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio: true)
@@ -232,6 +251,7 @@ final class PlayerController: ObservableObject {
 
     func previous() {
         loadRetries = 0
+        Log.i("Player", "previous radio=\(radioMode) index=\(queueIndex) radioPos=\(radioPos)")
         if radioMode {
             if radioPos > 0 { radioPos -= 1; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio: true) }
         } else if queueIndex > 0 {
@@ -247,39 +267,50 @@ final class PlayerController: ObservableObject {
     // MARK: - 随机电台
 
     func startRadio(_ next: @escaping () async -> Episode?) {
+        Log.i("Radio", "startRadio")
         radioNext = next
         radioHistory.removeAll()
         radioPos = -1
         radioMode = true
     }
 
-    func stopRadio() { radioNext = nil; radioMode = false; updateNavFlags() }
+    func stopRadio() {
+        if radioMode { Log.i("Radio", "stopRadio 历史=\(radioHistory.count)") }
+        radioNext = nil; radioMode = false; updateNavFlags()
+    }
 
     func playRadioEpisode(_ episode: Episode) {
         loadRetries = 0
         radioHistory.append(episode)
         if radioHistory.count > radioHistoryCap { radioHistory.removeFirst() }
         radioPos = radioHistory.count - 1
+        Log.i("Radio", "playRadioEpisode id=\(episode.id) radioPos=\(radioPos)")
         updateNavFlags()
         playEpisode(episode, isRadio: true)
     }
 
     private func advanceRadio() {
         guard let next = radioNext else { return }
+        Log.i("Radio", "advanceRadio 拉取下一集…")
         Task { @MainActor in
             let ep = await next()
-            if let ep, radioMode { playRadioEpisode(ep) } else { stopRadio() }
+            if let ep, radioMode { playRadioEpisode(ep) } else {
+                Log.w("Radio", "advanceRadio 无下一集,停止电台")
+                stopRadio()
+            }
         }
     }
 
     // MARK: - 传输控制
 
     func togglePlayPause() {
+        Log.d("Player", "togglePlayPause 当前 isPlaying=\(isPlaying)")
         if isPlaying { player.pause() } else { player.play(); player.rate = Float(speed) }
     }
 
     func seek(toMs ms: Int) {
         let t = max(0, ms)
+        Log.d("Player", "seek → \(t)ms")
         player.seek(to: CMTime(value: Int64(t), timescale: 1000))
         positionMs = t
     }
@@ -289,6 +320,7 @@ final class PlayerController: ObservableObject {
     private func seekBy(ms delta: Int) { seek(toMs: max(0, positionMs + delta)) }
 
     func setSpeed(_ s: Double) {
+        Log.d("Player", "setSpeed \(s)×")
         speed = s
         if isPlaying { player.rate = Float(s) }
     }
@@ -296,18 +328,21 @@ final class PlayerController: ObservableObject {
     // MARK: - 睡眠定时
 
     func setSleepTimer(minutes: Int) {
+        Log.i("Sleep", "设置睡眠定时 \(minutes) 分钟")
         sleepEndOfEpisode = false
         sleepRemainingMs = minutes * 60_000
         startSleepTicker()
     }
 
     func setSleepEndOfEpisode() {
+        Log.i("Sleep", "设置睡眠定时:本集结束")
         sleepTimer?.invalidate()
         sleepRemainingMs = 0
         sleepEndOfEpisode = true
     }
 
     func cancelSleep() {
+        Log.i("Sleep", "取消睡眠定时")
         sleepTimer?.invalidate(); sleepTimer = nil
         fadeTimer?.invalidate(); fadeTimer = nil
         sleepRemainingMs = 0
@@ -322,6 +357,7 @@ final class PlayerController: ObservableObject {
                 guard let self else { return }
                 let remain = self.sleepRemainingMs - 1000
                 if remain <= 0 {
+                    Log.i("Sleep", "睡眠定时触发,暂停播放")
                     self.sleepRemainingMs = 0
                     self.player.pause(); self.player.volume = 1.0
                     self.sleepTimer?.invalidate(); self.sleepTimer = nil
@@ -374,6 +410,7 @@ final class PlayerController: ObservableObject {
                 guard let self else { return }
                 let stopAfter = self.sleepEndOfEpisode
                 self.sleepEndOfEpisode = false
+                Log.i("Player", "播放结束 id=\(self.current?.id ?? "-") radio=\(self.radioMode) 本集结束停止=\(stopAfter)")
                 if let ep = self.current { self.history?.updatePosition(ep.id, positionMs: 0, durationMs: self.durationMs) }
                 if self.radioMode && !stopAfter { self.advanceRadio() }
             }

@@ -134,6 +134,13 @@
 "语言" = "Langue";
 "重启后生效" = "Prend effet après redémarrage";
 
+/* Logs */
+"日志" = "Journaux";
+"导出日志…" = "Exporter le journal…";
+"分享日志" = "Partager le journal";
+"清空日志" = "Effacer le journal";
+"确定清空日志?" = "Effacer le journal ?";
+
 /* Share cards */
 "共 %lld 枚印记" = "%lld empreintes au total";
 "余音 · 听觉足迹" = "Reverb · Empreintes sonores";

@@ -16,6 +16,10 @@ final class AppEnvironment: ObservableObject {
     let downloadManager: DownloadManager
 
     init() {
+        let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
+        let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
+        Log.i("App", "启动 余音 Reverb v\(version) (\(build)) macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
+
         downloadManager = DownloadManager(store: downloads)
         player.bind(history: history, settings: settings)
         player.localFileProvider = { [downloads] ep in downloads.localURL(ep.id) }
@@ -27,6 +31,9 @@ final class AppEnvironment: ObservableObject {
                     downloads.objectWillChange, downloadManager.objectWillChange] {
             pub.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         }
+
+        let lang = settings.language.isEmpty ? "auto(\(Locale.preferredLanguages.first ?? "?"))" : settings.language
+        Log.i("App", "本地数据就绪 region=\(region) language=\(lang) 订阅=\(subscriptions.subscriptions.count) 收藏=\(favorites.favorites.count) 历史=\(history.history.count) 印记=\(stamps.stamps.count) 下载=\(downloads.downloads.count)")
     }
 
     /// 当前生效地区:设置覆盖优先,否则跟随系统区域,再退化为 us。

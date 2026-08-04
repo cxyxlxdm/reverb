@@ -61,7 +61,11 @@ enum BackupManager {
         }
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
-        guard let data = try? enc.encode(p), let str = String(data: data, encoding: .utf8) else { return "{}" }
+        guard let data = try? enc.encode(p), let str = String(data: data, encoding: .utf8) else {
+            Log.e("Backup", "导出编码失败")
+            return "{}"
+        }
+        Log.i("Backup", "导出备份 分区=[\(include.map { $0.rawValue }.sorted().joined(separator: ","))] 订阅=\(p.subscriptions?.count ?? 0) 收藏=\(p.favorites?.count ?? 0) 印记=\(p.stamps?.count ?? 0) 下载=\(p.downloads?.count ?? 0) 历史=\(p.history?.count ?? 0)")
         return str
     }
 
@@ -84,15 +88,21 @@ enum BackupManager {
     @MainActor
     static func apply(_ env: AppEnvironment, _ json: String, _ include: Set<Section>) {
         guard let data = json.data(using: .utf8),
-              let p = try? JSONDecoder().decode(Payload.self, from: data) else { return }
-        if include.contains(.subscriptions), let v = p.subscriptions { env.subscriptions.addAll(v) }
-        if include.contains(.favorites), let v = p.favorites { env.favorites.addAll(v) }
-        if include.contains(.stamps), let v = p.stamps { env.stamps.addAll(v) }
-        if include.contains(.downloads), let v = p.downloads {
-            for ep in v where !env.downloads.contains(ep.id) { env.downloadManager.download(ep) }
+              let p = try? JSONDecoder().decode(Payload.self, from: data) else {
+            Log.e("Backup", "恢复解析失败")
+            return
         }
-        if include.contains(.history), let v = p.history { mergeHistory(env, v) }
-        if include.contains(.settings), let s = p.settings { applySettings(env, s) }
+        Log.i("Backup", "恢复备份 分区=[\(include.map { $0.rawValue }.sorted().joined(separator: ","))]")
+        if include.contains(.subscriptions), let v = p.subscriptions { Log.i("Backup", "恢复订阅 \(v.count) 条"); env.subscriptions.addAll(v) }
+        if include.contains(.favorites), let v = p.favorites { Log.i("Backup", "恢复收藏 \(v.count) 条"); env.favorites.addAll(v) }
+        if include.contains(.stamps), let v = p.stamps { Log.i("Backup", "恢复印记 \(v.count) 条"); env.stamps.addAll(v) }
+        if include.contains(.downloads), let v = p.downloads {
+            let toDownload = v.filter { !env.downloads.contains($0.id) }
+            Log.i("Backup", "恢复下载 需重新下载 \(toDownload.count) 集")
+            for ep in toDownload { env.downloadManager.download(ep) }
+        }
+        if include.contains(.history), let v = p.history { Log.i("Backup", "恢复历史 \(v.count) 条"); mergeHistory(env, v) }
+        if include.contains(.settings), let s = p.settings { Log.i("Backup", "恢复设置"); applySettings(env, s) }
     }
 
     /// 历史合并:同集冲突保留 updatedAt 更新者,不回退进度。
@@ -131,6 +141,7 @@ enum BackupManager {
             let feed = xmlEscape(p.feedUrl)
             body += "    <outline type=\"rss\" text=\"\(title)\" title=\"\(title)\" xmlUrl=\"\(feed)\"/>\n"
         }
+        Log.i("Backup", "导出 OPML \(env.subscriptions.subscriptions.count) 个订阅")
         return """
         <?xml version="1.0" encoding="UTF-8"?>
         <opml version="2.0">
@@ -143,7 +154,10 @@ enum BackupManager {
 
     @MainActor
     static func importOPML(_ env: AppEnvironment, _ xml: String) {
-        guard let data = xml.data(using: .utf8) else { return }
+        guard let data = xml.data(using: .utf8) else {
+            Log.e("Backup", "导入 OPML 编码失败")
+            return
+        }
         let collector = OPMLCollector()
         let parser = XMLParser(data: data)
         parser.delegate = collector
@@ -151,6 +165,7 @@ enum BackupManager {
         let podcasts = collector.items.map {
             Podcast(id: $0.feedUrl, title: $0.text, author: "", artworkUrl: "", feedUrl: $0.feedUrl)
         }
+        Log.i("Backup", "导入 OPML 解析到 \(podcasts.count) 个订阅")
         env.subscriptions.addAll(podcasts)
     }
 
