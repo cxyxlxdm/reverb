@@ -21,6 +21,7 @@ final class PlayerController: ObservableObject {
     // 睡眠定时:剩余毫秒(0=关),或「本集结束」
     @Published private(set) var sleepRemainingMs: Int = 0
     @Published private(set) var sleepEndOfEpisode = false
+    @Published private(set) var playbackError: String?   // 加载失败提示(nil=正常)
 
     let speedSteps: [Double] = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0]
 
@@ -28,6 +29,9 @@ final class PlayerController: ObservableObject {
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var statusObserver: AnyCancellable?
+    private var itemStatusObserver: AnyCancellable?
+    private var loadRetries = 0
+    private var lastIsRadio = false
 
     private var history: HistoryStore?
     private var settings: SettingsStore?
@@ -137,6 +141,7 @@ final class PlayerController: ObservableObject {
     /// 以列表为队列从 startIndex 起播。
     func playQueue(_ episodes: [Episode], startIndex: Int) {
         guard !episodes.isEmpty else { return }
+        loadRetries = 0
         if radioMode { stopRadio() }
         queue = episodes
         queueIndex = min(max(startIndex, 0), episodes.count - 1)
@@ -154,6 +159,8 @@ final class PlayerController: ObservableObject {
 
     private func playEpisode(_ episode: Episode, isRadio: Bool = false) {
         if !isRadio && radioMode { stopRadio() }
+        lastIsRadio = isRadio
+        playbackError = nil
         current = episode
         positionMs = 0
         durationMs = 0
@@ -162,6 +169,21 @@ final class PlayerController: ObservableObject {
 
         guard let url = localFileProvider?(episode) ?? URL(string: episode.audioUrl) else { return }
         let item = AVPlayerItem(url: url)
+        // 观察加载状态:失败(常见于睡眠唤醒后网络栈短暂异常)自动重试,仍失败则给出可见提示,避免静默卡死
+        itemStatusObserver = item.publisher(for: \.status)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] status in
+                guard let self else { return }
+                switch status {
+                case .readyToPlay:
+                    self.loadRetries = 0
+                    self.playbackError = nil
+                case .failed:
+                    self.handleLoadFailure(episode)
+                default:
+                    break
+                }
+            }
         player.replaceCurrentItem(with: item)
         observeEnd(of: item)
         if resumeMs > 3000 { player.seek(to: CMTime(value: Int64(resumeMs), timescale: 1000)) }
@@ -172,9 +194,33 @@ final class PlayerController: ObservableObject {
         updateNowPlaying()
     }
 
+    /// 加载失败:同一集下自动重试至多 3 次(退避 0.8s),超限则提示,等待用户手动重试。
+    private func handleLoadFailure(_ episode: Episode) {
+        guard current?.id == episode.id else { return }
+        if loadRetries < 3 {
+            loadRetries += 1
+            let isRadio = lastIsRadio
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                if self.current?.id == episode.id { self.playEpisode(episode, isRadio: isRadio) }
+            }
+        } else {
+            loadRetries = 0
+            playbackError = String(localized: "加载失败,请检查网络后重试")
+        }
+    }
+
+    /// 手动重试当前集(供 UI 的「重试」用)。
+    func retry() {
+        guard let ep = current else { return }
+        loadRetries = 0
+        playEpisode(ep, isRadio: lastIsRadio)
+    }
+
     // MARK: - 队列导航
 
     func next() {
+        loadRetries = 0
         if radioMode {
             if radioPos >= 0 && radioPos < radioHistory.count - 1 {
                 radioPos += 1; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio: true)
@@ -185,6 +231,7 @@ final class PlayerController: ObservableObject {
     }
 
     func previous() {
+        loadRetries = 0
         if radioMode {
             if radioPos > 0 { radioPos -= 1; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio: true) }
         } else if queueIndex > 0 {
@@ -209,6 +256,7 @@ final class PlayerController: ObservableObject {
     func stopRadio() { radioNext = nil; radioMode = false; updateNavFlags() }
 
     func playRadioEpisode(_ episode: Episode) {
+        loadRetries = 0
         radioHistory.append(episode)
         if radioHistory.count > radioHistoryCap { radioHistory.removeFirst() }
         radioPos = radioHistory.count - 1

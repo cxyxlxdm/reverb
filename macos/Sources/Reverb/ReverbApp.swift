@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 /// 入口:正常启动 App;带 --selftest <audioUrl> 时跑一次无界面播放自检(验证 PlayerController 播放管线)。
 @main
@@ -41,21 +42,20 @@ struct ReverbApp: App {
     }
 }
 
-/// 无界面播放自检:用真实 PlayerController 播 4 秒,打印进度是否推进。
+/// 无界面播放自检:直接用 AVPlayer 播,打印状态与错误(定位 app 内网络/播放失败)。
 enum SelfTest {
     static func run(audioUrl: String) {
-        MainActor.assumeIsolated {
-            let pc = PlayerController()
-            let ep = Episode(id: "selftest", title: "SelfTest", description: "",
-                             audioUrl: audioUrl, artworkUrl: "", podcastTitle: "Probe")
-            pc.playQueue([ep], startIndex: 0)
-            let start = Date()
-            while Date().timeIntervalSince(start) < 4 {
-                RunLoop.main.run(until: Date().addingTimeInterval(0.5))
-                print(String(format: "SELFTEST pos=%dms playing=%@ dur=%dms",
-                             pc.positionMs, pc.isPlaying ? "yes" : "no", pc.durationMs))
-            }
-            print(pc.positionMs > 500 ? "SELFTEST RESULT: PLAYBACK OK" : "SELFTEST RESULT: NO PROGRESS")
+        func err(_ s: String) { FileHandle.standardError.write((s + "\n").data(using: .utf8)!) }
+        guard let url = URL(string: audioUrl) else { err("SELFTEST bad url"); return }
+        let item = AVPlayerItem(url: url)
+        let p = AVPlayer(playerItem: item); p.volume = 1; p.play()
+        let start = Date()
+        while Date().timeIntervalSince(start) < 6 {
+            RunLoop.main.run(until: Date().addingTimeInterval(1))
+            err(String(format: "SELFTEST t=%.2f status=%d tcs=%d err=%@",
+                       p.currentTime().seconds, item.status.rawValue, p.timeControlStatus.rawValue,
+                       String(describing: item.error ?? p.error)))
         }
+        err(p.currentTime().seconds > 0.5 ? "SELFTEST RESULT: PLAYBACK OK" : "SELFTEST RESULT: NO PROGRESS")
     }
 }

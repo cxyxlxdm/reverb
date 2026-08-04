@@ -106,6 +106,19 @@ struct PlayerView: View {
     // MARK: - 传输控制
 
     private var controls: some View {
+        VStack(spacing: 14) {
+            if let err = player.playbackError {
+                HStack(spacing: 10) {
+                    Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    Text(err).font(.callout).foregroundStyle(.secondary)
+                    Button("重试") { player.retry() }.buttonStyle(.bordered).controlSize(.small)
+                }
+            }
+            transportRow
+        }
+    }
+
+    private var transportRow: some View {
         HStack(spacing: 26) {
             controlButton("gobackward.\(min(env.settings.skipBackSec, 30))", size: 22) { player.skipBackward() }
                 .help("快退")

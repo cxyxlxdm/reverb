@@ -155,3 +155,6 @@
 "完成" = "Terminé";
 "分享" = "Partager";
 "保存" = "Enregistrer";
+"重试" = "Réessayer";
+"加载失败,请检查网络后重试" = "Échec du chargement. Vérifiez le réseau et réessayez.";
+"加载失败,点击重试" = "Échec — cliquez pour réessayer";

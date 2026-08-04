@@ -51,12 +51,14 @@ struct NowPlayingBar: View {
                         .buttonStyle(.plain)
                         .disabled(!player.hasPrev)
 
-                        Button { player.togglePlayPause() } label: {
-                            Image(systemName: player.isPlaying ? "pause.fill" : "play.fill")
+                        Button { if player.playbackError != nil { player.retry() } else { player.togglePlayPause() } } label: {
+                            Image(systemName: player.playbackError != nil ? "arrow.clockwise" : (player.isPlaying ? "pause.fill" : "play.fill"))
                                 .font(.system(size: 20))
                                 .frame(width: 30, height: 30)
+                                .foregroundStyle(player.playbackError != nil ? .orange : .primary)
                         }
                         .buttonStyle(.plain)
+                        .help(player.playbackError != nil ? "加载失败,点击重试" : "")
 
                         Button { player.next() } label: {
                             Image(systemName: "forward.fill").font(.system(size: 15))

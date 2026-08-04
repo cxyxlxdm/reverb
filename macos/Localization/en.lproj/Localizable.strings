@@ -155,3 +155,6 @@
 "完成" = "Done";
 "分享" = "Share";
 "保存" = "Save";
+"重试" = "Retry";
+"加载失败,请检查网络后重试" = "Failed to load. Check your network and retry.";
+"加载失败,点击重试" = "Failed to load — click to retry";
