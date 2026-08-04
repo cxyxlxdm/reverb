@@ -51,6 +51,7 @@ struct PlayerView: View {
                 Image(systemName: "chevron.down").font(.system(size: 14, weight: .semibold))
             }
             .buttonStyle(.plain)
+            .noFocusRing()
             Spacer()
             Text("正在播放").font(.headline)
             Spacer()

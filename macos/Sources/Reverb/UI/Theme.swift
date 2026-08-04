@@ -30,6 +30,13 @@ enum Theme {
     }
 }
 
+extension View {
+    /// 去掉键盘焦点环(首次启动时某控件被自动聚焦出现的蓝框)。macOS 14+ 生效。
+    @ViewBuilder func noFocusRing() -> some View {
+        if #available(macOS 14.0, *) { self.focusEffectDisabled() } else { self }
+    }
+}
+
 /// 统一的间距 / 版心尺度。以留白而非分隔线区隔内容。
 enum Metrics {
     static let pagePadding: CGFloat = 32      // 页面水平内边距

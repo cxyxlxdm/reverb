@@ -136,6 +136,7 @@ struct DiscoverView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .noFocusRing()
     }
 
     private func loadPopular(initial: Bool) async {
