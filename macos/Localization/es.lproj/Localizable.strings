@@ -165,3 +165,18 @@
 "重试" = "Reintentar";
 "加载失败,请检查网络后重试" = "Error al cargar. Verifica la red y reinténtalo.";
 "加载失败,点击重试" = "Error — clic para reintentar";
+
+/* Latest / inbox, Queue, Continue listening, Played (v2 features) */
+"最新" = "Novedades";
+"继续收听" = "Seguir escuchando";
+"刷新" = "Actualizar";
+"订阅节目后,这里会汇集最新单集" = "Suscríbete a programas para ver aquí sus últimos episodios";
+"暂无最新单集" = "No hay episodios nuevos";
+"播放队列" = "Cola";
+"播放队列为空" = "La cola está vacía";
+"清空播放队列" = "Vaciar la cola";
+"下一个播放" = "Reproducir a continuación";
+"加入队列" = "Añadir a la cola";
+"标记为已播完" = "Marcar como reproducido";
+"标记为未播完" = "Marcar como no reproducido";
+"已播完" = "Reproducido";

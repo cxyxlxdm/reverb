@@ -18,6 +18,8 @@ final class PlayerController: ObservableObject {
     @Published private(set) var radioMode = false
     @Published private(set) var hasNext = false
     @Published private(set) var hasPrev = false
+    /// 用户播放队列(up next):优先于当前上下文队列/电台续播。
+    @Published private(set) var userQueue: [Episode] = []
     // 睡眠定时:剩余毫秒(0=关),或「本集结束」
     @Published private(set) var sleepRemainingMs: Int = 0
     @Published private(set) var sleepEndOfEpisode = false
@@ -235,11 +237,66 @@ final class PlayerController: ObservableObject {
         playEpisode(ep, isRadio: lastIsRadio)
     }
 
+    // MARK: - 用户播放队列(up next)
+
+    /// 追加到队尾(已在队列中则忽略)。
+    func enqueue(_ ep: Episode) {
+        guard !userQueue.contains(where: { $0.id == ep.id }) else {
+            Log.d("Queue", "enqueue 跳过已存在 id=\(ep.id)")
+            return
+        }
+        userQueue.append(ep)
+        Log.i("Queue", "enqueue id=\(ep.id) title=\"\(ep.title)\" 队列=\(userQueue.count)")
+        updateNavFlags()
+    }
+
+    /// 插入到队首,作为「下一个播放」(已存在则移动到队首)。
+    func playNext(_ ep: Episode) {
+        userQueue.removeAll { $0.id == ep.id }
+        userQueue.insert(ep, at: 0)
+        Log.i("Queue", "playNext id=\(ep.id) title=\"\(ep.title)\" 队列=\(userQueue.count)")
+        updateNavFlags()
+    }
+
+    func removeFromQueue(_ id: String) {
+        userQueue.removeAll { $0.id == id }
+        Log.i("Queue", "removeFromQueue id=\(id) 队列=\(userQueue.count)")
+        updateNavFlags()
+    }
+
+    /// 队列内重排。offsets 遵循 SwiftUI onMove 语义。
+    func moveInQueue(from: Int, to: Int) {
+        guard from >= 0, from < userQueue.count, from != to else { return }
+        let ep = userQueue.remove(at: from)
+        let dest = to > from ? to - 1 : to
+        userQueue.insert(ep, at: min(max(dest, 0), userQueue.count))
+    }
+
+    func clearQueue() {
+        guard !userQueue.isEmpty else { return }
+        Log.i("Queue", "清空播放队列 \(userQueue.count) 条")
+        userQueue.removeAll()
+        updateNavFlags()
+    }
+
+    /// 取出并播放队首(退出电台,不改动既有上下文队列)。
+    private func consumeUserQueueHead(reason: String) {
+        guard !userQueue.isEmpty else { return }
+        let ep = userQueue.removeFirst()
+        Log.i("Queue", "consume(\(reason)) id=\(ep.id) title=\"\(ep.title)\" 剩余=\(userQueue.count)")
+        loadRetries = 0
+        if radioMode { stopRadio() }
+        playEpisode(ep)
+        updateNavFlags()
+    }
+
     // MARK: - 队列导航
 
     func next() {
         loadRetries = 0
-        Log.i("Player", "next radio=\(radioMode) index=\(queueIndex) radioPos=\(radioPos)")
+        Log.i("Player", "next radio=\(radioMode) index=\(queueIndex) radioPos=\(radioPos) userQueue=\(userQueue.count)")
+        // 用户队列优先
+        if !userQueue.isEmpty { consumeUserQueueHead(reason: "next"); return }
         if radioMode {
             if radioPos >= 0 && radioPos < radioHistory.count - 1 {
                 radioPos += 1; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio: true)
@@ -261,7 +318,10 @@ final class PlayerController: ObservableObject {
 
     private func updateNavFlags() {
         if radioMode { hasPrev = radioPos > 0; hasNext = true }
-        else { hasPrev = queueIndex > 0; hasNext = queueIndex >= 0 && queueIndex < queue.count - 1 }
+        else {
+            hasPrev = queueIndex > 0
+            hasNext = (queueIndex >= 0 && queueIndex < queue.count - 1) || !userQueue.isEmpty
+        }
     }
 
     // MARK: - 随机电台
@@ -410,9 +470,19 @@ final class PlayerController: ObservableObject {
                 guard let self else { return }
                 let stopAfter = self.sleepEndOfEpisode
                 self.sleepEndOfEpisode = false
-                Log.i("Player", "播放结束 id=\(self.current?.id ?? "-") radio=\(self.radioMode) 本集结束停止=\(stopAfter)")
-                if let ep = self.current { self.history?.updatePosition(ep.id, positionMs: 0, durationMs: self.durationMs) }
-                if self.radioMode && !stopAfter { self.advanceRadio() }
+                Log.i("Player", "播放结束 id=\(self.current?.id ?? "-") radio=\(self.radioMode) userQueue=\(self.userQueue.count) 本集结束停止=\(stopAfter)")
+                if let ep = self.current {
+                    self.history?.updatePosition(ep.id, positionMs: 0, durationMs: self.durationMs)
+                    self.history?.markPlayed(ep.id, true)   // 自然播完:标记已播完
+                }
+                if stopAfter {
+                    // 睡眠「本集结束」:到此为止,不续播
+                } else if self.radioMode {
+                    self.advanceRadio()
+                } else if !self.userQueue.isEmpty {
+                    // 队列续播:取出队首继续
+                    self.consumeUserQueueHead(reason: "end")
+                }
             }
         }
     }

@@ -39,6 +39,7 @@ struct HistoryEntry: Codable, Identifiable, Hashable {
     var positionMs: Int
     var durationMs: Int
     var updatedAt: Double     // 时间戳(秒)
+    var played: Bool = false  // 是否已播完(自然播放到结尾,或手动标记);旧数据缺省解码为 false
     var id: String { episode.id }
 }
 

@@ -110,6 +110,18 @@ enum AppSupport {
         persist()
     }
 
+    /// 是否已播完。
+    func isPlayed(_ id: String) -> Bool { history.first { $0.episode.id == id }?.played ?? false }
+
+    /// 标记单集已播完 / 未播完。
+    func markPlayed(_ id: String, _ played: Bool) {
+        guard let i = history.firstIndex(where: { $0.episode.id == id }) else { return }
+        guard history[i].played != played else { return }
+        history[i].played = played
+        Log.i("Store", "标记\(played ? "已" : "未")播完 id=\(id)")
+        persist()
+    }
+
     func clear() { Log.i("Store", "清空播放历史"); history = []; persist() }
     private func persist() { AppSupport.save("history.json", history) }
 }

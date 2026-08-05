@@ -73,20 +73,28 @@ enum Fmt {
     static func pubDate(_ raw: String) -> String {
         let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return "" }
-        let candidates = ["EEE, dd MMM yyyy HH:mm:ss Z", "yyyy-MM-dd'T'HH:mm:ssZ",
-                          "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd"]
+        if let d = parseDate(s) {
+            let out = DateFormatter()
+            out.locale = Locale.autoupdatingCurrent
+            out.dateFormat = NSLocalizedString("yyyy年M月d日", comment: "date format")
+            return out.string(from: d)
+        }
+        return String(s.prefix(16))
+    }
+
+    /// RFC822 / ISO8601 pubDate 解析为 Date(用于「最新」排序),失败返回 nil。
+    static func parseDate(_ raw: String) -> Date? {
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return nil }
+        let candidates = ["EEE, dd MMM yyyy HH:mm:ss Z", "EEE, d MMM yyyy HH:mm:ss Z",
+                          "yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd'T'HH:mm:ss", "yyyy-MM-dd"]
         let parser = DateFormatter()
         parser.locale = Locale(identifier: "en_US_POSIX")
         for f in candidates {
             parser.dateFormat = f
-            if let d = parser.date(from: s) {
-                let out = DateFormatter()
-                out.locale = Locale.autoupdatingCurrent
-                out.dateFormat = NSLocalizedString("yyyy年M月d日", comment: "date format")
-                return out.string(from: d)
-            }
+            if let d = parser.date(from: s) { return d }
         }
-        return String(s.prefix(16))
+        return nil
     }
 }
 
@@ -195,10 +203,13 @@ struct RoomyEpisodeRow: View {
     var isCurrent: Bool = false
     var isPlaying: Bool = false
     var showPodcast: Bool = false
+    var played: Bool = false
     var accent: Color = .accentColor
     var onPlay: () -> Void = {}
 
     private var playing: Bool { isCurrent && isPlaying }
+    /// 已播完且非当前:标题以次要色淡化。
+    private var titleColor: Color { isCurrent ? accent : (played ? .secondary : .primary) }
 
     /// 最多两条安静的元信息:节目名(如需) + 时长,或 日期 + 时长。
     private var meta: String {
@@ -218,11 +229,20 @@ struct RoomyEpisodeRow: View {
                 )
 
             VStack(alignment: .leading, spacing: 6) {
-                Text(episode.title)
-                    .font(.headline).fontWeight(.medium)
-                    .lineSpacing(2)
-                    .lineLimit(2)
-                    .foregroundStyle(isCurrent ? accent : Color.primary)
+                HStack(alignment: .top, spacing: 6) {
+                    if played {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 3)
+                            .help("已播完")
+                    }
+                    Text(episode.title)
+                        .font(.headline).fontWeight(.medium)
+                        .lineSpacing(2)
+                        .lineLimit(2)
+                        .foregroundStyle(titleColor)
+                }
                 if !meta.isEmpty {
                     Text(meta)
                         .font(.footnote)
@@ -245,6 +265,40 @@ struct RoomyEpisodeRow: View {
         }
         .padding(.vertical, 16)
         .frame(minHeight: 74)
+    }
+}
+
+/// 单集行通用右键菜单:下一个播放 / 加入队列 / 标记已播完切换。
+/// 依赖注入的 env(历史)与 player(队列)。
+struct EpisodeContextMenu: ViewModifier {
+    let episode: Episode
+    @EnvironmentObject var env: AppEnvironment
+    @EnvironmentObject var player: PlayerController
+
+    func body(content: Content) -> some View {
+        content.contextMenu {
+            Button {
+                player.playNext(episode)
+            } label: { Label("下一个播放", systemImage: "text.line.first.and.arrowtriangle.forward") }
+            Button {
+                player.enqueue(episode)
+            } label: { Label("加入队列", systemImage: "text.append") }
+            Divider()
+            let played = env.history.isPlayed(episode.id)
+            Button {
+                env.history.markPlayed(episode.id, !played)
+            } label: {
+                Label(played ? "标记为未播完" : "标记为已播完",
+                      systemImage: played ? "circle" : "checkmark.circle")
+            }
+        }
+    }
+}
+
+extension View {
+    /// 为单集行附加通用右键菜单(队列 / 已播完)。
+    func episodeContextMenu(_ episode: Episode) -> some View {
+        modifier(EpisodeContextMenu(episode: episode))
     }
 }
 

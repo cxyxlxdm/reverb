@@ -10,6 +10,7 @@ final class AppEnvironment: ObservableObject {
     let favorites = FavoriteStore()
     let history = HistoryStore()
     let stamps = StampStore()
+    let inbox = InboxStore()
     let settings = SettingsStore()
     let player = PlayerController()
     let downloads = DownloadStore()
@@ -27,7 +28,7 @@ final class AppEnvironment: ObservableObject {
         // 把低频本地存储的变更转发到自身,使观察 env 的视图能即时刷新(订阅/收藏/印记/历史/下载)。
         // 不转发高频的 player(每 0.5s 进度)/settings,以免整树无谓重渲。
         for pub in [subscriptions.objectWillChange, favorites.objectWillChange,
-                    history.objectWillChange, stamps.objectWillChange,
+                    history.objectWillChange, stamps.objectWillChange, inbox.objectWillChange,
                     downloads.objectWillChange, downloadManager.objectWillChange] {
             pub.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         }

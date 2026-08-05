@@ -107,8 +107,10 @@ struct LibraryView: View {
                                     isCurrent: player.current?.id == ep.id,
                                     isPlaying: player.isPlaying,
                                     showPodcast: true,
+                                    played: env.history.isPlayed(ep.id),
                                     accent: accent,
                                     onPlay: { player.playOrToggle(ep, queue: items) })
+                                    .episodeContextMenu(ep)
                                 Button { env.favorites.toggle(ep) } label: {
                                     Image(systemName: "heart.fill").foregroundStyle(accent)
                                 }
@@ -142,8 +144,10 @@ struct LibraryView: View {
                                 isCurrent: player.current?.id == ep.id,
                                 isPlaying: player.isPlaying,
                                 showPodcast: true,
+                                played: env.history.isPlayed(ep.id),
                                 accent: accent,
                                 onPlay: { player.playOrToggle(ep, queue: items) })
+                                .episodeContextMenu(ep)
                         }
                     }
                     .frame(maxWidth: Metrics.contentMaxWidth)
@@ -172,8 +176,10 @@ struct LibraryView: View {
                                     isCurrent: player.current?.id == ep.id,
                                     isPlaying: player.isPlaying,
                                     showPodcast: true,
+                                    played: env.history.isPlayed(ep.id),
                                     accent: accent,
                                     onPlay: { player.playOrToggle(ep, queue: items) })
+                                    .episodeContextMenu(ep)
                                 Button { pendingDelete = ep } label: {
                                     Image(systemName: "trash").foregroundStyle(.secondary)
                                 }

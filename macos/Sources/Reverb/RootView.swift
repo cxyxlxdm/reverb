@@ -4,6 +4,7 @@ import SwiftUI
 /// 底部常驻播放条(仅当有正在播放的内容)。使用 NavigationStack 让详情页原生推入。
 struct RootView: View {
     enum Section: String, CaseIterable, Identifiable {
+        case inbox = "最新"
         case discover = "发现"
         case library = "音阁"
         var id: String { rawValue }
@@ -20,6 +21,7 @@ struct RootView: View {
             NavigationStack(path: $path) {
                 Group {
                     switch section {
+                    case .inbox: InboxView()
                     case .discover: DiscoverView()
                     case .library: LibraryView()
                     }
@@ -32,7 +34,7 @@ struct RootView: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        .frame(width: 190)
+                        .frame(width: 270)
                     }
                     ToolbarItem(placement: .primaryAction) {
                         SettingsButton()

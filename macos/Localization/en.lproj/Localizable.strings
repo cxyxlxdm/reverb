@@ -165,3 +165,18 @@
 "重试" = "Retry";
 "加载失败,请检查网络后重试" = "Failed to load. Check your network and retry.";
 "加载失败,点击重试" = "Failed to load — click to retry";
+
+/* Latest / inbox, Queue, Continue listening, Played (v2 features) */
+"最新" = "Latest";
+"继续收听" = "Continue Listening";
+"刷新" = "Refresh";
+"订阅节目后,这里会汇集最新单集" = "Subscribe to shows to see their latest episodes here";
+"暂无最新单集" = "No new episodes";
+"播放队列" = "Queue";
+"播放队列为空" = "Queue is empty";
+"清空播放队列" = "Clear queue";
+"下一个播放" = "Play Next";
+"加入队列" = "Add to Queue";
+"标记为已播完" = "Mark as Played";
+"标记为未播完" = "Mark as Unplayed";
+"已播完" = "Played";

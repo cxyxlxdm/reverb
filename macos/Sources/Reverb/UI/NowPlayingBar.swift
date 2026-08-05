@@ -8,6 +8,7 @@ struct NowPlayingBar: View {
     @EnvironmentObject var settings: SettingsStore
     var onOpenChannel: (Podcast) -> Void = { _ in }
     @State private var showPlayer = false
+    @State private var showQueue = false
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
 
@@ -66,6 +67,19 @@ struct NowPlayingBar: View {
                         }
                         .buttonStyle(.plain)
                         .disabled(!player.hasNext)
+
+                        Button { showQueue = true } label: {
+                            Image(systemName: "list.bullet")
+                                .font(.system(size: 15))
+                                .overlay(alignment: .topTrailing) {
+                                    if !player.userQueue.isEmpty {
+                                        Circle().fill(accent).frame(width: 6, height: 6)
+                                            .offset(x: 4, y: -3)
+                                    }
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .help("播放队列")
                     }
                 }
             }
@@ -76,6 +90,12 @@ struct NowPlayingBar: View {
         .background(.regularMaterial)
         .sheet(isPresented: $showPlayer) {
             PlayerView(onOpenChannel: { pod in showPlayer = false; onOpenChannel(pod) })
+                .environmentObject(env)
+                .environmentObject(player)
+                .environmentObject(settings)
+        }
+        .sheet(isPresented: $showQueue) {
+            QueueView()
                 .environmentObject(env)
                 .environmentObject(player)
                 .environmentObject(settings)

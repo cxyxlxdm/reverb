@@ -41,8 +41,10 @@ struct PodcastDetailView: View {
                                         episode: ep,
                                         isCurrent: player.current?.id == ep.id,
                                         isPlaying: player.isPlaying,
+                                        played: env.history.isPlayed(ep.id),
                                         accent: accent,
                                         onPlay: { player.playOrToggle(ep, queue: episodes) })
+                                        .episodeContextMenu(ep)
                                     EpisodeDownloadButton(episode: ep, accent: accent)
                                 }
                             }

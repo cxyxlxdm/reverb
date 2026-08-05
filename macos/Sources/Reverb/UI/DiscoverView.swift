@@ -81,9 +81,43 @@ struct DiscoverView: View {
 
     // MARK: - 榜单
 
+    // MARK: - 继续收听
+
+    /// 进行中的单集:有时长、进度在 10s 与 95% 之间、未播完;按更新时间倒序,至多 15 条。
+    private var continueItems: [HistoryEntry] {
+        Array(env.history.history
+            .filter { e in
+                e.durationMs > 0
+                    && e.positionMs >= 10_000
+                    && e.positionMs <= Int(Double(e.durationMs) * 0.95)
+                    && !e.played
+            }
+            .sorted { $0.updatedAt > $1.updatedAt }
+            .prefix(15))
+    }
+
+    private var continueStrip: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("继续收听").font(.title3).fontWeight(.semibold)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 18) {
+                    ForEach(continueItems) { entry in
+                        ContinueCard(entry: entry, accent: accent) {
+                            player.playQueue([entry.episode], startIndex: 0)
+                        }
+                        .episodeContextMenu(entry.episode)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
+
     private var popularContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
+                if !continueItems.isEmpty { continueStrip }
+
                 HStack(spacing: 12) {
                     Text("每日热门")
                         .font(.title2).fontWeight(.semibold)
@@ -182,8 +216,10 @@ struct DiscoverView: View {
                                     isCurrent: player.current?.id == ep.id,
                                     isPlaying: player.isPlaying,
                                     showPodcast: true,
+                                    played: env.history.isPlayed(ep.id),
                                     accent: accent,
                                     onPlay: { player.playOrToggle(ep, queue: searchEpisodes) })
+                                    .episodeContextMenu(ep)
                             }
                         }
                     }
@@ -269,5 +305,46 @@ struct DiscoverView: View {
                 player.stopRadio()
             }
         }
+    }
+}
+
+/// 「继续收听」横向卡片:封面 + 标题(两行) + 细进度条。点按续播。
+private struct ContinueCard: View {
+    let entry: HistoryEntry
+    var accent: Color
+    var onTap: () -> Void
+    @State private var hover = false
+
+    private let width: CGFloat = 132
+
+    private var progress: Double {
+        guard entry.durationMs > 0 else { return 0 }
+        return min(1, max(0, Double(entry.positionMs) / Double(entry.durationMs)))
+    }
+
+    var body: some View {
+        Button(action: onTap) {
+            VStack(alignment: .leading, spacing: 8) {
+                Artwork(url: entry.episode.artworkUrl, size: width, corner: 12)
+                    .shadow(color: .black.opacity(hover ? 0.20 : 0.10),
+                            radius: hover ? 12 : 6, y: hover ? 5 : 3)
+                Text(entry.episode.title)
+                    .font(.callout).fontWeight(.medium)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(width: width, height: 40, alignment: .topLeading)
+                // 细进度条
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.primary.opacity(0.10))
+                        Capsule().fill(accent).frame(width: geo.size.width * progress)
+                    }
+                }
+                .frame(width: width, height: 3)
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(.easeOut(duration: 0.18), value: hover)
     }
 }
