@@ -66,6 +66,7 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val downloadStates by DownloadManager.states.collectAsStateWithLifecycle()
+    val history by container.historyStore.history.collectAsStateWithLifecycle()
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -97,6 +98,7 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                         )
                     }
                     items(s.episodes) { ep ->
+                        val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
                         EpisodeListItem(
                             episode = ep,
                             isCurrent = current?.id == ep.id,
@@ -104,7 +106,11 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                             onPlay = { PlayerController.playOrToggle(ep, s.episodes) },
                             downloadStatus = downloadStates[ep.id],
                             onDownload = { DownloadManager.download(ep) },
-                            onDeleteDownload = { DownloadManager.delete(ep.id) }
+                            onDeleteDownload = { DownloadManager.delete(ep.id) },
+                            played = played,
+                            onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                            onPlayNext = { PlayerController.playNext(ep) },
+                            onEnqueue = { PlayerController.enqueue(ep) }
                         )
                     }
                 }

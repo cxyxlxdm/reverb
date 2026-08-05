@@ -52,6 +52,22 @@ class HistoryStore(context: Context) {
         }
     }
 
+    fun isPlayed(episodeId: String): Boolean =
+        _history.value.firstOrNull { it.episode.id == episodeId }?.played ?: false
+
+    /** 标记某集是否已播完（不改变顺序）。 */
+    fun markPlayed(episodeId: String, played: Boolean) {
+        synchronized(lock) {
+            if (_history.value.none { it.episode.id == episodeId }) return
+            val list = _history.value.map {
+                if (it.episode.id == episodeId) it.copy(played = played) else it
+            }
+            _history.value = list
+            persist(list)
+            com.yuyin.reverb.util.Logger.i("HistoryStore", "markPlayed id=$episodeId played=$played")
+        }
+    }
+
     fun clear() {
         synchronized(lock) {
             com.yuyin.reverb.util.Logger.i("HistoryStore", "clear (was ${_history.value.size})")
@@ -72,7 +88,8 @@ class HistoryStore(context: Context) {
                         episode = EpisodeJson.fromJson(o.getJSONObject("episode")),
                         positionMs = o.optLong("positionMs"),
                         durationMs = o.optLong("durationMs"),
-                        updatedAt = o.optLong("updatedAt")
+                        updatedAt = o.optLong("updatedAt"),
+                        played = o.optBoolean("played", false)
                     )
                 )
             }
@@ -92,6 +109,7 @@ class HistoryStore(context: Context) {
                         .put("positionMs", h.positionMs)
                         .put("durationMs", h.durationMs)
                         .put("updatedAt", h.updatedAt)
+                        .put("played", h.played)
                 )
             }
             file.writeText(arr.toString())

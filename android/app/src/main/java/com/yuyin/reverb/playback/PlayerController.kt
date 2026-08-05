@@ -57,6 +57,10 @@ object PlayerController {
     private var radioPos = -1
     private val radioHistoryCap = 100
 
+    // 用户播放队列(up next):手动排的「接下来播放」,优先于上下文队列的顺序推进。
+    private val _userQueue = MutableStateFlow<List<Episode>>(emptyList())
+    val userQueue: StateFlow<List<Episode>> = _userQueue
+
     private val _hasNext = MutableStateFlow(false)
     val hasNext: StateFlow<Boolean> = _hasNext
     private val _hasPrev = MutableStateFlow(false)
@@ -68,8 +72,59 @@ object PlayerController {
             _hasNext.value = true // 电台随时可抓下一个
         } else {
             _hasPrev.value = queueIndex > 0
-            _hasNext.value = queueIndex in 0 until (queue.size - 1)
+            // 用户队列非空,或上下文队列还有后续,都算「有下一集」
+            _hasNext.value = _userQueue.value.isNotEmpty() || queueIndex in 0 until (queue.size - 1)
         }
+    }
+
+    // ---- 用户播放队列(up next) ----
+    /** 追加到队尾(已在队列则忽略)。 */
+    fun enqueue(episode: Episode) {
+        if (_userQueue.value.any { it.id == episode.id }) return
+        _userQueue.value = _userQueue.value + episode
+        log.i(TAG, "enqueue id=${episode.id} size=${_userQueue.value.size}")
+        updateNavFlags()
+    }
+
+    /** 插到队首:下一个就播它(去重后置顶)。 */
+    fun playNext(episode: Episode) {
+        _userQueue.value = listOf(episode) + _userQueue.value.filterNot { it.id == episode.id }
+        log.i(TAG, "playNext id=${episode.id} size=${_userQueue.value.size}")
+        updateNavFlags()
+    }
+
+    fun removeFromQueue(episodeId: String) {
+        _userQueue.value = _userQueue.value.filterNot { it.id == episodeId }
+        log.i(TAG, "removeFromQueue id=$episodeId size=${_userQueue.value.size}")
+        updateNavFlags()
+    }
+
+    fun move(from: Int, to: Int) {
+        val list = _userQueue.value.toMutableList()
+        if (from !in list.indices || to !in list.indices || from == to) return
+        list.add(to, list.removeAt(from))
+        _userQueue.value = list
+        log.i(TAG, "queue move $from -> $to")
+    }
+
+    fun clearQueue() {
+        if (_userQueue.value.isEmpty()) return
+        _userQueue.value = emptyList()
+        log.i(TAG, "clearQueue")
+        updateNavFlags()
+    }
+
+    /** 取出队首并播放;无则返回 false。 */
+    private fun playQueueHead(): Boolean {
+        val head = _userQueue.value.firstOrNull() ?: return false
+        _userQueue.value = _userQueue.value.drop(1)
+        log.i(TAG, "play from userQueue id=${head.id} remaining=${_userQueue.value.size}")
+        // 队列上下文改为单曲:清空列表队列,导航标志据剩余用户队列刷新
+        queue = listOf(head)
+        queueIndex = 0
+        updateNavFlags()
+        playEpisode(head, isRadio = false)
+        return true
     }
 
     private val _current = MutableStateFlow<Episode?>(null)
@@ -151,11 +206,20 @@ object PlayerController {
                 pendingSeekMs = 0
             }
             if (playbackState == Player.STATE_ENDED) {
-                val stopAfterThis = _sleepEndOfEpisode.value // 睡眠「本集结束」优先于电台续播
+                val stopAfterThis = _sleepEndOfEpisode.value // 睡眠「本集结束」优先于电台/队列续播
                 _sleepEndOfEpisode.value = false
-                _current.value?.let { history?.updatePosition(it.id, 0, c?.duration ?: 0) }
-                // 电台模式:本集播完自动抓下一首随机节目续播
-                if (_radioMode.value && !stopAfterThis) advanceRadio()
+                // 自然听完:进度归零并标记已播完
+                _current.value?.let {
+                    history?.updatePosition(it.id, 0, c?.duration ?: 0)
+                    history?.markPlayed(it.id, true)
+                }
+                when {
+                    stopAfterThis -> Unit
+                    // 电台模式:本集播完自动抓下一首随机节目续播
+                    _radioMode.value -> advanceRadio()
+                    // 用户队列非空:自动接上队首,连续收听
+                    _userQueue.value.isNotEmpty() -> playQueueHead()
+                }
             }
         }
 
@@ -195,6 +259,8 @@ object PlayerController {
             if (radioPos in 0 until radioHistory.lastIndex) {
                 radioPos++; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true)
             } else advanceRadio()
+        } else if (_userQueue.value.isNotEmpty()) {
+            playQueueHead() // 用户队列优先:取队首播放
         } else if (queueIndex in 0 until (queue.size - 1)) {
             queueIndex++; updateNavFlags(); playEpisode(queue[queueIndex], isRadio = false)
         }

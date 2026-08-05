@@ -10,6 +10,7 @@ import com.yuyin.reverb.data.local.CategoryStore
 import com.yuyin.reverb.data.local.DownloadStore
 import com.yuyin.reverb.data.local.FavoriteStore
 import com.yuyin.reverb.data.local.HistoryStore
+import com.yuyin.reverb.data.local.InboxStore
 import com.yuyin.reverb.data.local.PopularCacheStore
 import com.yuyin.reverb.data.local.RegionStore
 import com.yuyin.reverb.data.local.SettingsStore
@@ -39,6 +40,7 @@ class AppContainer(app: Application) {
     val repository = PodcastRepository(httpClient, popularCache)
 
     val subscriptionStore = SubscriptionStore(app)
+    val inboxStore = InboxStore(app)
     val categoryStore = CategoryStore(app)
     val downloadStore = DownloadStore(app)
     val historyStore = HistoryStore(app)

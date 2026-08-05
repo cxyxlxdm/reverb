@@ -272,4 +272,20 @@
     <string name="notif_one">«%s» tiene un nuevo episodio</string>
     <string name="notif_multi">%1$d programas actualizados: %2$s</string>
     <string name="notif_multi_more">y más</string>
+
+    <!-- Novedades / Seguir escuchando / A continuación -->
+    <string name="nav_inbox">Novedades</string>
+    <string name="continue_listening">Seguir escuchando</string>
+    <string name="mark_played">Marcar como escuchado</string>
+    <string name="mark_unplayed">Marcar como no escuchado</string>
+    <string name="queue_play_next">Reproducir a continuación</string>
+    <string name="queue_add">Añadir a la cola</string>
+    <string name="queue_title">A continuación</string>
+    <string name="queue_empty">Tu cola está vacía. Mantén pulsado un episodio para añadirlo aquí.</string>
+    <string name="inbox_empty_no_subs">Aún no tienes suscripciones. Suscríbete en Descubrir y los nuevos episodios aparecerán aquí.</string>
+    <string name="a11y_played">Escuchado</string>
+    <string name="a11y_queue">A continuación</string>
+    <string name="a11y_queue_up">Subir</string>
+    <string name="a11y_queue_down">Bajar</string>
+    <string name="a11y_queue_remove">Quitar de la cola</string>
 </resources>

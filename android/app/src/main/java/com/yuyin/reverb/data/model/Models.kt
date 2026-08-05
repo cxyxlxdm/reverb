@@ -47,10 +47,11 @@ data class DownloadedEpisode(
     val localPath: String
 )
 
-/** 播放历史一条：分集 + 上次进度 + 更新时间。 */
+/** 播放历史一条：分集 + 上次进度 + 更新时间 + 是否已播完。 */
 data class HistoryEntry(
     val episode: Episode,
     val positionMs: Long,
     val durationMs: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val played: Boolean = false
 )

@@ -1,8 +1,10 @@
 package com.yuyin.reverb.ui.components
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Favorite
@@ -25,6 +28,8 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -32,6 +37,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -127,6 +136,7 @@ fun PodcastListItem(podcast: Podcast, onClick: () -> Unit) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun EpisodeListItem(
     episode: Episode,
@@ -138,13 +148,24 @@ fun EpisodeListItem(
     onDeleteDownload: (() -> Unit)? = null,
     showPodcastTitle: Boolean = false, // 搜索结果里同列多个不同播客的单集，需标出所属频道
     isFavorite: Boolean = false,
-    onToggleFavorite: (() -> Unit)? = null
+    onToggleFavorite: (() -> Unit)? = null,
+    played: Boolean = false,            // 已播完:标题变暗 + 打勾
+    onTogglePlayed: (() -> Unit)? = null, // 长按菜单:标记已播完/未播完
+    onPlayNext: (() -> Unit)? = null,     // 长按菜单:下一个播放
+    onEnqueue: (() -> Unit)? = null       // 长按菜单:加入队列
 ) {
+    var menuOpen by remember { mutableStateOf(false) }
+    val hasMenu = onTogglePlayed != null || onPlayNext != null || onEnqueue != null
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .then(
+            if (hasMenu) Modifier.combinedClickable(onClick = onPlay, onLongClick = { menuOpen = true })
+            else Modifier.clickable(onClick = onPlay)
+        )
+        .padding(horizontal = 16.dp, vertical = 12.dp)
+    Box {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onPlay)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = rowModifier,
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 封面缩略图 + 播放/暂停轻蒙层:更有色彩,并保留播放态与播放入口(整行可点)
@@ -165,13 +186,29 @@ fun EpisodeListItem(
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(
-                episode.title,
-                style = MaterialTheme.typography.bodyLarge,
-                color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onBackground,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    episode.title,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = when {
+                        isCurrent -> MaterialTheme.colorScheme.primary
+                        played -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        else -> MaterialTheme.colorScheme.onBackground
+                    },
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false)
+                )
+                if (played) {
+                    Spacer(Modifier.width(6.dp))
+                    Icon(
+                        Icons.Rounded.Check,
+                        contentDescription = stringResource(R.string.a11y_played),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
             val meta = listOf(episode.pubDate.take(16), formatDurationSec(episode.durationSec))
                 .filter { it.isNotBlank() }
                 .joinToString("  ·  ")
@@ -217,6 +254,29 @@ fun EpisodeListItem(
         }
         if (onDownload != null || onDeleteDownload != null) {
             DownloadControl(downloadStatus, onDownload, onDeleteDownload)
+        }
+    }
+        if (hasMenu) {
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                if (onPlayNext != null) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.queue_play_next)) },
+                        onClick = { menuOpen = false; onPlayNext() }
+                    )
+                }
+                if (onEnqueue != null) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.queue_add)) },
+                        onClick = { menuOpen = false; onEnqueue() }
+                    )
+                }
+                if (onTogglePlayed != null) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(if (played) R.string.mark_unplayed else R.string.mark_played)) },
+                        onClick = { menuOpen = false; onTogglePlayed() }
+                    )
+                }
+            }
         }
     }
 }

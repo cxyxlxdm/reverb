@@ -272,4 +272,20 @@
     <string name="notif_one">« %s » a un nouvel épisode</string>
     <string name="notif_multi">%1$d émissions mises à jour : %2$s</string>
     <string name="notif_multi_more">et plus</string>
+
+    <!-- Nouveautés / Continuer l’écoute / À suivre -->
+    <string name="nav_inbox">Nouveautés</string>
+    <string name="continue_listening">Continuer l’écoute</string>
+    <string name="mark_played">Marquer comme lu</string>
+    <string name="mark_unplayed">Marquer comme non lu</string>
+    <string name="queue_play_next">Lire ensuite</string>
+    <string name="queue_add">Ajouter à la file</string>
+    <string name="queue_title">À suivre</string>
+    <string name="queue_empty">Votre file est vide. Appuyez longuement sur un épisode pour l’ajouter ici.</string>
+    <string name="inbox_empty_no_subs">Aucun abonnement pour l’instant. Abonnez-vous dans Découvrir et les nouveaux épisodes arriveront ici.</string>
+    <string name="a11y_played">Écouté</string>
+    <string name="a11y_queue">À suivre</string>
+    <string name="a11y_queue_up">Monter</string>
+    <string name="a11y_queue_down">Descendre</string>
+    <string name="a11y_queue_remove">Retirer de la file</string>
 </resources>

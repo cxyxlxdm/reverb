@@ -13,9 +13,11 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyListState
@@ -52,6 +54,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -88,6 +91,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
+import com.yuyin.reverb.data.model.HistoryEntry
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.ui.Category
 import com.yuyin.reverb.ui.DiscoverState
@@ -127,6 +131,16 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
     val browsing = vm.state is DiscoverState.Idle
     val pagerState = rememberPagerState(pageCount = { categories.size })
     val chipsState = rememberLazyListState()
+
+    // 继续收听:进度在 10s..95% 之间且未播完的历史条目,最新在前,最多 15 条
+    val history by container.historyStore.history.collectAsStateWithLifecycle()
+    val inProgress = remember(history) {
+        history.filter {
+            it.durationMs > 0 &&
+                it.positionMs in 10_000..(it.durationMs * 0.95).toLong() &&
+                !it.played
+        }.take(15)
+    }
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
@@ -198,6 +212,8 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
 
         if (browsing) {
             val selectedIndex = pagerState.currentPage.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
+            // 继续收听横条(有在听的才显示),置于分类之上
+            ContinueListeningStrip(inProgress)
             // 横滑切到屏幕外的分类时，自动把选中标签滚动进可视区
             LaunchedEffect(selectedIndex) {
                 chipsState.animateScrollToItem(selectedIndex)
@@ -460,11 +476,68 @@ private fun ReorderCategoriesDialog(
     )
 }
 
+/** 继续收听:未听完的历史横滑卡片。封面 + 标题(2 行) + 进度条,点按续播。 */
+@Composable
+private fun ContinueListeningStrip(entries: List<HistoryEntry>) {
+    if (entries.isEmpty()) return
+    Column {
+        Text(
+            stringResource(R.string.continue_listening),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 6.dp)
+        )
+        LazyRow(
+            contentPadding = PaddingValues(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            items(entries, key = { it.episode.id }) { h ->
+                ContinueCard(entry = h, onClick = { PlayerController.play(h.episode) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContinueCard(entry: HistoryEntry, onClick: () -> Unit) {
+    val progress = if (entry.durationMs > 0)
+        (entry.positionMs.toFloat() / entry.durationMs).coerceIn(0f, 1f) else 0f
+    Column(
+        Modifier
+            .width(132.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(bottom = 8.dp)
+    ) {
+        com.yuyin.reverb.ui.components.Artwork(entry.episode.artworkUrl, size = 132, corner = 12)
+        Spacer(Modifier.height(6.dp))
+        Text(
+            entry.episode.title,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 2.dp)
+        )
+        Spacer(Modifier.height(6.dp))
+        LinearProgressIndicator(
+            progress = { progress },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(3.dp),
+            color = MaterialTheme.colorScheme.primary,
+            trackColor = MaterialTheme.colorScheme.surfaceVariant
+        )
+    }
+}
+
 /** 搜索结果：单集 / 节目 两个分段。单集点击即播，节目点进详情。 */
 @Composable
 private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
+    val history by container.historyStore.history.collectAsStateWithLifecycle()
     // 默认停在「单集」；若本次无单集则落到「节目」，避免进来一片空白
     var tab by remember(s) { mutableIntStateOf(if (s.episodes.isNotEmpty()) 0 else 1) }
 
@@ -493,12 +566,17 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
                     items(s.episodes) { ep ->
+                        val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
                         EpisodeListItem(
                             episode = ep,
                             isCurrent = current?.id == ep.id,
                             isPlaying = isPlaying,
                             onPlay = { PlayerController.playOrToggle(ep, s.episodes) },
-                            showPodcastTitle = true
+                            showPodcastTitle = true,
+                            played = played,
+                            onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                            onPlayNext = { PlayerController.playNext(ep) },
+                            onEnqueue = { PlayerController.enqueue(ep) }
                         )
                     }
                 }

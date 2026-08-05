@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay
@@ -74,7 +75,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}) {
+fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpenQueue: () -> Unit = {}) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val position by PlayerController.position.collectAsStateWithLifecycle()
@@ -142,6 +143,13 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                IconButton(onClick = onOpenQueue) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.QueueMusic,
+                        contentDescription = stringResource(R.string.a11y_queue),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 SpeedChip(speed = speed)
                 SleepChip(remainingMs = sleepRemaining, endOfEpisode = sleepEnd)
                 FavoriteButton(

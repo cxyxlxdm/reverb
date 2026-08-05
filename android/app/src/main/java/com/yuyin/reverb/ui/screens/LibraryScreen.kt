@@ -177,6 +177,8 @@ private fun FavoritesSection() {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
 
+    val history by container.historyStore.history.collectAsStateWithLifecycle()
+
     if (favorites.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_favorites))
         return
@@ -186,6 +188,7 @@ private fun FavoritesSection() {
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         items(favorites, key = { it.id }) { ep ->
+            val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
             EpisodeListItem(
                 episode = ep,
                 isCurrent = current?.id == ep.id,
@@ -193,7 +196,11 @@ private fun FavoritesSection() {
                 onPlay = { PlayerController.playOrToggle(ep, favorites) },
                 showPodcastTitle = true,
                 isFavorite = true,
-                onToggleFavorite = { container.favoriteStore.toggle(ep) }
+                onToggleFavorite = { container.favoriteStore.toggle(ep) },
+                played = played,
+                onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                onPlayNext = { PlayerController.playNext(ep) },
+                onEnqueue = { PlayerController.enqueue(ep) }
             )
         }
     }
@@ -203,6 +210,7 @@ private fun FavoritesSection() {
 private fun DownloadsSection() {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val downloads by container.downloadStore.downloads.collectAsStateWithLifecycle()
+    val history by container.historyStore.history.collectAsStateWithLifecycle()
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     // 删除是不可逆操作，点对号后先弹确认，避免误删
@@ -217,13 +225,18 @@ private fun DownloadsSection() {
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
         items(downloads) { d ->
+            val played = history.firstOrNull { it.episode.id == d.episode.id }?.played ?: false
             EpisodeListItem(
                 episode = d.episode,
                 isCurrent = current?.id == d.episode.id,
                 isPlaying = isPlaying,
                 onPlay = { PlayerController.playOrToggle(d.episode, downloads.map { it.episode }) },
                 downloadStatus = DownloadStatus.Completed,
-                onDeleteDownload = { pendingDelete = d }
+                onDeleteDownload = { pendingDelete = d },
+                played = played,
+                onTogglePlayed = { container.historyStore.markPlayed(d.episode.id, !played) },
+                onPlayNext = { PlayerController.playNext(d.episode) },
+                onEnqueue = { PlayerController.enqueue(d.episode) }
             )
         }
     }
@@ -248,6 +261,7 @@ private fun DownloadsSection() {
 
 @Composable
 private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntry>) {
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
 
@@ -264,7 +278,11 @@ private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntr
                 episode = h.episode,
                 isCurrent = current?.id == h.episode.id,
                 isPlaying = isPlaying,
-                onPlay = { PlayerController.playOrToggle(h.episode, history.map { it.episode }) }
+                onPlay = { PlayerController.playOrToggle(h.episode, history.map { it.episode }) },
+                played = h.played,
+                onTogglePlayed = { container.historyStore.markPlayed(h.episode.id, !h.played) },
+                onPlayNext = { PlayerController.playNext(h.episode) },
+                onEnqueue = { PlayerController.enqueue(h.episode) }
             )
         }
     }
