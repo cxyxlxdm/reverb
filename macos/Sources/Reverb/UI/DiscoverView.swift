@@ -74,6 +74,7 @@ struct DiscoverView: View {
             }
         }
         .toolbar {
+            ToolbarItem(placement: .primaryAction) { refreshButton }
             ToolbarItem(placement: .primaryAction) { radioButton }
         }
         .task { await loadPopular(initial: true) }
@@ -251,6 +252,17 @@ struct DiscoverView: View {
     }
 
     // MARK: - 电台
+
+    private var refreshButton: some View {
+        Button {
+            Task { await loadPopular(initial: false) }
+        } label: {
+            Image(systemName: "arrow.clockwise")
+        }
+        .help("刷新")
+        .disabled(loading || isSearchActive)
+        .noFocusRing()
+    }
 
     private var radioButton: some View {
         Button {
