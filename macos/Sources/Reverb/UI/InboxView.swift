@@ -30,6 +30,7 @@ struct InboxView: View {
                                 isCurrent: player.current?.id == ep.id,
                                 isPlaying: player.isPlaying,
                                 showPodcast: true,
+                                showDate: true,
                                 played: env.history.isPlayed(ep.id),
                                 accent: accent,
                                 onPlay: { player.playOrToggle(ep, queue: items) })

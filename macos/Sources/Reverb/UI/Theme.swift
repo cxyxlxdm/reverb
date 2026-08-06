@@ -203,6 +203,7 @@ struct RoomyEpisodeRow: View {
     var isCurrent: Bool = false
     var isPlaying: Bool = false
     var showPodcast: Bool = false
+    var showDate: Bool = false      // 「最新」等场景在频道名之外再显示发布日期
     var played: Bool = false
     var accent: Color = .accentColor
     var onPlay: () -> Void = {}
@@ -211,12 +212,13 @@ struct RoomyEpisodeRow: View {
     /// 已播完且非当前:标题以次要色淡化。
     private var titleColor: Color { isCurrent ? accent : (played ? .secondary : .primary) }
 
-    /// 最多两条安静的元信息:节目名(如需) + 时长,或 日期 + 时长。
+    /// 安静的元信息:频道名(如需)· 发布日期(如需/非频道场景默认显示)· 时长。
     private var meta: String {
-        let items = showPodcast
-            ? [episode.podcastTitle, Fmt.duration(episode.durationSec)]
-            : [Fmt.pubDate(episode.pubDate), Fmt.duration(episode.durationSec)]
-        return items.filter { !$0.isEmpty }.prefix(2).joined(separator: "  ·  ")
+        var parts: [String] = []
+        if showPodcast { parts.append(episode.podcastTitle) }
+        if showDate || !showPodcast { parts.append(Fmt.pubDate(episode.pubDate)) }
+        parts.append(Fmt.duration(episode.durationSec))
+        return parts.filter { !$0.isEmpty }.joined(separator: "  ·  ")
     }
 
     var body: some View {
