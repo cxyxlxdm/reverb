@@ -243,6 +243,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             SettingRow(stringResource(R.string.set_share_log), stringResource(R.string.set_share_log_sub)) {
                 scope.launch { shareLog(context) }
             }
+            SettingRow(stringResource(R.string.set_mail_log), stringResource(R.string.set_mail_log_sub)) {
+                scope.launch { mailLog(context) }
+            }
             SettingRow(
                 stringResource(R.string.set_clear_log),
                 stringResource(R.string.log_size, if (logBytes < 0) stringResource(R.string.size_calculating) else human(logBytes))
@@ -440,6 +443,37 @@ private suspend fun shareLog(context: Context) {
         context.startActivity(chooser)
     } catch (e: Exception) {
         com.yuyin.reverb.util.Logger.e("Settings", "share log failed", e)
+    }
+}
+
+/** 把日志作为附件、经系统邮件发送到开发者邮箱(收件人/主题预填)。 */
+private suspend fun mailLog(context: Context) {
+    try {
+        val text = com.yuyin.reverb.util.Logger.allText().ifBlank { "(暂无日志)" }
+        val uri = withContext(Dispatchers.IO) {
+            val dir = File(context.cacheDir, "shares").apply { mkdirs() }
+            val file = File(dir, "reverb-log.txt")
+            file.writeText(text)
+            androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        }
+        val ver = try {
+            context.packageManager.getPackageInfo(context.packageName, 0).versionName
+        } catch (e: Exception) { "?" }
+        val body = "请描述你遇到的问题:\n\n\n——\n余音 Android v$ver · Android ${android.os.Build.VERSION.RELEASE}"
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = "message/rfc822"
+            putExtra(Intent.EXTRA_EMAIL, arrayOf("woooxooom@gmail.com"))
+            putExtra(Intent.EXTRA_SUBJECT, "余音 Android 日志反馈")
+            putExtra(Intent.EXTRA_TEXT, body)
+            putExtra(Intent.EXTRA_STREAM, uri)
+            clipData = ClipData.newRawUri("reverb-log", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(send, context.getString(R.string.set_mail_log))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
+    } catch (e: Exception) {
+        com.yuyin.reverb.util.Logger.e("Settings", "mail log failed", e)
     }
 }
 

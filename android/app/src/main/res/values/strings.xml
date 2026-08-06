@@ -172,6 +172,8 @@
     <string name="sec_backup">订阅与备份</string>
     <string name="set_logs">日志</string>
     <string name="set_share_log">分享日志</string>
+    <string name="set_mail_log">发送日志到开发者邮箱</string>
+    <string name="set_mail_log_sub">将日志作为附件通过邮件发给开发者</string>
     <string name="set_share_log_sub">把运行日志发给开发者协助排查偶发问题</string>
     <string name="set_clear_log">清空日志</string>
     <string name="log_size">当前日志 %1$s</string>

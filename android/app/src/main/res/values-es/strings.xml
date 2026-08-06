@@ -163,6 +163,8 @@
     <string name="sec_backup">Suscripciones y copia</string>
     <string name="set_logs">Registros</string>
     <string name="set_share_log">Compartir registros</string>
+    <string name="set_mail_log">Enviar registros al desarrollador</string>
+    <string name="set_mail_log_sub">Envía el registro como adjunto por correo al desarrollador</string>
     <string name="set_share_log_sub">Envía los registros al desarrollador para ayudar a diagnosticar problemas ocasionales</string>
     <string name="set_clear_log">Borrar registros</string>
     <string name="log_size">Registros actuales %1$s</string>

@@ -157,6 +157,9 @@ private struct SettingsForm: View {
                         Label("分享日志", systemImage: "square.and.arrow.up.on.square")
                     }
                 }
+                Button { mailLog() } label: {
+                    Label("发送日志到开发者邮箱", systemImage: "envelope")
+                }
                 Button(role: .destructive) { confirmClearLog = true } label: {
                     Label("清空日志", systemImage: "trash")
                 }
@@ -284,6 +287,30 @@ private struct SettingsForm: View {
         Task {
             let text = await Task.detached { Log.allText() }.value
             try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+        }
+    }
+
+    /// 用系统邮件把日志作为附件发到开发者邮箱;无邮件客户端时回退到 mailto + 在访达中定位日志文件。
+    private func mailLog() {
+        let devEmail = "woooxooom@gmail.com"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("reverb-log.txt")
+        Task {
+            let text = await Task.detached { Log.allText() }.value
+            try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+            let ver = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
+            let body = "请描述你遇到的问题:\n\n\n——\n余音 macOS v\(ver) · \(ProcessInfo.processInfo.operatingSystemVersionString)" as NSString
+            let items: [Any] = [body, url]
+            if let svc = NSSharingService(named: .composeEmail), svc.canPerform(withItems: items) {
+                svc.recipients = [devEmail]
+                svc.subject = "余音 macOS 日志反馈"
+                svc.perform(withItems: items)
+            } else {
+                // 未配置邮件客户端:打开 mailto 起草,并在访达中选中日志文件方便手动拖入附件
+                if let mailto = URL(string: "mailto:\(devEmail)?subject=%E4%BD%99%E9%9F%B3%20macOS%20%E6%97%A5%E5%BF%97%E5%8F%8D%E9%A6%88") {
+                    NSWorkspace.shared.open(mailto)
+                }
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            }
         }
     }
 }

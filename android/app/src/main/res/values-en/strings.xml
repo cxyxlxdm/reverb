@@ -163,6 +163,8 @@
     <string name="sec_backup">Subscriptions &amp; Backup</string>
     <string name="set_logs">Logs</string>
     <string name="set_share_log">Share logs</string>
+    <string name="set_mail_log">Email logs to developer</string>
+    <string name="set_mail_log_sub">Send the log as an email attachment to the developer</string>
     <string name="set_share_log_sub">Send runtime logs to the developer to help diagnose rare issues</string>
     <string name="set_clear_log">Clear logs</string>
     <string name="log_size">Current logs %1$s</string>
