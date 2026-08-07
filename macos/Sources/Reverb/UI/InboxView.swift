@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// 最新:跨订阅合并的最新单集列表。先展示缓存,首屏自动刷新;工具栏提供手动刷新。
+/// 最新:跨订阅合并的最新单集列表。先展示缓存,首屏自动刷新。
+/// 作为「音阁」的一个分段内嵌展示,手动刷新按钮由 LibraryView 工具栏提供。
 struct InboxView: View {
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
@@ -42,17 +43,6 @@ struct InboxView: View {
                     .padding(.horizontal, Metrics.pagePadding)
                     .padding(.vertical, 8)
                 }
-            }
-        }
-        .navigationTitle("余音")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button { Task { await refresh() } } label: {
-                    if env.inbox.refreshing { ProgressView().controlSize(.small) }
-                    else { Image(systemName: "arrow.clockwise") }
-                }
-                .disabled(env.inbox.refreshing)
-                .help("刷新")
             }
         }
         .task {

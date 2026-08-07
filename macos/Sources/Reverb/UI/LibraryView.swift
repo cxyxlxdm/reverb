@@ -1,12 +1,13 @@
 import SwiftUI
 
-/// 音阁:订阅 / 收藏 / 历史。分段控制置于内容顶部,内容区宽松展示。
+/// 音阁:订阅 / 最新 / 收藏 / 下载 / 历史。分段控制置于内容顶部,内容区宽松展示。
 struct LibraryView: View {
     enum Segment: String, CaseIterable, Identifiable {
         case subscriptions = "订阅"
+        case inbox = "最新"
         case favorites = "收藏"
-        case history = "历史"
         case downloads = "下载"
+        case history = "历史"
         var id: String { rawValue }
     }
 
@@ -29,7 +30,7 @@ struct LibraryView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(maxWidth: 360)
+            .frame(maxWidth: 440)
             .padding(.horizontal, Metrics.pagePadding)
             .padding(.top, Metrics.topPadding)
             .padding(.bottom, 18)
@@ -37,9 +38,10 @@ struct LibraryView: View {
             Group {
                 switch segment {
                 case .subscriptions: subscriptionsGrid
+                case .inbox: InboxView()
                 case .favorites: favoritesList
-                case .history: historyList
                 case .downloads: downloadsList
+                case .history: historyList
                 }
             }
         }
@@ -55,6 +57,21 @@ struct LibraryView: View {
             Button("取消", role: .cancel) { pendingDelete = nil }
         }
         .toolbar {
+            if segment == .inbox {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        Task {
+                            await env.inbox.refresh(subscriptions: env.subscriptions.subscriptions,
+                                                    repository: env.repository)
+                        }
+                    } label: {
+                        if env.inbox.refreshing { ProgressView().controlSize(.small) }
+                        else { Image(systemName: "arrow.clockwise") }
+                    }
+                    .disabled(env.inbox.refreshing)
+                    .help("刷新")
+                }
+            }
             if segment == .history && !env.history.history.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
                     Button(role: .destructive) { env.history.clear() } label: {
