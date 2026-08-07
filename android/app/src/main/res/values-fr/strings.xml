@@ -285,6 +285,7 @@
     <string name="queue_title">À suivre</string>
     <string name="queue_empty">Votre file est vide. Appuyez longuement sur un épisode pour l’ajouter ici.</string>
     <string name="inbox_empty_no_subs">Aucun abonnement pour l’instant. Abonnez-vous dans Découvrir et les nouveaux épisodes arriveront ici.</string>
+    <string name="inbox_empty_no_updates">Aucun nouvel épisode pour l’instant. Tirez vers le bas pour actualiser.</string>
     <string name="a11y_played">Écouté</string>
     <string name="a11y_queue">À suivre</string>
     <string name="a11y_queue_up">Monter</string>

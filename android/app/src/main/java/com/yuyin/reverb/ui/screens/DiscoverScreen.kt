@@ -212,8 +212,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
 
         if (browsing) {
             val selectedIndex = pagerState.currentPage.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
-            // 继续收听横条(有在听的才显示),置于分类之上
-            ContinueListeningStrip(inProgress)
+            // 分类 chips 紧贴搜索框(靠顶),不被继续收听横条挤到屏幕中部
             // 横滑切到屏幕外的分类时，自动把选中标签滚动进可视区
             LaunchedEffect(selectedIndex) {
                 chipsState.animateScrollToItem(selectedIndex)
@@ -226,14 +225,20 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                 onSelect = { i -> scope.launch { pagerState.animateScrollToPage(i) } },
                 onEdit = { showReorder = true }
             )
-            // 横滑左右切换分类
+            // 横滑左右切换分类:列表占满剩余空间,继续收听横条作为列表首项一起滚动
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) { page ->
-                CategoryPage(vm = vm, category = categories[page], region = region, onOpen = onOpen)
+                CategoryPage(
+                    vm = vm,
+                    category = categories[page],
+                    region = region,
+                    onOpen = onOpen,
+                    continueEntries = inProgress
+                )
             }
         } else {
             when (val s = vm.state) {
@@ -309,7 +314,13 @@ private fun RadioActionButton(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun CategoryPage(vm: DiscoverViewModel, category: Category, region: String, onOpen: (Podcast) -> Unit) {
+private fun CategoryPage(
+    vm: DiscoverViewModel,
+    category: Category,
+    region: String,
+    onOpen: (Podcast) -> Unit,
+    continueEntries: List<HistoryEntry> = emptyList()
+) {
     // 先展示缓存，秒开；再后台刷新，数据回来替换。地区变化时按新地区重载。
     var list by remember(category.key, region) { mutableStateOf(vm.cachedCategory(category, region)) }
     var loading by remember(category.key, region) { mutableStateOf(list.isEmpty()) }
@@ -347,7 +358,10 @@ private fun CategoryPage(vm: DiscoverViewModel, category: Category, region: Stri
             list.isNotEmpty() -> PodcastResultList(
                 header = stringResource(R.string.discover_daily_hot, stringResource(category.labelRes)),
                 podcasts = list,
-                onOpen = onOpen
+                onOpen = onOpen,
+                topContent = if (continueEntries.isNotEmpty()) {
+                    { ContinueListeningStrip(continueEntries) }
+                } else null
             )
             loading -> LoadingBox()
             else -> EmptyHint(stringResource(R.string.discover_empty_category, stringResource(category.labelRes)))
@@ -612,12 +626,16 @@ private fun SearchTabChip(selected: Boolean, text: String, onClick: () -> Unit) 
 private fun PodcastResultList(
     header: String,
     podcasts: List<Podcast>,
-    onOpen: (Podcast) -> Unit
+    onOpen: (Podcast) -> Unit,
+    topContent: (@Composable () -> Unit)? = null // 列表首项(如“继续收听”横条),随列表一起滚动
 ) {
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp)
     ) {
+        if (topContent != null) {
+            item { topContent() }
+        }
         item {
             Text(
                 header,

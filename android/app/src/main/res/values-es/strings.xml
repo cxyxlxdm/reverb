@@ -285,6 +285,7 @@
     <string name="queue_title">A continuación</string>
     <string name="queue_empty">Tu cola está vacía. Mantén pulsado un episodio para añadirlo aquí.</string>
     <string name="inbox_empty_no_subs">Aún no tienes suscripciones. Suscríbete en Descubrir y los nuevos episodios aparecerán aquí.</string>
+    <string name="inbox_empty_no_updates">Aún no hay episodios nuevos. Desliza hacia abajo para actualizar.</string>
     <string name="a11y_played">Escuchado</string>
     <string name="a11y_queue">A continuación</string>
     <string name="a11y_queue_up">Subir</string>

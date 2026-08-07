@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Explore
-import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,7 +41,6 @@ import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.MiniPlayer
 import com.yuyin.reverb.ui.screens.AboutScreen
 import com.yuyin.reverb.ui.screens.DiscoverScreen
-import com.yuyin.reverb.ui.screens.InboxScreen
 import com.yuyin.reverb.ui.screens.LibraryScreen
 import com.yuyin.reverb.ui.screens.LicensesScreen
 import com.yuyin.reverb.ui.screens.PlayerScreen
@@ -150,7 +148,6 @@ private fun MainShell(rootNav: NavHostController) {
     val route = backStackEntry?.destination?.route
 
     val tabs = listOf(
-        TopDest("inbox", stringResource(R.string.nav_inbox), Icons.Rounded.Inbox),
         TopDest("discover", stringResource(R.string.nav_discover), Icons.Rounded.Explore),
         TopDest("library", stringResource(R.string.nav_library), Icons.Rounded.LibraryMusic)
     )
@@ -203,12 +200,9 @@ private fun MainShell(rootNav: NavHostController) {
     ) { padding ->
         NavHost(
             navController = tabNav,
-            startDestination = "inbox",
+            startDestination = "discover",
             modifier = Modifier.padding(padding)
         ) {
-            composable("inbox") {
-                InboxScreen()
-            }
             composable("discover") {
                 DiscoverScreen(onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") })
             }

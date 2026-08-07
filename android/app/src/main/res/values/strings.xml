@@ -301,6 +301,7 @@
     <string name="queue_title">播放队列</string>
     <string name="queue_empty">队列是空的。长按单集「加入队列」，排着慢慢听</string>
     <string name="inbox_empty_no_subs">还没有订阅。去「发现」订阅几档，新一期就会汇到这里</string>
+    <string name="inbox_empty_no_updates">暂无最新内容，下拉试试刷新</string>
     <string name="a11y_played">已播完</string>
     <string name="a11y_queue">播放队列</string>
     <string name="a11y_queue_up">上移</string>

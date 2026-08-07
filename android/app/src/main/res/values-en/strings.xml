@@ -285,6 +285,7 @@
     <string name="queue_title">Up next</string>
     <string name="queue_empty">Your queue is empty. Long-press an episode to add it here.</string>
     <string name="inbox_empty_no_subs">No subscriptions yet. Subscribe in Discover and new episodes will land here.</string>
+    <string name="inbox_empty_no_updates">No new episodes yet. Pull down to refresh.</string>
     <string name="a11y_played">Played</string>
     <string name="a11y_queue">Up next</string>
     <string name="a11y_queue_up">Move up</string>

@@ -285,6 +285,7 @@
     <string name="queue_title">播放佇列</string>
     <string name="queue_empty">佇列是空的。長按單集「加入佇列」，排著慢慢聽</string>
     <string name="inbox_empty_no_subs">還沒有訂閱。去「發現」訂閱幾檔，新一集就會匯到這裡</string>
+    <string name="inbox_empty_no_updates">暫無最新內容，下拉試試重新整理</string>
     <string name="a11y_played">已播完</string>
     <string name="a11y_queue">播放佇列</string>
     <string name="a11y_queue_up">上移</string>

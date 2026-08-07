@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.withTimeoutOrNull
 import org.json.JSONArray
 import java.io.File
 import java.text.SimpleDateFormat
@@ -25,7 +26,8 @@ class InboxStore(context: Context) {
     private val file = File(context.filesDir, "inbox.json")
     private val lock = Any()
     private val max = 100
-    private val parallelism = 4 // 有限并发,避免同时打开过多连接
+    private val parallelism = 8 // 有限并发,兼顾速度与连接数
+    private val perFeedTimeoutMs = 8_000L // 单个 feed 超时:避免一个慢源拖垮整体刷新
 
     private val _episodes = MutableStateFlow(load())
     val episodes: StateFlow<List<Episode>> = _episodes
@@ -49,7 +51,12 @@ class InboxStore(context: Context) {
                     async(Dispatchers.IO) {
                         gate.withPermit {
                             try {
-                                repo.feed(p.feedUrl)?.episodes ?: emptyList()
+                                // 单源超时兜底:慢源到点即放弃,不阻塞其余订阅的合并
+                                withTimeoutOrNull(perFeedTimeoutMs) {
+                                    repo.feed(p.feedUrl)?.episodes
+                                } ?: emptyList<Episode>().also {
+                                    log.w(TAG, "feed timeout title='${p.title}' url=${p.feedUrl}")
+                                }
                             } catch (e: Exception) {
                                 log.w(TAG, "feed failed title='${p.title}' url=${p.feedUrl}")
                                 emptyList()

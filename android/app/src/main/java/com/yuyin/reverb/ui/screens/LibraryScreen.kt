@@ -59,8 +59,10 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val history by container.historyStore.history.collectAsStateWithLifecycle()
     var section by remember { mutableIntStateOf(0) }
+    // 订阅 / 最新 / 收藏 / 下载 / 历史。「最新」= 全部订阅的更新聚合,归入音阁。
     val sections = listOf(
         stringResource(R.string.lib_subscriptions),
+        stringResource(R.string.nav_inbox),
         stringResource(R.string.lib_favorites),
         stringResource(R.string.lib_downloads),
         stringResource(R.string.lib_history)
@@ -93,7 +95,7 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
                     )
                 }
             }
-            if (section == 3 && history.isNotEmpty()) {
+            if (section == 4 && history.isNotEmpty()) {
                 TextButton(
                     onClick = { container.historyStore.clear() },
                     modifier = Modifier
@@ -107,8 +109,9 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when (section) {
                 0 -> SubscriptionsSection(onOpen)
-                1 -> FavoritesSection()
-                2 -> DownloadsSection()
+                1 -> InboxBody()
+                2 -> FavoritesSection()
+                3 -> DownloadsSection()
                 else -> HistorySection(history)
             }
         }
