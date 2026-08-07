@@ -7,8 +7,6 @@ struct InboxView: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
 
-    @State private var didAppear = false
-
     private var accent: Color { Theme.accent(settings.accentIndex) }
 
     var body: some View {
@@ -46,14 +44,9 @@ struct InboxView: View {
             }
         }
         .task {
-            guard !didAppear else { return }
-            didAppear = true
-            await refresh()
+            // 订阅集未变时切回本分段不重刷(避免每次切 tab 全量重载与列表跳动)
+            await env.inbox.refreshIfStale(subscriptions: env.subscriptions.subscriptions,
+                                           repository: env.repository)
         }
-    }
-
-    private func refresh() async {
-        await env.inbox.refresh(subscriptions: env.subscriptions.subscriptions,
-                                repository: env.repository)
     }
 }

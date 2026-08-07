@@ -13,7 +13,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -54,14 +56,16 @@ fun InboxBody() {
             firstLoading = false
         }
     }
-    // 下拉刷新:结束态(成功/失败)统一在 finally 收起,杜绝指示器卡死
+    // 下拉刷新:增量刷新会持续较久(要等各源),故指示器只短暂显示即收起,刷新在后台继续增量填充,
+    // 避免"内容早出来了圈还在转"的卡死观感。刷新放在长生命周期 scope,不随指示器收起被取消。
+    val scope = rememberCoroutineScope()
     if (pullState.isRefreshing) {
         LaunchedEffect(true) {
-            try {
-                container.inboxStore.refresh(subs, container.repository)
-            } finally {
-                pullState.endRefresh()
+            scope.launch {
+                try { container.inboxStore.refresh(subs, container.repository) } catch (_: Exception) {}
             }
+            kotlinx.coroutines.delay(700)
+            pullState.endRefresh()
         }
     }
 

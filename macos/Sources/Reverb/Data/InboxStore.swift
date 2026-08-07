@@ -12,6 +12,10 @@ import Foundation
     @Published private(set) var episodes: [Episode]
     @Published private(set) var refreshing = false
 
+    /// 已成功刷新过的订阅集签名。用于避免每次切到「最新」分段都全量重刷:
+    /// 只有签名变化(订阅增删)或手动刷新才重新拉取。
+    private var loadedSignature: String?
+
     private let maxCount = 100
     private let maxConcurrent = 8
     private let perFeedCap = 12
@@ -22,6 +26,12 @@ import Foundation
         Log.i("Inbox", "最新加载 \(episodes.count) 条")
     }
 
+    /// 订阅集未变化时跳过刷新。供「最新」分段 .task 调用,避免切 tab 重复全量刷新。
+    func refreshIfStale(subscriptions: [Podcast], repository: PodcastRepository) async {
+        if loadedSignature == Self.signature(subscriptions) { return }
+        await refresh(subscriptions: subscriptions, repository: repository)
+    }
+
     /// 并发(有界)拉取全部订阅源。每个源只取最新 ~12 集,解析完成即增量合并
     /// (按 id 去重、按发布时间倒序、截断 100)并即时发布;全部完成后持久化。
     func refresh(subscriptions: [Podcast], repository: PodcastRepository) async {
@@ -30,6 +40,7 @@ import Foundation
         guard !feeds.isEmpty else {
             Log.i("Inbox", "无订阅,清空最新")
             if !episodes.isEmpty { episodes = []; persist() }
+            loadedSignature = ""
             return
         }
 
@@ -39,6 +50,9 @@ import Foundation
         Log.i("Inbox", "刷新最新 订阅=\(feeds.count) 并发=\(maxConcurrent) 每源=\(perFeedCap)")
 
         // 运行列表:从空开始,按源到达增量合并。seen 用于跨源去重(保留首次出现)。
+        // hasCache:已有缓存内容时,刷新期间不增量替换可见列表(否则会先坍缩再重建、产生跳动),
+        // 仅在冷启动无缓存时才增量填充以提供进度反馈;有缓存则后台build完最终一次性替换。
+        let hasCache = !episodes.isEmpty
         var merged: [Episode] = []
         var seen = Set<String>()
         var rawCount = 0
@@ -64,16 +78,24 @@ import Foundation
                 if added {
                     merged = Self.sortedByDateDesc(merged)
                     if merged.count > maxCount { merged.removeLast(merged.count - maxCount) }
-                    let snapshot = merged
-                    await MainActor.run { self.episodes = snapshot }   // 增量发布(主线程)
+                    if !hasCache {
+                        let snapshot = merged
+                        await MainActor.run { self.episodes = snapshot }   // 冷启动增量发布(主线程)
+                    }
                 }
                 addNext()
             }
         }
 
-        episodes = merged
+        episodes = merged   // 最终一次性替换:靠 id diff,已有条目位置稳定,不跳动
         persist()
+        loadedSignature = Self.signature(subscriptions)
         Log.i("Inbox", "刷新最新 → 收集 \(rawCount) 展示 \(episodes.count) \(Log.ms(t0))")
+    }
+
+    /// 订阅集签名:非空 feedUrl 排序后拼接,用于判断订阅集是否变化。
+    private static func signature(_ subscriptions: [Podcast]) -> String {
+        subscriptions.map { $0.feedUrl }.filter { !$0.isEmpty }.sorted().joined(separator: "|")
     }
 
     /// 拉取单个订阅源,带 ~timeoutSec 超时;成功后取该源最新 cap 集(按发布时间倒序)。
