@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 class SettingsStore(context: Context) {
     private val prefs = context.getSharedPreferences("reverb_settings", Context.MODE_PRIVATE)
 
-    val themeMode = MutableStateFlow(prefs.getInt("theme_mode", 2)) // 默认深色（古风水墨）
+    val themeMode = MutableStateFlow(prefs.getInt("theme_mode", 2)) // 默认深色（水墨）
     val fontScale = MutableStateFlow(prefs.getFloat("font_scale", 1.0f))
     val accentIndex = MutableStateFlow(prefs.getInt("accent_index", 0))
     val allowCellularDownload = MutableStateFlow(prefs.getBoolean("cellular_dl", false))

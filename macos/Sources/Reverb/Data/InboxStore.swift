@@ -2,19 +2,28 @@ import Foundation
 
 /// 「最新」收件箱:跨全部订阅合并的最新单集。持久化到 inbox.json 以便秒开,
 /// 再异步刷新。与 Android 版行为对齐。
+///
+/// 为提升「感知速度」,刷新采用:
+/// - 每源限量:每个订阅只取该源最新 ~12 集,降低体量与内存;
+/// - 增量渲染:每个源解析完成即合并进运行列表并即时发布,界面随源到达逐步填充,
+///   而非等所有源都拉完再一次性刷新;
+/// - 有界并发 + 每源超时,单源失败/超时不影响整体。
 @MainActor final class InboxStore: ObservableObject {
     @Published private(set) var episodes: [Episode]
     @Published private(set) var refreshing = false
 
     private let maxCount = 100
-    private let maxConcurrent = 6
+    private let maxConcurrent = 8
+    private let perFeedCap = 12
+    private let feedTimeoutSec: Double = 8
 
     init() {
         episodes = AppSupport.load("inbox.json", as: [Episode].self) ?? []
         Log.i("Inbox", "最新加载 \(episodes.count) 条")
     }
 
-    /// 并发(有界)拉取全部订阅源,合并去重、按发布时间倒序、截断 100,发布并持久化。
+    /// 并发(有界)拉取全部订阅源。每个源只取最新 ~12 集,解析完成即增量合并
+    /// (按 id 去重、按发布时间倒序、截断 100)并即时发布;全部完成后持久化。
     func refresh(subscriptions: [Podcast], repository: PodcastRepository) async {
         guard !refreshing else { Log.d("Inbox", "刷新进行中,忽略重复请求"); return }
         let feeds = subscriptions.map { $0.feedUrl }.filter { !$0.isEmpty }
@@ -25,33 +34,77 @@ import Foundation
         }
 
         refreshing = true
+        defer { refreshing = false }
         let t0 = Date()
-        Log.i("Inbox", "刷新最新 订阅=\(feeds.count) 并发=\(maxConcurrent)")
+        Log.i("Inbox", "刷新最新 订阅=\(feeds.count) 并发=\(maxConcurrent) 每源=\(perFeedCap)")
 
-        var collected: [Episode] = []
-        let bound = maxConcurrent
+        // 运行列表:从空开始,按源到达增量合并。seen 用于跨源去重(保留首次出现)。
+        var merged: [Episode] = []
+        var seen = Set<String>()
+        var rawCount = 0
+
+        let cap = perFeedCap
+        let timeout = feedTimeoutSec
         await withTaskGroup(of: [Episode].self) { group in
             var index = 0
             func addNext() {
                 guard index < feeds.count else { return }
                 let url = feeds[index]; index += 1
                 group.addTask {
-                    guard let r = await repository.feed(url) else { return [] }
-                    return r.episodes
+                    await Self.loadCapped(url, repository: repository, cap: cap, timeoutSec: timeout)
                 }
             }
-            for _ in 0..<min(bound, feeds.count) { addNext() }
+            for _ in 0..<min(maxConcurrent, feeds.count) { addNext() }
             while let eps = await group.next() {
-                collected.append(contentsOf: eps)
+                rawCount += eps.count
+                var added = false
+                for e in eps where seen.insert(e.id).inserted {
+                    merged.append(e); added = true
+                }
+                if added {
+                    merged = Self.sortedByDateDesc(merged)
+                    if merged.count > maxCount { merged.removeLast(merged.count - maxCount) }
+                    let snapshot = merged
+                    await MainActor.run { self.episodes = snapshot }   // 增量发布(主线程)
+                }
                 addNext()
             }
         }
 
-        // 去重(按 id 保留首次出现),再按发布时间倒序;无法解析日期者保持相对顺序垫底。
-        var seen = Set<String>()
-        let deduped = collected.filter { seen.insert($0.id).inserted }
-        let indexed = deduped.enumerated().map { ($0.offset, $0.element, Fmt.parseDate($0.element.pubDate)) }
-        let sorted = indexed.sorted { l, r in
+        episodes = merged
+        persist()
+        Log.i("Inbox", "刷新最新 → 收集 \(rawCount) 展示 \(episodes.count) \(Log.ms(t0))")
+    }
+
+    /// 拉取单个订阅源,带 ~timeoutSec 超时;成功后取该源最新 cap 集(按发布时间倒序)。
+    /// 失败或超时返回空数组,不影响其他源。
+    private static func loadCapped(_ url: String, repository: PodcastRepository,
+                                   cap: Int, timeoutSec: Double) async -> [Episode] {
+        let result: [Episode]? = await withTaskGroup(of: [Episode]?.self) { group in
+            group.addTask {
+                guard let r = await repository.feed(url) else { return [] }
+                return r.episodes
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(timeoutSec * 1_000_000_000))
+                return nil   // 超时哨兵
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
+        }
+        guard let episodes = result else {
+            Log.w("Inbox", "feed 超时 \(url)")
+            return []
+        }
+        // 每源限量:该源最新 ~cap 集。
+        return Array(Self.sortedByDateDesc(episodes).prefix(cap))
+    }
+
+    /// 按发布时间倒序;无法解析日期者保持相对顺序垫底。
+    private static func sortedByDateDesc(_ eps: [Episode]) -> [Episode] {
+        let indexed = eps.enumerated().map { ($0.offset, $0.element, Fmt.parseDate($0.element.pubDate)) }
+        return indexed.sorted { l, r in
             switch (l.2, r.2) {
             case let (a?, b?): return a != b ? a > b : l.0 < r.0
             case (_?, nil): return true
@@ -59,11 +112,6 @@ import Foundation
             default: return l.0 < r.0
             }
         }.map { $0.1 }
-
-        episodes = Array(sorted.prefix(maxCount))
-        refreshing = false
-        persist()
-        Log.i("Inbox", "刷新最新 → 收集 \(collected.count) 去重 \(deduped.count) 展示 \(episodes.count) \(Log.ms(t0))")
     }
 
     private func persist() { AppSupport.save("inbox.json", episodes) }

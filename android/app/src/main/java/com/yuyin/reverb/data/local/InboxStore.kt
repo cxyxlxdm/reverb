@@ -5,11 +5,10 @@ import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.data.remote.PodcastRepository
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withTimeoutOrNull
@@ -26,6 +25,7 @@ class InboxStore(context: Context) {
     private val file = File(context.filesDir, "inbox.json")
     private val lock = Any()
     private val max = 100
+    private val perFeedMax = 12 // 每个订阅只取最新 ~12 集,避免大源刷屏、加速合并
     private val parallelism = 8 // 有限并发,兼顾速度与连接数
     private val perFeedTimeoutMs = 8_000L // 单个 feed 超时:避免一个慢源拖垮整体刷新
 
@@ -46,11 +46,14 @@ class InboxStore(context: Context) {
         log.i(TAG, "refresh start subs=${subs.size}")
         try {
             val gate = Semaphore(parallelism)
-            val perFeed = coroutineScope {
-                subs.map { p ->
-                    async(Dispatchers.IO) {
+            // 增量渲染:边抓边并入。按 id 去重的累积池,每有一个 feed 到位即重排并更新 UI。
+            val accumulated = LinkedHashMap<String, Episode>()
+            var latest: List<Episode> = emptyList()
+            coroutineScope {
+                subs.forEach { p ->
+                    launch(Dispatchers.IO) {
                         gate.withPermit {
-                            try {
+                            val eps = try {
                                 // 单源超时兜底:慢源到点即放弃,不阻塞其余订阅的合并
                                 withTimeoutOrNull(perFeedTimeoutMs) {
                                     repo.feed(p.feedUrl)?.episodes
@@ -61,19 +64,26 @@ class InboxStore(context: Context) {
                                 log.w(TAG, "feed failed title='${p.title}' url=${p.feedUrl}")
                                 emptyList()
                             }
+                            // 单源限量:只取该订阅最新 ~12 集再并入
+                            val capped = eps
+                                .sortedByDescending { parsePubMillis(it.pubDate) }
+                                .take(perFeedMax)
+                            if (capped.isEmpty()) return@withPermit
+                            // 统一在 lock 内合并 + 更新 StateFlow,保证线程一致
+                            synchronized(lock) {
+                                for (e in capped) accumulated[e.id] = e
+                                latest = accumulated.values
+                                    .sortedByDescending { parsePubMillis(it.pubDate) }
+                                    .take(max)
+                                _episodes.value = latest
+                            }
                         }
                     }
-                }.awaitAll()
+                }
             }
-            val merged = perFeed.flatten()
-                .distinctBy { it.id }
-                .sortedByDescending { parsePubMillis(it.pubDate) }
-                .take(max)
-            synchronized(lock) {
-                _episodes.value = merged
-                persist(merged)
-            }
-            log.i(TAG, "refresh done episodes=${merged.size}")
+            // 全部到位后落盘(增量过程只更新内存态,末尾持久化一次)
+            synchronized(lock) { persist(latest) }
+            log.i(TAG, "refresh done episodes=${latest.size}")
         } finally {
             refreshing = false
         }
