@@ -1,7 +1,7 @@
 package com.yuyin.reverb.ui.screens
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,10 +12,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ViewList
+import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
@@ -26,12 +28,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -44,20 +44,18 @@ import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.DownloadStatus
 import com.yuyin.reverb.data.model.DownloadedEpisode
-import com.yuyin.reverb.data.model.Genres
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.PodcastGridItem
 import com.yuyin.reverb.ui.components.PodcastListItem
-import kotlinx.coroutines.launch
-
-private const val ALL = "__all__"
 
 @Composable
 fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val history by container.historyStore.history.collectAsStateWithLifecycle()
+    val subsGrid by container.settingsStore.subsGrid.collectAsStateWithLifecycle()
     var section by remember { mutableIntStateOf(0) }
     // 订阅 / 最新 / 收藏 / 下载 / 历史。「最新」= 全部订阅的更新聚合,归入音阁。
     val sections = listOf(
@@ -104,11 +102,27 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
                         .background(MaterialTheme.colorScheme.background)
                 ) { Text(stringResource(R.string.action_clear_confirm)) }
             }
+            // 订阅分段:右侧「行 / 宫格」排列切换。图标显示切换后的目标布局。
+            if (section == 0) {
+                IconButton(
+                    onClick = { container.settingsStore.setSubsGrid(!subsGrid) },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .zIndex(1f)
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    Icon(
+                        if (subsGrid) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.GridView,
+                        contentDescription = stringResource(R.string.subs_layout_toggle),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
 
         Box(Modifier.fillMaxWidth().weight(1f)) {
             when (section) {
-                0 -> SubscriptionsSection(onOpen)
+                0 -> SubscriptionsSection(subsGrid, onOpen)
                 1 -> InboxBody()
                 2 -> FavoritesSection()
                 3 -> DownloadsSection()
@@ -118,57 +132,33 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SubscriptionsSection(onOpen: (Podcast) -> Unit) {
+private fun SubscriptionsSection(gridLayout: Boolean, onOpen: (Podcast) -> Unit) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
-    val scope = rememberCoroutineScope()
 
     if (subs.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_library))
         return
     }
 
-    val genres = subs.map { Genres.key(it.genre) }.filter { it.isNotBlank() }.distinct()
-    val pages = listOf(ALL) + genres
-    val pagerState = rememberPagerState(pageCount = { pages.size })
-    val chipsState = rememberLazyListState()
-    val selected = pagerState.currentPage.coerceIn(0, pages.lastIndex)
-
-    Column(Modifier.fillMaxSize()) {
-        if (pages.size > 1) {
-            LaunchedEffect(selected) { chipsState.animateScrollToItem(selected) }
-            LazyRow(
-                state = chipsState,
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)
-            ) {
-                itemsIndexed(pages) { i, g ->
-                    FilterChip(
-                        selected = i == selected,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
-                        label = { Text(if (g == ALL) stringResource(R.string.filter_all) else Genres.labelRes(g)?.let { stringResource(it) } ?: g) },
-                        modifier = Modifier.padding(end = 8.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                        )
-                    )
-                }
-            }
+    // 与 macOS 对齐:订阅不再分类,直接平铺;排列方式(列表/宫格)由顶部按钮切换。
+    if (gridLayout) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 104.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items(subs, key = { it.id }) { p -> PodcastGridItem(p) { onOpen(p) } }
         }
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth().weight(1f)
-        ) { page ->
-            val g = pages[page]
-            val shown = if (g == ALL) subs else subs.filter { Genres.key(it.genre) == g }
-            LazyColumn(
-                Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                items(shown) { p -> PodcastListItem(p) { onOpen(p) } }
-            }
+    } else {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            items(subs, key = { it.id }) { p -> PodcastListItem(p) { onOpen(p) } }
         }
     }
 }

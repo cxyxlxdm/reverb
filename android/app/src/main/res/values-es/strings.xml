@@ -118,6 +118,7 @@
     <string name="region_de">Alemania</string>
 
     <string name="lib_subscriptions">Suscripciones</string>
+    <string name="subs_layout_toggle">Cambiar disposición</string>
     <string name="lib_favorites">Favoritos</string>
     <string name="empty_favorites">Aún no hay episodios favoritos. Toca el corazón en el reproductor para guardar uno</string>
     <string name="a11y_favorite">Favorito</string>

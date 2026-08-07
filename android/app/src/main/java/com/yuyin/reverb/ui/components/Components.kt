@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -94,6 +95,60 @@ fun Artwork(url: String, size: Int, corner: Int = 12) {
                 .clip(shape)
                 .background(MaterialTheme.colorScheme.surfaceVariant)
         )
+    }
+}
+
+/** 填满单元格宽度的方形封面(宫格用)。无封面时以主色频谱图标占位。 */
+@Composable
+fun SquareArtwork(url: String, corner: Int = 14) {
+    val shape = RoundedCornerShape(corner.dp)
+    if (url.isBlank()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(shape)
+                .background(CeladonDim.copy(alpha = 0.18f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(Icons.Rounded.GraphicEq, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        }
+    } else {
+        AsyncImage(
+            model = url,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+                .clip(shape)
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+        )
+    }
+}
+
+/** 宫格卡片:方形封面 + 标题 + 作者,与 macOS PodcastCard 对齐。 */
+@Composable
+fun PodcastGridItem(podcast: Podcast, onClick: () -> Unit) {
+    Column(Modifier.clickable(onClick = onClick)) {
+        SquareArtwork(podcast.artworkUrl)
+        Spacer(Modifier.height(8.dp))
+        Text(
+            podcast.title,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        if (podcast.author.isNotBlank()) {
+            Text(
+                podcast.author,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

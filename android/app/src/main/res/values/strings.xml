@@ -124,6 +124,7 @@
 
     <!-- 音阁 -->
     <string name="lib_subscriptions">订阅</string>
+    <string name="subs_layout_toggle">切换排列方式</string>
     <string name="lib_favorites">收藏</string>
     <string name="empty_favorites">还没有收藏的单集。在播放页点心形按钮即可收藏</string>
     <string name="a11y_favorite">收藏</string>
