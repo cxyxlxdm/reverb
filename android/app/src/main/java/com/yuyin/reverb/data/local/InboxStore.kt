@@ -76,8 +76,12 @@ class InboxStore(context: Context) {
                             // 统一在 lock 内合并 + 更新 StateFlow,保证线程一致
                             synchronized(lock) {
                                 for (e in capped) accumulated[e.id] = e
+                                // 稳定排序:日期倒序 + id 次序。各源并行返回顺序不定,若仅按日期排序,
+                                // 日期相同/无法解析(=0)的单集相对顺序会随刷新变动,导致内容没变却"闪动"
+                                // (StateFlow 判不相等而重排)。加 id 次序使结果确定 → 内容不变即不重渲。
                                 latest = accumulated.values
-                                    .sortedByDescending { parsePubMillis(it.pubDate) }
+                                    .sortedWith(compareByDescending<Episode> { parsePubMillis(it.pubDate) }
+                                        .thenBy { it.id })
                                     .take(max)
                                 if (!hasCache) _episodes.value = latest // 冷启动才逐源刷 UI
                             }

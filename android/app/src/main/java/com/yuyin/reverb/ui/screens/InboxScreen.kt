@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,9 +27,8 @@ import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.EpisodeListItem
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * 「最新」列表主体:合并所有订阅的最新单集。缓存秒显 + 进入即后台刷新 + 下拉刷新。
@@ -58,19 +58,15 @@ fun InboxBody() {
             firstLoading = false
         }
     }
-    // 下拉刷新:与「发现」页同款实现。最短可见 600ms(避免一闪而过),刷新完(InboxStore 已保证
-    // 有缓存时不坍缩、末尾原子替换)在 finally 收起指示器,异常也收起,杜绝圆圈卡死。
+    // 下拉刷新:多源刷新可能耗时数秒,不能像「发现」页那样 await 到完成(否则指示器挂很久)。
+    // 故把刷新丢到长生命周期 scope 后台跑,指示器只短暂示意(600ms)即收起;内容就绪后由
+    // InboxStore 原子替换(稳定排序→内容不变不重渲)。clipToBounds 已保证静止态指示器不残留。
+    val scope = rememberCoroutineScope()
     if (pullState.isRefreshing) {
         LaunchedEffect(true) {
-            try {
-                coroutineScope {
-                    val fetch = async { container.inboxStore.refresh(subs, container.repository) }
-                    delay(600)
-                    fetch.await()
-                }
-            } finally {
-                pullState.endRefresh()
-            }
+            scope.launch { container.inboxStore.refresh(subs, container.repository) }
+            delay(600)
+            pullState.endRefresh()
         }
     }
 
