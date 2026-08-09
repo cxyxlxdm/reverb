@@ -46,7 +46,11 @@ class InboxStore(context: Context) {
         log.i(TAG, "refresh start subs=${subs.size}")
         try {
             val gate = Semaphore(parallelism)
-            // 增量渲染:边抓边并入。按 id 去重的累积池,每有一个 feed 到位即重排并更新 UI。
+            // 有缓存时:刷新期间不做增量替换(否则可见列表会先坍缩到几条再重建,既跳闪,又会把
+            // 下拉刷新的 verticalOffset 顶起、灰色指示器滞留在顶部),后台 build 完在末尾一次性
+            // 原子替换(LazyColumn 按 id diff,已有条目位置稳定不跳)。冷启动无缓存时才逐源增量填充。
+            val hasCache = _episodes.value.isNotEmpty()
+            // 按 id 去重的累积池,每有一个 feed 到位即重排。
             val accumulated = LinkedHashMap<String, Episode>()
             var latest: List<Episode> = emptyList()
             coroutineScope {
@@ -75,14 +79,18 @@ class InboxStore(context: Context) {
                                 latest = accumulated.values
                                     .sortedByDescending { parsePubMillis(it.pubDate) }
                                     .take(max)
-                                _episodes.value = latest
+                                if (!hasCache) _episodes.value = latest // 冷启动才逐源刷 UI
                             }
                         }
                     }
                 }
             }
-            // 全部到位后落盘(增量过程只更新内存态,末尾持久化一次)
-            synchronized(lock) { persist(latest) }
+            // 全部到位后:一次性原子替换 + 落盘。若全部源失败/超时(latest 为空)且已有缓存,
+            // 则不用空列表覆盖,避免一次刷新失败把「最新」清空。
+            synchronized(lock) {
+                if (latest.isNotEmpty() || !hasCache) _episodes.value = latest
+                if (latest.isNotEmpty()) persist(latest)
+            }
             log.i(TAG, "refresh done episodes=${latest.size}")
         } finally {
             refreshing = false
