@@ -18,7 +18,8 @@ enum Transcriber {
     /// 转录过程事件。
     enum Event: Sendable {
         case installingModel                 // 首次:系统下载语言模型
-        case segment(TranscribedSegment)     // 识别出一句(按时间顺序)
+        case volatile(String)                // 未定稿的实时尾巴(打字机/流式效果)
+        case segment(TranscribedSegment)     // 定稿一句(按时间顺序)
     }
 
     /// 为期望语言挑一个受支持的 locale;挑不到返回 nil。
@@ -37,7 +38,8 @@ enum Transcriber {
             let task = Task {
                 do {
                     let transcriber = SpeechTranscriber(
-                        locale: locale, transcriptionOptions: [], reportingOptions: [], attributeOptions: [])
+                        locale: locale, transcriptionOptions: [],
+                        reportingOptions: [.volatileResults], attributeOptions: [])
 
                     // 确保语言模型已安装(nil = 已装)。系统级、一次性。
                     if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
@@ -51,9 +53,13 @@ enum Transcriber {
                         for try await result in transcriber.results {
                             let text = String(result.text.characters).trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !text.isEmpty else { continue }
-                            let start = ms(result.range.start.seconds)
-                            continuation.yield(.segment(TranscribedSegment(
-                                text: text, startMs: start, endMs: max(ms(result.range.end.seconds), start))))
+                            if result.isFinal {
+                                let start = ms(result.range.start.seconds)
+                                continuation.yield(.segment(TranscribedSegment(
+                                    text: text, startMs: start, endMs: max(ms(result.range.end.seconds), start))))
+                            } else {
+                                continuation.yield(.volatile(text))   // 未定稿:实时尾巴
+                            }
                         }
                     }
                     do {

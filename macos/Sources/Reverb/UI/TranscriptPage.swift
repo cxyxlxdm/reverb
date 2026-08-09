@@ -11,8 +11,15 @@ struct TranscriptPage: View {
     let episode: Episode
     let accent: Color
 
-    /// 转录语言:中文 / 英文(默认跟随界面语言,空=未定)。
-    @State private var localeChoice: String = ""
+    /// 转录语言按应用界面语言确定(一段音频通常只有一种语言,不做手动切换)。
+    private var localeId: String {
+        switch env.settings.language {
+        case "en", "fr", "es": return "en"
+        case "zh-Hant": return "zh-Hant"
+        case "zh-Hans": return "zh-Hans"
+        default: return (Locale.current.language.languageCode?.identifier == "zh") ? "zh-Hans" : "en"
+        }
+    }
 
     /// 当前播放位置对应的句子下标。
     private var currentIndex: Int? {
@@ -26,25 +33,17 @@ struct TranscriptPage: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 16)
-        .task(id: episode.id + "|" + localeChoice) {
-            if localeChoice.isEmpty { localeChoice = defaultLocaleId(); return } // 定语言后本 task 会以新 id 再跑
-            transcripts.prepare(episodeId: episode.id, localeId: localeChoice)
+        .task(id: episode.id + "|" + localeId) {
+            transcripts.prepare(episodeId: episode.id, localeId: localeId)
         }
     }
 
-    // MARK: - 头部:标题 + 语言切换
+    // MARK: - 头部
 
     private var header: some View {
         HStack {
             Text("转录").font(.headline)
             Spacer()
-            Picker("", selection: $localeChoice) {
-                Text("中文").tag("zh-Hans")
-                Text(verbatim: "English").tag("en")
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .fixedSize()
         }
     }
 
@@ -133,18 +132,33 @@ struct TranscriptPage: View {
                             .id(idx)
                     }
                     if runningTail {
+                        // 未定稿的实时尾巴(流式/打字机):淡色显示,定稿后并入上面的句子
+                        if !transcripts.volatileTail.isEmpty {
+                            Text(transcripts.volatileTail)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                         HStack(spacing: 8) {
                             ProgressView().controlSize(.small)
                             Text("正在识别…").font(.caption).foregroundStyle(.secondary)
                         }
                         .padding(.top, 4)
+                        .id("tail")
                     }
                 }
                 .padding(.vertical, 4)
                 .textSelection(.enabled)
             }
+            // 播放时:滚到当前句;生成时:滚到底部让流式尾巴始终可见
             .onChange(of: currentIndex) { _, new in
-                if let new { withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(new, anchor: .center) } }
+                if !runningTail, let new { withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(new, anchor: .center) } }
+            }
+            .onChange(of: transcripts.segments.count) { _, _ in
+                if runningTail { withAnimation(.easeInOut(duration: 0.2)) { proxy.scrollTo("tail", anchor: .bottom) } }
+            }
+            .onChange(of: transcripts.volatileTail) { _, _ in
+                if runningTail { proxy.scrollTo("tail", anchor: .bottom) }
             }
         }
     }
@@ -156,16 +170,6 @@ struct TranscriptPage: View {
             episodeId: episode.id,
             audioURL: episode.audioUrl,
             localURL: env.downloads.localURL(episode.id),
-            localeId: localeChoice)
-    }
-
-    /// 依界面语言给转录默认语言。
-    private func defaultLocaleId() -> String {
-        switch env.settings.language {
-        case "en", "fr", "es": return "en"
-        case "zh-Hans", "zh-Hant": return "zh-Hans"
-        default:
-            return (Locale.current.language.languageCode?.identifier == "zh") ? "zh-Hans" : "en"
-        }
+            localeId: localeId)
     }
 }

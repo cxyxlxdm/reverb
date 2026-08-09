@@ -17,6 +17,7 @@ import Foundation
     }
 
     @Published private(set) var segments: [TranscribedSegment] = []
+    @Published private(set) var volatileTail: String = ""   // 生成期未定稿的实时尾巴;缓存命中为空
     @Published private(set) var state: State = .idle
     @Published private(set) var episodeId: String = ""
     @Published private(set) var localeId: String = ""
@@ -41,8 +42,9 @@ import Foundation
         generation += 1
         self.episodeId = episodeId
         self.localeId = localeId
+        volatileTail = ""
         if let cached = loadCache(episodeId: episodeId, localeId: localeId), cached.complete {
-            segments = cached.segments
+            segments = cached.segments   // 缓存命中:秒显全文,不重播打字机
             state = .done
         } else {
             segments = []
@@ -59,6 +61,7 @@ import Foundation
         self.episodeId = episodeId
         self.localeId = localeId
         segments = []
+        volatileTail = ""
         state = localURL == nil ? .downloadingAudio : .running
 
         job = Task { [weak self] in
@@ -119,12 +122,17 @@ import Foundation
                 switch ev {
                 case .installingModel:
                     state = .installingModel
+                case .volatile(let tail):
+                    volatileTail = tail
+                    if state != .running { state = .running }
                 case .segment(let seg):
                     segments.append(seg)
+                    volatileTail = ""   // 该尾巴已定稿并入 segments
                     if state != .running { state = .running }
                 }
             }
             if stale() { return }
+            volatileTail = ""
             state = .done
             saveCache(episodeId: episodeId, localeId: localeId, segments: segments)
         } catch is CancellationError {
