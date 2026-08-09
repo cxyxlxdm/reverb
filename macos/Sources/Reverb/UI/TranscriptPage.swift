@@ -10,6 +10,7 @@ struct TranscriptPage: View {
 
     let episode: Episode
     let accent: Color
+    var active: Bool = true   // 是否为当前可见页;false 时当前句静态显示,不跑逐帧刷新
 
     // 平滑外推的锚点:播放进度每 0.5s 才更新一次,靠这对锚点在两次采样间逐帧插值,
     // 让当前句逐字推进而非半秒一跳。
@@ -135,7 +136,7 @@ struct TranscriptPage: View {
             if idx == cur {
                 KaraokeLine(seg: seg, accent: accent,
                             anchorMs: anchorMs, anchorAt: anchorAt,
-                            speed: player.speed, isPlaying: player.isPlaying)
+                            speed: player.speed, isPlaying: player.isPlaying && active)
             } else {
                 Text(seg.text).foregroundColor(idx < (cur ?? -1) ? .secondary : .primary)
             }

@@ -55,7 +55,7 @@ struct PlayerView: View {
                     playerPage(ep).containerRelativeFrame(.horizontal).id(0)
                     showNotePage(ep).containerRelativeFrame(.horizontal).id(1)
                     if showTranscript {
-                        TranscriptPage(episode: ep, accent: accent)
+                        TranscriptPage(episode: ep, accent: accent, active: (page ?? 0) == 2)
                             .containerRelativeFrame(.horizontal).id(2)
                     }
                 }
@@ -131,7 +131,8 @@ struct PlayerView: View {
 
     private func artwork(_ ep: Episode) -> some View {
         ZStack {
-            InkWave(color: accent, animating: player.isPlaying)
+            // 仅在播放页(第 0 页)可见且播放时才让波纹流动,避免后台/横滑时空跑
+            InkWave(color: accent, animating: player.isPlaying && (page ?? 0) == 0)
                 .frame(height: 300)
             Artwork(url: ep.artworkUrl, size: 240, corner: 18)
                 .shadow(color: .black.opacity(0.25), radius: 18, y: 8)
@@ -315,6 +316,9 @@ struct PlayerView: View {
     private func prepareMoment(_ ep: Episode) async {
         momentURL = nil
         momentArtwork = await loadNSImage(ep.artworkUrl)
+        // 延后剪藏 PNG 渲染(ImageRenderer 在主线程同步执行),让开场/横滑动画先跑完再渲染
+        try? await Task.sleep(nanoseconds: 350_000_000)
+        if Task.isCancelled { return }
         momentURL = renderPNG(card(ep))
     }
 
@@ -378,7 +382,7 @@ private struct InkWave: View {
     let animating: Bool
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !animating)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: !animating)) { timeline in
             Canvas { ctx, size in
                 let t = timeline.date.timeIntervalSinceReferenceDate
                 let ribbons = 3
