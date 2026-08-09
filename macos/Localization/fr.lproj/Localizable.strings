@@ -180,3 +180,9 @@
 "标记为已播完" = "Marquer comme lu";
 "标记为未播完" = "Marquer comme non lu";
 "已播完" = "Lu";
+
+/* i18n 补丁:查看频道 / 日志反馈 */
+"查看频道" = "Voir la chaîne";
+"发送日志到开发者邮箱" = "Envoyer les journaux au développeur";
+"余音 macOS 日志反馈" = "Retour des journaux Reverb macOS";
+"请描述你遇到的问题:\n\n\n——\n余音 macOS v%@ · %@" = "Veuillez décrire le problème rencontré :\n\n\n——\nReverb macOS v%@ · %@";

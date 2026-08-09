@@ -54,8 +54,8 @@ private struct SettingsForm: View {
                 }
                 Picker("语言", selection: $settings.language) {
                     Text("跟随系统").tag("")
-                    Text("简体中文").tag("zh-Hans")
-                    Text("繁體中文").tag("zh-Hant")
+                    Text(verbatim: "简体中文").tag("zh-Hans")
+                    Text(verbatim: "繁體中文").tag("zh-Hant")
                     Text(verbatim: "English").tag("en")
                     Text(verbatim: "Français").tag("fr")
                     Text(verbatim: "Español").tag("es")
@@ -298,11 +298,12 @@ private struct SettingsForm: View {
             let text = await Task.detached { Log.allText() }.value
             try? text.data(using: .utf8)?.write(to: url, options: .atomic)
             let ver = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
-            let body = "请描述你遇到的问题:\n\n\n——\n余音 macOS v\(ver) · \(ProcessInfo.processInfo.operatingSystemVersionString)" as NSString
+            let os = ProcessInfo.processInfo.operatingSystemVersionString
+            let body = String(localized: "请描述你遇到的问题:\n\n\n——\n余音 macOS v\(ver) · \(os)") as NSString
             let items: [Any] = [body, url]
             if let svc = NSSharingService(named: .composeEmail), svc.canPerform(withItems: items) {
                 svc.recipients = [devEmail]
-                svc.subject = "余音 macOS 日志反馈"
+                svc.subject = String(localized: "余音 macOS 日志反馈")
                 svc.perform(withItems: items)
             } else {
                 // 未配置邮件客户端:打开 mailto 起草,并在访达中选中日志文件方便手动拖入附件

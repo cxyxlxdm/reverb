@@ -180,3 +180,9 @@
 "标记为已播完" = "Mark as Played";
 "标记为未播完" = "Mark as Unplayed";
 "已播完" = "Played";
+
+/* i18n 补丁:查看频道 / 日志反馈 */
+"查看频道" = "View channel";
+"发送日志到开发者邮箱" = "Email logs to developer";
+"余音 macOS 日志反馈" = "Reverb macOS log feedback";
+"请描述你遇到的问题:\n\n\n——\n余音 macOS v%@ · %@" = "Please describe the problem you encountered:\n\n\n——\nReverb macOS v%@ · %@";
