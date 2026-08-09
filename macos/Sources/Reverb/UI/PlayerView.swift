@@ -13,6 +13,8 @@ struct PlayerView: View {
     @State private var momentURL: URL?
     @State private var momentArtwork: NSImage?
     @State private var page: Int? = 0   // 轮播当前页(macOS 14+)
+    @State private var noteParagraphs: [String] = []   // 简介按段拆分(解析在渲染路径外,懒排版)
+    @State private var noteForEpisode: String = ""      // 上述缓存对应的单集 id
 
     private let sleepMinutes = [15, 30, 45, 60]
     private let seals: [(seal: String, label: String)] = [
@@ -85,19 +87,33 @@ struct PlayerView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 Text("简介").font(.headline)
-                let text = Fmt.plainText(ep.description)
-                if text.isEmpty {
-                    Text("暂无简介").font(.callout).foregroundStyle(.secondary)
-                } else {
-                    Text(text)
-                        .font(.body).foregroundStyle(.secondary).lineSpacing(3)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
+                if noteForEpisode == ep.id {
+                    if noteParagraphs.isEmpty {
+                        Text("暂无简介").font(.callout).foregroundStyle(.secondary)
+                    } else {
+                        // 按段落进 LazyVStack:只对可见段落做文本布局,长简介也不再一次性排完
+                        LazyVStack(alignment: .leading, spacing: 10) {
+                            ForEach(noteParagraphs.indices, id: \.self) { i in
+                                Text(noteParagraphs[i])
+                                    .font(.body).foregroundStyle(.secondary).lineSpacing(3)
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 32)
             .padding(.vertical, 24)
+        }
+        // 解析(正则较重)放到渲染路径外,按集缓存,避免每次横滑重跑
+        .task(id: ep.id) {
+            noteParagraphs = Fmt.plainText(ep.description)
+                .components(separatedBy: "\n")
+                .map { $0.trimmingCharacters(in: .whitespaces) }
+                .filter { !$0.isEmpty }
+            noteForEpisode = ep.id
         }
     }
 
