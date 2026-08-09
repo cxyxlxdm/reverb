@@ -41,5 +41,7 @@
         <key>NSAllowsArbitraryLoads</key>
         <true/>
     </dict>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>用于在设备上离线把播客音频转成文字,内容不会离开你的 Mac。</string>
 </dict>
 </plist>

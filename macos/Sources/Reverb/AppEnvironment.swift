@@ -15,6 +15,8 @@ final class AppEnvironment: ObservableObject {
     let player = PlayerController()
     let downloads = DownloadStore()
     let downloadManager: DownloadManager
+    // 转录:高频 append,不转发到 env(由 TranscriptPage 直接观察),避免整树重渲。
+    let transcripts = TranscriptStore()
 
     init() {
         let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"

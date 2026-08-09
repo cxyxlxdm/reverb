@@ -186,3 +186,21 @@
 "发送日志到开发者邮箱" = "Envoyer les journaux au développeur";
 "余音 macOS 日志反馈" = "Retour des journaux Reverb macOS";
 "请描述你遇到的问题:\n\n\n——\n余音 macOS v%@ · %@" = "Veuillez décrire le problème rencontré :\n\n\n——\nReverb macOS v%@ · %@";
+
+/* 语音转文字(转录页) */
+"语音转文字" = "Reconnaissance vocale";
+"在播放页新增「转录」页,完全离线转录当前单集(需 macOS 26,首次按语言下载模型)" = "Ajoute une page Transcription au lecteur pour transcrire l'épisode entièrement hors ligne (nécessite macOS 26 ; le modèle se télécharge une fois).";
+"简介" = "Notes";
+"暂无简介" = "Aucune note";
+"转录" = "Transcription";
+"中文" = "Chinois";
+"正在准备音频…" = "Préparation de l'audio…";
+"正在下载语言模型…" = "Téléchargement du modèle…";
+"该语言暂不支持转录" = "Cette langue n'est pas prise en charge";
+"需要 macOS 26" = "Nécessite macOS 26";
+"把这集音频离线转成文字" = "Transcrire l'audio de cet épisode hors ligne";
+"生成转录" = "Transcrire";
+"正在识别…" = "Transcription…";
+"音频地址无效" = "URL audio invalide";
+"音频下载失败" = "Échec du téléchargement audio";
+"转录失败,点按重试" = "Échec de la transcription. Touchez pour réessayer";

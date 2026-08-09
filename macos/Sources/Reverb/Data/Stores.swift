@@ -169,6 +169,8 @@ enum AppSupport {
     @Published var skipBackSec: Int { didSet { d.set(skipBackSec, forKey: "skip_back") } }
     @Published var skipForwardSec: Int { didSet { d.set(skipForwardSec, forKey: "skip_fwd") } }
     @Published var contextualRadio: Bool { didSet { d.set(contextualRadio, forKey: "contextual_radio") } }
+    /// 语音转文字:开启后播放页出现"转录"轮播页。默认关(需 macOS 26 + 首次下载语言模型)。
+    @Published var transcriptionEnabled: Bool { didSet { d.set(transcriptionEnabled, forKey: "transcription_enabled") } }
     /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。
     @Published var language: String {
         didSet {
@@ -191,6 +193,7 @@ enum AppSupport {
         skipBackSec = d.object(forKey: "skip_back") as? Int ?? 10
         skipForwardSec = d.object(forKey: "skip_fwd") as? Int ?? 30
         contextualRadio = d.object(forKey: "contextual_radio") as? Bool ?? false
+        transcriptionEnabled = d.object(forKey: "transcription_enabled") as? Bool ?? false
         language = d.string(forKey: "app_language") ?? ""
     }
 }

@@ -93,6 +93,7 @@ struct NowPlayingBar: View {
                 .environmentObject(env)
                 .environmentObject(player)
                 .environmentObject(settings)
+                .environmentObject(env.transcripts)
         }
         .sheet(isPresented: $showQueue) {
             QueueView()

@@ -186,3 +186,21 @@
 "发送日志到开发者邮箱" = "Email logs to developer";
 "余音 macOS 日志反馈" = "Reverb macOS log feedback";
 "请描述你遇到的问题:\n\n\n——\n余音 macOS v%@ · %@" = "Please describe the problem you encountered:\n\n\n——\nReverb macOS v%@ · %@";
+
+/* 语音转文字(转录页) */
+"语音转文字" = "Speech to Text";
+"在播放页新增「转录」页,完全离线转录当前单集(需 macOS 26,首次按语言下载模型)" = "Adds a Transcript page in the player to transcribe the current episode fully offline (requires macOS 26; the language model downloads once).";
+"简介" = "Show Notes";
+"暂无简介" = "No show notes";
+"转录" = "Transcript";
+"中文" = "Chinese";
+"正在准备音频…" = "Preparing audio…";
+"正在下载语言模型…" = "Downloading language model…";
+"该语言暂不支持转录" = "This language isn't supported for transcription";
+"需要 macOS 26" = "Requires macOS 26";
+"把这集音频离线转成文字" = "Transcribe this episode's audio offline";
+"生成转录" = "Transcribe";
+"正在识别…" = "Transcribing…";
+"音频地址无效" = "Invalid audio URL";
+"音频下载失败" = "Audio download failed";
+"转录失败,点按重试" = "Transcription failed. Tap to retry";

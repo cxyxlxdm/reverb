@@ -99,6 +99,10 @@ private struct SettingsForm: View {
                 Picker("快进", selection: $settings.skipForwardSec) {
                     ForEach(skipForwardOptions, id: \.self) { Text("\($0) 秒").tag($0) }
                 }
+                Toggle("语音转文字", isOn: $settings.transcriptionEnabled)
+                Text("在播放页新增「转录」页,完全离线转录当前单集(需 macOS 26,首次按语言下载模型)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("足迹") {

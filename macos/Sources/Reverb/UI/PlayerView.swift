@@ -12,6 +12,7 @@ struct PlayerView: View {
     @State private var showStamps = false
     @State private var momentURL: URL?
     @State private var momentArtwork: NSImage?
+    @State private var page: Int? = 0   // 轮播当前页(macOS 14+)
 
     private let sleepMinutes = [15, 30, 45, 60]
     private let seals: [(seal: String, label: String)] = [
@@ -26,16 +27,10 @@ struct PlayerView: View {
         VStack(spacing: 0) {
             header
             if let ep = player.current {
-                ScrollView {
-                    VStack(spacing: 28) {
-                        artwork(ep)
-                        titleBlock(ep)
-                        seekBar
-                        controls
-                        actionRow(ep)
-                    }
-                    .padding(.horizontal, 36)
-                    .padding(.vertical, 32)
+                if #available(macOS 14, *) {
+                    carousel(ep)
+                } else {
+                    playerPage(ep)   // 老系统:仅播放页,无轮播
                 }
             } else {
                 Spacer()
@@ -45,6 +40,75 @@ struct PlayerView: View {
         }
         .frame(minWidth: 420, minHeight: 560)
         .noFocusRing()
+    }
+
+    // MARK: - 轮播:播放 / 简介 / 转录
+
+    /// 横滑分页(macOS 14+)。转录页仅在设置开启时出现。
+    @available(macOS 14, *)
+    private func carousel(_ ep: Episode) -> some View {
+        let showTranscript = env.settings.transcriptionEnabled
+        let count = showTranscript ? 3 : 2
+        return VStack(spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 0) {
+                    playerPage(ep).containerRelativeFrame(.horizontal).id(0)
+                    showNotePage(ep).containerRelativeFrame(.horizontal).id(1)
+                    if showTranscript {
+                        TranscriptPage(episode: ep, accent: accent)
+                            .containerRelativeFrame(.horizontal).id(2)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.paging)
+            .scrollPosition(id: $page)
+            dots(count: count).padding(.bottom, 10)
+        }
+    }
+
+    private func playerPage(_ ep: Episode) -> some View {
+        ScrollView {
+            VStack(spacing: 28) {
+                artwork(ep)
+                titleBlock(ep)
+                seekBar
+                controls
+                actionRow(ep)
+            }
+            .padding(.horizontal, 36)
+            .padding(.vertical, 32)
+        }
+    }
+
+    private func showNotePage(_ ep: Episode) -> some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("简介").font(.headline)
+                let text = Fmt.plainText(ep.description)
+                if text.isEmpty {
+                    Text("暂无简介").font(.callout).foregroundStyle(.secondary)
+                } else {
+                    Text(text)
+                        .font(.body).foregroundStyle(.secondary).lineSpacing(3)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 32)
+            .padding(.vertical, 24)
+        }
+    }
+
+    private func dots(count: Int) -> some View {
+        HStack(spacing: 7) {
+            ForEach(0..<count, id: \.self) { i in
+                Circle()
+                    .fill(i == (page ?? 0) ? accent : Color.secondary.opacity(0.35))
+                    .frame(width: 7, height: 7)
+            }
+        }
     }
 
     private var header: some View {
