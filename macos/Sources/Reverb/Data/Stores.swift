@@ -193,7 +193,7 @@ enum AppSupport {
         skipBackSec = d.object(forKey: "skip_back") as? Int ?? 10
         skipForwardSec = d.object(forKey: "skip_fwd") as? Int ?? 30
         contextualRadio = d.object(forKey: "contextual_radio") as? Bool ?? false
-        transcriptionEnabled = d.object(forKey: "transcription_enabled") as? Bool ?? false
+        transcriptionEnabled = d.object(forKey: "transcription_enabled") as? Bool ?? true
         language = d.string(forKey: "app_language") ?? ""
     }
 }

@@ -59,13 +59,23 @@ enum Fmt {
             : String(format: NSLocalizedString("%lld 分钟", comment: ""), Int64(m))
     }
 
-    /// 去除 HTML 标签与常见实体,得到干净纯文本(RSS 简介常含 HTML)。
+    /// 去除 HTML 标签与常见实体,得到干净文本(RSS 简介常含 HTML)。
+    /// 保留段落/换行:<br> 与块级标签转为换行,避免整段糊成一坨。
     static func plainText(_ raw: String) -> String {
-        var s = raw.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        var s = raw
+        // 换行标签 + 块级标签(开/闭)→ 换行,保留结构
+        s = s.replacingOccurrences(of: "(?i)<br\\s*/?>", with: "\n", options: .regularExpression)
+        s = s.replacingOccurrences(of: "(?i)</?(p|div|li|ul|ol|h[1-6]|tr|blockquote|section)[^>]*>",
+                                    with: "\n", options: .regularExpression)
+        // 去掉其余标签
+        s = s.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
         let entities = ["&nbsp;": " ", "&amp;": "&", "&lt;": "<", "&gt;": ">",
                         "&quot;": "\"", "&#39;": "'", "&apos;": "'", "&mdash;": "—", "&hellip;": "…"]
         for (k, v) in entities { s = s.replacingOccurrences(of: k, with: v) }
-        s = s.replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        // 行内空白压缩(不动换行);去掉行首尾空格;多余空行收敛为最多一个空行
+        s = s.replacingOccurrences(of: "[ \\t]+", with: " ", options: .regularExpression)
+        s = s.replacingOccurrences(of: " *\\n *", with: "\n", options: .regularExpression)
+        s = s.replacingOccurrences(of: "\\n{3,}", with: "\n\n", options: .regularExpression)
         return s.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
