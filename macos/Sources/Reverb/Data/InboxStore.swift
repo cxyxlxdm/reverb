@@ -87,9 +87,17 @@ import Foundation
             }
         }
 
-        episodes = merged   // 最终一次性替换:靠 id diff,已有条目位置稳定,不跳动
-        persist()
-        loadedSignature = Self.signature(subscriptions)
+        // 一次性原子替换(靠 id diff,已有条目位置稳定不跳动)+ 落盘。
+        // 若全部源失败/超时(merged 为空)且已有缓存,则不用空列表覆盖,避免一次刷新失败把
+        // 「最新」清空,并且不标记已加载,以便下次切回分段时重试。
+        if !merged.isEmpty {
+            episodes = merged
+            persist()
+            loadedSignature = Self.signature(subscriptions)
+        } else if !hasCache {
+            episodes = merged
+            loadedSignature = Self.signature(subscriptions)
+        }
         Log.i("Inbox", "刷新最新 → 收集 \(rawCount) 展示 \(episodes.count) \(Log.ms(t0))")
     }
 
