@@ -13,11 +13,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -27,6 +26,9 @@ import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 
 /**
  * 「最新」列表主体:合并所有订阅的最新单集。缓存秒显 + 进入即后台刷新 + 下拉刷新。
@@ -56,22 +58,26 @@ fun InboxBody() {
             firstLoading = false
         }
     }
-    // 下拉刷新:增量刷新会持续较久(要等各源),故指示器只短暂显示即收起,刷新在后台继续增量填充,
-    // 避免"内容早出来了圈还在转"的卡死观感。刷新放在长生命周期 scope,不随指示器收起被取消。
-    val scope = rememberCoroutineScope()
+    // 下拉刷新:与「发现」页同款实现。最短可见 600ms(避免一闪而过),刷新完(InboxStore 已保证
+    // 有缓存时不坍缩、末尾原子替换)在 finally 收起指示器,异常也收起,杜绝圆圈卡死。
     if (pullState.isRefreshing) {
         LaunchedEffect(true) {
-            scope.launch {
-                try { container.inboxStore.refresh(subs, container.repository) } catch (_: Exception) {}
+            try {
+                coroutineScope {
+                    val fetch = async { container.inboxStore.refresh(subs, container.repository) }
+                    delay(600)
+                    fetch.await()
+                }
+            } finally {
+                pullState.endRefresh()
             }
-            kotlinx.coroutines.delay(700)
-            pullState.endRefresh()
         }
     }
 
     Box(
         Modifier
             .fillMaxSize()
+            .clipToBounds() // 裁掉静止态越界露出的指示器(圆圈常驻的根因)
             .nestedScroll(pullState.nestedScrollConnection)
     ) {
         when {

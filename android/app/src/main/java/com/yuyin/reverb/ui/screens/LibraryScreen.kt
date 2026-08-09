@@ -1,5 +1,6 @@
 package com.yuyin.reverb.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +16,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.GridView
@@ -29,9 +32,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,13 +53,14 @@ import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.PodcastGridItem
 import com.yuyin.reverb.ui.components.PodcastListItem
+import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val history by container.historyStore.history.collectAsStateWithLifecycle()
     val subsGrid by container.settingsStore.subsGrid.collectAsStateWithLifecycle()
-    var section by remember { mutableIntStateOf(0) }
     // 订阅 / 最新 / 收藏 / 下载 / 历史。「最新」= 全部订阅的更新聚合,归入音阁。
     val sections = listOf(
         stringResource(R.string.lib_subscriptions),
@@ -65,6 +69,10 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
         stringResource(R.string.lib_downloads),
         stringResource(R.string.lib_history)
     )
+    // 分段用 HorizontalPager 承载,可横滑切换;chips 与 pager 双向联动。
+    val pagerState = rememberPagerState(pageCount = { sections.size })
+    val section = pagerState.currentPage
+    val scope = rememberCoroutineScope()
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
@@ -83,7 +91,7 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
                 itemsIndexed(sections) { i, s ->
                     FilterChip(
                         selected = section == i,
-                        onClick = { section = i },
+                        onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
                         label = { Text(s) },
                         modifier = Modifier.padding(end = 8.dp),
                         colors = FilterChipDefaults.filterChipColors(
@@ -120,8 +128,11 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit) {
             }
         }
 
-        Box(Modifier.fillMaxWidth().weight(1f)) {
-            when (section) {
+        HorizontalPager(
+            state = pagerState,
+            modifier = Modifier.fillMaxWidth().weight(1f)
+        ) { page ->
+            when (page) {
                 0 -> SubscriptionsSection(subsGrid, onOpen)
                 1 -> InboxBody()
                 2 -> FavoritesSection()
