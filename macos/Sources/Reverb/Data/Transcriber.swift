@@ -2,11 +2,20 @@ import Foundation
 import AVFoundation
 import Speech
 
+/// 词级时间(卡拉OK同步)。text 为该 run 的原始子串(含原有空格),拼接可还原整句。
+struct TranscribedWord: Sendable, Codable, Equatable {
+    let text: String
+    let startMs: Int
+    let endMs: Int
+}
+
 /// 一句转录结果:文本 + 起止毫秒(用于按播放进度高亮)。
+/// words 为词级时间;老缓存无此字段时为 nil,回退整句高亮。
 struct TranscribedSegment: Sendable, Codable, Equatable {
     let text: String
     let startMs: Int
     let endMs: Int
+    var words: [TranscribedWord]? = nil
 }
 
 /// 离线语音转文字封装,基于 macOS 26 的 SpeechAnalyzer / SpeechTranscriber。
@@ -39,7 +48,7 @@ enum Transcriber {
                 do {
                     let transcriber = SpeechTranscriber(
                         locale: locale, transcriptionOptions: [],
-                        reportingOptions: [.volatileResults], attributeOptions: [])
+                        reportingOptions: [.volatileResults], attributeOptions: [.audioTimeRange])
 
                     // 确保语言模型已安装(nil = 已装)。系统级、一次性。
                     if let request = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
@@ -55,8 +64,18 @@ enum Transcriber {
                             guard !text.isEmpty else { continue }
                             if result.isFinal {
                                 let start = ms(result.range.start.seconds)
+                                // 词级时间:从 AttributedString 各 run 的 audioTimeRange 提取
+                                var words: [TranscribedWord] = []
+                                for run in result.text.runs {
+                                    guard let tr = run[AttributeScopes.SpeechAttributes.TimeRangeAttribute.self] else { continue }
+                                    let w = String(result.text[run.range].characters)
+                                    guard !w.isEmpty else { continue }
+                                    let ws = ms(tr.start.seconds)
+                                    words.append(TranscribedWord(text: w, startMs: ws, endMs: max(ms(tr.end.seconds), ws)))
+                                }
                                 continuation.yield(.segment(TranscribedSegment(
-                                    text: text, startMs: start, endMs: max(ms(result.range.end.seconds), start))))
+                                    text: text, startMs: start, endMs: max(ms(result.range.end.seconds), start),
+                                    words: words.isEmpty ? nil : words)))
                             } else {
                                 continuation.yield(.volatile(text))   // 未定稿:实时尾巴
                             }

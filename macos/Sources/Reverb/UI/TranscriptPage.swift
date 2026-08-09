@@ -118,14 +118,25 @@ struct TranscriptPage: View {
         .frame(maxWidth: .infinity)
     }
 
+    /// 单句渲染:当前句做词级卡拉OK(已读到的词用强调色),已读句变暗,未读句正常。
+    private func lineView(idx: Int, seg: TranscribedSegment) -> Text {
+        let cur = currentIndex
+        if idx == cur, let words = seg.words, !words.isEmpty {
+            return words.reduce(Text("")) { acc, w in
+                acc + Text(w.text).foregroundColor(player.positionMs >= w.startMs ? accent : .primary)
+            }
+        }
+        let color: Color = idx == cur ? accent : (idx < (cur ?? -1) ? .secondary : .primary)
+        return Text(seg.text).foregroundColor(color)
+    }
+
     private func transcriptList(runningTail: Bool) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 10) {
                     ForEach(Array(transcripts.segments.enumerated()), id: \.offset) { idx, seg in
-                        Text(seg.text)
+                        lineView(idx: idx, seg: seg)
                             .font(.body)
-                            .foregroundStyle(idx == currentIndex ? accent : .primary)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .contentShape(Rectangle())
                             .onTapGesture { player.seek(toMs: seg.startMs) }
