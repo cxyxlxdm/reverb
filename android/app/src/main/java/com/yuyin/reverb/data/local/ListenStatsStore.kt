@@ -97,6 +97,9 @@ class ListenStatsStore(context: Context) {
     }
 
     companion object {
+        /** 历史估算种子的分账键（所有设备共用一格，合并取 max ⇒ 估算不会跨设备翻倍）。 */
+        const val SEED_KEY = "seed"
+
         /** 频道键：feedUrl 非空优先，否则频道名。 */
         fun keyFor(e: Episode): String = e.feedUrl.ifBlank { e.podcastTitle }
     }
@@ -164,8 +167,11 @@ class ListenStatsStore(context: Context) {
     }
 
     /**
-     * 首启种子：无既有统计时，用现有历史（每集 played?durationMs:positionMs）
-     * 按频道求和做近似初值，记在本机名下；此后按实际播放精确累加。
+     * 首启种子：无既有统计时，用现有历史（每集 played?durationMs:positionMs）按频道求和做近似初值。
+     *
+     * 注意：种子记在**固定的 SEED_KEY 格**而非本机格。因为历史本身会被备份合并，两台设备可能
+     * 从同一份历史各自种子；若记在各自名下就会相加翻倍。共用一格 + 合并取 max ⇒ 取较大的估算值，
+     * 不会重复统计（代价：两台设备听的是完全不同的旧内容时，估算会偏保守）。
      */
     fun seedFromHistory(history: List<HistoryEntry>) {
         synchronized(lock) {
@@ -177,7 +183,7 @@ class ListenStatsStore(context: Context) {
                 val k = keyFor(h.episode)
                 val cur = table[k] ?: ChannelListen(k, h.episode.podcastTitle, h.episode.artworkUrl, h.episode.feedUrl)
                 val pd = HashMap(cur.perDevice)
-                pd[deviceId] = (pd[deviceId] ?: 0L) + ms
+                pd[SEED_KEY] = (pd[SEED_KEY] ?: 0L) + ms
                 table[k] = cur.copy(perDevice = pd)
             }
             com.yuyin.reverb.util.Logger.i("ListenStats", "seed ${table.size} channels")

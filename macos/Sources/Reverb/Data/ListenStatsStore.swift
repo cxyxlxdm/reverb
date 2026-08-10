@@ -43,6 +43,9 @@ import Foundation
         Log.i("Store", "收听时长加载 \(table.count) 个频道 device=\(deviceId.prefix(8)) 迁移=\(migrated)")
     }
 
+    /// 历史估算种子的分账键(所有设备共用一格,合并取 max ⇒ 估算不会跨设备翻倍)。
+    static let seedKey = "seed"
+
     /// 频道键:feedUrl 非空优先,否则频道名。
     static func key(for e: Episode) -> String {
         e.feedUrl.isEmpty ? e.podcastTitle : e.feedUrl
@@ -104,8 +107,11 @@ import Foundation
         publish()
     }
 
-    /// 首启种子:无既有统计时,用现有历史(每集 played?durationMs:positionMs)
-    /// 按频道求和做近似初值,记在本机名下;此后按实际播放精确累加。
+    /// 首启种子:无既有统计时,用现有历史(每集 played?durationMs:positionMs)按频道求和做近似初值。
+    ///
+    /// 注意:种子记在**固定的 "seed" 格**而非本机格。因为历史本身会被备份合并,两台设备可能
+    /// 从同一份历史各自种子;若记在各自名下就会相加翻倍。共用一格 + 合并取 max ⇒ 取较大的估算值,
+    /// 不会重复统计(代价:两台设备听的是完全不同的旧内容时,估算会偏保守)。
     func seedFromHistory(_ history: [HistoryEntry]) {
         guard table.isEmpty else { return }
         guard !history.isEmpty else { return }
@@ -116,7 +122,7 @@ import Foundation
             var cur = table[k] ?? ChannelListen(key: k, title: h.episode.podcastTitle,
                                                 artworkUrl: h.episode.artworkUrl,
                                                 feedUrl: h.episode.feedUrl)
-            cur.perDevice[deviceId, default: 0] += ms
+            cur.perDevice[Self.seedKey, default: 0] += ms
             table[k] = cur
         }
         Log.i("Store", "收听时长种子 \(table.count) 个频道")
