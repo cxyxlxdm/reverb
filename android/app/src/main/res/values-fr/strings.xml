@@ -24,6 +24,13 @@
     <string name="set_footprint">Empreinte d\'écoute</string>
     <string name="set_footprint_sub">Tous vos sceaux réunis en une affiche</string>
     <string name="footprint_title">Empreinte d\'écoute</string>
+    <string name="listen_stats_title">Temps d\'écoute</string>
+    <string name="listen_stats_empty">Aucun historique d\'écoute</string>
+    <string name="listened_prefix">Écouté %1$s</string>
+    <string name="listen_hm">%1$d h %2$d min</string>
+    <string name="listen_m">%1$d min</string>
+    <string name="listen_lt1m">Moins d\'1 min</string>
+    <string name="unknown_channel">Chaîne inconnue</string>
     <string name="footprint_share">Partager l\'empreinte</string>
     <string name="footprint_empty">Aucun sceau. Terminez un épisode et scellez-le depuis le menu Plus du lecteur</string>
     <string name="radio_next">Suivant</string>

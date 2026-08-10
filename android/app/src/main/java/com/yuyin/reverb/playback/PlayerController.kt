@@ -36,6 +36,10 @@ object PlayerController {
     private var pending: Episode? = null
     private var history: HistoryStore? = null
     private var settings: SettingsStore? = null
+    private var listenStats: com.yuyin.reverb.data.local.ListenStatsStore? = null
+    // 累计收听时长的基线：仅统计“同一集、播放中、合理正向增量”的内容毫秒
+    private var lastCountedPosMs = 0L
+    private var lastCountedEpId = ""
     private var pendingSeekMs: Long = 0
     private var tickCount = 0
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
@@ -154,6 +158,8 @@ object PlayerController {
 
     fun bindHistory(h: HistoryStore) { history = h }
 
+    fun bindListenStats(s: com.yuyin.reverb.data.local.ListenStatsStore) { listenStats = s }
+
     fun bindSettings(s: SettingsStore) {
         settings = s
         _speed.value = s.defaultSpeed.value // 启动即套用默认倍速
@@ -184,7 +190,7 @@ object PlayerController {
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _isPlaying.value = isPlaying
-            if (isPlaying) startTicker() else { stopTicker(); saveProgress() }
+            if (isPlaying) startTicker() else { stopTicker(); saveProgress(); listenStats?.flush() }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -213,6 +219,7 @@ object PlayerController {
                     history?.updatePosition(it.id, 0, c?.duration ?: 0)
                     history?.markPlayed(it.id, true)
                 }
+                listenStats?.flush()
                 when {
                     stopAfterThis -> Unit
                     // 电台模式:本集播完自动抓下一首随机节目续播
@@ -291,6 +298,9 @@ object PlayerController {
         _duration.value = 0
         history?.record(episode, System.currentTimeMillis())
         pendingSeekMs = history?.positionFor(episode.id) ?: 0L
+        listenStats?.flush()   // 结算上一集残余
+        lastCountedEpId = episode.id     // 统计基线对齐续播起点，避免把 resume 跳转记成收听
+        lastCountedPosMs = pendingSeekMs
 
         val local = DownloadManager.localPath(episode.id)
         val useLocal = local != null && File(local).exists()
@@ -460,6 +470,21 @@ object PlayerController {
         history?.updatePosition(ep.id, c.currentPosition.coerceAtLeast(0), if (c.duration > 0) c.duration else 0)
     }
 
+    /**
+     * 累计“实际播放过的内容毫秒”：仅当同一集、播放中、且增量为合理正向值(1..3000ms)时计入。
+     * 快进/快退的大跳变(越界)与暂停(增量≈0)自然被剔除；倍速下按内容时长计。
+     */
+    private fun countListening() {
+        val ep = _current.value ?: run { lastCountedEpId = ""; return }
+        val pos = _position.value
+        if (ep.id == lastCountedEpId) {
+            val delta = pos - lastCountedPosMs
+            if (_isPlaying.value && delta in 1L..3000L) listenStats?.add(ep, delta)
+        }
+        lastCountedPosMs = pos
+        lastCountedEpId = ep.id
+    }
+
     private fun syncOnce() {
         val c = controller ?: return
         _isPlaying.value = c.isPlaying
@@ -482,6 +507,7 @@ object PlayerController {
             val c = controller ?: return
             _position.value = c.currentPosition.coerceAtLeast(0)
             if (c.duration > 0) _duration.value = c.duration
+            countListening()
             tickCount++
             if (tickCount % 10 == 0) saveProgress() // 每约 5 秒落一次进度
             if (c.isPlaying) handler.postDelayed(this, 500)

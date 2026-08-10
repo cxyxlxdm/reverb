@@ -24,6 +24,13 @@
     <string name="set_footprint">Huella de escucha</string>
     <string name="set_footprint_sub">Todos tus sellos, reunidos en un póster</string>
     <string name="footprint_title">Huella de escucha</string>
+    <string name="listen_stats_title">Tiempo de escucha</string>
+    <string name="listen_stats_empty">Aún no hay registros de escucha</string>
+    <string name="listened_prefix">Escuchado %1$s</string>
+    <string name="listen_hm">%1$d h %2$d min</string>
+    <string name="listen_m">%1$d min</string>
+    <string name="listen_lt1m">Menos de 1 min</string>
+    <string name="unknown_channel">Canal desconocido</string>
     <string name="footprint_share">Compartir huella</string>
     <string name="footprint_empty">Aún no hay sellos. Termina un episodio y séllalo desde el menú Más del reproductor</string>
     <string name="radio_next">Siguiente</string>

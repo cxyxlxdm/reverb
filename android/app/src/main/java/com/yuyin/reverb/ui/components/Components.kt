@@ -68,6 +68,15 @@ fun formatTime(ms: Long): String {
 
 fun formatDurationSec(sec: Long): String = if (sec <= 0) "" else formatTime(sec * 1000)
 
+/** 人类可读的累计时长:"X 小时 Y 分" / "Y 分钟" / "小于 1 分钟"(用于收听时长展示)。 */
+@Composable
+fun formatListenDuration(sec: Long): String {
+    if (sec < 60) return stringResource(R.string.listen_lt1m)
+    val m = sec / 60
+    return if (m >= 60) stringResource(R.string.listen_hm, m / 60, m % 60)
+    else stringResource(R.string.listen_m, m)
+}
+
 @Composable
 fun Artwork(url: String, size: Int, corner: Int = 12) {
     val shape = RoundedCornerShape(corner.dp)

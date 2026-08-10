@@ -11,6 +11,7 @@ import com.yuyin.reverb.data.local.DownloadStore
 import com.yuyin.reverb.data.local.FavoriteStore
 import com.yuyin.reverb.data.local.HistoryStore
 import com.yuyin.reverb.data.local.InboxStore
+import com.yuyin.reverb.data.local.ListenStatsStore
 import com.yuyin.reverb.data.local.PopularCacheStore
 import com.yuyin.reverb.data.local.RegionStore
 import com.yuyin.reverb.data.local.SettingsStore
@@ -44,6 +45,7 @@ class AppContainer(app: Application) {
     val categoryStore = CategoryStore(app)
     val downloadStore = DownloadStore(app)
     val historyStore = HistoryStore(app)
+    val listenStatsStore = ListenStatsStore(app)
     val favoriteStore = FavoriteStore(app)
     val stampStore = StampStore(app)
     val updateStore = UpdateStore(app)
@@ -67,6 +69,8 @@ class ReverbApp : Application() {
         DownloadManager.init(this, container.httpClient, container.downloadStore, container.settingsStore)
         PlayerController.bindHistory(container.historyStore)
         PlayerController.bindSettings(container.settingsStore)
+        PlayerController.bindListenStats(container.listenStatsStore)
+        container.listenStatsStore.seedFromHistory(container.historyStore.history.value)
         Notifications.ensureChannel(this)
         val updatesEnabled = container.settingsStore.updatesEnabled.value
         if (updatesEnabled) scheduleFeedUpdates(this) else cancelFeedUpdates(this)

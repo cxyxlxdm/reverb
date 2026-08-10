@@ -24,6 +24,13 @@
     <string name="set_footprint">Listening footprint</string>
     <string name="set_footprint_sub">All your stamps, gathered into one poster</string>
     <string name="footprint_title">Listening footprint</string>
+    <string name="listen_stats_title">Listening time</string>
+    <string name="listen_stats_empty">No listening records yet</string>
+    <string name="listened_prefix">Listened %1$s</string>
+    <string name="listen_hm">%1$d h %2$d min</string>
+    <string name="listen_m">%1$d min</string>
+    <string name="listen_lt1m">Less than 1 min</string>
+    <string name="unknown_channel">Unknown channel</string>
     <string name="footprint_share">Share footprint</string>
     <string name="footprint_empty">No stamps yet. Finish an episode and stamp it from the player\'s More menu</string>
     <string name="radio_next">Next</string>

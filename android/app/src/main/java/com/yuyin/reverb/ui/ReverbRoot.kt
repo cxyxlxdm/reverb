@@ -43,6 +43,7 @@ import com.yuyin.reverb.ui.screens.AboutScreen
 import com.yuyin.reverb.ui.screens.DiscoverScreen
 import com.yuyin.reverb.ui.screens.LibraryScreen
 import com.yuyin.reverb.ui.screens.LicensesScreen
+import com.yuyin.reverb.ui.screens.ListenStatsScreen
 import com.yuyin.reverb.ui.screens.PlayerScreen
 import com.yuyin.reverb.ui.screens.PodcastDetailScreen
 import com.yuyin.reverb.ui.screens.QueueScreen
@@ -118,6 +119,7 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
             }
         }
         composable("footprint") { FullScreen { StampsScreen(onBack = { rootNav.popBackStack() }) } }
+        composable("listen_stats") { FullScreen { ListenStatsScreen(onBack = { rootNav.popBackStack() }) } }
         composable("about") { FullScreen { AboutScreen(onBack = { rootNav.popBackStack() }) } }
         composable("licenses") { FullScreen { LicensesScreen(onBack = { rootNav.popBackStack() }) } }
     }
@@ -209,7 +211,8 @@ private fun MainShell(rootNav: NavHostController) {
             composable("library") {
                 LibraryScreen(
                     onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
-                    onOpenSettings = { rootNav.navigate("settings") }
+                    onOpenSettings = { rootNav.navigate("settings") },
+                    onOpenListenStats = { rootNav.navigate("listen_stats") }
                 )
             }
         }

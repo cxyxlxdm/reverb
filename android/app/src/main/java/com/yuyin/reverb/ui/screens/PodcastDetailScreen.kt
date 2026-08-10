@@ -54,6 +54,7 @@ import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.PodcastState
 import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.formatListenDuration
 import com.yuyin.reverb.ui.podcastViewModel
 
 @Composable
@@ -67,6 +68,7 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val downloadStates by DownloadManager.states.collectAsStateWithLifecycle()
     val history by container.historyStore.history.collectAsStateWithLifecycle()
+    val listenStats by container.listenStatsStore.stats.collectAsStateWithLifecycle()
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -90,9 +92,12 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
                     item {
+                        val channelKey = s.podcast.feedUrl.ifBlank { s.podcast.title }
+                        val listenedMs = listenStats.firstOrNull { it.key == channelKey }?.listenedMs ?: 0L
                         PodcastDetailHeader(
                             podcast = s.podcast,
                             episodeCount = s.episodes.size,
+                            listenedMs = listenedMs,
                             subscribed = subscribed,
                             onSubscribe = { container.subscriptionStore.toggle(s.podcast) }
                         )
@@ -123,6 +128,7 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
 private fun PodcastDetailHeader(
     podcast: Podcast,
     episodeCount: Int,
+    listenedMs: Long,
     subscribed: Boolean,
     onSubscribe: () -> Unit
 ) {
@@ -203,6 +209,14 @@ private fun PodcastDetailHeader(
             style = MaterialTheme.typography.titleSmall,
             color = MaterialTheme.colorScheme.onBackground
         )
+        if (listenedMs > 0) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                stringResource(R.string.listened_prefix, formatListenDuration(listenedMs / 1000)),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
 

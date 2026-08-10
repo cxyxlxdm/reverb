@@ -55,3 +55,12 @@ data class HistoryEntry(
     val updatedAt: Long,
     val played: Boolean = false
 )
+
+/** 单个频道的累计收听时长（累计“实际播放过的内容毫秒”）。key：feedUrl 非空优先，否则频道名。 */
+data class ChannelListen(
+    val key: String,
+    val title: String,
+    val artworkUrl: String,
+    val feedUrl: String,
+    val listenedMs: Long
+)

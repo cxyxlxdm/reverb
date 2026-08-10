@@ -24,6 +24,13 @@
     <string name="set_footprint">听觉足迹</string>
     <string name="set_footprint_sub">你盖下的所有印记，汇成一张足迹图</string>
     <string name="footprint_title">听觉足迹</string>
+    <string name="listen_stats_title">收听时长</string>
+    <string name="listen_stats_empty">还没有收听记录</string>
+    <string name="listened_prefix">已收听 %1$s</string>
+    <string name="listen_hm">%1$d 小时 %2$d 分</string>
+    <string name="listen_m">%1$d 分钟</string>
+    <string name="listen_lt1m">小于 1 分钟</string>
+    <string name="unknown_channel">未知频道</string>
     <string name="footprint_share">分享足迹</string>
     <string name="footprint_empty">还没有印记。听完一集，在播放页「更多」里盖一枚吧</string>
     <string name="radio_next">下一首</string>
