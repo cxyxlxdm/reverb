@@ -17,6 +17,8 @@ final class AppEnvironment: ObservableObject {
     let downloadManager: DownloadManager
     // 转录:高频 append,不转发到 env(由 TranscriptPage 直接观察),避免整树重渲。
     let transcripts = TranscriptStore()
+    // 收听时长:播放中约每 5s 才刷新一次,单独注入、由相关页面直接观察,不转发到 env。
+    let listenStats = ListenStatsStore()
 
     init() {
         let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
@@ -25,6 +27,8 @@ final class AppEnvironment: ObservableObject {
 
         downloadManager = DownloadManager(store: downloads)
         player.bind(history: history, settings: settings)
+        player.bindListenStats(listenStats)
+        listenStats.seedFromHistory(history.history)   // 首启用历史近似种子(仅当无既有统计)
         player.localFileProvider = { [downloads] ep in downloads.localURL(ep.id) }
 
         // 把低频本地存储的变更转发到自身,使观察 env 的视图能即时刷新(订阅/收藏/印记/历史/下载)。

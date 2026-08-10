@@ -37,6 +37,10 @@ final class PlayerController: ObservableObject {
 
     private var history: HistoryStore?
     private var settings: SettingsStore?
+    private var listenStats: ListenStatsStore?
+    // 累计收听时长的基线:仅统计"同一集、播放中、合理正向增量"的内容毫秒
+    private var lastCountedPosMs = 0
+    private var lastCountedEpId = ""
     /// 下载模块注入:给定单集,若已离线下载则返回本地文件 URL,优先本地播放。
     var localFileProvider: ((Episode) -> URL?)?
 
@@ -69,6 +73,7 @@ final class PlayerController: ObservableObject {
                 self.buffering = (status == .waitingToPlayAtSpecifiedRate)
                 self.isPlaying = (status == .playing)
                 if self.tickCount % 10 == 0 { self.saveProgress() }
+                if !self.isPlaying { self.listenStats?.flush() }   // 暂停即落盘累计时长
                 self.updateNowPlaying()
             }
         setupRemoteCommands()
@@ -138,6 +143,8 @@ final class PlayerController: ObservableObject {
         self.speed = settings.defaultSpeed
     }
 
+    func bindListenStats(_ s: ListenStatsStore) { self.listenStats = s }
+
     // MARK: - 播放入口
 
     /// 单集(无上下文)。
@@ -173,8 +180,12 @@ final class PlayerController: ObservableObject {
         current = episode
         positionMs = 0
         durationMs = 0
+        listenStats?.flush()   // 结算上一集残余
         history?.record(episode, at: Date().timeIntervalSince1970)
         let resumeMs = history?.positionFor(episode.id) ?? 0
+        // 统计基线对齐到续播起点,避免把 resume 跳转记成收听
+        lastCountedEpId = episode.id
+        lastCountedPosMs = resumeMs
 
         let local = localFileProvider?(episode)
         guard let url = local ?? URL(string: episode.audioUrl) else {
@@ -456,6 +467,7 @@ final class PlayerController: ObservableObject {
         if let d = player.currentItem?.duration.seconds, d.isFinite, d > 0 {
             durationMs = Int(d * 1000)
         }
+        countListening()
         tickCount += 1
         if tickCount % 10 == 0 { saveProgress() }
         if tickCount % 4 == 0 { updateNowPlaying() } // 约每 2 秒同步系统 Now Playing 进度
@@ -475,6 +487,7 @@ final class PlayerController: ObservableObject {
                     self.history?.updatePosition(ep.id, positionMs: 0, durationMs: self.durationMs)
                     self.history?.markPlayed(ep.id, true)   // 自然播完:标记已播完
                 }
+                self.listenStats?.flush()
                 if stopAfter {
                     // 睡眠「本集结束」:到此为止,不续播
                 } else if self.radioMode {
@@ -490,5 +503,19 @@ final class PlayerController: ObservableObject {
     private func saveProgress() {
         guard let ep = current else { return }
         history?.updatePosition(ep.id, positionMs: max(0, positionMs), durationMs: max(0, durationMs))
+    }
+
+    /// 累计"实际播放过的内容毫秒":仅当同一集、播放中、且增量为合理正向值(1..3000ms)时计入。
+    /// 快进/快退的大跳变(越界)与暂停(增量≈0)自然被剔除;倍速下按内容时长计。
+    private func countListening() {
+        guard let ep = current else { lastCountedEpId = ""; return }
+        if ep.id == lastCountedEpId {
+            let delta = positionMs - lastCountedPosMs
+            if isPlaying && delta >= 1 && delta <= 3000 {
+                listenStats?.add(episode: ep, deltaMs: delta)
+            }
+        }
+        lastCountedPosMs = positionMs
+        lastCountedEpId = ep.id
     }
 }

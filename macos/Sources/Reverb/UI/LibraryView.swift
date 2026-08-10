@@ -18,6 +18,7 @@ struct LibraryView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @State private var segment: Segment = .subscriptions
     @State private var pendingDelete: Episode?
+    @State private var showListenStats = false
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin, maximum: Metrics.cardMax),
@@ -56,7 +57,18 @@ struct LibraryView: View {
             }
             Button("取消", role: .cancel) { pendingDelete = nil }
         }
+        .sheet(isPresented: $showListenStats) {
+            ListenStatsView()
+                .environmentObject(env.listenStats)
+                .environmentObject(settings)
+        }
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button { showListenStats = true } label: {
+                    Label("收听时长", systemImage: "chart.bar.xaxis")
+                }
+                .help("收听时长")
+            }
             if segment == .inbox {
                 ToolbarItem(placement: .primaryAction) {
                     Button {

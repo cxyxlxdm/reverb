@@ -204,3 +204,9 @@
 "音频地址无效" = "URL audio invalide";
 "音频下载失败" = "Échec du téléchargement audio";
 "转录失败,点按重试" = "Échec de la transcription. Touchez pour réessayer";
+
+// 收听时长
+"收听时长" = "Temps d'écoute";
+"已收听 %@" = "Écouté %@";
+"还没有收听记录" = "Aucun historique d'écoute";
+"未知频道" = "Chaîne inconnue";

@@ -204,3 +204,9 @@
 "音频地址无效" = "Invalid audio URL";
 "音频下载失败" = "Audio download failed";
 "转录失败,点按重试" = "Transcription failed. Tap to retry";
+
+// 收听时长
+"收听时长" = "Listening Time";
+"已收听 %@" = "Listened %@";
+"还没有收听记录" = "No listening records yet";
+"未知频道" = "Unknown channel";

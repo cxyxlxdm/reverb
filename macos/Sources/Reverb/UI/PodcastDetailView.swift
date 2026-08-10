@@ -7,6 +7,7 @@ struct PodcastDetailView: View {
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
+    @EnvironmentObject var listenStats: ListenStatsStore
 
     @State private var episodes: [Episode] = []
     @State private var loaded: Podcast?
@@ -14,6 +15,8 @@ struct PodcastDetailView: View {
 
     private var display: Podcast { loaded ?? podcast }
     private var accent: Color { Theme.accent(settings.accentIndex) }
+    /// 频道键:与 ListenStatsStore.key(for:) 一致(feedUrl 优先,回退频道名)。
+    private var channelKey: String { display.feedUrl.isEmpty ? display.title : display.feedUrl }
 
     var body: some View {
         ScrollView {
@@ -79,6 +82,13 @@ struct PodcastDetailView: View {
                 }
                 subscribeButton
                     .padding(.top, 4)
+                let listenedSec = listenStats.listenedMs(for: channelKey) / 1000
+                if listenedSec > 0 {
+                    Label("已收听 \(Fmt.duration(listenedSec))", systemImage: "headphones")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
                 let desc = Fmt.plainText(display.description)
                 if !desc.isEmpty {
                     Text(desc)

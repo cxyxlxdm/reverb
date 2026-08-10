@@ -204,3 +204,9 @@
 "音频地址无效" = "URL de audio no válida";
 "音频下载失败" = "Error al descargar el audio";
 "转录失败,点按重试" = "Error de transcripción. Toca para reintentar";
+
+// 收听时长
+"收听时长" = "Tiempo de escucha";
+"已收听 %@" = "Escuchado %@";
+"还没有收听记录" = "Aún no hay registros de escucha";
+"未知频道" = "Canal desconocido";

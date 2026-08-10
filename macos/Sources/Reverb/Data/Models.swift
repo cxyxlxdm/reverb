@@ -43,6 +43,17 @@ struct HistoryEntry: Codable, Identifiable, Hashable {
     var id: String { episode.id }
 }
 
+/// 单个频道的累计收听时长(累计"实际播放过的内容毫秒")。
+/// key 为频道键:feedUrl 非空时用它,否则回退频道名。
+struct ChannelListen: Codable, Identifiable, Hashable {
+    var key: String
+    var title: String
+    var artworkUrl: String
+    var feedUrl: String
+    var listenedMs: Int
+    var id: String { key }
+}
+
 /// 一枚听觉印记。
 struct Stamp: Codable, Identifiable, Hashable {
     var episodeId: String
