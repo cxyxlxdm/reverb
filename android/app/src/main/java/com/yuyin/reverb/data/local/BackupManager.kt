@@ -10,7 +10,7 @@ import org.json.JSONObject
  * 或从 JSON 选择性导入。每一项都可单独选择是否备份/恢复。
  */
 object BackupManager {
-    enum class Section { SUBSCRIPTIONS, FAVORITES, STAMPS, DOWNLOADS, HISTORY, SETTINGS }
+    enum class Section { SUBSCRIPTIONS, FAVORITES, STAMPS, DOWNLOADS, HISTORY, LISTEN_STATS, SETTINGS }
 
     private const val TAG = "Backup"
 
@@ -58,6 +58,12 @@ object BackupManager {
             }
             root.put("history", arr)
         }
+        if (Section.LISTEN_STATS in include) {
+            // 按设备分账导出;恢复时按设备取 max,故重复恢复不会重复统计
+            val arr = JSONArray()
+            container.listenStatsStore.snapshot().forEach { arr.put(ChannelListenJson.toJson(it)) }
+            root.put("listenStats", arr)
+        }
         if (Section.SETTINGS in include) {
             val s = container.settingsStore
             val obj = JSONObject()
@@ -92,6 +98,7 @@ object BackupManager {
             if (root.has("stamps")) add(Section.STAMPS)
             if (root.has("downloads")) add(Section.DOWNLOADS)
             if (root.has("history")) add(Section.HISTORY)
+            if (root.has("listenStats")) add(Section.LISTEN_STATS)
             if (root.has("settings")) add(Section.SETTINGS)
         }
     } catch (e: Exception) {
@@ -142,6 +149,18 @@ object BackupManager {
                 container.historyStore.record(ep, updatedAt)
                 container.historyStore.updatePosition(ep.id, o.optLong("positionMs"), o.optLong("durationMs"))
             }
+        }
+        if (Section.LISTEN_STATS in include) root.optJSONArray("listenStats")?.let { arr ->
+            // 按设备取 max 合并(幂等):重复恢复同一份备份不会重复累加,跨设备则自然汇总
+            val list = ArrayList<com.yuyin.reverb.data.model.ChannelListen>(arr.length())
+            val legacy = HashMap<String, Long>()
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val (c, legacyMs) = ChannelListenJson.parse(o)
+                list.add(c)
+                if (legacyMs > 0) legacy[c.key] = legacyMs
+            }
+            if (list.isNotEmpty()) container.listenStatsStore.merge(list, legacy)
         }
         var importedSettings = false
         if (Section.SETTINGS in include) root.optJSONObject("settings")?.let { s ->

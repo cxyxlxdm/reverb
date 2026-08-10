@@ -4,7 +4,7 @@ import Foundation
 enum BackupManager {
     /// 可备份的数据分区。
     enum Section: String, CaseIterable, Identifiable {
-        case subscriptions, favorites, stamps, downloads, history, settings
+        case subscriptions, favorites, stamps, downloads, history, listenStats, settings
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -13,6 +13,7 @@ enum BackupManager {
             case .stamps: return "听觉印记"
             case .downloads: return "下载"
             case .history: return "历史"
+            case .listenStats: return "收听时长"
             case .settings: return "设置"
             }
         }
@@ -38,6 +39,7 @@ enum BackupManager {
         var stamps: [Stamp]?
         var downloads: [Episode]?   // 仅保存单集元信息,恢复时重新下载
         var history: [HistoryEntry]?
+        var listenStats: [ChannelListen]?   // 按设备分账,恢复时按设备取 max(幂等)
         var settings: SettingsPayload?
     }
 
@@ -51,6 +53,7 @@ enum BackupManager {
         if include.contains(.stamps) { p.stamps = env.stamps.stamps }
         if include.contains(.downloads) { p.downloads = env.downloads.downloads.map { $0.episode } }
         if include.contains(.history) { p.history = env.history.history }
+        if include.contains(.listenStats) { p.listenStats = env.listenStats.snapshot() }
         if include.contains(.settings) {
             let s = env.settings
             p.settings = SettingsPayload(
@@ -79,6 +82,7 @@ enum BackupManager {
         if let v = p.stamps, !v.isEmpty { s.insert(.stamps) }
         if let v = p.downloads, !v.isEmpty { s.insert(.downloads) }
         if let v = p.history, !v.isEmpty { s.insert(.history) }
+        if let v = p.listenStats, !v.isEmpty { s.insert(.listenStats) }
         if p.settings != nil { s.insert(.settings) }
         return s
     }
@@ -102,6 +106,10 @@ enum BackupManager {
             for ep in toDownload { env.downloadManager.download(ep) }
         }
         if include.contains(.history), let v = p.history { Log.i("Backup", "恢复历史 \(v.count) 条"); mergeHistory(env, v) }
+        if include.contains(.listenStats), let v = p.listenStats {
+            Log.i("Backup", "恢复收听时长 \(v.count) 个频道")
+            env.listenStats.merge(v)
+        }
         if include.contains(.settings), let s = p.settings { Log.i("Backup", "恢复设置"); applySettings(env, s) }
     }
 

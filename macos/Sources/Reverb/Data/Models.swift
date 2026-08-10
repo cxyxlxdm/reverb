@@ -45,13 +45,54 @@ struct HistoryEntry: Codable, Identifiable, Hashable {
 
 /// 单个频道的累计收听时长(累计"实际播放过的内容毫秒")。
 /// key 为频道键:feedUrl 非空时用它,否则回退频道名。
+///
+/// 时长**按设备分账**存放于 perDevice(设备ID → 毫秒),展示值为各设备之和。
+/// 这样备份恢复的合并规则可取「按设备取 max」而非相加,重复恢复同一份备份不会重复统计
+/// (等价于 G-Counter CRDT);跨设备恢复则天然把两台的时长加总。
 struct ChannelListen: Codable, Identifiable, Hashable {
     var key: String
     var title: String
     var artworkUrl: String
     var feedUrl: String
-    var listenedMs: Int
+    var perDevice: [String: Int] = [:]
     var id: String { key }
+
+    /// 展示用总时长 = 各设备之和。
+    var listenedMs: Int { perDevice.values.reduce(0, +) }
+
+    enum CodingKeys: String, CodingKey { case key, title, artworkUrl, feedUrl, perDevice, listenedMs }
+
+    init(key: String, title: String, artworkUrl: String, feedUrl: String, perDevice: [String: Int] = [:]) {
+        self.key = key; self.title = title; self.artworkUrl = artworkUrl
+        self.feedUrl = feedUrl; self.perDevice = perDevice
+    }
+
+    /// 兼容旧格式:无 perDevice 时,把扁平的 listenedMs 归入 legacyFlatMs,由 store 迁移到本机名下。
+    var legacyFlatMs: Int = 0
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        title = (try? c.decode(String.self, forKey: .title)) ?? ""
+        artworkUrl = (try? c.decode(String.self, forKey: .artworkUrl)) ?? ""
+        feedUrl = (try? c.decode(String.self, forKey: .feedUrl)) ?? ""
+        if let pd = try? c.decode([String: Int].self, forKey: .perDevice), !pd.isEmpty {
+            perDevice = pd
+        } else {
+            perDevice = [:]
+            legacyFlatMs = (try? c.decode(Int.self, forKey: .listenedMs)) ?? 0
+        }
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(key, forKey: .key)
+        try c.encode(title, forKey: .title)
+        try c.encode(artworkUrl, forKey: .artworkUrl)
+        try c.encode(feedUrl, forKey: .feedUrl)
+        try c.encode(perDevice, forKey: .perDevice)
+        try c.encode(listenedMs, forKey: .listenedMs)   // 便于人读/旧版本兼容读取
+    }
 }
 
 /// 一枚听觉印记。

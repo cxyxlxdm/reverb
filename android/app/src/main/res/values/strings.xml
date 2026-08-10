@@ -268,6 +268,7 @@
     <string name="backup_row_subscriptions">订阅</string>
     <string name="backup_row_downloads">下载（仅节目链接）</string>
     <string name="backup_row_history">历史</string>
+    <string name="backup_row_listen_stats">收听时长</string>
     <string name="backup_row_settings">设置</string>
     <string name="backup_done">备份完成</string>
     <string name="backup_failed">备份失败</string>

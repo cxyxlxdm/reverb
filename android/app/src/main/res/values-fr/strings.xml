@@ -255,6 +255,7 @@
     <string name="backup_row_subscriptions">Abonnements</string>
     <string name="backup_row_downloads">Téléchargements (liens)</string>
     <string name="backup_row_history">Historique</string>
+    <string name="backup_row_listen_stats">Temps d\'écoute</string>
     <string name="backup_row_settings">Réglages</string>
     <string name="backup_done">Sauvegarde terminée</string>
     <string name="backup_failed">Échec de la sauvegarde</string>

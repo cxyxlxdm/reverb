@@ -647,6 +647,7 @@ private val SECTION_ROWS = listOf(
     BackupManager.Section.STAMPS to R.string.backup_row_stamps,
     BackupManager.Section.DOWNLOADS to R.string.backup_row_downloads,
     BackupManager.Section.HISTORY to R.string.backup_row_history,
+    BackupManager.Section.LISTEN_STATS to R.string.backup_row_listen_stats,
     BackupManager.Section.SETTINGS to R.string.backup_row_settings
 )
 

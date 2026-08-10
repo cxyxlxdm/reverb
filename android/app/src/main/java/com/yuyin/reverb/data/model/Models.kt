@@ -56,11 +56,20 @@ data class HistoryEntry(
     val played: Boolean = false
 )
 
-/** 单个频道的累计收听时长（累计“实际播放过的内容毫秒”）。key：feedUrl 非空优先，否则频道名。 */
+/**
+ * 单个频道的累计收听时长（累计“实际播放过的内容毫秒”）。key：feedUrl 非空优先，否则频道名。
+ *
+ * 时长**按设备分账**存于 perDevice（设备ID → 毫秒），展示值 listenedMs 为各设备之和。
+ * 这样备份恢复的合并规则可取「按设备取 max」而非相加，重复恢复同一份备份不会重复统计
+ * （等价于 G-Counter CRDT）；跨设备恢复则天然把两台的时长加总。
+ */
 data class ChannelListen(
     val key: String,
     val title: String,
     val artworkUrl: String,
     val feedUrl: String,
-    val listenedMs: Long
-)
+    val perDevice: Map<String, Long> = emptyMap()
+) {
+    /** 展示用总时长 = 各设备之和。 */
+    val listenedMs: Long get() = perDevice.values.sum()
+}
