@@ -4,6 +4,9 @@ import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint } from '../view/Widgets';
 import { DiscoverPage } from '../view/DiscoverPage';
 import { PodcastDetailPage } from '../view/PodcastDetailPage';
+import { PlayerPage } from '../view/PlayerPage';
+import { MiniPlayerBar } from '../view/MiniPlayerBar';
+import { PlayerController } from '../playback/PlayerController';
 import { Podcast, Episode, emptyPodcast } from '../model/Models';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
@@ -23,6 +26,9 @@ struct Index {
   /// 状态栏 / 导航条避让高度(px→vp)。窗口设了全屏布局,故需自行避让。
   @State topInset: number = 0;
   @State bottomInset: number = 0;
+  @State player: PlayerController = PlayerController.get();
+  /// 播放状态变化触发重渲的计数(PlayerController 非 @Observed 字段级追踪,用它兜底刷新)
+  @State tick: number = 0;
 
   aboutToAppear(): void {
     // getContext() 已废弃,API 12+ 用 UIContext 取宿主 context
@@ -30,6 +36,13 @@ struct Index {
     const app = AppContainer.get();
     app.boot(ctx);
     this.settings = app.settings;
+    this.player = app.player;
+    // 播放状态变化时驱动界面刷新
+    const prev = app.player.onStateChanged;
+    app.player.onStateChanged = () => {
+      if (prev !== null) prev();
+      this.tick = this.tick + 1;
+    };
     const cfgMode: number | undefined = ctx.config?.colorMode;
     this.systemDark = cfgMode === 0;   // ColorMode.COLOR_MODE_DARK = 0
     this.readInsets();
@@ -68,9 +81,9 @@ struct Index {
     this.stack.pushPathByName('podcast', null);
   }
 
-  /// M4 接入真实播放;当前先记日志,保证链路可点。
   private playEpisode(e: Episode, queue: Episode[]): void {
-    Log.i('UI', `请求播放 "${e.title}" 队列=${queue.length}(播放层将于 M4 接入)`);
+    Log.i('UI', `播放 "${e.title}" 队列=${queue.length}`);
+    this.player.playOrToggle(e, queue);
   }
 
   build() {
@@ -87,15 +100,40 @@ struct Index {
 
   @Builder
   destination(name: string, _param: object) {
-    if (name === 'podcast') {
+    if (name === 'player') {
       NavDestination() {
-        PodcastDetailPage({
+        PlayerPage({
           scheme: this.scheme(),
           fontScale: this.fontScale(),
-          seed: this.detailSeed,
-          onBack: () => { this.stack.pop(); },
-          onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
+          player: this.player,
+          onBack: () => { this.stack.pop(); }
         })
+      }
+      .hideTitleBar(true)
+      .padding({ top: this.topInset, bottom: this.bottomInset })
+      .backgroundColor(this.scheme().background)
+    }
+    if (name === 'podcast') {
+      NavDestination() {
+        Column() {
+          PodcastDetailPage({
+            scheme: this.scheme(),
+            fontScale: this.fontScale(),
+            seed: this.detailSeed,
+            onBack: () => { this.stack.pop(); },
+            onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
+          })
+            .layoutWeight(1)
+          if (this.player.current !== null) {
+            MiniPlayerBar({
+              scheme: this.scheme(),
+              fontScale: this.fontScale(),
+              player: this.player,
+              onExpand: () => { this.stack.pushPathByName('player', null); }
+            })
+          }
+        }
+        .width('100%').height('100%')
       }
       .hideTitleBar(true)
       .padding({ top: this.topInset, bottom: this.bottomInset })
@@ -127,6 +165,15 @@ struct Index {
       .scrollable(false)
       .onChange((i: number) => { this.tab = i; })
       .layoutWeight(1)
+
+      if (this.player.current !== null) {
+        MiniPlayerBar({
+          scheme: this.scheme(),
+          fontScale: this.fontScale(),
+          player: this.player,
+          onExpand: () => { this.stack.pushPathByName('player', null); }
+        })
+      }
     }
     .width('100%')
     .height('100%')

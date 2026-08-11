@@ -5,6 +5,8 @@ import { SettingsStore } from './store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore, PopularCacheStore } from './store/Stores';
 import { InboxStore } from './store/InboxStore';
 import { PodcastRepository } from './net/PodcastRepository';
+import { PlayerController } from './playback/PlayerController';
+import { AvSessionBridge } from './playback/AvSessionBridge';
 import { Log } from './util/Logger';
 
 /// 手写依赖容器(与 Android AppContainer / macOS AppEnvironment 同一形态,不引 DI 框架)。
@@ -19,6 +21,7 @@ export class AppContainer {
   readonly inbox: InboxStore = new InboxStore();
   readonly popularCache: PopularCacheStore = new PopularCacheStore();
   readonly repository: PodcastRepository;
+  readonly player: PlayerController = PlayerController.get();
 
   private constructor() {
     this.repository = new PodcastRepository(this.popularCache);
@@ -46,6 +49,12 @@ export class AppContainer {
     this.popularCache.load();
 
     Log.i('App', `本地数据就绪 订阅=${this.subscriptions.subscriptions.length} 收藏=${this.favorites.favorites.length} 历史=${this.history.history.length} 最新=${this.inbox.episodes.length}`);
+
+    // 播放层装配:注入历史/设置,并把状态变化同步给系统媒体会话
+    this.player.bind(this.history, this.settings);
+    const bridge = AvSessionBridge.get();
+    bridge.setup(ctx, this.player);
+    this.player.onStateChanged = () => { bridge.sync(this.player); };
   }
 
   /// 当前生效地区:设置覆盖优先,否则回落 us(与两端一致)。

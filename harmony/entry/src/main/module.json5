@@ -18,6 +18,8 @@
         "startWindowIcon": "$media:startIcon",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
+        // 声明音频后台模式,否则 startBackgroundRunning 报 9800005 bgMode is invalid
+        "backgroundModes": ["audioPlayback"],
         "skills": [
           {
             "entities": ["entity.system.home"],
