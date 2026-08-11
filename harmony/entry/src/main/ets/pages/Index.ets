@@ -10,6 +10,7 @@ import { LibraryPage } from '../view/LibraryPage';
 import { SettingsPage } from '../view/SettingsPage';
 import { ListenStatsPage } from '../view/ListenStatsPage';
 import { QueuePage } from '../view/QueuePage';
+import { FootprintPage } from '../view/FootprintPage';
 import { PlayerController } from '../playback/PlayerController';
 import { Podcast, Episode, emptyPodcast } from '../model/Models';
 import { Log } from '../util/Logger';
@@ -142,6 +143,17 @@ struct Index {
       .padding({ top: this.topInset, bottom: this.bottomInset })
       .backgroundColor(this.scheme().background)
     }
+    else if (name === 'footprint') {
+      NavDestination() {
+        FootprintPage({
+          scheme: this.scheme(), fontScale: this.fontScale(),
+          onBack: () => { this.stack.pop(); }
+        })
+      }
+      .hideTitleBar(true)
+      .padding({ top: this.topInset, bottom: this.bottomInset })
+      .backgroundColor(this.scheme().background)
+    }
     else if (name === 'queue') {
       NavDestination() {
         QueuePage({
@@ -204,7 +216,8 @@ struct Index {
             onOpenPodcast: (p: Podcast) => this.openPodcast(p),
             onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q),
             onOpenSettings: () => { this.stack.pushPathByName('settings', null); },
-            onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); }
+            onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); },
+            onOpenFootprint: () => { this.stack.pushPathByName('footprint', null); }
           })
         }
         .tabBar(this.tabBarItem($r('app.string.nav_library'), $r('sys.media.ohos_ic_public_albums'), 1))

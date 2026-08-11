@@ -17,6 +17,7 @@ export struct LibraryPage {
   onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
   onOpenSettings: () => void = () => {};
   onOpenListenStats: () => void = () => {};
+  onOpenFootprint: () => void = () => {};
 
   @State seg: number = 0;
   @State inboxRefreshing: boolean = false;
@@ -98,6 +99,12 @@ export struct LibraryPage {
   @Builder
   headerActions() {
     Row({ space: 14 }) {
+      // 听觉足迹
+      Text('印')
+        .fontSize(TypeScale.label * this.fontScale)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.app.stamps.stamps.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
+        .onClick(() => this.onOpenFootprint())
       // 收听时长
       Image($r('sys.media.ohos_ic_public_device_sound_filled'))
         .width(21).height(21)

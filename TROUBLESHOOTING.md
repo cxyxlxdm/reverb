@@ -290,3 +290,12 @@
 - **解法**(鸿蒙侧一开始就按正确做法写):**先写 `<target>.part`,成功后 `renameSync` 成目标名**;
   失败路径统一 `cleanup(part)`。
 - **教训 / 规律**:凡"下载/导出到最终路径"的写入,一律 **临时名 + 原子 rename**,别让失败留下伪成品。
+
+### H12. 存相册:`createAsset` 要受限权限;`showAssetsCreationDialog` 的 uri 必须用 `fileUri` 转
+
+- **现场**:剪藏 PNG 生成成功,存相册先报 `Permission denied`,换接口后又报 `Internal system error`。
+- **根因(两层)**:
+  1. `photoAccessHelper.createAsset` 需要 `ohos.permission.WRITE_IMAGEVIDEO` 这类**受限权限**,普通应用申请不到 ⇒ Permission denied。
+  2. 改用免权限的 `showAssetsCreationDialog(srcFileUris, configs)` 后仍失败,是因为我**手拼了 `file://` + 路径**;该接口要求传**沙箱 uri**。
+- **解法**:用 `fileUri.getUriFromPath(path)` 得到合规 uri 再传入。修好后系统会弹「允许"余音"保存 1 张图片?」(带图片预览),用户点允许即写入相册,日志确认「已存入相册」。
+- **教训 / 规律**:鸿蒙里「写系统媒体库」的正道是**受控接口 + 系统确认弹窗**,而不是申请权限;并且**凡是跨进程传文件,一律用 `fileUri` 生成 uri,不要手拼字符串**。

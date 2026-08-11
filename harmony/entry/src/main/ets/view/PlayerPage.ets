@@ -5,6 +5,10 @@ import { Artwork } from './Widgets';
 import { InkWave } from './InkWave';
 import { formatTime } from './Components';
 import { htmlToText } from '../util/HtmlText';
+import { SEALS, SealOption } from '../store/StampStore';
+import { MomentCard, snapshotToPng, saveToGallery } from './MomentCard';
+import { Log } from '../util/Logger';
+import type common from '@ohos.app.ability.common';
 
 /// 全屏播放页:两页轮播(封面+水墨 / shownotes)+ 进度 + 主控制 + 倍速/睡眠/收藏。
 /// 对应 Android `PlayerScreen.kt`(首版不含印记/剪藏/队列页)。
@@ -21,6 +25,8 @@ export struct PlayerPage {
   @State dragValue: number = 0;
   @State showSpeed: boolean = false;
   @State showSleep: boolean = false;
+  @State showSeals: boolean = false;
+  @State momentHint: string = '';
 
   private app: AppContainer = AppContainer.get();
   private sleepMinutes: number[] = [15, 30, 45, 60];
@@ -48,6 +54,8 @@ export struct PlayerPage {
         this.speedChip()
         this.sleepChip()
         this.favoriteChip()
+        this.sealChip()
+        this.momentChip()
       }
       .width('100%')
       .padding({ left: 4, right: 12, top: 4, bottom: 4 })
@@ -80,6 +88,22 @@ export struct PlayerPage {
       this.titleBlock()
       this.seekBar()
       this.controls()
+      if (this.momentHint.length > 0) {
+        Text(this.momentHint)
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .margin({ top: 6 })
+      }
+      // 供 componentSnapshot 截图的剪藏卡:移到可视区外(不能用 visibility.None,那样截不到)
+      if (this.player.current !== null) {
+        MomentCard({
+          scheme: this.scheme, fontScale: this.fontScale,
+          episode: this.player.current, positionMs: this.player.positionMs,
+          seal: this.currentSeal()
+        })
+          .id('reverb-moment-card')
+          .position({ x: -2000, y: 0 })
+      }
     }
     .width('100%')
     .height('100%')
@@ -299,6 +323,95 @@ export struct PlayerPage {
       MenuItem({ content: '本集结束' }).onClick(() => this.player.setSleepEndOfEpisode())
       MenuItem({ content: '关闭' }).onClick(() => this.player.cancelSleep())
     }
+  }
+
+  /// 盖章:3×3 情绪印章;再点同一枚即取消。
+  @Builder
+  sealChip() {
+    Text(this.currentSeal().length > 0 ? this.currentSeal() : '章')
+      .fontSize(TypeScale.caption * this.fontScale)
+      .fontWeight(FontWeight.Bold)
+      .fontColor(this.currentSeal().length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
+      .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.12))
+      .padding({ left: 9, right: 9, top: 5, bottom: 5 })
+      .borderRadius(12)
+      .onClick(() => { this.showSeals = true; })
+      .bindSheet($$this.showSeals, this.sealSheet(), { height: 330 })
+  }
+
+  private currentSeal(): string {
+    const e = this.player.current;
+    return e === null ? '' : this.app.stamps.sealFor(e.id);
+  }
+
+  @Builder
+  sealSheet() {
+    Column({ space: 14 }) {
+      Text('这一集给你留下什么')
+        .fontSize(TypeScale.titleSmall * this.fontScale)
+        .fontColor(this.scheme.onBackground)
+        .margin({ top: 16 })
+      Grid() {
+        ForEach(SEALS, (o: SealOption) => {
+          GridItem() {
+            Column({ space: 3 }) {
+              Text(o.seal)
+                .fontSize(24 * this.fontScale)
+                .fontWeight(FontWeight.Bold)
+                .fontColor(this.currentSeal() === o.seal ? this.scheme.primary : this.scheme.onBackground)
+              Text(o.label)
+                .fontSize(TypeScale.caption * this.fontScale)
+                .fontColor(this.scheme.onSurfaceVariant)
+            }
+            .width('100%').height(66)
+            .justifyContent(FlexAlign.Center)
+            .backgroundColor(this.currentSeal() === o.seal
+              ? withAlpha(this.scheme.primary, 0.18) : withAlpha(this.scheme.onSurfaceVariant, 0.10))
+            .borderRadius(12)
+            .onClick(() => {
+              const e = this.player.current;
+              if (e === null) return;
+              if (this.currentSeal() === o.seal) this.app.stamps.remove(e.id);
+              else this.app.stamps.set(e.id, o.seal, e.title, e.podcastTitle);
+              this.showSeals = false;
+            })
+          }
+        }, (o: SealOption) => o.seal)
+      }
+      .columnsTemplate('1fr 1fr 1fr')
+      .columnsGap(10)
+      .rowsGap(10)
+      .height(226)
+      .padding({ left: 20, right: 20 })
+    }
+    .width('100%')
+    .backgroundColor(this.scheme.surface)
+  }
+
+  /// 剪藏此刻:把卡片截图存成 PNG,并尝试存入相册。
+  @Builder
+  momentChip() {
+    Text('藏')
+      .fontSize(TypeScale.caption * this.fontScale)
+      .fontColor(this.scheme.onSurfaceVariant)
+      .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.12))
+      .padding({ left: 9, right: 9, top: 5, bottom: 5 })
+      .borderRadius(12)
+      .onClick(() => { this.saveMoment(); })
+  }
+
+  private async saveMoment(): Promise<void> {
+    const e = this.player.current;
+    if (e === null) return;
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    const png = await snapshotToPng(ctx, 'reverb-moment-card', 'reverb-moment.png');
+    if (png === null) {
+      this.momentHint = '剪藏生成失败';
+      return;
+    }
+    const ok = await saveToGallery(ctx, png);
+    this.momentHint = ok ? '剪藏已存入相册' : '剪藏已生成(存相册未成功)';
+    Log.i('Moment', this.momentHint);
   }
 
   @Builder

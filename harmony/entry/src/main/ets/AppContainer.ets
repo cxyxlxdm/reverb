@@ -6,6 +6,7 @@ import { SubscriptionStore, FavoriteStore, HistoryStore, PopularCacheStore } fro
 import { InboxStore } from './store/InboxStore';
 import { ListenStatsStore } from './store/ListenStatsStore';
 import { DownloadStore } from './store/DownloadStore';
+import { StampStore } from './store/StampStore';
 import { DownloadManager } from './playback/DownloadManager';
 import { PodcastRepository } from './net/PodcastRepository';
 import { Episode } from './model/Models';
@@ -26,6 +27,7 @@ export class AppContainer {
   readonly inbox: InboxStore = new InboxStore();
   readonly popularCache: PopularCacheStore = new PopularCacheStore();
   readonly listenStats: ListenStatsStore = new ListenStatsStore();
+  readonly stamps: StampStore = new StampStore();
   readonly downloads: DownloadStore = new DownloadStore();
   readonly downloadManager: DownloadManager = DownloadManager.get();
   readonly repository: PodcastRepository;
@@ -56,6 +58,7 @@ export class AppContainer {
     this.history.load();
     this.inbox.load();
     this.popularCache.load();
+    this.stamps.load();
     this.downloads.load();
     this.downloadManager.init(ctx.filesDir, this.downloads);
     this.listenStats.load();
