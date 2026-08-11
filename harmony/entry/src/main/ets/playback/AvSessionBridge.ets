@@ -24,6 +24,7 @@ export class AvSessionBridge {
   private bgFailed = false;
   private ctx: common.UIAbilityContext | null = null;
   private lastAssetId = '';
+  private lastDuration = 0;
 
   async setup(ctx: common.UIAbilityContext, player: PlayerController): Promise<void> {
     if (this.session !== null) return;
@@ -69,9 +70,12 @@ export class AvSessionBridge {
     const e = player.current;
     if (s === null || e === null) return;
     try {
-      // 元信息只在换集时写,避免每 0.5s 打扰系统
-      if (e.id !== this.lastAssetId) {
+      // 元信息在换集时写;时长是异步到达的(durationUpdate),首次拿到后必须补写一次,
+      // 否则锁屏/控制中心的进度会一直显示 --:--(duration=0)。
+      const durKnown = player.durationMs > 0;
+      if (e.id !== this.lastAssetId || (durKnown && this.lastDuration !== player.durationMs)) {
         this.lastAssetId = e.id;
+        this.lastDuration = player.durationMs;
         await s.setAVMetadata({
           assetId: e.id,
           title: e.title,
@@ -79,6 +83,7 @@ export class AvSessionBridge {
           mediaImage: e.artworkUrl,
           duration: player.durationMs
         });
+        Log.i('AVSession', `元信息已写 duration=${player.durationMs} title="${e.title}"`);
       }
       await s.setAVPlaybackState({
         state: player.isPlaying ? avSession.PlaybackState.PLAYBACK_STATE_PLAY

@@ -115,7 +115,7 @@ struct Index {
       .padding({ top: this.topInset, bottom: this.bottomInset })
       .backgroundColor(this.scheme().background)
     }
-    if (name === 'player') {
+    else if (name === 'player') {
       NavDestination() {
         PlayerPage({
           scheme: this.scheme(),
@@ -128,7 +128,7 @@ struct Index {
       .padding({ top: this.topInset, bottom: this.bottomInset })
       .backgroundColor(this.scheme().background)
     }
-    if (name === 'podcast') {
+    else if (name === 'podcast') {
       NavDestination() {
         Column() {
           PodcastDetailPage({
