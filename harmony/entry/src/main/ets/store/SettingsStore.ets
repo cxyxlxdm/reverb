@@ -20,6 +20,8 @@ export class SettingsStore {
   skipForwardSec: number = 30;
   /// 订阅段是否宫格排布
   subsGrid: boolean = false;
+  /// 电台模式:false 随机 / true 情境(按时段选分类)
+  contextualRadio: boolean = false;
 
   load(): void {
     this.themeMode = Prefs.getNumber('theme_mode', 0);
@@ -31,6 +33,7 @@ export class SettingsStore {
     this.skipBackSec = Prefs.getNumber('skip_back', 10);
     this.skipForwardSec = Prefs.getNumber('skip_fwd', 30);
     this.subsGrid = Prefs.getBool('subs_grid', false);
+    this.contextualRadio = Prefs.getBool('contextual_radio', false);
     Log.i('Settings', `加载 theme=${this.themeMode} accent=${this.accentIndex} font=${this.fontIndex} region=${this.regionOverride === '' ? 'auto' : this.regionOverride}`);
   }
 
@@ -65,6 +68,10 @@ export class SettingsStore {
   setSkipForwardSec(v: number): void {
     this.skipForwardSec = v;
     Prefs.put('skip_fwd', v);
+  }
+  setContextualRadio(v: boolean): void {
+    this.contextualRadio = v;
+    Prefs.put('contextual_radio', v);
   }
   setSubsGrid(v: boolean): void {
     this.subsGrid = v;

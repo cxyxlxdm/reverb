@@ -37,6 +37,8 @@ export class PlayerController {
   sleepRemainingMs: number = 0;
   sleepEndOfEpisode: boolean = false;
   playbackError: string = '';
+  /// 是否在台(随机/情境电台):播完自动接下一首
+  radioMode: boolean = false;
 
   readonly speedSteps: number[] = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0];
 
@@ -51,6 +53,12 @@ export class PlayerController {
 
   private queue: Episode[] = [];
   private queueIndex = 0;
+
+  // 电台:下一首从哪来由 RadioStation 提供,是否在台/自动续播由本类统一持有
+  private radioNext: (() => Promise<Episode | null>) | null = null;
+  private radioHistory: Episode[] = [];
+  private radioPos = -1;
+  private readonly radioHistoryCap = 100;
 
   private pendingSeekMs = 0;
   private tickTimer = -1;
@@ -88,6 +96,7 @@ export class PlayerController {
 
   playQueue(list: Episode[], startIndex: number): void {
     if (list.length === 0) return;
+    if (this.radioMode) this.stopRadio();   // 手动播放即退出电台
     this.queue = list;
     this.queueIndex = Math.max(0, Math.min(startIndex, list.length - 1));
     this.loadRetries = 0;
@@ -237,7 +246,8 @@ export class PlayerController {
       const stopAfter = this.sleepEndOfEpisode;
       this.sleepEndOfEpisode = false;
       if (!stopAfter) {
-        if (this.userQueue.length > 0) this.consumeQueueHead();
+        if (this.radioMode) this.advanceRadio();
+        else if (this.userQueue.length > 0) this.consumeQueueHead();
         else if (this.queueIndex < this.queue.length - 1) this.next();
       }
       this.notify();
@@ -315,6 +325,16 @@ export class PlayerController {
 
   next(): void {
     this.loadRetries = 0;
+    if (this.radioMode) {
+      if (this.radioPos >= 0 && this.radioPos < this.radioHistory.length - 1) {
+        this.radioPos += 1;
+        this.updateNavFlags();
+        this.playEpisode(this.radioHistory[this.radioPos]);
+      } else {
+        this.advanceRadio();
+      }
+      return;
+    }
     if (this.userQueue.length > 0) {
       this.consumeQueueHead();
       return;
@@ -328,6 +348,14 @@ export class PlayerController {
 
   previous(): void {
     this.loadRetries = 0;
+    if (this.radioMode) {
+      if (this.radioPos > 0) {
+        this.radioPos -= 1;
+        this.updateNavFlags();
+        this.playEpisode(this.radioHistory[this.radioPos]);
+      }
+      return;
+    }
     if (this.queueIndex > 0) {
       this.queueIndex -= 1;
       this.updateNavFlags();
@@ -350,6 +378,47 @@ export class PlayerController {
   removeFromQueue(id: string): void {
     this.userQueue = this.userQueue.filter((x: Episode) => x.id !== id);
     this.updateNavFlags();
+  }
+
+  // ── 随机 / 情境电台 ──
+
+  startRadio(next: () => Promise<Episode | null>): void {
+    Log.i('Radio', '开台');
+    this.radioNext = next;
+    this.radioHistory = [];
+    this.radioPos = -1;
+    this.radioMode = true;
+    this.updateNavFlags();
+  }
+
+  stopRadio(): void {
+    if (this.radioMode) Log.i('Radio', `停台 历史=${this.radioHistory.length}`);
+    this.radioNext = null;
+    this.radioMode = false;
+    this.updateNavFlags();
+  }
+
+  /// 播放电台抓到的一集(记入电台历史,便于「上一首」回看)。
+  playRadioEpisode(e: Episode): void {
+    this.loadRetries = 0;
+    this.radioHistory.push(e);
+    if (this.radioHistory.length > this.radioHistoryCap) this.radioHistory.shift();
+    this.radioPos = this.radioHistory.length - 1;
+    this.updateNavFlags();
+    this.playEpisode(e);
+  }
+
+  /// 本集播完:抓下一首;抓不到则自动停台。
+  private async advanceRadio(): Promise<void> {
+    const next = this.radioNext;
+    if (next === null) return;
+    Log.i('Radio', '抓下一首…');
+    const e = await next();
+    if (e !== null && this.radioMode) this.playRadioEpisode(e);
+    else {
+      Log.w('Radio', '无下一首,停台');
+      this.stopRadio();
+    }
   }
 
   /// 队列内重排(上移/下移)。
@@ -379,8 +448,13 @@ export class PlayerController {
   }
 
   private updateNavFlags(): void {
-    this.hasPrev = this.queueIndex > 0;
-    this.hasNext = (this.queueIndex >= 0 && this.queueIndex < this.queue.length - 1) || this.userQueue.length > 0;
+    if (this.radioMode) {
+      this.hasPrev = this.radioPos > 0;
+      this.hasNext = true;   // 在台永远有下一首(现抓)
+    } else {
+      this.hasPrev = this.queueIndex > 0;
+      this.hasNext = (this.queueIndex >= 0 && this.queueIndex < this.queue.length - 1) || this.userQueue.length > 0;
+    }
     this.notify();
   }
 

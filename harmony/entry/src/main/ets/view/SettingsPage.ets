@@ -40,6 +40,10 @@ export struct SettingsPage {
             () => this.regionIndex(),
             (i: number) => { this.app.settings.setRegionOverride(REGIONS[i].code); this.onChanged(); })
 
+          this.choiceRow('电台模式', ['随机', '情境(按时段)'],
+            () => this.app.settings.contextualRadio ? 1 : 0,
+            (i: number) => { this.app.settings.setContextualRadio(i === 1); this.onChanged(); })
+
           this.sectionLabel('播放')
           this.choiceRow('默认倍速', this.speeds.map((s: number) => `${s}×`),
             () => this.speedIndex(),

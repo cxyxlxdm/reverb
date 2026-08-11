@@ -4,6 +4,7 @@ import { DISCOVER_CATEGORIES, DiscoverCategory } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint, LoadingBox } from './Widgets';
 import { PodcastGridItem, PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
+import { RadioStation, RadioMode } from '../playback/RadioStation';
 import { Log } from '../util/Logger';
 
 /// 发现页:分类热门榜(缓存秒开 + 后台刷新 + 下拉刷新)+ 搜索(节目/单集双分段)
@@ -100,7 +101,8 @@ export struct DiscoverPage {
         scheme: this.scheme,
         fontScale: this.fontScale,
         title: '发现',
-        subtitle: '听见余音'
+        subtitle: '听见余音',
+        action: () => { this.radioButton() }
       })
 
       this.searchBar()
@@ -136,6 +138,38 @@ export struct DiscoverPage {
     }
     .width('100%')
     .height('100%')
+  }
+
+  /// 电台按钮:未开台点击开台;在台时点击换下一首,长按停台。
+  /// 情境模式显示当前时段(清晨/白日/日落/深夜),与 Android 的时段图标同义。
+  @Builder
+  radioButton() {
+    Row({ space: 5 }) {
+      if (this.app.radio.preparing !== null) {
+        LoadingProgress().width(18).height(18).color(this.scheme.primary)
+      } else {
+        Image($r('sys.media.ohos_ic_public_device_soundx_filled'))
+          .width(20).height(20)
+          .fillColor(this.app.radio.mode !== null ? this.scheme.primary : this.scheme.onSurfaceVariant)
+      }
+      if (this.app.settings.contextualRadio) {
+        Text(RadioStation.contextualPhase())
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.app.radio.mode !== null ? this.scheme.primary : this.scheme.onSurfaceVariant)
+      }
+    }
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      if (this.app.radio.mode !== null) {
+        this.app.radio.skip();
+      } else {
+        const mode = this.app.settings.contextualRadio ? RadioMode.CONTEXTUAL : RadioMode.RANDOM;
+        this.app.radio.start(mode);
+      }
+    })
+    .gesture(LongPressGesture().onAction(() => {
+      if (this.app.radio.mode !== null) this.app.radio.stop();
+    }))
   }
 
   @Builder

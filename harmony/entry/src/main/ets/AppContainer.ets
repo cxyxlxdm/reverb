@@ -9,6 +9,7 @@ import { PodcastRepository } from './net/PodcastRepository';
 import { Episode } from './model/Models';
 import { PlayerController } from './playback/PlayerController';
 import { AvSessionBridge } from './playback/AvSessionBridge';
+import { RadioStation } from './playback/RadioStation';
 import { Log } from './util/Logger';
 
 /// 手写依赖容器(与 Android AppContainer / macOS AppEnvironment 同一形态,不引 DI 框架)。
@@ -25,6 +26,7 @@ export class AppContainer {
   readonly listenStats: ListenStatsStore = new ListenStatsStore();
   readonly repository: PodcastRepository;
   readonly player: PlayerController = PlayerController.get();
+  readonly radio: RadioStation = RadioStation.get();
 
   private constructor() {
     this.repository = new PodcastRepository(this.popularCache);
@@ -60,6 +62,7 @@ export class AppContainer {
     this.player.bindListen(
       (e: Episode, delta: number) => { this.listenStats.add(e, delta); },
       () => { this.listenStats.flush(); });
+    this.radio.configure(this.repository, this.player, this.region());
     const bridge = AvSessionBridge.get();
     bridge.setup(ctx, this.player);
     this.player.onStateChanged = () => { bridge.sync(this.player); };
