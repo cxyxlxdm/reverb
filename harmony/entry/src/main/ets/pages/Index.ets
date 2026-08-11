@@ -6,6 +6,8 @@ import { DiscoverPage } from '../view/DiscoverPage';
 import { PodcastDetailPage } from '../view/PodcastDetailPage';
 import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
+import { LibraryPage } from '../view/LibraryPage';
+import { SettingsPage } from '../view/SettingsPage';
 import { PlayerController } from '../playback/PlayerController';
 import { Podcast, Episode, emptyPodcast } from '../model/Models';
 import { Log } from '../util/Logger';
@@ -100,6 +102,19 @@ struct Index {
 
   @Builder
   destination(name: string, _param: object) {
+    if (name === 'settings') {
+      NavDestination() {
+        SettingsPage({
+          scheme: this.scheme(),
+          fontScale: this.fontScale(),
+          onBack: () => { this.stack.pop(); },
+          onChanged: () => { this.tick = this.tick + 1; }
+        })
+      }
+      .hideTitleBar(true)
+      .padding({ top: this.topInset, bottom: this.bottomInset })
+      .backgroundColor(this.scheme().background)
+    }
     if (name === 'player') {
       NavDestination() {
         PlayerPage({
@@ -156,7 +171,14 @@ struct Index {
         .tabBar(this.tabBarItem($r('app.string.nav_discover'), $r('sys.media.ohos_ic_public_search_filled'), 0))
 
         TabContent() {
-          this.libraryPlaceholder()
+          LibraryPage({
+            scheme: this.scheme(),
+            fontScale: this.fontScale(),
+            player: this.player,
+            onOpenPodcast: (p: Podcast) => this.openPodcast(p),
+            onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q),
+            onOpenSettings: () => { this.stack.pushPathByName('settings', null); }
+          })
         }
         .tabBar(this.tabBarItem($r('app.string.nav_library'), $r('sys.media.ohos_ic_public_albums'), 1))
       }
@@ -196,19 +218,4 @@ struct Index {
     .justifyContent(FlexAlign.Center)
   }
 
-  /// M5 将替换为真实音阁
-  @Builder
-  libraryPlaceholder() {
-    Column() {
-      ScreenHeader({
-        scheme: this.scheme(),
-        fontScale: this.fontScale(),
-        title: '音阁'
-      })
-      EmptyHint({ scheme: this.scheme(), fontScale: this.fontScale(), text: '音阁将于 M5 接入' })
-        .layoutWeight(1)
-    }
-    .width('100%').height('100%')
-    .padding({ top: Metrics.topPadding })
-  }
 }

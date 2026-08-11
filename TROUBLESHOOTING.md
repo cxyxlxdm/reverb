@@ -11,7 +11,7 @@
   - **根因**——真正的原因,而非表面症状。
   - **解法**——关键改动、涉及文件与行为;有取舍要写清。
   - **教训 / 规律**——可迁移到别处的经验(能写就写)。
-- **分平台**:分 `通用`、`Android`、`macOS` 三节。**日后新增平台(如 iOS / Windows),照此追加一节**,并把跨端共性问题沉淀到「通用」。
+- **分平台**:分 `通用`、`Android`、`macOS`、`鸿蒙` 四节。**日后再新增平台(如 iOS / Windows),照此追加一节**,并把跨端共性问题沉淀到「通用」。
 - **编号**:每节内递增编号(G/A/M…),新问题**追加到对应小节末尾**,不复用旧号。
 - **不虚构**:只记真实发生并已定位的问题;假 bug(误操作 / 环境问题)也值得记,但要标注清楚。
 
@@ -204,3 +204,57 @@
   - 长文**按段落拆进 `LazyVStack`**,**只对可见段落布局**,去掉 `fixedSize`。
 - **取舍**:跨段落的连续框选会**断在段边界**(段内正常),换来长文流畅滚动与秒开。
 - **教训 / 规律**:**昂贵的纯计算(正则 / 解析)别放在 `body`**,移到 `.task`/`onChange` 按 key 缓存;**超长文本用 `Lazy` 容器分块**,避免 `fixedSize` 触发一次性全量布局。
+
+---
+
+## 鸿蒙(HarmonyOS NEXT / ArkTS)
+
+> 环境:DevEco Studio 6.0.2、SDK HarmonyOS 6.0.2(API 22);真机 BRA-AL00 / HarmonyOS 6.1.0.135(API 24)。
+
+### H1. hvigor 报「工程结构与配置需升级」
+
+- **现场**:全新手写的工程,`hvigorw assembleHap` 直接失败:`00303024 The project structure and configuration need to be upgraded before use.`,提示用 DevEco 的迁移工具。
+- **根因**:`ValidateUtil.modelVersionCheck()` 要求 **`modelVersion` 同时出现在 `hvigor/hvigor-config.json5` 与根 `oh-package.json5` 两处且完全相等**;缺任意一处即报此错(错误信息完全没提这点)。版本还必须落在 `[MINIMUM_MODEL_VERSION, CURRENT_MODEL_VERSION]`(本机为 5.0.0 ~ 6.0.2)。
+- **解法**:两处都写 `"modelVersion": "6.0.2"`。
+- **教训 / 规律**:遇到语义含糊的工具链报错,**直接去插件里搜错误码**(`hvigor-logger/res/error/*.json` 拿到符号名,再全局搜该符号名找到校验函数),比照文档猜快得多。
+
+### H2. ArkTS 只编译「可达」文件,未引用的模块完全不参与类型检查
+
+- **现场**:写完整个数据层(RSS 解析、四路取源、Repository、6 个 Store)后 `hvigorw assembleHap` **构建成功、0 错 0 警**——但这些文件当时还没被任何页面 import。
+- **根因**:ArkTS 编译器从入口页面出发按依赖图编译,**未被引用的 .ets 根本不进编译单元**,自然也不做类型检查。于是"构建通过"是假的。
+- **解法**:建立引用点(接入 `AppContainer` 并被 `Index.ets` import)后再构建;并用 `strings entry/build/default/intermediates/loader_out/default/ets/modules.abc | grep <符号>` **验证目标模块确实被编进字节码**。
+- **教训 / 规律**:分层开发时别攒着一大堆未接入的文件——**每写完一层就接上引用点再构建**,否则错误会积压到最后集中爆发。
+
+### H3. 页头压住状态栏(全屏布局下安全区避让失效)
+
+- **现场**:M1 时页头正常;M3 把外层换成 `Navigation` 后,「发现」标题直接压在状态栏时间上。
+- **根因**:`EntryAbility` 里设了 `setWindowLayoutFullScreen(true)`,内容延伸到状态栏下;原先靠内层 `Column` 的 `.expandSafeArea(...)` 生效,套上 `Navigation` 后该修饰符不再作用于最外层。
+- **解法**:主动读避让区并作内边距——`window.getLastWindow()` → `getWindowAvoidArea(TYPE_SYSTEM / TYPE_NAVIGATION_INDICATOR)`,用 `UIContext.px2vp()` 换算后 `padding({top, bottom})`;tab 外壳与每个 `NavDestination` 都要加。实测 top≈32.9vp、bottom=28vp。
+- **注意**:`getContext()` 已废弃,API 12+ 用 `this.getUIContext().getHostContext()`;`px2vp` 不要用 `.bind()`(会产生隐式 any,触发 `arkts-no-any-unknown`)。
+
+### H4. 长时任务报 9800005「bgMode is invalid」,后台播放会被回收
+
+- **现场**:播放正常,但 `backgroundTaskManager.startBackgroundRunning(...)` 持续失败:`9800005 Continuous Task verification failed. The bgMode is invalid.`,且因每 0.5s 同步一次状态而**刷屏重试**。
+- **根因**:两点——(1) 必须在 `module.json5` 的 ability 里声明 `"backgroundModes": ["audioPlayback"]`(合法值见 SDK `toolchains/modulecheck/module.json` 的枚举),仅代码申请无效;(2) 用枚举版 `BackgroundMode.AUDIO_PLAYBACK` 与新版校验不匹配。
+- **解法**:module.json5 补 `backgroundModes`,并改用**字符串模式版** `startBackgroundRunning(ctx, ['audioPlayback'], wantAgent)`;同时加 `bgFailed` 守卫,失败后不再每 tick 重试。
+- **教训 / 规律**:鸿蒙的后台能力是「清单声明 + 运行时申请」双重门,少一半就失败。另外**任何放在 0.5s tick 链路上的失败分支都要加"只试一次"守卫**,否则日志与耗电一起失控。
+
+### H5. 迷你播放条在全屏详情页消失
+
+- **现场**:开始播放后回到频道详情页,底部迷你条不见了。
+- **根因**:迷你条只挂在 tab 外壳里,而频道详情是覆盖其上的 `NavDestination`,外壳被整体遮住。
+- **解法**:详情页的 `NavDestination` 内部也挂一份迷你条(与 Android「全屏详情页保留迷你条、隐藏 tab 栏」的设计一致)。
+
+### H6. `@Builder` 的值参数是一次性的,状态变化后不重新求值
+
+- **现场**:设置页切成「深色 · 水墨」,主题**确实即时生效**(整页变色),但「主题」那一行右侧显示的值仍是「跟随系统」。
+- **根因**:`@Builder choiceRow(title, options, selected: number, ...)` 里 `selected` 是**按值传入**的参数;ArkUI 的 @Builder 值参数**不参与状态追踪**,组件重渲时不会重新求值,于是显示值定格在首次渲染。
+- **解法**:改为传**闭包** `selectedOf: () => number`,在 builder 内部调用求值(闭包每次重渲都会重新执行)。
+- **教训 / 规律**:ArkUI 里 `@Builder` 想拿到会变的值,要么**传闭包/按引用 `$$`**,要么在 builder 内部直接读状态——**不要按值传**。同类坑:`@Prop` 会更新(组件属性),`@Builder` 值参数不会,两者容易混淆。
+
+### H7. 被重入拒绝的刷新把 loading 提前关掉
+
+- **现场**:进音阁时「最新」聚合被触发两次,第二次被重入守卫拒绝,却把转圈标志置为 false——下拉刷新的圈提前消失,而真正的刷新还在跑。
+- **根因**:loading 标志放在**页面**的本地状态里,由调用方设置;而"是否真的在刷"只有 store 自己知道。
+- **解法**:让 store 自己持有 `refreshing` 标志(`InboxStore.refreshing`),UI 只读不写。
+- **教训 / 规律**:**异步任务的进行态应由持有该任务的一方拥有**,调用方只订阅。与 Android 侧「指示器不该和数据加载时长强耦合」(A1)是同一个道理的另一面。

@@ -1,0 +1,40 @@
+{
+  "string": [
+    {
+      "name": "nav_discover",
+      "value": "Découvrir"
+    },
+    {
+      "name": "nav_library",
+      "value": "Bibliothèque"
+    },
+    {
+      "name": "app_slogan",
+      "value": "Écoutez la réverbération"
+    },
+    {
+      "name": "loading",
+      "value": "Chargement"
+    },
+    {
+      "name": "empty_default",
+      "value": "Rien pour le moment"
+    },
+    {
+      "name": "load_failed",
+      "value": "Échec du chargement, réessayez"
+    },
+    {
+      "name": "action_retry",
+      "value": "Réessayer"
+    },
+    {
+      "name": "action_back",
+      "value": "Retour"
+    },
+    {
+      "name": "action_settings",
+      "value": "Réglages"
+    }
+  ]
+}

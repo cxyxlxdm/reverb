@@ -1,0 +1,40 @@
+{
+  "string": [
+    {
+      "name": "nav_discover",
+      "value": "Discover"
+    },
+    {
+      "name": "nav_library",
+      "value": "Library"
+    },
+    {
+      "name": "app_slogan",
+      "value": "Hear the reverb"
+    },
+    {
+      "name": "loading",
+      "value": "Loading"
+    },
+    {
+      "name": "empty_default",
+      "value": "Nothing here yet"
+    },
+    {
+      "name": "load_failed",
+      "value": "Failed to load, please retry"
+    },
+    {
+      "name": "action_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "action_back",
+      "value": "Back"
+    },
+    {
+      "name": "action_settings",
+      "value": "Settings"
+    }
+  ]
+}

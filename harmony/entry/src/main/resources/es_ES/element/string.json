@@ -1,0 +1,40 @@
+{
+  "string": [
+    {
+      "name": "nav_discover",
+      "value": "Descubrir"
+    },
+    {
+      "name": "nav_library",
+      "value": "Biblioteca"
+    },
+    {
+      "name": "app_slogan",
+      "value": "Escucha el eco"
+    },
+    {
+      "name": "loading",
+      "value": "Cargando"
+    },
+    {
+      "name": "empty_default",
+      "value": "Aún no hay nada"
+    },
+    {
+      "name": "load_failed",
+      "value": "Error al cargar, reintenta"
+    },
+    {
+      "name": "action_retry",
+      "value": "Reintentar"
+    },
+    {
+      "name": "action_back",
+      "value": "Atrás"
+    },
+    {
+      "name": "action_settings",
+      "value": "Ajustes"
+    }
+  ]
+}

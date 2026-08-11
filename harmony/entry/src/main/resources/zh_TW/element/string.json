@@ -1,0 +1,40 @@
+{
+  "string": [
+    {
+      "name": "nav_discover",
+      "value": "發現"
+    },
+    {
+      "name": "nav_library",
+      "value": "音閣"
+    },
+    {
+      "name": "app_slogan",
+      "value": "聽見餘音"
+    },
+    {
+      "name": "loading",
+      "value": "載入中"
+    },
+    {
+      "name": "empty_default",
+      "value": "暫無內容"
+    },
+    {
+      "name": "load_failed",
+      "value": "載入失敗,請重試"
+    },
+    {
+      "name": "action_retry",
+      "value": "重試"
+    },
+    {
+      "name": "action_back",
+      "value": "返回"
+    },
+    {
+      "name": "action_settings",
+      "value": "設定"
+    }
+  ]
+}
