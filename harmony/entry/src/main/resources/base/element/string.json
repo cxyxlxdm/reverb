@@ -1,0 +1,20 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "余音 Reverb 主模块" },
+    { "name": "EntryAbility_desc", "value": "余音 Reverb" },
+    { "name": "perm_internet", "value": "获取播客目录与音频需要联网" },
+    { "name": "perm_network_info", "value": "判断当前网络类型以避免计费网络下大流量下载" },
+    { "name": "perm_background_audio", "value": "退到后台或锁屏后继续播放音频" },
+
+    { "name": "nav_discover", "value": "发现" },
+    { "name": "nav_library", "value": "音阁" },
+    { "name": "app_slogan", "value": "听见余音" },
+
+    { "name": "loading", "value": "加载中" },
+    { "name": "empty_default", "value": "暂无内容" },
+    { "name": "load_failed", "value": "加载失败,请重试" },
+    { "name": "action_retry", "value": "重试" },
+    { "name": "action_back", "value": "返回" },
+    { "name": "action_settings", "value": "设置" }
+  ]
+}

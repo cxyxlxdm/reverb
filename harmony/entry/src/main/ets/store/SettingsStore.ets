@@ -1,0 +1,73 @@
+import { Prefs } from './Prefs';
+import { Log } from '../util/Logger';
+
+/// 应用设置。与 Android SettingsStore / macOS SettingsStore 的键位对齐。
+/// 用 @Observed 让界面直接观察;每个 setter 立即落盘。
+@Observed
+export class SettingsStore {
+  /// 0 跟随系统 / 1 浅色(宣纸) / 2 深色(水墨) / 3 纯白
+  themeMode: number = 0;
+  /// ACCENTS 索引:0 青瓷 / 1 黛蓝 / 2 绯红 / 3 竹青
+  accentIndex: number = 0;
+  /// FONT_SCALES 索引(4 档)
+  fontIndex: number = 1;
+  /// 界面语言:"" 跟随系统,否则 zh-Hans / zh-Hant / en / fr / es
+  language: string = '';
+  /// 目录检索地区:"" 自动
+  regionOverride: string = '';
+  defaultSpeed: number = 1.0;
+  skipBackSec: number = 10;
+  skipForwardSec: number = 30;
+  /// 订阅段是否宫格排布
+  subsGrid: boolean = false;
+
+  load(): void {
+    this.themeMode = Prefs.getNumber('theme_mode', 0);
+    this.accentIndex = Prefs.getNumber('accent_index', 0);
+    this.fontIndex = Prefs.getNumber('font_index', 1);
+    this.language = Prefs.getString('app_language', '');
+    this.regionOverride = Prefs.getString('region_override', '');
+    this.defaultSpeed = Prefs.getNumber('default_speed', 1.0);
+    this.skipBackSec = Prefs.getNumber('skip_back', 10);
+    this.skipForwardSec = Prefs.getNumber('skip_fwd', 30);
+    this.subsGrid = Prefs.getBool('subs_grid', false);
+    Log.i('Settings', `加载 theme=${this.themeMode} accent=${this.accentIndex} font=${this.fontIndex} region=${this.regionOverride === '' ? 'auto' : this.regionOverride}`);
+  }
+
+  setThemeMode(v: number): void {
+    this.themeMode = v;
+    Prefs.put('theme_mode', v);
+  }
+  setAccentIndex(v: number): void {
+    this.accentIndex = v;
+    Prefs.put('accent_index', v);
+  }
+  setFontIndex(v: number): void {
+    this.fontIndex = v;
+    Prefs.put('font_index', v);
+  }
+  setLanguage(v: string): void {
+    this.language = v;
+    Prefs.put('app_language', v);
+  }
+  setRegionOverride(v: string): void {
+    this.regionOverride = v;
+    Prefs.put('region_override', v);
+  }
+  setDefaultSpeed(v: number): void {
+    this.defaultSpeed = v;
+    Prefs.put('default_speed', v);
+  }
+  setSkipBackSec(v: number): void {
+    this.skipBackSec = v;
+    Prefs.put('skip_back', v);
+  }
+  setSkipForwardSec(v: number): void {
+    this.skipForwardSec = v;
+    Prefs.put('skip_fwd', v);
+  }
+  setSubsGrid(v: boolean): void {
+    this.subsGrid = v;
+    Prefs.put('subs_grid', v);
+  }
+}
