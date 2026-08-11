@@ -272,3 +272,21 @@
 - **根因(已确认的一半)**:元信息只在**换集时**写一次,而此刻 `durationMs` 还是 0(时长要等 `durationUpdate` 或 `prepared` 后才拿到)⇒ 系统收到 `duration=0`。
 - **解法**:`sync()` 里在**首次拿到时长后补写一次元信息**(记 `lastDuration`,变化即重写)。修复后日志确认 `duration=602592` 已送达,**进度条也确实随播放推进**。
 - **仍未解决**:两端的**数字标签**依旧 `--:--`。进度条能动说明 position/duration 已被系统接受,故推测是该机型锁屏卡片自身的渲染行为(或还需额外声明某项会话能力),暂未找到解法。功能不受影响,**如实标记为未解决**。
+
+### H10. AVPlayer 不接受普通文件路径,本地播放必须走 `fdSrc`
+
+- **现场**:离线下载成功(文件确实在 `files/downloads/dl_xxx.m4a`),但播放已下载单集立刻报
+  `Invalid Parameter: invalid parameters, The input parameter is not fd:// or network address`。
+- **根因**:`AVPlayer.url` 只接受 **`fd://` 形式或网络地址**,**不接受文件系统路径**。
+  Android 的 `Uri.fromFile(...)` / macOS 的 `URL(fileURLWithPath:)` 都能直接用,鸿蒙不行。
+- **解法**:本地播放改用 `p.fdSrc = { fd: file.fd }`,文件用 `fs.openSync(path, READ_ONLY)` 打开;
+  并在**换源与 release 时关闭上一个 fd**(`closeLocalFile()`),否则 fd 泄漏。
+- **教训 / 规律**:跨端移植"传一个音频源"这种看似平凡的动作时,**每个平台接受的源形态都要单独确认**;
+  同时凡是拿到系统句柄(fd/handle)就必须配一条明确的释放路径。
+
+### H11. 下载失败会残留半截可播文件(顺手修掉的既有缺陷)
+
+- **现场**:Android 版下载是直接写目标文件,中断/失败后**残留一个不完整但看起来能播的文件**。
+- **解法**(鸿蒙侧一开始就按正确做法写):**先写 `<target>.part`,成功后 `renameSync` 成目标名**;
+  失败路径统一 `cleanup(part)`。
+- **教训 / 规律**:凡"下载/导出到最终路径"的写入,一律 **临时名 + 原子 rename**,别让失败留下伪成品。

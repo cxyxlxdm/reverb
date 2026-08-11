@@ -1,4 +1,5 @@
 import media from '@ohos.multimedia.media';
+import fs from '@ohos.file.fs';
 import audio from '@ohos.multimedia.audio';
 import { Episode } from '../model/Models';
 import { HistoryStore } from '../store/Stores';
@@ -64,6 +65,8 @@ export class PlayerController {
   private tickTimer = -1;
   private tickCount = 0;
   private loadRetries = 0;
+  /// 本地播放时打开的文件句柄(AVPlayer 的 url 只收 fd:// 或网络地址,本地必须走 fdSrc)
+  private localFile: fs.File | null = null;
 
   // 收听时长计数基线
   private lastCountedPosMs = 0;
@@ -130,12 +133,12 @@ export class PlayerController {
     this.lastCountedPosMs = resumeMs;
 
     const local = this.localFileProvider === null ? null : this.localFileProvider(e);
-    const src = local !== null && local.length > 0 ? local : e.audioUrl;
-    if (src.length === 0) {
+    const useLocal = local !== null && local.length > 0;
+    if (!useLocal && e.audioUrl.length === 0) {
       this.playbackError = '音频地址无效';
       return;
     }
-    Log.i('Player', `播放 "${e.title}" 源=${local !== null ? '本地' : '网络'} resume=${resumeMs}ms`);
+    Log.i('Player', `播放 "${e.title}" 源=${useLocal ? '本地' : '网络'} resume=${resumeMs}ms`);
 
     try {
       await this.ensurePlayer();
@@ -143,7 +146,15 @@ export class PlayerController {
       if (p === null) return;
       // 换源必须先回到 idle
       if (p.state !== 'idle') await p.reset();
-      p.url = src;
+      this.closeLocalFile();
+      if (useLocal) {
+        // AVPlayer 不接受普通文件路径,必须用 fdSrc 传文件描述符
+        const f = fs.openSync(local, fs.OpenMode.READ_ONLY);
+        this.localFile = f;
+        p.fdSrc = { fd: f.fd };
+      } else {
+        p.url = e.audioUrl;
+      }
       // prepare 在 stateChange 的 'initialized' 分支触发
     } catch (err) {
       Log.e('Player', `装载失败 ${(err as Error).message}`);
@@ -582,6 +593,19 @@ export class PlayerController {
     this.lastCountedEpId = e.id;
   }
 
+  /// 关闭上一次本地播放的文件句柄(换源/释放时必须调,否则 fd 泄漏)。
+  private closeLocalFile(): void {
+    const f = this.localFile;
+    this.localFile = null;
+    if (f !== null) {
+      try {
+        fs.closeSync(f);
+      } catch (e) {
+        // 忽略
+      }
+    }
+  }
+
   private notify(): void {
     if (this.onStateChanged !== null) this.onStateChanged();
   }
@@ -592,6 +616,7 @@ export class PlayerController {
     this.clearSleepTicker();
     const p = this.player;
     this.player = null;
+    this.closeLocalFile();
     if (p !== null) {
       try {
         await p.release();

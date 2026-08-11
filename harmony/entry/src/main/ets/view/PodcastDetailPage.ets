@@ -21,12 +21,21 @@ export struct PodcastDetailPage {
   @State failed: boolean = false;
   @State descExpanded: boolean = false;
   @State subscribed: boolean = false;
+  /// 下载态变化后驱动重渲(DownloadManager 的 states 是整体替换)
+  @State dlTick: number = 0;
 
   private app: AppContainer = AppContainer.get();
 
   aboutToAppear(): void {
     this.subscribed = this.app.subscriptions.isSubscribed(this.seed.feedUrl);
     this.load();
+  }
+
+  /// 该集下载态:已下载 2 / 进行中 1 / 排队 0 / 未下载 3(用 3 表示"可下载")
+  private dlState(id: string): number {
+    const s = this.app.downloadManager.stateOf(id);
+    if (s === null) return 3;   // 未下载 → 显示「下载」
+    return s.state;
   }
 
   /// 本频道累计收听时长(频道键:feedUrl 优先,回退频道名)。
@@ -103,7 +112,10 @@ export struct PodcastDetailPage {
                 fontScale: this.fontScale,
                 episode: e,
                 played: this.app.history.isPlayed(e.id),
-                onPlay: () => this.onPlayEpisode(e, this.episodes)
+                downloadState: this.dlState(e.id),
+                onPlay: () => this.onPlayEpisode(e, this.episodes),
+                onDownload: () => { this.app.downloadManager.download(e); this.dlTick++; },
+                onDeleteDownload: () => { this.app.downloadManager.delete(e.id); this.dlTick++; }
               })
             }
           }, (e: Episode) => e.id)

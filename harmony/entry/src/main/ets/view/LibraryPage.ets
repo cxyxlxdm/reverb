@@ -22,7 +22,7 @@ export struct LibraryPage {
   @State inboxRefreshing: boolean = false;
 
   private app: AppContainer = AppContainer.get();
-  private segments: string[] = ['订阅', '最新', '收藏', '历史'];
+  private segments: string[] = ['订阅', '最新', '收藏', '下载', '历史'];
 
   aboutToAppear(): void {
     // 进音阁即按需刷新「最新」(订阅集未变则跳过,避免切 tab 反复全量刷)
@@ -66,7 +66,7 @@ export struct LibraryPage {
             .backgroundColor(this.scheme.background)
             .onClick(() => { this.app.settings.setSubsGrid(!this.app.settings.subsGrid); })
         }
-        if (this.seg === 3 && this.app.history.history.length > 0) {
+        if (this.seg === 4 && this.app.history.history.length > 0) {
           Text('清空')
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.primary)
@@ -81,6 +81,7 @@ export struct LibraryPage {
         this.subscriptionsSection()
         this.inboxSection()
         this.favoritesSection()
+        this.downloadsSection()
         this.historySection()
       }
       .index(this.seg)
@@ -219,6 +220,40 @@ export struct LibraryPage {
     .width('100%').height('100%')
   }
 
+  // ── 下载 ──
+  @Builder
+  downloadsSection() {
+    Column() {
+      if (this.app.downloads.downloads.length === 0) {
+        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '还没有离线下载的单集' })
+      } else {
+        List() {
+          ForEach(this.app.downloads.downloads, (d: DownloadRow) => {
+            ListItem() {
+              EpisodeListItem({
+                scheme: this.scheme, fontScale: this.fontScale, episode: d.episode,
+                showPodcastTitle: true,
+                isCurrent: this.player.current !== null && this.player.current.id === d.episode.id,
+                isPlaying: this.player.isPlaying,
+                played: this.app.history.isPlayed(d.episode.id),
+                downloadState: 2,
+                onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes()),
+                onDeleteDownload: () => { this.app.downloadManager.delete(d.episode.id); }
+              })
+            }
+          }, (d: DownloadRow) => d.episode.id)
+        }
+        .scrollBar(BarState.Off)
+        .width('100%').height('100%')
+      }
+    }
+    .width('100%').height('100%')
+  }
+
+  private downloadEpisodes(): Episode[] {
+    return this.app.downloads.downloads.map((d: DownloadRow) => d.episode);
+  }
+
   // ── 历史 ──
   @Builder
   historySection() {
@@ -252,8 +287,13 @@ export struct LibraryPage {
   }
 }
 
-/// ForEach 的项类型别名(HistoryEntry 的结构子集,便于在 UI 里标注类型)。
+/// ForEach 的项类型别名(便于在 UI 里标注类型)。
 interface HistoryRow {
   episode: Episode;
   played: boolean;
+}
+
+interface DownloadRow {
+  episode: Episode;
+  localPath: string;
 }

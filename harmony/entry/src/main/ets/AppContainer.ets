@@ -5,6 +5,8 @@ import { SettingsStore } from './store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore, PopularCacheStore } from './store/Stores';
 import { InboxStore } from './store/InboxStore';
 import { ListenStatsStore } from './store/ListenStatsStore';
+import { DownloadStore } from './store/DownloadStore';
+import { DownloadManager } from './playback/DownloadManager';
 import { PodcastRepository } from './net/PodcastRepository';
 import { Episode } from './model/Models';
 import { PlayerController } from './playback/PlayerController';
@@ -24,6 +26,8 @@ export class AppContainer {
   readonly inbox: InboxStore = new InboxStore();
   readonly popularCache: PopularCacheStore = new PopularCacheStore();
   readonly listenStats: ListenStatsStore = new ListenStatsStore();
+  readonly downloads: DownloadStore = new DownloadStore();
+  readonly downloadManager: DownloadManager = DownloadManager.get();
   readonly repository: PodcastRepository;
   readonly player: PlayerController = PlayerController.get();
   readonly radio: RadioStation = RadioStation.get();
@@ -52,6 +56,8 @@ export class AppContainer {
     this.history.load();
     this.inbox.load();
     this.popularCache.load();
+    this.downloads.load();
+    this.downloadManager.init(ctx.filesDir, this.downloads);
     this.listenStats.load();
     this.listenStats.seedFromHistory(this.history.history);
 
@@ -59,6 +65,8 @@ export class AppContainer {
 
     // 播放层装配:注入历史/设置,并把状态变化同步给系统媒体会话
     this.player.bind(this.history, this.settings);
+    // 已下载优先本地播放(闭包注入,解耦下载模块)
+    this.player.localFileProvider = (e: Episode) => this.downloadManager.localPath(e.id);
     this.player.bindListen(
       (e: Episode, delta: number) => { this.listenStats.add(e, delta); },
       () => { this.listenStats.flush(); });

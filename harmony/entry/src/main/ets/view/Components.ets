@@ -2,6 +2,7 @@ import { Scheme, TypeScale, withAlpha, Metrics } from '../theme/Theme';
 import { Podcast, Episode } from '../model/Models';
 import { Artwork, SquareArtwork } from './Widgets';
 import { formatPubDate } from '../util/DateParse';
+import { DownloadState } from '../playback/DownloadManager';
 
 /// 列表/网格通用条目。对应 Android `ui/components/Components.kt`。
 
@@ -116,7 +117,11 @@ export struct EpisodeListItem {
   @Prop isPlaying: boolean = false;
   @Prop played: boolean = false;
   @Prop showPodcastTitle: boolean = false;
+  /// 下载态:-1 不显示下载入口 / 0 排队 / 1 进行中 / 2 已完成 / 3 失败
+  @Prop downloadState: number = -1;
   onPlay: () => void = () => {};
+  onDownload: () => void = () => {};
+  onDeleteDownload: () => void = () => {};
 
   private meta(): string {
     const parts: string[] = [];
@@ -153,6 +158,21 @@ export struct EpisodeListItem {
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
+
+      // 下载三态:未下载(下载)/ 进行中(转圈)/ 已下载(已存,可点删)
+      if (this.downloadState === DownloadState.DOWNLOADING || this.downloadState === DownloadState.QUEUED) {
+        LoadingProgress().width(18).height(18).color(this.scheme.primary)
+      } else if (this.downloadState === DownloadState.COMPLETED) {
+        Text('已存')
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.primary)
+          .onClick(() => this.onDeleteDownload())
+      } else if (this.downloadState >= 0) {
+        Text('下载')
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .onClick(() => this.onDownload())
+      }
 
       // 圆形播放/暂停键
       Stack() {
