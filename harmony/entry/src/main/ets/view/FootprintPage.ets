@@ -1,4 +1,5 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
+import { L } from '../util/L';
 import { Stamp } from '../store/StampStore';
 import { AppContainer } from '../AppContainer';
 import { TopBar, EmptyHint } from './Widgets';
@@ -17,12 +18,12 @@ export struct FootprintPage {
     Column() {
       TopBar({
         scheme: this.scheme, fontScale: this.fontScale,
-        title: '听觉足迹', onBack: () => this.onBack()
+        title: L.s('footprint_title'), onBack: () => this.onBack()
       })
       if (this.app.stamps.stamps.length === 0) {
         EmptyHint({
           scheme: this.scheme, fontScale: this.fontScale,
-          text: '还没有留下听觉印记。在播放页给打动你的那一集盖一枚章'
+          text: L.s('footprint_empty')
         })
           .layoutWeight(1)
       } else {

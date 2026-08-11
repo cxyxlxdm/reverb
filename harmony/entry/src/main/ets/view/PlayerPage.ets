@@ -1,11 +1,12 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
+import { L } from '../util/L';
 import { PlayerController } from '../playback/PlayerController';
 import { AppContainer } from '../AppContainer';
 import { Artwork } from './Widgets';
 import { InkWave } from './InkWave';
 import { formatTime } from './Components';
 import { htmlToText } from '../util/HtmlText';
-import { SEALS, SealOption } from '../store/StampStore';
+import { sealOptions, SealOption } from '../store/StampStore';
 import { MomentCard, snapshotToPng, saveToGallery } from './MomentCard';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
@@ -132,7 +133,7 @@ export struct PlayerPage {
   shownotePage() {
     Scroll() {
       Column({ space: 10 }) {
-        Text('简介')
+        Text(L.s('shownotes'))
           .fontSize(TypeScale.titleSmall * this.fontScale)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.scheme.onBackground)
@@ -155,7 +156,7 @@ export struct PlayerPage {
     const e = this.player.current;
     if (e === null) return '';
     const t = htmlToText(e.description);
-    return t.length > 0 ? t : '这一集没有提供简介';
+    return t.length > 0 ? t : L.s('shownotes_empty');
   }
 
   @Builder
@@ -224,7 +225,7 @@ export struct PlayerPage {
           Text(this.player.playbackError)
             .fontSize(TypeScale.label * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
-          Button('重试')
+          Button(L.s('action_retry'))
             .fontSize(TypeScale.caption * this.fontScale)
             .height(30)
             .backgroundColor(this.scheme.primary)
@@ -317,18 +318,18 @@ export struct PlayerPage {
   sleepMenu() {
     Menu() {
       ForEach(this.sleepMinutes, (m: number) => {
-        MenuItem({ content: `${m} 分钟` })
+        MenuItem({ content: L.f('dur_m', m) })
           .onClick(() => this.player.setSleepTimer(m))
       }, (m: number) => `${m}`)
-      MenuItem({ content: '本集结束' }).onClick(() => this.player.setSleepEndOfEpisode())
-      MenuItem({ content: '关闭' }).onClick(() => this.player.cancelSleep())
+      MenuItem({ content: L.s('sleep_end_of_episode') }).onClick(() => this.player.setSleepEndOfEpisode())
+      MenuItem({ content: L.s('sleep_off') }).onClick(() => this.player.cancelSleep())
     }
   }
 
   /// 盖章:3×3 情绪印章;再点同一枚即取消。
   @Builder
   sealChip() {
-    Text(this.currentSeal().length > 0 ? this.currentSeal() : '章')
+    Text(this.currentSeal().length > 0 ? this.currentSeal() : L.s('seal_short'))
       .fontSize(TypeScale.caption * this.fontScale)
       .fontWeight(FontWeight.Bold)
       .fontColor(this.currentSeal().length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
@@ -347,12 +348,12 @@ export struct PlayerPage {
   @Builder
   sealSheet() {
     Column({ space: 14 }) {
-      Text('这一集给你留下什么')
+      Text(L.s('seal_prompt'))
         .fontSize(TypeScale.titleSmall * this.fontScale)
         .fontColor(this.scheme.onBackground)
         .margin({ top: 16 })
       Grid() {
-        ForEach(SEALS, (o: SealOption) => {
+        ForEach(sealOptions(), (o: SealOption) => {
           GridItem() {
             Column({ space: 3 }) {
               Text(o.seal)
@@ -391,7 +392,7 @@ export struct PlayerPage {
   /// 剪藏此刻:把卡片截图存成 PNG,并尝试存入相册。
   @Builder
   momentChip() {
-    Text('藏')
+    Text(L.s('moment_short'))
       .fontSize(TypeScale.caption * this.fontScale)
       .fontColor(this.scheme.onSurfaceVariant)
       .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.12))
@@ -407,11 +408,11 @@ export struct PlayerPage {
     const ctx = ui.getHostContext() as common.UIAbilityContext;
     const png = await snapshotToPng(ui, ctx, 'reverb-moment-card', 'reverb-moment.png');
     if (png === null) {
-      this.momentHint = '剪藏生成失败';
+      this.momentHint = L.s('moment_failed');
       return;
     }
     const ok = await saveToGallery(ctx, png);
-    this.momentHint = ok ? '剪藏已存入相册' : '剪藏已生成(存相册未成功)';
+    this.momentHint = ok ? L.s('moment_saved') : L.s('moment_saved_partial');
     Log.i('Moment', this.momentHint);
   }
 

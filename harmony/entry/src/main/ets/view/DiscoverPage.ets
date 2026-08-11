@@ -1,6 +1,7 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
+import { L } from '../util/L';
 import { Podcast, Episode, SearchOutcome, HistoryEntry } from '../model/Models';
-import { DISCOVER_CATEGORIES, DiscoverCategory } from '../model/Genres';
+import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork } from './Widgets';
 import { PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
@@ -101,8 +102,8 @@ export struct DiscoverPage {
       ScreenHeader({
         scheme: this.scheme,
         fontScale: this.fontScale,
-        title: '发现',
-        subtitle: '听见余音',
+        title: L.s('nav_discover'),
+        subtitle: L.s('app_slogan'),
         action: () => { this.radioButton() }
       })
 
@@ -114,7 +115,7 @@ export struct DiscoverPage {
         ChipsRow({
           scheme: this.scheme,
           fontScale: this.fontScale,
-          labels: DISCOVER_CATEGORIES.map((c: DiscoverCategory) => c.label),
+          labels: DISCOVER_CATEGORIES.map((c: DiscoverCategory) => categoryLabel(c)),
           selected: this.catIndex,
           onSelect: (i: number) => {
             this.catIndex = i;
@@ -179,7 +180,7 @@ export struct DiscoverPage {
       Image($r('sys.media.ohos_ic_public_search_filled'))
         .width(18).height(18)
         .fillColor(this.scheme.onSurfaceVariant)
-      TextInput({ placeholder: '搜索节目、单集,或粘贴 RSS 地址', text: this.query })
+      TextInput({ placeholder: L.s('search_placeholder'), text: this.query })
         .placeholderColor(this.scheme.onSurfaceVariant)
         .fontColor(this.scheme.onBackground)
         .fontSize(TypeScale.body * this.fontScale)
@@ -190,7 +191,7 @@ export struct DiscoverPage {
         .onChange((v: string) => { this.query = v; })
         .onSubmit(() => { this.runSearch(); })
       if (this.query.length > 0) {
-        Text('取消')
+        Text(L.s('action_cancel'))
           .fontSize(TypeScale.label * this.fontScale)
           .fontColor(this.scheme.primary)
           .onClick(() => {
@@ -218,7 +219,7 @@ export struct DiscoverPage {
         if (this.loadingFlags[idx] && this.lists[idx].length === 0) {
           LoadingBox({ scheme: this.scheme, fontScale: this.fontScale })
         } else if (this.lists[idx].length === 0) {
-          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '暂时没有内容,下拉重试' })
+          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('discover_empty') })
         } else {
           List() {
             if (this.continueEntries().length > 0) {
@@ -227,7 +228,7 @@ export struct DiscoverPage {
               }
             }
             ListItem() {
-              Text(`每日热门 · ${DISCOVER_CATEGORIES[idx].label}`)
+              Text(L.f('discover_daily_hot', categoryLabel(DISCOVER_CATEGORIES[idx])))
                 .fontSize(TypeScale.caption * this.fontScale)
                 .fontColor(this.scheme.onSurfaceVariant)
                 .padding({ left: Metrics.pagePadding, top: 4, bottom: 4 })
@@ -268,7 +269,7 @@ export struct DiscoverPage {
   @Builder
   continueStrip() {
     Column({ space: 6 }) {
-      Text('继续收听')
+      Text(L.s('continue_listening'))
         .fontSize(TypeScale.titleSmall * this.fontScale)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.scheme.onBackground)
@@ -314,11 +315,11 @@ export struct DiscoverPage {
     Column() {
       // 分段:节目 / 单集
       Row({ space: 8 }) {
-        this.searchTabChip('节目', this.searchPodcasts.length, 0)
-        this.searchTabChip('单集', this.searchEpisodes.length, 1)
+        this.searchTabChip(L.s('tab_shows'), this.searchPodcasts.length, 0)
+        this.searchTabChip(L.s('tab_episodes'), this.searchEpisodes.length, 1)
         Blank()
         if (this.searchLabel.length > 0) {
-          Text(`来自 ${this.searchLabel}`)
+          Text(L.f('search_from', this.searchLabel))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
         }
@@ -331,7 +332,7 @@ export struct DiscoverPage {
         LoadingBox({ scheme: this.scheme, fontScale: this.fontScale }).layoutWeight(1)
       } else if (this.searchTab === 0) {
         if (this.searchPodcasts.length === 0) {
-          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '没有找到节目' }).layoutWeight(1)
+          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('search_no_shows') }).layoutWeight(1)
         } else {
           List() {
             ForEach(this.searchPodcasts, (p: Podcast) => {
@@ -348,7 +349,7 @@ export struct DiscoverPage {
         }
       } else {
         if (this.searchEpisodes.length === 0) {
-          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '没有找到单集' }).layoutWeight(1)
+          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('search_no_episodes') }).layoutWeight(1)
         } else {
           List() {
             ForEach(this.searchEpisodes, (e: Episode) => {

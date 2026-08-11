@@ -1,4 +1,5 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
+import { L } from '../util/L';
 import { Episode } from '../model/Models';
 import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, Artwork } from './Widgets';
@@ -18,11 +19,11 @@ export struct QueuePage {
       Row() {
         TopBar({
           scheme: this.scheme, fontScale: this.fontScale,
-          title: '播放队列', onBack: () => this.onBack()
+          title: L.s('queue_title'), onBack: () => this.onBack()
         })
           .layoutWeight(1)
         if (this.player.userQueue.length > 0) {
-          Text('清空')
+          Text(L.s('action_clear'))
             .fontSize(TypeScale.label * this.fontScale)
             .fontColor(this.scheme.primary)
             .padding({ right: Metrics.pagePadding })
@@ -35,7 +36,7 @@ export struct QueuePage {
       if (this.player.userQueue.length === 0) {
         EmptyHint({
           scheme: this.scheme, fontScale: this.fontScale,
-          text: '队列是空的。在单集上长按「加入队列」,即可排进这里'
+          text: L.s('queue_empty')
         })
           .layoutWeight(1)
       } else {
@@ -80,7 +81,7 @@ export struct QueuePage {
       this.iconBtn($r('sys.media.ohos_ic_public_play_next'), idx < this.player.userQueue.length - 1, () => {
         this.player.moveInQueue(idx, idx + 1);
       })
-      Text('移除')
+      Text(L.s('action_remove'))
         .fontSize(TypeScale.caption * this.fontScale)
         .fontColor(this.scheme.onSurfaceVariant)
         .onClick(() => this.player.removeFromQueue(e.id))

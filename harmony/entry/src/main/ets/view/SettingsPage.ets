@@ -1,5 +1,6 @@
 import { Scheme, TypeScale, Metrics, withAlpha, ACCENTS, AccentPalette, Theme } from '../theme/Theme';
-import { REGIONS, RegionOption } from '../model/Genres';
+import { L } from '../util/L';
+import { REGIONS, RegionOption, regionLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
 import { TopBar } from './Widgets';
 
@@ -14,11 +15,11 @@ export struct SettingsPage {
   onChanged: () => void = () => {};
 
   private app: AppContainer = AppContainer.get();
-  private themeLabels: string[] = ['跟随系统', '浅色 · 宣纸', '深色 · 水墨', '纯白'];
-  private fontLabels: string[] = ['小', '标准', '大', '特大'];
+  private themeLabels(): string[] { return [L.s('theme_system'), L.s('theme_light'), L.s('theme_dark'), L.s('theme_white')]; }
+  private fontLabels(): string[] { return [L.s('font_small'), L.s('font_standard'), L.s('font_large'), L.s('font_xlarge')]; }
   /// 语言:值与 resources 下的 locale 目录对应("" = 跟随系统)
   private langCodes: string[] = ['', 'zh-Hans', 'zh-Hant', 'en', 'fr', 'es'];
-  private langLabels: string[] = ['跟随系统', '简体中文', '繁體中文', 'English', 'Français', 'Español'];
+  private langLabels(): string[] { return [L.s('theme_system'), '简体中文', '繁體中文', 'English', 'Français', 'Español']; }
   private speeds: number[] = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0];
   private skipBackOpts: number[] = [5, 10, 15, 30];
   private skipFwdOpts: number[] = [15, 30, 45, 60];
@@ -27,41 +28,41 @@ export struct SettingsPage {
     Column() {
       TopBar({
         scheme: this.scheme, fontScale: this.fontScale,
-        title: '设置', onBack: () => this.onBack()
+        title: L.s('settings_title'), onBack: () => this.onBack()
       })
       Scroll() {
         Column({ space: 4 }) {
-          this.sectionLabel('外观')
-          this.choiceRow('主题', this.themeLabels, () => this.app.settings.themeMode,
+          this.sectionLabel(L.s('sec_appearance'))
+          this.choiceRow(L.s('set_theme'), this.themeLabels(), () => this.app.settings.themeMode,
             (i: number) => { this.app.settings.setThemeMode(i); this.onChanged(); })
           this.accentRow()
-          this.choiceRow('字号', this.fontLabels, () => this.app.settings.fontIndex,
+          this.choiceRow(L.s('set_font'), this.fontLabels(), () => this.app.settings.fontIndex,
             (i: number) => { this.app.settings.setFontIndex(i); this.onChanged(); })
 
-          this.choiceRow('语言', this.langLabels, () => this.langIndex(),
+          this.choiceRow(L.s('set_language'), this.langLabels(), () => this.langIndex(),
             (i: number) => { this.app.settings.setLanguage(this.langCodes[i]); this.onChanged(); })
 
-          this.sectionLabel('内容')
-          this.choiceRow('地区', REGIONS.map((r: RegionOption) => r.label),
+          this.sectionLabel(L.s('sec_content'))
+          this.choiceRow(L.s('set_region'), REGIONS.map((r: RegionOption) => regionLabel(r)),
             () => this.regionIndex(),
             (i: number) => { this.app.settings.setRegionOverride(REGIONS[i].code); this.onChanged(); })
 
-          this.choiceRow('电台模式', ['随机', '情境(按时段)'],
+          this.choiceRow(L.s('set_radio_mode'), [L.s('radio_random'), L.s('radio_contextual')],
             () => this.app.settings.contextualRadio ? 1 : 0,
             (i: number) => { this.app.settings.setContextualRadio(i === 1); this.onChanged(); })
 
-          this.sectionLabel('播放')
-          this.choiceRow('默认倍速', this.speeds.map((s: number) => `${s}×`),
+          this.sectionLabel(L.s('sec_playback'))
+          this.choiceRow(L.s('set_default_speed'), this.speeds.map((s: number) => `${s}×`),
             () => this.speedIndex(),
             (i: number) => { this.app.settings.setDefaultSpeed(this.speeds[i]); this.onChanged(); })
-          this.choiceRow('快退', this.skipBackOpts.map((s: number) => `${s} 秒`),
+          this.choiceRow(L.s('set_skip_back'), this.skipBackOpts.map((s: number) => L.f('sec_n', s)),
             () => this.optIndex(this.skipBackOpts, this.app.settings.skipBackSec),
             (i: number) => { this.app.settings.setSkipBackSec(this.skipBackOpts[i]); this.onChanged(); })
-          this.choiceRow('快进', this.skipFwdOpts.map((s: number) => `${s} 秒`),
+          this.choiceRow(L.s('set_skip_forward'), this.skipFwdOpts.map((s: number) => L.f('sec_n', s)),
             () => this.optIndex(this.skipFwdOpts, this.app.settings.skipForwardSec),
             (i: number) => { this.app.settings.setSkipForwardSec(this.skipFwdOpts[i]); this.onChanged(); })
 
-          Text('余音 Reverb · 鸿蒙端 1.0.0')
+          Text(L.f('about_line', '1.0.0'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
             .margin({ top: 24, bottom: 24 })
@@ -141,7 +142,7 @@ export struct SettingsPage {
   @Builder
   accentRow() {
     Row() {
-      Text('配色')
+      Text(L.s('set_accent'))
         .fontSize(TypeScale.body * this.fontScale)
         .fontColor(this.scheme.onBackground)
         .layoutWeight(1)

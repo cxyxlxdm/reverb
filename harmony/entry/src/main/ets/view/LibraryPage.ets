@@ -1,4 +1,5 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
+import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
 import { AppContainer } from '../AppContainer';
 import { PlayerController } from '../playback/PlayerController';
@@ -22,7 +23,7 @@ export struct LibraryPage {
   @State seg: number = 0;
 
   private app: AppContainer = AppContainer.get();
-  private segments: string[] = ['订阅', '最新', '收藏', '下载', '历史'];
+  private segments(): string[] { return [L.s('lib_subscriptions'), L.s('lib_inbox'), L.s('lib_favorites'), L.s('lib_downloads'), L.s('lib_history')]; }
 
   aboutToAppear(): void {
     // 进音阁即按需刷新「最新」(订阅集未变则跳过,避免切 tab 反复全量刷)
@@ -44,7 +45,7 @@ export struct LibraryPage {
       ScreenHeader({
         scheme: this.scheme,
         fontScale: this.fontScale,
-        title: '音阁',
+        title: L.s('nav_library'),
         action: () => { this.headerActions() }
       })
 
@@ -53,12 +54,12 @@ export struct LibraryPage {
         ChipsRow({
           scheme: this.scheme,
           fontScale: this.fontScale,
-          labels: this.segments,
+          labels: this.segments(),
           selected: this.seg,
           onSelect: (i: number) => { this.seg = i; }
         })
         if (this.seg === 0 && this.app.subscriptions.subscriptions.length > 0) {
-          Text(this.app.settings.subsGrid ? '列表' : '宫格')
+          Text(this.app.settings.subsGrid ? L.s('layout_list') : L.s('layout_grid'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.primary)
             .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
@@ -66,7 +67,7 @@ export struct LibraryPage {
             .onClick(() => { this.app.settings.setSubsGrid(!this.app.settings.subsGrid); })
         }
         if (this.seg === 4 && this.app.history.history.length > 0) {
-          Text('清空')
+          Text(L.s('action_clear'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.primary)
             .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
@@ -98,7 +99,7 @@ export struct LibraryPage {
   headerActions() {
     Row({ space: 14 }) {
       // 听觉足迹
-      Text('印')
+      Text(L.s('footprint_short'))
         .fontSize(TypeScale.label * this.fontScale)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.app.stamps.stamps.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
@@ -120,7 +121,7 @@ export struct LibraryPage {
   subscriptionsSection() {
     Column() {
       if (this.app.subscriptions.subscriptions.length === 0) {
-        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '还没有订阅任何节目' })
+        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_subscriptions') })
       } else if (this.app.settings.subsGrid) {
         Scroll() {
           Grid() {
@@ -165,12 +166,12 @@ export struct LibraryPage {
     Refresh({ refreshing: this.app.inbox.refreshing }) {
       Column() {
         if (this.app.subscriptions.subscriptions.length === 0) {
-          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '订阅节目后,这里汇总最新单集' })
+          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox_nosubs') })
         } else if (this.app.inbox.episodes.length === 0) {
           if (this.app.inbox.refreshing) {
             LoadingBox({ scheme: this.scheme, fontScale: this.fontScale })
           } else {
-            EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '暂时没有更新,下拉重试' })
+            EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox') })
           }
         } else {
           List() {
@@ -202,7 +203,7 @@ export struct LibraryPage {
   favoritesSection() {
     Column() {
       if (this.app.favorites.favorites.length === 0) {
-        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '还没有收藏的单集' })
+        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_favorites') })
       } else {
         List() {
           ForEach(this.app.favorites.favorites, (e: Episode) => {
@@ -230,7 +231,7 @@ export struct LibraryPage {
   downloadsSection() {
     Column() {
       if (this.app.downloads.downloads.length === 0) {
-        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '还没有离线下载的单集' })
+        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_downloads') })
       } else {
         List() {
           ForEach(this.app.downloads.downloads, (d: DownloadRow) => {
@@ -264,7 +265,7 @@ export struct LibraryPage {
   historySection() {
     Column() {
       if (this.app.history.history.length === 0) {
-        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '暂无播放历史' })
+        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_history') })
       } else {
         List() {
           ForEach(this.app.history.history, (h: HistoryRow) => {

@@ -1,4 +1,5 @@
 import { Scheme, TypeScale, Metrics } from '../theme/Theme';
+import { L } from '../util/L';
 import { Podcast, Episode, FeedResult } from '../model/Models';
 import { AppContainer } from '../AppContainer';
 import { TopBar, EmptyHint, LoadingBox, Artwork } from './Widgets';
@@ -92,10 +93,10 @@ export struct PodcastDetailPage {
           if (this.failed && this.episodes.length === 0) {
             ListItem() {
               Column({ space: 12 }) {
-                Text('加载失败,请检查网络')
+                Text(L.s('detail_load_failed'))
                   .fontSize(TypeScale.body * this.fontScale)
                   .fontColor(this.scheme.onSurfaceVariant)
-                Button('重试')
+                Button(L.s('action_retry'))
                   .fontSize(TypeScale.label * this.fontScale)
                   .backgroundColor(this.scheme.primary)
                   .fontColor(this.scheme.onPrimary)
@@ -148,7 +149,7 @@ export struct PodcastDetailPage {
               .textOverflow({ overflow: TextOverflow.Ellipsis })
           }
           if (this.display().isPaid) {
-            Text('付费节目')
+            Text(L.s('paid_show'))
               .fontSize(TypeScale.caption * this.fontScale)
               .fontColor(this.scheme.secondary)
           }
@@ -160,7 +161,7 @@ export struct PodcastDetailPage {
       .alignItems(VerticalAlign.Top)
 
       // 订阅 / 已订阅
-      Button(this.subscribed ? '已订阅' : '订阅')
+      Button(this.subscribed ? L.s('action_subscribed') : L.s('action_subscribe'))
         .fontSize(TypeScale.label * this.fontScale)
         .fontColor(this.subscribed ? this.scheme.primary : this.scheme.onPrimary)
         .backgroundColor(this.subscribed ? Color.Transparent : this.scheme.primary)
@@ -182,7 +183,7 @@ export struct PodcastDetailPage {
             .lineHeight(21)
             .maxLines(this.descExpanded ? 100 : 4)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(this.descExpanded ? '收起' : '展开')
+          Text(this.descExpanded ? L.s('action_collapse') : L.s('action_expand'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.primary)
             .onClick(() => { this.descExpanded = !this.descExpanded; })
@@ -192,12 +193,12 @@ export struct PodcastDetailPage {
       }
 
       if (this.listenedMs() > 0) {
-        Text(`已收听 ${formatListenDuration(Math.floor(this.listenedMs() / 1000))}`)
+        Text(L.f('listened_prefix', formatListenDuration(Math.floor(this.listenedMs() / 1000))))
           .fontSize(TypeScale.label * this.fontScale)
           .fontColor(this.scheme.onSurfaceVariant)
       }
       if (this.episodes.length > 0) {
-        Text(`共 ${this.episodes.length} 集`)
+        Text(L.f('episode_count', this.episodes.length))
           .fontSize(TypeScale.titleSmall * this.fontScale)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.scheme.onBackground)

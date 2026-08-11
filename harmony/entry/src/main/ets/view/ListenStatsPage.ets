@@ -1,4 +1,5 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
+import { L } from '../util/L';
 import { ChannelListen, listenedMsOf } from '../model/Models';
 import { AppContainer } from '../AppContainer';
 import { TopBar, EmptyHint, Artwork } from './Widgets';
@@ -27,10 +28,10 @@ export struct ListenStatsPage {
     Column() {
       TopBar({
         scheme: this.scheme, fontScale: this.fontScale,
-        title: '收听时长', onBack: () => this.onBack()
+        title: L.s('listen_stats_title'), onBack: () => this.onBack()
       })
       if (this.rows().length === 0) {
-        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '还没有收听记录' })
+        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('listen_stats_empty') })
           .layoutWeight(1)
       } else {
         List({ space: 18 }) {
@@ -54,7 +55,7 @@ export struct ListenStatsPage {
     Column({ space: 8 }) {
       Row({ space: 12 }) {
         Artwork({ scheme: this.scheme, url: c.artworkUrl, dim: 40, corner: 8 })
-        Text(c.title.length > 0 ? c.title : '未知频道')
+        Text(c.title.length > 0 ? c.title : L.s('unknown_channel'))
           .fontSize(TypeScale.titleSmall * this.fontScale)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.scheme.onBackground)

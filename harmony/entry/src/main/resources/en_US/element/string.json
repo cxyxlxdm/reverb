@@ -35,6 +35,526 @@
     {
       "name": "action_settings",
       "value": "Settings"
+    },
+    {
+      "name": "action_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "action_clear",
+      "value": "Clear"
+    },
+    {
+      "name": "action_remove",
+      "value": "Remove"
+    },
+    {
+      "name": "action_expand",
+      "value": "More"
+    },
+    {
+      "name": "action_collapse",
+      "value": "Less"
+    },
+    {
+      "name": "dur_hm",
+      "value": "%1$d h %2$d min"
+    },
+    {
+      "name": "dur_m",
+      "value": "%d min"
+    },
+    {
+      "name": "dur_lt1m",
+      "value": "Less than 1 min"
+    },
+    {
+      "name": "sec_n",
+      "value": "%d s"
+    },
+    {
+      "name": "search_placeholder",
+      "value": "Search shows, episodes, or paste an RSS URL"
+    },
+    {
+      "name": "discover_daily_hot",
+      "value": "Top today · %s"
+    },
+    {
+      "name": "discover_empty",
+      "value": "Nothing yet, pull to refresh"
+    },
+    {
+      "name": "continue_listening",
+      "value": "Continue listening"
+    },
+    {
+      "name": "tab_shows",
+      "value": "Shows"
+    },
+    {
+      "name": "tab_episodes",
+      "value": "Episodes"
+    },
+    {
+      "name": "search_from",
+      "value": "from %s"
+    },
+    {
+      "name": "search_no_shows",
+      "value": "No shows found"
+    },
+    {
+      "name": "search_no_episodes",
+      "value": "No episodes found"
+    },
+    {
+      "name": "lib_subscriptions",
+      "value": "Subscribed"
+    },
+    {
+      "name": "lib_inbox",
+      "value": "Latest"
+    },
+    {
+      "name": "lib_favorites",
+      "value": "Favorites"
+    },
+    {
+      "name": "lib_downloads",
+      "value": "Downloads"
+    },
+    {
+      "name": "lib_history",
+      "value": "History"
+    },
+    {
+      "name": "layout_list",
+      "value": "List"
+    },
+    {
+      "name": "layout_grid",
+      "value": "Grid"
+    },
+    {
+      "name": "empty_subscriptions",
+      "value": "No subscriptions yet"
+    },
+    {
+      "name": "empty_inbox_nosubs",
+      "value": "Subscribe to shows to see their latest episodes here"
+    },
+    {
+      "name": "empty_inbox",
+      "value": "No updates yet, pull to refresh"
+    },
+    {
+      "name": "empty_favorites",
+      "value": "No favorite episodes yet"
+    },
+    {
+      "name": "empty_downloads",
+      "value": "No downloaded episodes yet"
+    },
+    {
+      "name": "empty_history",
+      "value": "No playback history"
+    },
+    {
+      "name": "paid",
+      "value": "Paid"
+    },
+    {
+      "name": "paid_show",
+      "value": "Paid show"
+    },
+    {
+      "name": "action_subscribe",
+      "value": "Subscribe"
+    },
+    {
+      "name": "action_subscribed",
+      "value": "Subscribed"
+    },
+    {
+      "name": "detail_load_failed",
+      "value": "Failed to load, check your network"
+    },
+    {
+      "name": "episode_count",
+      "value": "%d episodes"
+    },
+    {
+      "name": "listened_prefix",
+      "value": "Listened %s"
+    },
+    {
+      "name": "action_download",
+      "value": "Download"
+    },
+    {
+      "name": "downloaded",
+      "value": "Saved"
+    },
+    {
+      "name": "shownotes",
+      "value": "Notes"
+    },
+    {
+      "name": "shownotes_empty",
+      "value": "No notes for this episode"
+    },
+    {
+      "name": "sleep_end_of_episode",
+      "value": "End of episode"
+    },
+    {
+      "name": "sleep_off",
+      "value": "Off"
+    },
+    {
+      "name": "seal_short",
+      "value": "Seal"
+    },
+    {
+      "name": "seal_prompt",
+      "value": "What did this episode leave you with?"
+    },
+    {
+      "name": "moment_short",
+      "value": "Clip"
+    },
+    {
+      "name": "moment_failed",
+      "value": "Failed to create clip"
+    },
+    {
+      "name": "moment_saved",
+      "value": "Clip saved to gallery"
+    },
+    {
+      "name": "moment_saved_partial",
+      "value": "Clip created (not saved to gallery)"
+    },
+    {
+      "name": "audio_url_invalid",
+      "value": "Invalid audio address"
+    },
+    {
+      "name": "playback_load_failed",
+      "value": "Failed to load, check your network and retry"
+    },
+    {
+      "name": "player_init_failed",
+      "value": "Player failed to initialize"
+    },
+    {
+      "name": "queue_title",
+      "value": "Up next"
+    },
+    {
+      "name": "queue_empty",
+      "value": "Queue is empty. Long-press an episode and choose Add to queue"
+    },
+    {
+      "name": "listen_stats_title",
+      "value": "Listening time"
+    },
+    {
+      "name": "listen_stats_empty",
+      "value": "No listening records yet"
+    },
+    {
+      "name": "unknown_channel",
+      "value": "Unknown show"
+    },
+    {
+      "name": "footprint_title",
+      "value": "Listening footprint"
+    },
+    {
+      "name": "footprint_empty",
+      "value": "No seals yet. Stamp an episode that moved you from the player"
+    },
+    {
+      "name": "footprint_short",
+      "value": "Seals"
+    },
+    {
+      "name": "settings_title",
+      "value": "Settings"
+    },
+    {
+      "name": "sec_appearance",
+      "value": "Appearance"
+    },
+    {
+      "name": "sec_content",
+      "value": "Content"
+    },
+    {
+      "name": "sec_playback",
+      "value": "Playback"
+    },
+    {
+      "name": "set_theme",
+      "value": "Theme"
+    },
+    {
+      "name": "set_accent",
+      "value": "Accent"
+    },
+    {
+      "name": "set_font",
+      "value": "Text size"
+    },
+    {
+      "name": "set_language",
+      "value": "Language"
+    },
+    {
+      "name": "set_region",
+      "value": "Region"
+    },
+    {
+      "name": "set_radio_mode",
+      "value": "Radio mode"
+    },
+    {
+      "name": "set_default_speed",
+      "value": "Default speed"
+    },
+    {
+      "name": "set_skip_back",
+      "value": "Skip back"
+    },
+    {
+      "name": "set_skip_forward",
+      "value": "Skip forward"
+    },
+    {
+      "name": "theme_system",
+      "value": "Follow system"
+    },
+    {
+      "name": "theme_light",
+      "value": "Light · Paper"
+    },
+    {
+      "name": "theme_dark",
+      "value": "Dark · Ink"
+    },
+    {
+      "name": "theme_white",
+      "value": "Pure white"
+    },
+    {
+      "name": "font_small",
+      "value": "Small"
+    },
+    {
+      "name": "font_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "font_large",
+      "value": "Large"
+    },
+    {
+      "name": "font_xlarge",
+      "value": "Extra large"
+    },
+    {
+      "name": "radio_random",
+      "value": "Random"
+    },
+    {
+      "name": "radio_contextual",
+      "value": "Contextual (by time of day)"
+    },
+    {
+      "name": "about_line",
+      "value": "Reverb · HarmonyOS %s"
+    },
+    {
+      "name": "seal_happy",
+      "value": "Happy"
+    },
+    {
+      "name": "seal_warm",
+      "value": "Soothing"
+    },
+    {
+      "name": "seal_fired",
+      "value": "Fired up"
+    },
+    {
+      "name": "seal_awe",
+      "value": "Awe"
+    },
+    {
+      "name": "seal_think",
+      "value": "Pensive"
+    },
+    {
+      "name": "seal_insight",
+      "value": "Insight"
+    },
+    {
+      "name": "seal_sad",
+      "value": "Sad"
+    },
+    {
+      "name": "seal_angry",
+      "value": "Angry"
+    },
+    {
+      "name": "seal_tired",
+      "value": "Weary"
+    },
+    {
+      "name": "region_auto",
+      "value": "Automatic"
+    },
+    {
+      "name": "module_desc",
+      "value": "Reverb main module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Reverb"
+    },
+    {
+      "name": "perm_internet",
+      "value": "Network access is needed to fetch podcast catalogs and audio"
+    },
+    {
+      "name": "perm_network_info",
+      "value": "Used to detect the network type and avoid large downloads on metered networks"
+    },
+    {
+      "name": "perm_background_audio",
+      "value": "Keep playing audio in the background or on the lock screen"
+    },
+    {
+      "name": "genre_recommend",
+      "value": "For you"
+    },
+    {
+      "name": "genre_news",
+      "value": "News"
+    },
+    {
+      "name": "genre_business",
+      "value": "Business"
+    },
+    {
+      "name": "genre_tech",
+      "value": "Tech"
+    },
+    {
+      "name": "genre_culture",
+      "value": "Culture"
+    },
+    {
+      "name": "genre_knowledge",
+      "value": "Knowledge"
+    },
+    {
+      "name": "genre_education",
+      "value": "Education"
+    },
+    {
+      "name": "genre_comedy",
+      "value": "Comedy"
+    },
+    {
+      "name": "genre_health",
+      "value": "Health"
+    },
+    {
+      "name": "genre_history",
+      "value": "History"
+    },
+    {
+      "name": "genre_sports",
+      "value": "Sports"
+    },
+    {
+      "name": "genre_food",
+      "value": "Food"
+    },
+    {
+      "name": "genre_travel",
+      "value": "Travel"
+    },
+    {
+      "name": "genre_anime",
+      "value": "Anime"
+    },
+    {
+      "name": "genre_relationship",
+      "value": "Relationships"
+    },
+    {
+      "name": "genre_arts",
+      "value": "Arts"
+    },
+    {
+      "name": "genre_music",
+      "value": "Music"
+    },
+    {
+      "name": "genre_kids",
+      "value": "Kids & family"
+    },
+    {
+      "name": "genre_tv",
+      "value": "TV & film"
+    },
+    {
+      "name": "region_cn",
+      "value": "Chinese mainland"
+    },
+    {
+      "name": "region_hk",
+      "value": "Hong Kong, China"
+    },
+    {
+      "name": "region_tw",
+      "value": "Taiwan, China"
+    },
+    {
+      "name": "region_us",
+      "value": "United States"
+    },
+    {
+      "name": "region_jp",
+      "value": "Japan"
+    },
+    {
+      "name": "region_kr",
+      "value": "South Korea"
+    },
+    {
+      "name": "region_gb",
+      "value": "United Kingdom"
+    },
+    {
+      "name": "region_sg",
+      "value": "Singapore"
+    },
+    {
+      "name": "region_au",
+      "value": "Australia"
+    },
+    {
+      "name": "region_ca",
+      "value": "Canada"
+    },
+    {
+      "name": "region_de",
+      "value": "Germany"
     }
   ]
 }

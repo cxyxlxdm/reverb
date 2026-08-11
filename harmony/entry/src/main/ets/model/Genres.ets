@@ -1,3 +1,4 @@
+import { L } from '../util/L';
 /// 分类归一化:把 Apple/RSS 五花八门的原始分类名收敛成 19 个稳定 key。
 /// 移植自 Android `data/model/Genres.kt`(macOS 侧未做归一化,以 Android 为基线)。
 
@@ -64,49 +65,58 @@ export class Genres {
 /// 从 Android `ui/ViewModels.kt` 下移到数据层(它实质是数据配置,不是 UI)。
 export interface DiscoverCategory {
   key: string;
-  label: string;
   genreId: number;   // 0 表示无(综合榜)
 }
 
+/// 分类显示名(惰性取文案:模块级常量在 L.init() 之前求值会拿到键名)。
+export function categoryLabel(c: DiscoverCategory): string {
+  return L.s(`genre_${c.key}`);
+}
+
 export const DISCOVER_CATEGORIES: DiscoverCategory[] = [
-  { key: 'recommend', label: '推荐', genreId: 0 },
-  { key: 'news', label: '新闻', genreId: 1489 },
-  { key: 'business', label: '商业', genreId: 1321 },
-  { key: 'tech', label: '科技', genreId: 1318 },
-  { key: 'culture', label: '文化', genreId: 1324 },
-  { key: 'knowledge', label: '知识', genreId: 1533 },
-  { key: 'education', label: '教育', genreId: 1304 },
-  { key: 'comedy', label: '喜剧', genreId: 1303 },
-  { key: 'health', label: '健康', genreId: 1512 },
-  { key: 'history', label: '历史', genreId: 1487 },
-  { key: 'sports', label: '体育', genreId: 1545 },
-  { key: 'food', label: '美食', genreId: 1306 },
-  { key: 'travel', label: '旅行', genreId: 1320 },
-  { key: 'anime', label: '动漫', genreId: 1499 },
-  { key: 'relationship', label: '情感', genreId: 1517 },
-  { key: 'arts', label: '艺术', genreId: 1301 },
-  { key: 'music', label: '音乐', genreId: 1310 },
-  { key: 'kids', label: '亲子', genreId: 1305 },
-  { key: 'tv', label: '影视', genreId: 1309 }
+  { key: 'recommend', genreId: 0 },
+  { key: 'news', genreId: 1489 },
+  { key: 'business', genreId: 1321 },
+  { key: 'tech', genreId: 1318 },
+  { key: 'culture', genreId: 1324 },
+  { key: 'knowledge', genreId: 1533 },
+  { key: 'education', genreId: 1304 },
+  { key: 'comedy', genreId: 1303 },
+  { key: 'health', genreId: 1512 },
+  { key: 'history', genreId: 1487 },
+  { key: 'sports', genreId: 1545 },
+  { key: 'food', genreId: 1306 },
+  { key: 'travel', genreId: 1320 },
+  { key: 'anime', genreId: 1499 },
+  { key: 'relationship', genreId: 1517 },
+  { key: 'arts', genreId: 1301 },
+  { key: 'music', genreId: 1310 },
+  { key: 'kids', genreId: 1305 },
+  { key: 'tv', genreId: 1309 }
 ];
 
 /// 地区选项(与 Android 的 12 项一致;"" = 自动跟随设备)。
 export interface RegionOption {
   code: string;
-  label: string;
+  labelKey: string;
+}
+
+/// 地区显示名(同样惰性取)。
+export function regionLabel(r: RegionOption): string {
+  return L.s(r.labelKey);
 }
 
 export const REGIONS: RegionOption[] = [
-  { code: '', label: '自动' },
-  { code: 'cn', label: '中国大陆' },
-  { code: 'hk', label: '中国香港' },
-  { code: 'tw', label: '中国台湾' },
-  { code: 'us', label: '美国' },
-  { code: 'jp', label: '日本' },
-  { code: 'kr', label: '韩国' },
-  { code: 'gb', label: '英国' },
-  { code: 'sg', label: '新加坡' },
-  { code: 'au', label: '澳大利亚' },
-  { code: 'ca', label: '加拿大' },
-  { code: 'de', label: '德国' }
+  { code: '', labelKey: 'region_auto' },
+  { code: 'cn', labelKey: 'region_cn' },
+  { code: 'hk', labelKey: 'region_hk' },
+  { code: 'tw', labelKey: 'region_tw' },
+  { code: 'us', labelKey: 'region_us' },
+  { code: 'jp', labelKey: 'region_jp' },
+  { code: 'kr', labelKey: 'region_kr' },
+  { code: 'gb', labelKey: 'region_gb' },
+  { code: 'sg', labelKey: 'region_sg' },
+  { code: 'au', labelKey: 'region_au' },
+  { code: 'ca', labelKey: 'region_ca' },
+  { code: 'de', labelKey: 'region_de' }
 ];

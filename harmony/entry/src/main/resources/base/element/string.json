@@ -1,20 +1,560 @@
 {
   "string": [
-    { "name": "module_desc", "value": "余音 Reverb 主模块" },
-    { "name": "EntryAbility_desc", "value": "余音 Reverb" },
-    { "name": "perm_internet", "value": "获取播客目录与音频需要联网" },
-    { "name": "perm_network_info", "value": "判断当前网络类型以避免计费网络下大流量下载" },
-    { "name": "perm_background_audio", "value": "退到后台或锁屏后继续播放音频" },
-
-    { "name": "nav_discover", "value": "发现" },
-    { "name": "nav_library", "value": "音阁" },
-    { "name": "app_slogan", "value": "听见余音" },
-
-    { "name": "loading", "value": "加载中" },
-    { "name": "empty_default", "value": "暂无内容" },
-    { "name": "load_failed", "value": "加载失败,请重试" },
-    { "name": "action_retry", "value": "重试" },
-    { "name": "action_back", "value": "返回" },
-    { "name": "action_settings", "value": "设置" }
+    {
+      "name": "nav_discover",
+      "value": "发现"
+    },
+    {
+      "name": "nav_library",
+      "value": "音阁"
+    },
+    {
+      "name": "app_slogan",
+      "value": "听见余音"
+    },
+    {
+      "name": "loading",
+      "value": "加载中"
+    },
+    {
+      "name": "empty_default",
+      "value": "暂无内容"
+    },
+    {
+      "name": "load_failed",
+      "value": "加载失败,请重试"
+    },
+    {
+      "name": "action_retry",
+      "value": "重试"
+    },
+    {
+      "name": "action_back",
+      "value": "返回"
+    },
+    {
+      "name": "action_settings",
+      "value": "设置"
+    },
+    {
+      "name": "action_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "action_clear",
+      "value": "清空"
+    },
+    {
+      "name": "action_remove",
+      "value": "移除"
+    },
+    {
+      "name": "action_expand",
+      "value": "展开"
+    },
+    {
+      "name": "action_collapse",
+      "value": "收起"
+    },
+    {
+      "name": "dur_hm",
+      "value": "%1$d 小时 %2$d 分"
+    },
+    {
+      "name": "dur_m",
+      "value": "%d 分钟"
+    },
+    {
+      "name": "dur_lt1m",
+      "value": "小于 1 分钟"
+    },
+    {
+      "name": "sec_n",
+      "value": "%d 秒"
+    },
+    {
+      "name": "search_placeholder",
+      "value": "搜索节目、单集,或粘贴 RSS 地址"
+    },
+    {
+      "name": "discover_daily_hot",
+      "value": "每日热门 · %s"
+    },
+    {
+      "name": "discover_empty",
+      "value": "暂时没有内容,下拉重试"
+    },
+    {
+      "name": "continue_listening",
+      "value": "继续收听"
+    },
+    {
+      "name": "tab_shows",
+      "value": "节目"
+    },
+    {
+      "name": "tab_episodes",
+      "value": "单集"
+    },
+    {
+      "name": "search_from",
+      "value": "来自 %s"
+    },
+    {
+      "name": "search_no_shows",
+      "value": "没有找到节目"
+    },
+    {
+      "name": "search_no_episodes",
+      "value": "没有找到单集"
+    },
+    {
+      "name": "lib_subscriptions",
+      "value": "订阅"
+    },
+    {
+      "name": "lib_inbox",
+      "value": "最新"
+    },
+    {
+      "name": "lib_favorites",
+      "value": "收藏"
+    },
+    {
+      "name": "lib_downloads",
+      "value": "下载"
+    },
+    {
+      "name": "lib_history",
+      "value": "历史"
+    },
+    {
+      "name": "layout_list",
+      "value": "列表"
+    },
+    {
+      "name": "layout_grid",
+      "value": "宫格"
+    },
+    {
+      "name": "empty_subscriptions",
+      "value": "还没有订阅任何节目"
+    },
+    {
+      "name": "empty_inbox_nosubs",
+      "value": "订阅节目后,这里汇总最新单集"
+    },
+    {
+      "name": "empty_inbox",
+      "value": "暂时没有更新,下拉重试"
+    },
+    {
+      "name": "empty_favorites",
+      "value": "还没有收藏的单集"
+    },
+    {
+      "name": "empty_downloads",
+      "value": "还没有离线下载的单集"
+    },
+    {
+      "name": "empty_history",
+      "value": "暂无播放历史"
+    },
+    {
+      "name": "paid",
+      "value": "付费"
+    },
+    {
+      "name": "paid_show",
+      "value": "付费节目"
+    },
+    {
+      "name": "action_subscribe",
+      "value": "订阅"
+    },
+    {
+      "name": "action_subscribed",
+      "value": "已订阅"
+    },
+    {
+      "name": "detail_load_failed",
+      "value": "加载失败,请检查网络"
+    },
+    {
+      "name": "episode_count",
+      "value": "共 %d 集"
+    },
+    {
+      "name": "listened_prefix",
+      "value": "已收听 %s"
+    },
+    {
+      "name": "action_download",
+      "value": "下载"
+    },
+    {
+      "name": "downloaded",
+      "value": "已存"
+    },
+    {
+      "name": "shownotes",
+      "value": "简介"
+    },
+    {
+      "name": "shownotes_empty",
+      "value": "这一集没有提供简介"
+    },
+    {
+      "name": "sleep_end_of_episode",
+      "value": "本集结束"
+    },
+    {
+      "name": "sleep_off",
+      "value": "关闭"
+    },
+    {
+      "name": "seal_short",
+      "value": "章"
+    },
+    {
+      "name": "seal_prompt",
+      "value": "这一集给你留下什么"
+    },
+    {
+      "name": "moment_short",
+      "value": "藏"
+    },
+    {
+      "name": "moment_failed",
+      "value": "剪藏生成失败"
+    },
+    {
+      "name": "moment_saved",
+      "value": "剪藏已存入相册"
+    },
+    {
+      "name": "moment_saved_partial",
+      "value": "剪藏已生成(存相册未成功)"
+    },
+    {
+      "name": "audio_url_invalid",
+      "value": "音频地址无效"
+    },
+    {
+      "name": "playback_load_failed",
+      "value": "加载失败,请检查网络后重试"
+    },
+    {
+      "name": "player_init_failed",
+      "value": "播放器初始化失败"
+    },
+    {
+      "name": "queue_title",
+      "value": "播放队列"
+    },
+    {
+      "name": "queue_empty",
+      "value": "队列是空的。在单集上长按「加入队列」,即可排进这里"
+    },
+    {
+      "name": "listen_stats_title",
+      "value": "收听时长"
+    },
+    {
+      "name": "listen_stats_empty",
+      "value": "还没有收听记录"
+    },
+    {
+      "name": "unknown_channel",
+      "value": "未知频道"
+    },
+    {
+      "name": "footprint_title",
+      "value": "听觉足迹"
+    },
+    {
+      "name": "footprint_empty",
+      "value": "还没有留下听觉印记。在播放页给打动你的那一集盖一枚章"
+    },
+    {
+      "name": "footprint_short",
+      "value": "印"
+    },
+    {
+      "name": "settings_title",
+      "value": "设置"
+    },
+    {
+      "name": "sec_appearance",
+      "value": "外观"
+    },
+    {
+      "name": "sec_content",
+      "value": "内容"
+    },
+    {
+      "name": "sec_playback",
+      "value": "播放"
+    },
+    {
+      "name": "set_theme",
+      "value": "主题"
+    },
+    {
+      "name": "set_accent",
+      "value": "配色"
+    },
+    {
+      "name": "set_font",
+      "value": "字号"
+    },
+    {
+      "name": "set_language",
+      "value": "语言"
+    },
+    {
+      "name": "set_region",
+      "value": "地区"
+    },
+    {
+      "name": "set_radio_mode",
+      "value": "电台模式"
+    },
+    {
+      "name": "set_default_speed",
+      "value": "默认倍速"
+    },
+    {
+      "name": "set_skip_back",
+      "value": "快退"
+    },
+    {
+      "name": "set_skip_forward",
+      "value": "快进"
+    },
+    {
+      "name": "theme_system",
+      "value": "跟随系统"
+    },
+    {
+      "name": "theme_light",
+      "value": "浅色 · 宣纸"
+    },
+    {
+      "name": "theme_dark",
+      "value": "深色 · 水墨"
+    },
+    {
+      "name": "theme_white",
+      "value": "纯白"
+    },
+    {
+      "name": "font_small",
+      "value": "小"
+    },
+    {
+      "name": "font_standard",
+      "value": "标准"
+    },
+    {
+      "name": "font_large",
+      "value": "大"
+    },
+    {
+      "name": "font_xlarge",
+      "value": "特大"
+    },
+    {
+      "name": "radio_random",
+      "value": "随机"
+    },
+    {
+      "name": "radio_contextual",
+      "value": "情境(按时段)"
+    },
+    {
+      "name": "about_line",
+      "value": "余音 Reverb · 鸿蒙端 %s"
+    },
+    {
+      "name": "seal_happy",
+      "value": "开心"
+    },
+    {
+      "name": "seal_warm",
+      "value": "治愈"
+    },
+    {
+      "name": "seal_fired",
+      "value": "热血"
+    },
+    {
+      "name": "seal_awe",
+      "value": "震撼"
+    },
+    {
+      "name": "seal_think",
+      "value": "沉思"
+    },
+    {
+      "name": "seal_insight",
+      "value": "领悟"
+    },
+    {
+      "name": "seal_sad",
+      "value": "难过"
+    },
+    {
+      "name": "seal_angry",
+      "value": "愤怒"
+    },
+    {
+      "name": "seal_tired",
+      "value": "疲惫"
+    },
+    {
+      "name": "region_auto",
+      "value": "自动"
+    },
+    {
+      "name": "module_desc",
+      "value": "余音 Reverb 主模块"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "余音 Reverb"
+    },
+    {
+      "name": "perm_internet",
+      "value": "获取播客目录与音频需要联网"
+    },
+    {
+      "name": "perm_network_info",
+      "value": "判断当前网络类型以避免计费网络下大流量下载"
+    },
+    {
+      "name": "perm_background_audio",
+      "value": "退到后台或锁屏后继续播放音频"
+    },
+    {
+      "name": "genre_recommend",
+      "value": "推荐"
+    },
+    {
+      "name": "genre_news",
+      "value": "新闻"
+    },
+    {
+      "name": "genre_business",
+      "value": "商业"
+    },
+    {
+      "name": "genre_tech",
+      "value": "科技"
+    },
+    {
+      "name": "genre_culture",
+      "value": "文化"
+    },
+    {
+      "name": "genre_knowledge",
+      "value": "知识"
+    },
+    {
+      "name": "genre_education",
+      "value": "教育"
+    },
+    {
+      "name": "genre_comedy",
+      "value": "喜剧"
+    },
+    {
+      "name": "genre_health",
+      "value": "健康"
+    },
+    {
+      "name": "genre_history",
+      "value": "历史"
+    },
+    {
+      "name": "genre_sports",
+      "value": "体育"
+    },
+    {
+      "name": "genre_food",
+      "value": "美食"
+    },
+    {
+      "name": "genre_travel",
+      "value": "旅行"
+    },
+    {
+      "name": "genre_anime",
+      "value": "动漫"
+    },
+    {
+      "name": "genre_relationship",
+      "value": "情感"
+    },
+    {
+      "name": "genre_arts",
+      "value": "艺术"
+    },
+    {
+      "name": "genre_music",
+      "value": "音乐"
+    },
+    {
+      "name": "genre_kids",
+      "value": "亲子"
+    },
+    {
+      "name": "genre_tv",
+      "value": "影视"
+    },
+    {
+      "name": "region_cn",
+      "value": "中国大陆"
+    },
+    {
+      "name": "region_hk",
+      "value": "中国香港"
+    },
+    {
+      "name": "region_tw",
+      "value": "中国台湾"
+    },
+    {
+      "name": "region_us",
+      "value": "美国"
+    },
+    {
+      "name": "region_jp",
+      "value": "日本"
+    },
+    {
+      "name": "region_kr",
+      "value": "韩国"
+    },
+    {
+      "name": "region_gb",
+      "value": "英国"
+    },
+    {
+      "name": "region_sg",
+      "value": "新加坡"
+    },
+    {
+      "name": "region_au",
+      "value": "澳大利亚"
+    },
+    {
+      "name": "region_ca",
+      "value": "加拿大"
+    },
+    {
+      "name": "region_de",
+      "value": "德国"
+    }
   ]
 }

@@ -1,4 +1,5 @@
 import { Scheme, TypeScale, withAlpha, Metrics } from '../theme/Theme';
+import { L } from '../util/L';
 
 /// 通用小部件:页头 / 返回顶栏 / 空态 / 加载态 / 封面。
 /// 对应 Android `ui/screens/Widgets.kt` + 部分 `ui/components/Components.kt`。
@@ -117,7 +118,7 @@ export struct LoadingBox {
       LoadingProgress()
         .width(36).height(36)
         .color(this.scheme.primary)
-      Text($r('app.string.loading'))
+      Text(L.s('loading'))
         .fontSize(TypeScale.body * this.fontScale)
         .fontColor(this.scheme.onSurfaceVariant)
     }

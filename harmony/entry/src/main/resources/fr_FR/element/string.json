@@ -35,6 +35,526 @@
     {
       "name": "action_settings",
       "value": "Réglages"
+    },
+    {
+      "name": "action_cancel",
+      "value": "Annuler"
+    },
+    {
+      "name": "action_clear",
+      "value": "Vider"
+    },
+    {
+      "name": "action_remove",
+      "value": "Retirer"
+    },
+    {
+      "name": "action_expand",
+      "value": "Plus"
+    },
+    {
+      "name": "action_collapse",
+      "value": "Moins"
+    },
+    {
+      "name": "dur_hm",
+      "value": "%1$d h %2$d min"
+    },
+    {
+      "name": "dur_m",
+      "value": "%d min"
+    },
+    {
+      "name": "dur_lt1m",
+      "value": "Moins d'1 min"
+    },
+    {
+      "name": "sec_n",
+      "value": "%d s"
+    },
+    {
+      "name": "search_placeholder",
+      "value": "Rechercher des émissions, épisodes ou coller une URL RSS"
+    },
+    {
+      "name": "discover_daily_hot",
+      "value": "Populaires · %s"
+    },
+    {
+      "name": "discover_empty",
+      "value": "Rien pour l'instant, tirez pour actualiser"
+    },
+    {
+      "name": "continue_listening",
+      "value": "Reprendre l'écoute"
+    },
+    {
+      "name": "tab_shows",
+      "value": "Émissions"
+    },
+    {
+      "name": "tab_episodes",
+      "value": "Épisodes"
+    },
+    {
+      "name": "search_from",
+      "value": "via %s"
+    },
+    {
+      "name": "search_no_shows",
+      "value": "Aucune émission trouvée"
+    },
+    {
+      "name": "search_no_episodes",
+      "value": "Aucun épisode trouvé"
+    },
+    {
+      "name": "lib_subscriptions",
+      "value": "Abonnements"
+    },
+    {
+      "name": "lib_inbox",
+      "value": "Récents"
+    },
+    {
+      "name": "lib_favorites",
+      "value": "Favoris"
+    },
+    {
+      "name": "lib_downloads",
+      "value": "Téléchargements"
+    },
+    {
+      "name": "lib_history",
+      "value": "Historique"
+    },
+    {
+      "name": "layout_list",
+      "value": "Liste"
+    },
+    {
+      "name": "layout_grid",
+      "value": "Grille"
+    },
+    {
+      "name": "empty_subscriptions",
+      "value": "Aucun abonnement"
+    },
+    {
+      "name": "empty_inbox_nosubs",
+      "value": "Abonnez-vous pour voir les derniers épisodes ici"
+    },
+    {
+      "name": "empty_inbox",
+      "value": "Aucune mise à jour, tirez pour actualiser"
+    },
+    {
+      "name": "empty_favorites",
+      "value": "Aucun épisode favori"
+    },
+    {
+      "name": "empty_downloads",
+      "value": "Aucun épisode téléchargé"
+    },
+    {
+      "name": "empty_history",
+      "value": "Aucun historique de lecture"
+    },
+    {
+      "name": "paid",
+      "value": "Payant"
+    },
+    {
+      "name": "paid_show",
+      "value": "Émission payante"
+    },
+    {
+      "name": "action_subscribe",
+      "value": "S'abonner"
+    },
+    {
+      "name": "action_subscribed",
+      "value": "Abonné"
+    },
+    {
+      "name": "detail_load_failed",
+      "value": "Échec du chargement, vérifiez le réseau"
+    },
+    {
+      "name": "episode_count",
+      "value": "%d épisodes"
+    },
+    {
+      "name": "listened_prefix",
+      "value": "Écouté %s"
+    },
+    {
+      "name": "action_download",
+      "value": "Télécharger"
+    },
+    {
+      "name": "downloaded",
+      "value": "Enregistré"
+    },
+    {
+      "name": "shownotes",
+      "value": "Notes"
+    },
+    {
+      "name": "shownotes_empty",
+      "value": "Aucune note pour cet épisode"
+    },
+    {
+      "name": "sleep_end_of_episode",
+      "value": "Fin de l'épisode"
+    },
+    {
+      "name": "sleep_off",
+      "value": "Désactivé"
+    },
+    {
+      "name": "seal_short",
+      "value": "Sceau"
+    },
+    {
+      "name": "seal_prompt",
+      "value": "Que vous a laissé cet épisode ?"
+    },
+    {
+      "name": "moment_short",
+      "value": "Extrait"
+    },
+    {
+      "name": "moment_failed",
+      "value": "Échec de création de l'extrait"
+    },
+    {
+      "name": "moment_saved",
+      "value": "Extrait enregistré dans la galerie"
+    },
+    {
+      "name": "moment_saved_partial",
+      "value": "Extrait créé (non enregistré dans la galerie)"
+    },
+    {
+      "name": "audio_url_invalid",
+      "value": "Adresse audio invalide"
+    },
+    {
+      "name": "playback_load_failed",
+      "value": "Échec du chargement, vérifiez le réseau puis réessayez"
+    },
+    {
+      "name": "player_init_failed",
+      "value": "Échec d'initialisation du lecteur"
+    },
+    {
+      "name": "queue_title",
+      "value": "À suivre"
+    },
+    {
+      "name": "queue_empty",
+      "value": "La file est vide. Appuyez longuement sur un épisode et choisissez Ajouter à la file"
+    },
+    {
+      "name": "listen_stats_title",
+      "value": "Temps d'écoute"
+    },
+    {
+      "name": "listen_stats_empty",
+      "value": "Aucun historique d'écoute"
+    },
+    {
+      "name": "unknown_channel",
+      "value": "Émission inconnue"
+    },
+    {
+      "name": "footprint_title",
+      "value": "Empreinte d'écoute"
+    },
+    {
+      "name": "footprint_empty",
+      "value": "Aucun sceau. Marquez depuis le lecteur un épisode qui vous a touché"
+    },
+    {
+      "name": "footprint_short",
+      "value": "Sceaux"
+    },
+    {
+      "name": "settings_title",
+      "value": "Réglages"
+    },
+    {
+      "name": "sec_appearance",
+      "value": "Apparence"
+    },
+    {
+      "name": "sec_content",
+      "value": "Contenu"
+    },
+    {
+      "name": "sec_playback",
+      "value": "Lecture"
+    },
+    {
+      "name": "set_theme",
+      "value": "Thème"
+    },
+    {
+      "name": "set_accent",
+      "value": "Couleur"
+    },
+    {
+      "name": "set_font",
+      "value": "Taille du texte"
+    },
+    {
+      "name": "set_language",
+      "value": "Langue"
+    },
+    {
+      "name": "set_region",
+      "value": "Région"
+    },
+    {
+      "name": "set_radio_mode",
+      "value": "Mode radio"
+    },
+    {
+      "name": "set_default_speed",
+      "value": "Vitesse par défaut"
+    },
+    {
+      "name": "set_skip_back",
+      "value": "Reculer"
+    },
+    {
+      "name": "set_skip_forward",
+      "value": "Avancer"
+    },
+    {
+      "name": "theme_system",
+      "value": "Suivre le système"
+    },
+    {
+      "name": "theme_light",
+      "value": "Clair · Papier"
+    },
+    {
+      "name": "theme_dark",
+      "value": "Sombre · Encre"
+    },
+    {
+      "name": "theme_white",
+      "value": "Blanc pur"
+    },
+    {
+      "name": "font_small",
+      "value": "Petit"
+    },
+    {
+      "name": "font_standard",
+      "value": "Standard"
+    },
+    {
+      "name": "font_large",
+      "value": "Grand"
+    },
+    {
+      "name": "font_xlarge",
+      "value": "Très grand"
+    },
+    {
+      "name": "radio_random",
+      "value": "Aléatoire"
+    },
+    {
+      "name": "radio_contextual",
+      "value": "Contextuel (selon l'heure)"
+    },
+    {
+      "name": "about_line",
+      "value": "Reverb · HarmonyOS %s"
+    },
+    {
+      "name": "seal_happy",
+      "value": "Joie"
+    },
+    {
+      "name": "seal_warm",
+      "value": "Apaisant"
+    },
+    {
+      "name": "seal_fired",
+      "value": "Enthousiasme"
+    },
+    {
+      "name": "seal_awe",
+      "value": "Stupeur"
+    },
+    {
+      "name": "seal_think",
+      "value": "Songeur"
+    },
+    {
+      "name": "seal_insight",
+      "value": "Éclair"
+    },
+    {
+      "name": "seal_sad",
+      "value": "Tristesse"
+    },
+    {
+      "name": "seal_angry",
+      "value": "Colère"
+    },
+    {
+      "name": "seal_tired",
+      "value": "Fatigue"
+    },
+    {
+      "name": "region_auto",
+      "value": "Automatique"
+    },
+    {
+      "name": "module_desc",
+      "value": "Module principal Reverb"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Reverb"
+    },
+    {
+      "name": "perm_internet",
+      "value": "L'accès réseau est nécessaire pour récupérer les catalogues et l'audio"
+    },
+    {
+      "name": "perm_network_info",
+      "value": "Sert à détecter le type de réseau et éviter les gros téléchargements en réseau facturé"
+    },
+    {
+      "name": "perm_background_audio",
+      "value": "Continuer la lecture audio en arrière-plan ou écran verrouillé"
+    },
+    {
+      "name": "genre_recommend",
+      "value": "Pour vous"
+    },
+    {
+      "name": "genre_news",
+      "value": "Actualités"
+    },
+    {
+      "name": "genre_business",
+      "value": "Affaires"
+    },
+    {
+      "name": "genre_tech",
+      "value": "Tech"
+    },
+    {
+      "name": "genre_culture",
+      "value": "Culture"
+    },
+    {
+      "name": "genre_knowledge",
+      "value": "Savoir"
+    },
+    {
+      "name": "genre_education",
+      "value": "Éducation"
+    },
+    {
+      "name": "genre_comedy",
+      "value": "Humour"
+    },
+    {
+      "name": "genre_health",
+      "value": "Santé"
+    },
+    {
+      "name": "genre_history",
+      "value": "Histoire"
+    },
+    {
+      "name": "genre_sports",
+      "value": "Sport"
+    },
+    {
+      "name": "genre_food",
+      "value": "Cuisine"
+    },
+    {
+      "name": "genre_travel",
+      "value": "Voyage"
+    },
+    {
+      "name": "genre_anime",
+      "value": "Anime"
+    },
+    {
+      "name": "genre_relationship",
+      "value": "Relations"
+    },
+    {
+      "name": "genre_arts",
+      "value": "Arts"
+    },
+    {
+      "name": "genre_music",
+      "value": "Musique"
+    },
+    {
+      "name": "genre_kids",
+      "value": "Enfants"
+    },
+    {
+      "name": "genre_tv",
+      "value": "TV & cinéma"
+    },
+    {
+      "name": "region_cn",
+      "value": "Chine continentale"
+    },
+    {
+      "name": "region_hk",
+      "value": "Hong Kong, Chine"
+    },
+    {
+      "name": "region_tw",
+      "value": "Taïwan, Chine"
+    },
+    {
+      "name": "region_us",
+      "value": "États-Unis"
+    },
+    {
+      "name": "region_jp",
+      "value": "Japon"
+    },
+    {
+      "name": "region_kr",
+      "value": "Corée du Sud"
+    },
+    {
+      "name": "region_gb",
+      "value": "Royaume-Uni"
+    },
+    {
+      "name": "region_sg",
+      "value": "Singapour"
+    },
+    {
+      "name": "region_au",
+      "value": "Australie"
+    },
+    {
+      "name": "region_ca",
+      "value": "Canada"
+    },
+    {
+      "name": "region_de",
+      "value": "Allemagne"
     }
   ]
 }

@@ -1,4 +1,5 @@
 import media from '@ohos.multimedia.media';
+import { L } from '../util/L';
 import fs from '@ohos.file.fs';
 import audio from '@ohos.multimedia.audio';
 import { Episode } from '../model/Models';
@@ -135,7 +136,7 @@ export class PlayerController {
     const local = this.localFileProvider === null ? null : this.localFileProvider(e);
     const useLocal = local !== null && local.length > 0;
     if (!useLocal && e.audioUrl.length === 0) {
-      this.playbackError = '音频地址无效';
+      this.playbackError = L.s('audio_url_invalid');
       return;
     }
     Log.i('Player', `播放 "${e.title}" 源=${useLocal ? '本地' : '网络'} resume=${resumeMs}ms`);
@@ -170,7 +171,7 @@ export class PlayerController {
       p = await media.createAVPlayer();
     } catch (e) {
       Log.e('Player', `创建播放器失败 ${(e as Error).message}`);
-      this.playbackError = '播放器初始化失败';
+      this.playbackError = L.s('player_init_failed');
       return;
     }
     // 声明为音乐用途,系统才允许后台继续出声
@@ -283,7 +284,7 @@ export class PlayerController {
       }, 800);
     } else {
       this.loadRetries = 0;
-      this.playbackError = '加载失败,请检查网络后重试';
+      this.playbackError = L.s('playback_load_failed');
       Log.e('Player', '重试耗尽,等待用户手动重试');
       this.notify();
     }

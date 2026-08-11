@@ -1,4 +1,5 @@
 import { JsonFile } from './JsonFile';
+import { L } from '../util/L';
 import { J } from '../net/Http';
 import { Log } from '../util/Logger';
 
@@ -78,8 +79,11 @@ export interface SealOption {
   label: string;
 }
 
-export const SEALS: SealOption[] = [
-  { seal: '喜', label: '开心' }, { seal: '暖', label: '治愈' }, { seal: '燃', label: '热血' },
-  { seal: '惊', label: '震撼' }, { seal: '思', label: '沉思' }, { seal: '悟', label: '领悟' },
-  { seal: '悲', label: '难过' }, { seal: '怒', label: '愤怒' }, { seal: '疲', label: '疲惫' }
-];
+/// 印字本身是内容(不翻译),标签惰性取文案(模块级常量会在 L.init 前求值)。
+export function sealOptions(): SealOption[] {
+  return [
+    { seal: '喜', label: L.s('seal_happy') }, { seal: '暖', label: L.s('seal_warm') }, { seal: '燃', label: L.s('seal_fired') },
+    { seal: '惊', label: L.s('seal_awe') }, { seal: '思', label: L.s('seal_think') }, { seal: '悟', label: L.s('seal_insight') },
+    { seal: '悲', label: L.s('seal_sad') }, { seal: '怒', label: L.s('seal_angry') }, { seal: '疲', label: L.s('seal_tired') }
+  ];
+}

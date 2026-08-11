@@ -35,6 +35,526 @@
     {
       "name": "action_settings",
       "value": "設定"
+    },
+    {
+      "name": "action_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "action_clear",
+      "value": "清空"
+    },
+    {
+      "name": "action_remove",
+      "value": "移除"
+    },
+    {
+      "name": "action_expand",
+      "value": "展開"
+    },
+    {
+      "name": "action_collapse",
+      "value": "收起"
+    },
+    {
+      "name": "dur_hm",
+      "value": "%1$d 小時 %2$d 分"
+    },
+    {
+      "name": "dur_m",
+      "value": "%d 分鐘"
+    },
+    {
+      "name": "dur_lt1m",
+      "value": "少於 1 分鐘"
+    },
+    {
+      "name": "sec_n",
+      "value": "%d 秒"
+    },
+    {
+      "name": "search_placeholder",
+      "value": "搜尋節目、單集,或貼上 RSS 網址"
+    },
+    {
+      "name": "discover_daily_hot",
+      "value": "每日熱門 · %s"
+    },
+    {
+      "name": "discover_empty",
+      "value": "暫時沒有內容,下拉重試"
+    },
+    {
+      "name": "continue_listening",
+      "value": "繼續收聽"
+    },
+    {
+      "name": "tab_shows",
+      "value": "節目"
+    },
+    {
+      "name": "tab_episodes",
+      "value": "單集"
+    },
+    {
+      "name": "search_from",
+      "value": "來自 %s"
+    },
+    {
+      "name": "search_no_shows",
+      "value": "沒有找到節目"
+    },
+    {
+      "name": "search_no_episodes",
+      "value": "沒有找到單集"
+    },
+    {
+      "name": "lib_subscriptions",
+      "value": "訂閱"
+    },
+    {
+      "name": "lib_inbox",
+      "value": "最新"
+    },
+    {
+      "name": "lib_favorites",
+      "value": "收藏"
+    },
+    {
+      "name": "lib_downloads",
+      "value": "下載"
+    },
+    {
+      "name": "lib_history",
+      "value": "歷史"
+    },
+    {
+      "name": "layout_list",
+      "value": "列表"
+    },
+    {
+      "name": "layout_grid",
+      "value": "宮格"
+    },
+    {
+      "name": "empty_subscriptions",
+      "value": "還沒有訂閱任何節目"
+    },
+    {
+      "name": "empty_inbox_nosubs",
+      "value": "訂閱節目後,這裡匯總最新單集"
+    },
+    {
+      "name": "empty_inbox",
+      "value": "暫時沒有更新,下拉重試"
+    },
+    {
+      "name": "empty_favorites",
+      "value": "還沒有收藏的單集"
+    },
+    {
+      "name": "empty_downloads",
+      "value": "還沒有離線下載的單集"
+    },
+    {
+      "name": "empty_history",
+      "value": "暫無播放歷史"
+    },
+    {
+      "name": "paid",
+      "value": "付費"
+    },
+    {
+      "name": "paid_show",
+      "value": "付費節目"
+    },
+    {
+      "name": "action_subscribe",
+      "value": "訂閱"
+    },
+    {
+      "name": "action_subscribed",
+      "value": "已訂閱"
+    },
+    {
+      "name": "detail_load_failed",
+      "value": "載入失敗,請檢查網路"
+    },
+    {
+      "name": "episode_count",
+      "value": "共 %d 集"
+    },
+    {
+      "name": "listened_prefix",
+      "value": "已收聽 %s"
+    },
+    {
+      "name": "action_download",
+      "value": "下載"
+    },
+    {
+      "name": "downloaded",
+      "value": "已存"
+    },
+    {
+      "name": "shownotes",
+      "value": "簡介"
+    },
+    {
+      "name": "shownotes_empty",
+      "value": "這一集沒有提供簡介"
+    },
+    {
+      "name": "sleep_end_of_episode",
+      "value": "本集結束"
+    },
+    {
+      "name": "sleep_off",
+      "value": "關閉"
+    },
+    {
+      "name": "seal_short",
+      "value": "章"
+    },
+    {
+      "name": "seal_prompt",
+      "value": "這一集給你留下什麼"
+    },
+    {
+      "name": "moment_short",
+      "value": "藏"
+    },
+    {
+      "name": "moment_failed",
+      "value": "剪藏產生失敗"
+    },
+    {
+      "name": "moment_saved",
+      "value": "剪藏已存入相簿"
+    },
+    {
+      "name": "moment_saved_partial",
+      "value": "剪藏已產生(存相簿未成功)"
+    },
+    {
+      "name": "audio_url_invalid",
+      "value": "音訊網址無效"
+    },
+    {
+      "name": "playback_load_failed",
+      "value": "載入失敗,請檢查網路後重試"
+    },
+    {
+      "name": "player_init_failed",
+      "value": "播放器初始化失敗"
+    },
+    {
+      "name": "queue_title",
+      "value": "播放佇列"
+    },
+    {
+      "name": "queue_empty",
+      "value": "佇列是空的。在單集上長按「加入佇列」,即可排進這裡"
+    },
+    {
+      "name": "listen_stats_title",
+      "value": "收聽時長"
+    },
+    {
+      "name": "listen_stats_empty",
+      "value": "還沒有收聽記錄"
+    },
+    {
+      "name": "unknown_channel",
+      "value": "未知頻道"
+    },
+    {
+      "name": "footprint_title",
+      "value": "聽覺足跡"
+    },
+    {
+      "name": "footprint_empty",
+      "value": "還沒有留下聽覺印記。在播放頁給打動你的那一集蓋一枚章"
+    },
+    {
+      "name": "footprint_short",
+      "value": "印"
+    },
+    {
+      "name": "settings_title",
+      "value": "設定"
+    },
+    {
+      "name": "sec_appearance",
+      "value": "外觀"
+    },
+    {
+      "name": "sec_content",
+      "value": "內容"
+    },
+    {
+      "name": "sec_playback",
+      "value": "播放"
+    },
+    {
+      "name": "set_theme",
+      "value": "主題"
+    },
+    {
+      "name": "set_accent",
+      "value": "配色"
+    },
+    {
+      "name": "set_font",
+      "value": "字型大小"
+    },
+    {
+      "name": "set_language",
+      "value": "語言"
+    },
+    {
+      "name": "set_region",
+      "value": "地區"
+    },
+    {
+      "name": "set_radio_mode",
+      "value": "電台模式"
+    },
+    {
+      "name": "set_default_speed",
+      "value": "預設倍速"
+    },
+    {
+      "name": "set_skip_back",
+      "value": "快退"
+    },
+    {
+      "name": "set_skip_forward",
+      "value": "快進"
+    },
+    {
+      "name": "theme_system",
+      "value": "跟隨系統"
+    },
+    {
+      "name": "theme_light",
+      "value": "淺色 · 宣紙"
+    },
+    {
+      "name": "theme_dark",
+      "value": "深色 · 水墨"
+    },
+    {
+      "name": "theme_white",
+      "value": "純白"
+    },
+    {
+      "name": "font_small",
+      "value": "小"
+    },
+    {
+      "name": "font_standard",
+      "value": "標準"
+    },
+    {
+      "name": "font_large",
+      "value": "大"
+    },
+    {
+      "name": "font_xlarge",
+      "value": "特大"
+    },
+    {
+      "name": "radio_random",
+      "value": "隨機"
+    },
+    {
+      "name": "radio_contextual",
+      "value": "情境(按時段)"
+    },
+    {
+      "name": "about_line",
+      "value": "餘音 Reverb · 鴻蒙端 %s"
+    },
+    {
+      "name": "seal_happy",
+      "value": "開心"
+    },
+    {
+      "name": "seal_warm",
+      "value": "治癒"
+    },
+    {
+      "name": "seal_fired",
+      "value": "熱血"
+    },
+    {
+      "name": "seal_awe",
+      "value": "震撼"
+    },
+    {
+      "name": "seal_think",
+      "value": "沉思"
+    },
+    {
+      "name": "seal_insight",
+      "value": "領悟"
+    },
+    {
+      "name": "seal_sad",
+      "value": "難過"
+    },
+    {
+      "name": "seal_angry",
+      "value": "憤怒"
+    },
+    {
+      "name": "seal_tired",
+      "value": "疲憊"
+    },
+    {
+      "name": "region_auto",
+      "value": "自動"
+    },
+    {
+      "name": "module_desc",
+      "value": "餘音 Reverb 主模組"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "餘音 Reverb"
+    },
+    {
+      "name": "perm_internet",
+      "value": "取得播客目錄與音訊需要連網"
+    },
+    {
+      "name": "perm_network_info",
+      "value": "判斷目前網路類型以避免計費網路下大流量下載"
+    },
+    {
+      "name": "perm_background_audio",
+      "value": "退到背景或鎖定螢幕後繼續播放音訊"
+    },
+    {
+      "name": "genre_recommend",
+      "value": "推薦"
+    },
+    {
+      "name": "genre_news",
+      "value": "新聞"
+    },
+    {
+      "name": "genre_business",
+      "value": "商業"
+    },
+    {
+      "name": "genre_tech",
+      "value": "科技"
+    },
+    {
+      "name": "genre_culture",
+      "value": "文化"
+    },
+    {
+      "name": "genre_knowledge",
+      "value": "知識"
+    },
+    {
+      "name": "genre_education",
+      "value": "教育"
+    },
+    {
+      "name": "genre_comedy",
+      "value": "喜劇"
+    },
+    {
+      "name": "genre_health",
+      "value": "健康"
+    },
+    {
+      "name": "genre_history",
+      "value": "歷史"
+    },
+    {
+      "name": "genre_sports",
+      "value": "體育"
+    },
+    {
+      "name": "genre_food",
+      "value": "美食"
+    },
+    {
+      "name": "genre_travel",
+      "value": "旅行"
+    },
+    {
+      "name": "genre_anime",
+      "value": "動漫"
+    },
+    {
+      "name": "genre_relationship",
+      "value": "情感"
+    },
+    {
+      "name": "genre_arts",
+      "value": "藝術"
+    },
+    {
+      "name": "genre_music",
+      "value": "音樂"
+    },
+    {
+      "name": "genre_kids",
+      "value": "親子"
+    },
+    {
+      "name": "genre_tv",
+      "value": "影視"
+    },
+    {
+      "name": "region_cn",
+      "value": "中國大陸"
+    },
+    {
+      "name": "region_hk",
+      "value": "中國香港"
+    },
+    {
+      "name": "region_tw",
+      "value": "中國台灣"
+    },
+    {
+      "name": "region_us",
+      "value": "美國"
+    },
+    {
+      "name": "region_jp",
+      "value": "日本"
+    },
+    {
+      "name": "region_kr",
+      "value": "韓國"
+    },
+    {
+      "name": "region_gb",
+      "value": "英國"
+    },
+    {
+      "name": "region_sg",
+      "value": "新加坡"
+    },
+    {
+      "name": "region_au",
+      "value": "澳洲"
+    },
+    {
+      "name": "region_ca",
+      "value": "加拿大"
+    },
+    {
+      "name": "region_de",
+      "value": "德國"
     }
   ]
 }

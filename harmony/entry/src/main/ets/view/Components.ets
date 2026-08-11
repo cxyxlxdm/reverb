@@ -1,4 +1,5 @@
 import { Scheme, TypeScale, withAlpha, Metrics } from '../theme/Theme';
+import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
 import { Artwork, SquareArtwork } from './Widgets';
 import { formatPubDate } from '../util/DateParse';
@@ -21,16 +22,16 @@ export function formatTime(ms: number): string {
 export function formatDurationSec(sec: number): string {
   if (sec <= 0) return '';
   const m = Math.floor(sec / 60);
-  if (m >= 60) return `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
-  return `${m} 分钟`;
+  if (m >= 60) return L.f('dur_hm', Math.floor(m / 60), m % 60);
+  return L.f('dur_m', m);
 }
 
 /// 人类可读的累计时长("X 小时 Y 分" / "Y 分钟" / "小于 1 分钟")。
 export function formatListenDuration(sec: number): string {
-  if (sec < 60) return '小于 1 分钟';
+  if (sec < 60) return L.s('dur_lt1m');
   const m = Math.floor(sec / 60);
-  if (m >= 60) return `${Math.floor(m / 60)} 小时 ${m % 60} 分`;
-  return `${m} 分钟`;
+  if (m >= 60) return L.f('dur_hm', Math.floor(m / 60), m % 60);
+  return L.f('dur_m', m);
 }
 
 /// 频道列表行:封面 + 标题 + 作者 + 付费标记。
@@ -59,7 +60,7 @@ export struct PodcastListItem {
             .textOverflow({ overflow: TextOverflow.Ellipsis })
         }
         if (this.podcast.isPaid) {
-          Text('付费')
+          Text(L.s('paid'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.secondary)
         }
@@ -163,12 +164,12 @@ export struct EpisodeListItem {
       if (this.downloadState === DownloadState.DOWNLOADING || this.downloadState === DownloadState.QUEUED) {
         LoadingProgress().width(18).height(18).color(this.scheme.primary)
       } else if (this.downloadState === DownloadState.COMPLETED) {
-        Text('已存')
+        Text(L.s('downloaded'))
           .fontSize(TypeScale.caption * this.fontScale)
           .fontColor(this.scheme.primary)
           .onClick(() => this.onDeleteDownload())
       } else if (this.downloadState >= 0) {
-        Text('下载')
+        Text(L.s('action_download'))
           .fontSize(TypeScale.caption * this.fontScale)
           .fontColor(this.scheme.onSurfaceVariant)
           .onClick(() => this.onDownload())
