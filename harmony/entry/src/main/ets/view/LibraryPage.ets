@@ -16,6 +16,7 @@ export struct LibraryPage {
   onOpenPodcast: (p: Podcast) => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
   onOpenSettings: () => void = () => {};
+  onOpenListenStats: () => void = () => {};
 
   @State seg: number = 0;
   @State inboxRefreshing: boolean = false;
@@ -95,10 +96,17 @@ export struct LibraryPage {
 
   @Builder
   headerActions() {
-    Image($r('sys.media.ohos_ic_public_more'))
-      .width(22).height(22)
-      .fillColor(this.scheme.onSurfaceVariant)
-      .onClick(() => this.onOpenSettings())
+    Row({ space: 14 }) {
+      // 收听时长
+      Image($r('sys.media.ohos_ic_public_device_sound_filled'))
+        .width(21).height(21)
+        .fillColor(this.scheme.onSurfaceVariant)
+        .onClick(() => this.onOpenListenStats())
+      Image($r('sys.media.ohos_ic_public_more'))
+        .width(22).height(22)
+        .fillColor(this.scheme.onSurfaceVariant)
+        .onClick(() => this.onOpenSettings())
+    }
   }
 
   // ── 订阅 ──

@@ -2,7 +2,7 @@ import { Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { Podcast, Episode, FeedResult } from '../model/Models';
 import { AppContainer } from '../AppContainer';
 import { TopBar, EmptyHint, LoadingBox, Artwork } from './Widgets';
-import { EpisodeListItem } from './Components';
+import { EpisodeListItem, formatListenDuration } from './Components';
 import { Log } from '../util/Logger';
 
 /// 频道详情:头部(封面/标题/作者/集数/订阅/可展开简介/付费/赞助)+ 单集列表。
@@ -27,6 +27,13 @@ export struct PodcastDetailPage {
   aboutToAppear(): void {
     this.subscribed = this.app.subscriptions.isSubscribed(this.seed.feedUrl);
     this.load();
+  }
+
+  /// 本频道累计收听时长(频道键:feedUrl 优先,回退频道名)。
+  private listenedMs(): number {
+    const d = this.display();
+    const key = d.feedUrl.length > 0 ? d.feedUrl : d.title;
+    return this.app.listenStats.listenedMsFor(key);
   }
 
   private display(): Podcast {
@@ -172,6 +179,11 @@ export struct PodcastDetailPage {
         .width('100%')
       }
 
+      if (this.listenedMs() > 0) {
+        Text(`已收听 ${formatListenDuration(Math.floor(this.listenedMs() / 1000))}`)
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+      }
       if (this.episodes.length > 0) {
         Text(`共 ${this.episodes.length} 集`)
           .fontSize(TypeScale.titleSmall * this.fontScale)

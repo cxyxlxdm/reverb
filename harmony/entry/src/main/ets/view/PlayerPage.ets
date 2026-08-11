@@ -14,6 +14,7 @@ export struct PlayerPage {
   @Prop fontScale: number;
   @ObjectLink player: PlayerController;
   onBack: () => void = () => {};
+  onOpenQueue: () => void = () => {};
 
   @State page: number = 0;
   @State dragging: boolean = false;
@@ -40,6 +41,10 @@ export struct PlayerPage {
         .width(40).height(40)
         .onClick(() => this.onBack())
         Blank()
+        Image($r('sys.media.ohos_ic_public_albums'))
+          .width(20).height(20)
+          .fillColor(this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
+          .onClick(() => this.onOpenQueue())
         this.speedChip()
         this.sleepChip()
         this.favoriteChip()

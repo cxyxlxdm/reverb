@@ -352,6 +352,17 @@ export class PlayerController {
     this.updateNavFlags();
   }
 
+  /// 队列内重排(上移/下移)。
+  moveInQueue(from: number, to: number): void {
+    const n = this.userQueue.length;
+    if (from < 0 || from >= n || to < 0 || to >= n || from === to) return;
+    const next = this.userQueue.slice();
+    const item = next.splice(from, 1)[0];
+    next.splice(to, 0, item);
+    this.userQueue = next;
+    this.updateNavFlags();
+  }
+
   clearQueue(): void {
     this.userQueue = [];
     this.updateNavFlags();
