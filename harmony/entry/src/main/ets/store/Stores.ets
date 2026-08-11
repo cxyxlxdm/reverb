@@ -80,6 +80,16 @@ export class FavoriteStore {
     this.persist();
   }
 
+  /// 合并语义:按 id 去重后尾部追加(备份恢复用)。
+  addAll(items: Episode[]): void {
+    const next = this.favorites.slice();
+    for (let i = 0; i < items.length; i++) {
+      if (!next.some((x: Episode) => x.id === items[i].id)) next.push(items[i]);
+    }
+    this.favorites = next;
+    this.persist();
+  }
+
   private persist(): void {
     const arr: Object[] = [];
     for (let i = 0; i < this.favorites.length; i++) arr.push(Codec.episodeToJson(this.favorites[i]));
@@ -156,6 +166,23 @@ export class HistoryStore {
     if (!hit) return;
     this.history = next;
     this.persist();
+  }
+
+  /// 备份恢复合并:同一集两边都有时**按 updatedAt 取更新的那条**,避免用旧备份把当前进度倒退。
+  /// 先快照现状再比较(边并入边比较会失真);倒序导入使原本较新的记录最终位于前列。
+  mergeAll(incoming: HistoryEntry[]): void {
+    const snapshot = new Map<string, number>();
+    for (let i = 0; i < this.history.length; i++) {
+      snapshot.set(this.history[i].episode.id, this.history[i].updatedAt);
+    }
+    for (let i = incoming.length - 1; i >= 0; i--) {
+      const h = incoming[i];
+      const cur = snapshot.get(h.episode.id);
+      if (cur !== undefined && cur >= h.updatedAt) continue;
+      this.record(h.episode, h.updatedAt);
+      this.updatePosition(h.episode.id, h.positionMs, h.durationMs);
+      if (h.played) this.markPlayed(h.episode.id, true);
+    }
   }
 
   clear(): void {

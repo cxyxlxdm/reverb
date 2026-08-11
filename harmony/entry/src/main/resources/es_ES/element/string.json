@@ -555,6 +555,102 @@
     {
       "name": "region_de",
       "value": "Alemania"
+    },
+    {
+      "name": "sec_backup",
+      "value": "Copia de seguridad"
+    },
+    {
+      "name": "sec_other",
+      "value": "Otros"
+    },
+    {
+      "name": "backup_export",
+      "value": "Exportar copia completa"
+    },
+    {
+      "name": "backup_import",
+      "value": "Restaurar desde copia"
+    },
+    {
+      "name": "opml_export",
+      "value": "Exportar OPML"
+    },
+    {
+      "name": "opml_import",
+      "value": "Importar OPML"
+    },
+    {
+      "name": "backup_done",
+      "value": "Copia exportada"
+    },
+    {
+      "name": "backup_restored",
+      "value": "Restaurado (fusionado, nada sobrescrito)"
+    },
+    {
+      "name": "backup_failed",
+      "value": "Operación no completada"
+    },
+    {
+      "name": "opml_imported",
+      "value": "%d suscripciones importadas"
+    },
+    {
+      "name": "set_updates",
+      "value": "Avisos de nuevos episodios"
+    },
+    {
+      "name": "on",
+      "value": "Activado"
+    },
+    {
+      "name": "off",
+      "value": "Desactivado"
+    },
+    {
+      "name": "update_new_episode",
+      "value": "Nuevo episodio de %s"
+    },
+    {
+      "name": "update_check_now",
+      "value": "Comprobar ahora"
+    },
+    {
+      "name": "update_found",
+      "value": "%d episodios nuevos"
+    },
+    {
+      "name": "update_none",
+      "value": "Sin episodios nuevos"
+    },
+    {
+      "name": "log_export",
+      "value": "Exportar registros"
+    },
+    {
+      "name": "log_done",
+      "value": "Registros exportados"
+    },
+    {
+      "name": "about_title",
+      "value": "Acerca de"
+    },
+    {
+      "name": "about_body",
+      "value": "Un cliente de podcast ligero. Totalmente local: sin backend, sin claves de API, sin SDK de terceros."
+    },
+    {
+      "name": "licenses_title",
+      "value": "Licencias y fuentes"
+    },
+    {
+      "name": "about_sources",
+      "value": "Orden de fuentes: Apple → fyyd.de → gpodder.net → RSS directo, todas gratuitas y sin clave. La reproducción siempre usa la URL original del editor."
+    },
+    {
+      "name": "action_about",
+      "value": "Acerca de Reverb"
     }
   ]
 }

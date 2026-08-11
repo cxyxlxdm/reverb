@@ -7,7 +7,7 @@ import { Log } from '../util/Logger';
 export class Prefs {
   private static store: preferences.Preferences | null = null;
 
-  static init(ctx: common.UIAbilityContext): void {
+  static init(ctx: common.Context): void {
     if (Prefs.store !== null) return;
     try {
       Prefs.store = preferences.getPreferencesSync(ctx, { name: 'reverb_settings' });

@@ -55,6 +55,16 @@ export class StampStore {
     this.persist();
   }
 
+  /// 合并语义:按 episodeId 去重后尾部追加(备份恢复用)。
+  addAll(items: Stamp[]): void {
+    const next = this.stamps.slice();
+    for (let i = 0; i < items.length; i++) {
+      if (!next.some((x: Stamp) => x.episodeId === items[i].episodeId)) next.push(items[i]);
+    }
+    this.stamps = next;
+    this.persist();
+  }
+
   remove(episodeId: string): void {
     this.stamps = this.stamps.filter((x: Stamp) => x.episodeId !== episodeId);
     this.persist();

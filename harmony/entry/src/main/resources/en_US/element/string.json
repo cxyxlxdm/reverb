@@ -555,6 +555,102 @@
     {
       "name": "region_de",
       "value": "Germany"
+    },
+    {
+      "name": "sec_backup",
+      "value": "Backup"
+    },
+    {
+      "name": "sec_other",
+      "value": "Other"
+    },
+    {
+      "name": "backup_export",
+      "value": "Export full backup"
+    },
+    {
+      "name": "backup_import",
+      "value": "Restore from backup"
+    },
+    {
+      "name": "opml_export",
+      "value": "Export OPML"
+    },
+    {
+      "name": "opml_import",
+      "value": "Import OPML"
+    },
+    {
+      "name": "backup_done",
+      "value": "Backup exported"
+    },
+    {
+      "name": "backup_restored",
+      "value": "Restored from backup (merged, nothing overwritten)"
+    },
+    {
+      "name": "backup_failed",
+      "value": "Operation did not complete"
+    },
+    {
+      "name": "opml_imported",
+      "value": "Imported %d subscriptions"
+    },
+    {
+      "name": "set_updates",
+      "value": "New episode alerts"
+    },
+    {
+      "name": "on",
+      "value": "On"
+    },
+    {
+      "name": "off",
+      "value": "Off"
+    },
+    {
+      "name": "update_new_episode",
+      "value": "New episode from %s"
+    },
+    {
+      "name": "update_check_now",
+      "value": "Check for new episodes"
+    },
+    {
+      "name": "update_found",
+      "value": "Found %d new episodes"
+    },
+    {
+      "name": "update_none",
+      "value": "No new episodes"
+    },
+    {
+      "name": "log_export",
+      "value": "Export logs"
+    },
+    {
+      "name": "log_done",
+      "value": "Logs exported"
+    },
+    {
+      "name": "about_title",
+      "value": "About"
+    },
+    {
+      "name": "about_body",
+      "value": "A lightweight podcast client. Fully client-side: no backend, no API keys, no third-party SDKs."
+    },
+    {
+      "name": "licenses_title",
+      "value": "Licenses & sources"
+    },
+    {
+      "name": "about_sources",
+      "value": "Source order: Apple → fyyd.de → gpodder.net → direct RSS, all free and key-less. Playback always falls back to the publisher's original enclosure URL."
+    },
+    {
+      "name": "action_about",
+      "value": "About Reverb"
     }
   ]
 }

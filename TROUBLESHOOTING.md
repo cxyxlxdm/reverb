@@ -314,3 +314,18 @@
 - `AVPlayer` 的 `createAVPlayer/play/pause/seek/setPlaybackRate` **均可能抛异常**(状态机不允许时),
   ArkTS 会给 "Function may throw exceptions" 警告;统一包 try/catch(倍速集中到 `applyRate` 兜住)。
 - **教训 / 规律**:另两端都是 0 警告构建,鸿蒙端也应保持;**警告里混着真实健壮性问题**(播放器状态机随时可能拒绝调用),不能只当噪音。
+
+### H15. i18n 的求值时机:模块级常量会在 `L.init()` 之前求值
+
+- **现场**:把界面文案抽到 `string.json` 后,分类 chips / 地区名 / 印章标签显示成**键名**(如 `genre_news`),而同页其它文案正常。
+- **根因**:`DISCOVER_CATEGORIES` / `REGIONS` / `SEALS` 是**模块级常量**,在模块被 import 的那一刻就求值了 —— 那时 `L.init(ctx)` 还没执行,`resourceManager` 为空,`L.s()` 走了兜底分支返回键名。
+- **解法**:标签改为**惰性求值** —— `categoryLabel(c)`、`regionLabel(r)`、`sealOptions()`;页面里的 `themeLabels`/`fontLabels`/`langLabels`/`segments` 也从常量字段改成方法。并把 `L.init(ctx)` 放在 `AppContainer.boot` 最前(早于所有 `store.load()`)。
+- **教训 / 规律**:**凡依赖运行时上下文(context/资源/配置)的值,都不能放在模块级常量里**。这类 bug 只在真机跑起来才看得见——编译永远通过,兜底分支让它"看起来能用"。
+
+### H16. workScheduler 周期任务需要配套的 ExtensionAbility
+
+- **现场**:`workScheduler.startWork(...)` 注册看似成功,但后台检查从不执行。
+- **根因**:`WorkInfo.abilityName` 必须指向一个**已在 `module.json5` 声明的 `type: "workScheduler"` 扩展**(`WorkSchedulerExtensionAbility` 子类)。只写 ability 名不建扩展,任务没有落点。
+- **解法**:新建 `FeedUpdateExtension`(实现 `onWorkStart/onWorkStop`)并在 `module.json5` 的 `extensionAbilities` 里声明。
+- **注意**:扩展跑在**独立上下文**里,拿不到 UI 侧的 `AppContainer` 单例,须自行最小化装配(`L`/`Prefs`/`JsonFile`/订阅/repository);且它的 `context` 是 `ExtensionContext` 而非 `UIAbilityContext` —— 相关初始化接口的形参应放宽到 `common.Context`,别强转(强转会被 ArkTS 直接拒绝)。
+- **另外**:`notificationManager.requestEnableNotification()` 的无参重载自 API 12 废弃,要传 `UIAbilityContext`(授权弹窗需挂在具体界面上)。

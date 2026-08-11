@@ -9,7 +9,7 @@ import { Log } from './Logger';
 export class L {
   private static rm: resourceManager.ResourceManager | null = null;
 
-  static init(ctx: common.UIAbilityContext): void {
+  static init(ctx: common.Context): void {
     L.rm = ctx.resourceManager;
   }
 

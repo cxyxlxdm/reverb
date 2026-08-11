@@ -555,6 +555,102 @@
     {
       "name": "region_de",
       "value": "德國"
+    },
+    {
+      "name": "sec_backup",
+      "value": "備份"
+    },
+    {
+      "name": "sec_other",
+      "value": "其他"
+    },
+    {
+      "name": "backup_export",
+      "value": "匯出完整備份"
+    },
+    {
+      "name": "backup_import",
+      "value": "從備份還原"
+    },
+    {
+      "name": "opml_export",
+      "value": "匯出 OPML 訂閱"
+    },
+    {
+      "name": "opml_import",
+      "value": "匯入 OPML 訂閱"
+    },
+    {
+      "name": "backup_done",
+      "value": "已匯出備份"
+    },
+    {
+      "name": "backup_restored",
+      "value": "已從備份還原(合併,不覆蓋)"
+    },
+    {
+      "name": "backup_failed",
+      "value": "操作未完成"
+    },
+    {
+      "name": "opml_imported",
+      "value": "已匯入 %d 個訂閱"
+    },
+    {
+      "name": "set_updates",
+      "value": "訂閱更新提醒"
+    },
+    {
+      "name": "on",
+      "value": "開"
+    },
+    {
+      "name": "off",
+      "value": "關"
+    },
+    {
+      "name": "update_new_episode",
+      "value": "%s 有新一集"
+    },
+    {
+      "name": "update_check_now",
+      "value": "立即檢查更新"
+    },
+    {
+      "name": "update_found",
+      "value": "發現 %d 集新內容"
+    },
+    {
+      "name": "update_none",
+      "value": "暫時沒有新內容"
+    },
+    {
+      "name": "log_export",
+      "value": "匯出日誌"
+    },
+    {
+      "name": "log_done",
+      "value": "已匯出日誌"
+    },
+    {
+      "name": "about_title",
+      "value": "關於"
+    },
+    {
+      "name": "about_body",
+      "value": "一款輕量的播客客戶端。純客戶端、零後端、零 API Key、不接任何三方 SDK,打開即用。"
+    },
+    {
+      "name": "licenses_title",
+      "value": "開源與取源"
+    },
+    {
+      "name": "about_sources",
+      "value": "取源順序:Apple → fyyd.de → gpodder.net → RSS 直連,全部免費免鑑權;播放一律回落發布方 RSS 的原始直連。"
+    },
+    {
+      "name": "action_about",
+      "value": "關於餘音"
     }
   ]
 }

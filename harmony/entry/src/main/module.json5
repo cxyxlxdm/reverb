@@ -28,6 +28,16 @@
         ]
       }
     ],
+    "extensionAbilities": [
+      {
+        // 订阅更新检查的后台执行体(workScheduler 周期任务的落点)
+        "name": "FeedUpdateExtension",
+        "srcEntry": "./ets/update/FeedUpdateExtension.ets",
+        "description": "$string:module_desc",
+        "type": "workScheduler",
+        "exported": false
+      }
+    ],
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET",

@@ -11,6 +11,7 @@ import { SettingsPage } from '../view/SettingsPage';
 import { ListenStatsPage } from '../view/ListenStatsPage';
 import { QueuePage } from '../view/QueuePage';
 import { FootprintPage } from '../view/FootprintPage';
+import { AboutPage } from '../view/AboutPage';
 import { PlayerController } from '../playback/PlayerController';
 import { Podcast, Episode, emptyPodcast } from '../model/Models';
 import { Log } from '../util/Logger';
@@ -111,7 +112,8 @@ struct Index {
           scheme: this.scheme(),
           fontScale: this.fontScale(),
           onBack: () => { this.stack.pop(); },
-          onChanged: () => { this.tick = this.tick + 1; }
+          onChanged: () => { this.tick = this.tick + 1; },
+          onOpenAbout: () => { this.stack.pushPathByName('about', null); }
         })
       }
       .hideTitleBar(true)
@@ -135,6 +137,17 @@ struct Index {
     else if (name === 'listen_stats') {
       NavDestination() {
         ListenStatsPage({
+          scheme: this.scheme(), fontScale: this.fontScale(),
+          onBack: () => { this.stack.pop(); }
+        })
+      }
+      .hideTitleBar(true)
+      .padding({ top: this.topInset, bottom: this.bottomInset })
+      .backgroundColor(this.scheme().background)
+    }
+    else if (name === 'about') {
+      NavDestination() {
+        AboutPage({
           scheme: this.scheme(), fontScale: this.fontScale(),
           onBack: () => { this.stack.pop(); }
         })

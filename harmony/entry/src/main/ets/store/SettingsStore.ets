@@ -23,6 +23,8 @@ export class SettingsStore {
   subsGrid: boolean = false;
   /// 电台模式:false 随机 / true 情境(按时段选分类)
   contextualRadio: boolean = false;
+  /// 订阅更新提醒(周期检查 + 本地通知)
+  updatesEnabled: boolean = false;
 
   load(): void {
     this.themeMode = Prefs.getNumber('theme_mode', 0);
@@ -35,6 +37,7 @@ export class SettingsStore {
     this.skipForwardSec = Prefs.getNumber('skip_fwd', 30);
     this.subsGrid = Prefs.getBool('subs_grid', false);
     this.contextualRadio = Prefs.getBool('contextual_radio', false);
+    this.updatesEnabled = Prefs.getBool('updates_enabled', false);
     SettingsStore.applyLanguage(this.language);
     Log.i('Settings', `加载 theme=${this.themeMode} accent=${this.accentIndex} font=${this.fontIndex} region=${this.regionOverride === '' ? 'auto' : this.regionOverride}`);
   }
@@ -86,6 +89,10 @@ export class SettingsStore {
   setContextualRadio(v: boolean): void {
     this.contextualRadio = v;
     Prefs.put('contextual_radio', v);
+  }
+  setUpdatesEnabled(v: boolean): void {
+    this.updatesEnabled = v;
+    Prefs.put('updates_enabled', v);
   }
   setSubsGrid(v: boolean): void {
     this.subsGrid = v;

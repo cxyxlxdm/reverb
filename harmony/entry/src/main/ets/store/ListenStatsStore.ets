@@ -87,6 +87,54 @@ export class ListenStatsStore {
     this.publish();
   }
 
+  /// 供备份导出的快照。
+  snapshot(): ChannelListen[] {
+    const out: ChannelListen[] = [];
+    this.table.forEach((c: ChannelListen) => out.push(c));
+    return out;
+  }
+
+  /**
+   * 备份恢复合并:**按设备逐格取 max**(绝不跨设备相加)。
+   * 同一份备份重复恢复结果不变(幂等);不同设备的分账相加,故跨设备恢复自然汇总。
+   * legacyMsByKey 承载旧格式备份的扁平时长(归入伪设备键,避免与本机数相加出错)。
+   */
+  merge(incoming: ChannelListen[], legacyMsByKey: Map<string, number>): void {
+    if (incoming.length === 0) return;
+    for (let i = 0; i < incoming.length; i++) {
+      const inc = incoming[i];
+      if (inc.key.length === 0) continue;
+      let pd: Record<string, number> = inc.perDevice;
+      if (Object.keys(pd).length === 0) {
+        const legacy = legacyMsByKey.get(inc.key);
+        if (legacy === undefined || legacy <= 0) continue;
+        pd = {};
+        pd[`legacy:${inc.key}`] = legacy;
+      }
+      const cur = this.table.get(inc.key);
+      if (cur === undefined) {
+        this.table.set(inc.key, {
+          key: inc.key, title: inc.title, artworkUrl: inc.artworkUrl,
+          feedUrl: inc.feedUrl, perDevice: pd
+        });
+      } else {
+        const keys = Object.keys(pd);
+        for (let j = 0; j < keys.length; j++) {
+          const dev = keys[j];
+          const mine = cur.perDevice[dev];
+          cur.perDevice[dev] = Math.max(mine === undefined ? 0 : mine, pd[dev]);
+        }
+        if (cur.title.length === 0) cur.title = inc.title;
+        if (cur.artworkUrl.length === 0) cur.artworkUrl = inc.artworkUrl;
+        if (cur.feedUrl.length === 0) cur.feedUrl = inc.feedUrl;
+        this.table.set(inc.key, cur);
+      }
+    }
+    Log.i('ListenStats', `合并 ${incoming.length} 个频道(按设备取 max)`);
+    this.persist();
+    this.publish();
+  }
+
   /// 首启种子:无既有统计时用历史做近似初值,记在共用 seed 格。
   seedFromHistory(history: HistoryEntry[]): void {
     if (this.table.size > 0 || history.length === 0) return;
