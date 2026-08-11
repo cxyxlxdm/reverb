@@ -49,16 +49,17 @@ export struct DiscoverPage {
   private async loadCategory(idx: number, force: boolean): Promise<void> {
     const cat: DiscoverCategory = DISCOVER_CATEGORIES[idx];
     const region = this.app.region();
+    let hadCache = false;
     if (!force) {
       const cached = this.app.repository.cachedPopular(cat.genreId, region);
       if (cached.length > 0) {
         this.setList(idx, cached);
-        return;   // 有缓存即先展示;不阻塞,后台刷新在下面继续
+        hadCache = true;   // 缓存秒显,但**继续往下走后台刷新**(不显转圈)
       }
     }
-    this.setLoading(idx, true);
+    if (!hadCache) this.setLoading(idx, true);
     const fresh = await this.app.repository.refreshPopular(cat.genreId, region);
-    this.setLoading(idx, false);
+    if (!hadCache) this.setLoading(idx, false);
     if (fresh.length > 0) this.setList(idx, fresh);
     Log.i('Discover', `分类 ${cat.key} 加载 ${fresh.length} 条`);
   }

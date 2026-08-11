@@ -299,3 +299,18 @@
   2. 改用免权限的 `showAssetsCreationDialog(srcFileUris, configs)` 后仍失败,是因为我**手拼了 `file://` + 路径**;该接口要求传**沙箱 uri**。
 - **解法**:用 `fileUri.getUriFromPath(path)` 得到合规 uri 再传入。修好后系统会弹「允许"余音"保存 1 张图片?」(带图片预览),用户点允许即写入相册,日志确认「已存入相册」。
 - **教训 / 规律**:鸿蒙里「写系统媒体库」的正道是**受控接口 + 系统确认弹窗**,而不是申请权限;并且**凡是跨进程传文件,一律用 `fileUri` 生成 uri,不要手拼字符串**。
+
+### H13. 缓存命中后忘了继续后台刷新(注释与代码不一致)
+
+- **现场**:发现页分类榜第一次拉到后写入磁盘缓存;**此后无论何时进入,永远显示旧榜单**,只有手动下拉刷新才更新。
+- **根因**:`loadCategory` 里缓存命中就 `return` 了,而**注释却写着"后台刷新在下面继续"** —— 注释描述的是意图,代码没实现。Android/macOS 都是「缓存秒开 + 后台刷新」两步都做。
+- **解法**:命中缓存只做「先展示」并置 `hadCache=true`,**继续往下执行 refreshPopular**;仅在无缓存时才显示转圈(有缓存时静默刷新,不打扰用户)。
+- **教训 / 规律**:**注释声称的行为要和代码对得上**——这类"注释比代码更正确"的地方极难靠肉眼发现,写完一段带注释的分支后应回读一遍确认。
+
+### H14. 两个已废弃 API 与 5 处未处理异常(0 警告收尾)
+
+- `xml.XmlPullParser.parse` 自 API 14 废弃 → 改用 **`parseXml`**(同签名)。
+- 全局 `componentSnapshot.get` 自 API 18 废弃 → 改用 **`UIContext.getComponentSnapshot().get`**。
+- `AVPlayer` 的 `createAVPlayer/play/pause/seek/setPlaybackRate` **均可能抛异常**(状态机不允许时),
+  ArkTS 会给 "Function may throw exceptions" 警告;统一包 try/catch(倍速集中到 `applyRate` 兜住)。
+- **教训 / 规律**:另两端都是 0 警告构建,鸿蒙端也应保持;**警告里混着真实健壮性问题**(播放器状态机随时可能拒绝调用),不能只当噪音。

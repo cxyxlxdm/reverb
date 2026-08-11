@@ -16,6 +16,9 @@ export struct SettingsPage {
   private app: AppContainer = AppContainer.get();
   private themeLabels: string[] = ['跟随系统', '浅色 · 宣纸', '深色 · 水墨', '纯白'];
   private fontLabels: string[] = ['小', '标准', '大', '特大'];
+  /// 语言:值与 resources 下的 locale 目录对应("" = 跟随系统)
+  private langCodes: string[] = ['', 'zh-Hans', 'zh-Hant', 'en', 'fr', 'es'];
+  private langLabels: string[] = ['跟随系统', '简体中文', '繁體中文', 'English', 'Français', 'Español'];
   private speeds: number[] = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0];
   private skipBackOpts: number[] = [5, 10, 15, 30];
   private skipFwdOpts: number[] = [15, 30, 45, 60];
@@ -34,6 +37,9 @@ export struct SettingsPage {
           this.accentRow()
           this.choiceRow('字号', this.fontLabels, () => this.app.settings.fontIndex,
             (i: number) => { this.app.settings.setFontIndex(i); this.onChanged(); })
+
+          this.choiceRow('语言', this.langLabels, () => this.langIndex(),
+            (i: number) => { this.app.settings.setLanguage(this.langCodes[i]); this.onChanged(); })
 
           this.sectionLabel('内容')
           this.choiceRow('地区', REGIONS.map((r: RegionOption) => r.label),
@@ -69,6 +75,11 @@ export struct SettingsPage {
     }
     .width('100%')
     .height('100%')
+  }
+
+  private langIndex(): number {
+    const i = this.langCodes.indexOf(this.app.settings.language);
+    return i < 0 ? 0 : i;
   }
 
   private regionIndex(): number {

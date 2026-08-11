@@ -1,4 +1,3 @@
-import componentSnapshot from '@ohos.arkui.componentSnapshot';
 import image from '@ohos.multimedia.image';
 import fs from '@ohos.file.fs';
 import photoAccessHelper from '@ohos.file.photoAccessHelper';
@@ -64,10 +63,12 @@ export struct MomentCard {
 }
 
 /// 把某个组件(按 id)截图并存成 PNG。返回文件路径;失败返回 null。
-export async function snapshotToPng(ctx: common.UIAbilityContext, componentId: string, name: string): Promise<string | null> {
+export async function snapshotToPng(ui: UIContext, ctx: common.UIAbilityContext,
+                                    componentId: string, name: string): Promise<string | null> {
   let pm: image.PixelMap | null = null;
   try {
-    pm = await componentSnapshot.get(componentId);
+    // 旧的全局 componentSnapshot.get 已废弃,改用 UIContext 上的实例
+    pm = await ui.getComponentSnapshot().get(componentId);
   } catch (e) {
     Log.e('Moment', `截图失败 ${(e as Error).message}`);
     return null;

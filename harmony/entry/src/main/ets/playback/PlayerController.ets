@@ -165,7 +165,14 @@ export class PlayerController {
 
   private async ensurePlayer(): Promise<void> {
     if (this.player !== null) return;
-    const p = await media.createAVPlayer();
+    let p: media.AVPlayer;
+    try {
+      p = await media.createAVPlayer();
+    } catch (e) {
+      Log.e('Player', `创建播放器失败 ${(e as Error).message}`);
+      this.playbackError = '播放器初始化失败';
+      return;
+    }
     // 声明为音乐用途,系统才允许后台继续出声
     p.audioRendererInfo = {
       usage: audio.StreamUsage.STREAM_USAGE_MUSIC,
@@ -227,7 +234,7 @@ export class PlayerController {
       } catch (e) {
         Log.w('Player', '起播失败');
       }
-      p.setPlaybackRate(this.speed);
+      this.applyRate(p, this.speed);
       this.fadeVolume(1.0, this.fadeInMs);
       return;
     }
@@ -294,11 +301,15 @@ export class PlayerController {
   togglePlayPause(): void {
     const p = this.player;
     if (p === null) return;
-    if (this.isPlaying) {
-      p.pause();
-    } else {
-      p.play();
-      p.setPlaybackRate(this.speed);
+    try {
+      if (this.isPlaying) {
+        p.pause();
+      } else {
+        p.play();
+        this.applyRate(p, this.speed);
+      }
+    } catch (e) {
+      Log.w('Player', `播放/暂停失败 ${(e as Error).message}`);
     }
   }
 
@@ -306,7 +317,12 @@ export class PlayerController {
     const p = this.player;
     if (p === null) return;
     const t = Math.max(0, ms);
-    p.seek(t, media.SeekMode.SEEK_PREV_SYNC);
+    try {
+      p.seek(t, media.SeekMode.SEEK_PREV_SYNC);
+    } catch (e) {
+      Log.w('Player', `seek 失败 ${(e as Error).message}`);
+      return;
+    }
     this.positionMs = t;
     // seek 后把基线推到新位置,避免跳变被计入收听
     this.lastCountedPosMs = t;
@@ -328,8 +344,17 @@ export class PlayerController {
   setSpeed(s: number): void {
     this.speed = s;
     const p = this.player;
-    if (p !== null && this.isPlaying) p.setPlaybackRate(s);
+    if (p !== null && this.isPlaying) this.applyRate(p, s);
     this.notify();
+  }
+
+  /// 设置倍速。setPlaybackRate 可能抛(状态不允许时),集中兜住。
+  private applyRate(p: media.AVPlayer, rate: number): void {
+    try {
+      p.setPlaybackRate(rate);
+    } catch (e) {
+      Log.w('Player', `设置倍速失败 ${(e as Error).message}`);
+    }
   }
 
   // ── 队列导航 ──

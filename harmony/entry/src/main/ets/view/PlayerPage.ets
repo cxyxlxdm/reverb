@@ -403,8 +403,9 @@ export struct PlayerPage {
   private async saveMoment(): Promise<void> {
     const e = this.player.current;
     if (e === null) return;
-    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    const png = await snapshotToPng(ctx, 'reverb-moment-card', 'reverb-moment.png');
+    const ui = this.getUIContext();
+    const ctx = ui.getHostContext() as common.UIAbilityContext;
+    const png = await snapshotToPng(ui, ctx, 'reverb-moment-card', 'reverb-moment.png');
     if (png === null) {
       this.momentHint = '剪藏生成失败';
       return;

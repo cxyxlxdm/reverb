@@ -1,3 +1,4 @@
+import i18n from '@ohos.i18n';
 import { Prefs } from './Prefs';
 import { Log } from '../util/Logger';
 
@@ -34,6 +35,7 @@ export class SettingsStore {
     this.skipForwardSec = Prefs.getNumber('skip_fwd', 30);
     this.subsGrid = Prefs.getBool('subs_grid', false);
     this.contextualRadio = Prefs.getBool('contextual_radio', false);
+    SettingsStore.applyLanguage(this.language);
     Log.i('Settings', `加载 theme=${this.themeMode} accent=${this.accentIndex} font=${this.fontIndex} region=${this.regionOverride === '' ? 'auto' : this.regionOverride}`);
   }
 
@@ -49,9 +51,21 @@ export class SettingsStore {
     this.fontIndex = v;
     Prefs.put('font_index', v);
   }
+  /// 设置界面语言。"" = 跟随系统。写入应用级偏好语言,资源随即按新语言解析。
   setLanguage(v: string): void {
     this.language = v;
     Prefs.put('app_language', v);
+    SettingsStore.applyLanguage(v);
+  }
+
+  /// 启动时把已存的语言偏好套用到系统(否则重启后回落系统语言)。
+  static applyLanguage(v: string): void {
+    try {
+      i18n.System.setAppPreferredLanguage(v.length === 0 ? 'default' : v);
+      Log.i('Settings', `应用语言 ${v.length === 0 ? '跟随系统' : v}`);
+    } catch (e) {
+      Log.w('Settings', `设置语言失败 ${(e as Error).message}`);
+    }
   }
   setRegionOverride(v: string): void {
     this.regionOverride = v;

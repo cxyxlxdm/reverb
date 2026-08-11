@@ -26,7 +26,7 @@ export class RssParser {
       const st = new ParseState(feedUrl);
       const buf = new util.TextEncoder().encodeInto(xmlText).buffer as ArrayBuffer;
       const parser = new xml.XmlPullParser(buf, 'utf-8');
-      parser.parse({
+      parser.parseXml({
         supportDoctype: true,
         ignoreNameSpace: false,
         tokenValueCallbackFunction: (evt: xml.EventType, info: xml.ParseInfo): boolean => {

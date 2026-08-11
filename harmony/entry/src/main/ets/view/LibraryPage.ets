@@ -20,7 +20,6 @@ export struct LibraryPage {
   onOpenFootprint: () => void = () => {};
 
   @State seg: number = 0;
-  @State inboxRefreshing: boolean = false;
 
   private app: AppContainer = AppContainer.get();
   private segments: string[] = ['订阅', '最新', '收藏', '下载', '历史'];
@@ -37,7 +36,6 @@ export struct LibraryPage {
     if (subs.length === 0) return;
     if (force) await this.app.inbox.refresh(subs, this.app.repository);
     else await this.app.inbox.refreshIfStale(subs, this.app.repository);
-    this.inboxRefreshing = false;
     Log.i('Library', `最新:当前 ${this.app.inbox.episodes.length} 条`);
   }
 
