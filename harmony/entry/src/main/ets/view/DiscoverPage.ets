@@ -1,9 +1,9 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
-import { Podcast, Episode, SearchOutcome } from '../model/Models';
+import { Podcast, Episode, SearchOutcome, HistoryEntry } from '../model/Models';
 import { DISCOVER_CATEGORIES, DiscoverCategory } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
-import { ScreenHeader, EmptyHint, LoadingBox } from './Widgets';
-import { PodcastGridItem, PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
+import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork } from './Widgets';
+import { PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
 import { Log } from '../util/Logger';
 
@@ -209,44 +209,43 @@ export struct DiscoverPage {
     .alignItems(VerticalAlign.Center)
   }
 
-  /// 分类页:下拉刷新 + 两列宫格。
+  /// 分类页:下拉刷新 + **单列列表**(与 Android 一致,非宫格),
+  /// 首项为「继续收听」横条(有未播完历史时),其后是「每日热门 · X」小标题与频道行。
   @Builder
   categoryPage(idx: number) {
     Refresh({ refreshing: this.refreshing }) {
-      Scroll() {
-        Column() {
-          if (this.loadingFlags[idx] && this.lists[idx].length === 0) {
-            LoadingBox({ scheme: this.scheme, fontScale: this.fontScale })
-              .height(320)
-          } else if (this.lists[idx].length === 0) {
-            EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '暂时没有内容,下拉重试' })
-              .height(320)
-          } else {
-            Grid() {
-              ForEach(this.lists[idx], (p: Podcast) => {
-                GridItem() {
-                  PodcastGridItem({
-                    scheme: this.scheme,
-                    fontScale: this.fontScale,
-                    podcast: p,
-                    onTap: () => this.onOpenPodcast(p)
-                  })
-                }
-              }, (p: Podcast) => p.id)
+      Column() {
+        if (this.loadingFlags[idx] && this.lists[idx].length === 0) {
+          LoadingBox({ scheme: this.scheme, fontScale: this.fontScale })
+        } else if (this.lists[idx].length === 0) {
+          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: '暂时没有内容,下拉重试' })
+        } else {
+          List() {
+            if (this.continueEntries().length > 0) {
+              ListItem() {
+                this.continueStrip()
+              }
             }
-            .columnsTemplate('1fr 1fr')
-            .columnsGap(Metrics.gridSpacing)
-            .rowsGap(Metrics.gridSpacing + 4)
-            .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 20 })
-            .height(this.gridHeight(this.lists[idx].length))
+            ListItem() {
+              Text(`每日热门 · ${DISCOVER_CATEGORIES[idx].label}`)
+                .fontSize(TypeScale.caption * this.fontScale)
+                .fontColor(this.scheme.onSurfaceVariant)
+                .padding({ left: Metrics.pagePadding, top: 4, bottom: 4 })
+            }
+            ForEach(this.lists[idx], (p: Podcast) => {
+              ListItem() {
+                PodcastListItem({
+                  scheme: this.scheme, fontScale: this.fontScale, podcast: p,
+                  onTap: () => this.onOpenPodcast(p)
+                })
+              }
+            }, (p: Podcast) => p.id)
           }
+          .scrollBar(BarState.Off)
+          .width('100%').height('100%')
         }
-        .width('100%')
       }
-      .scrollBar(BarState.Off)
-      .width('100%')
-      .height('100%')
-      .align(Alignment.Top)
+      .width('100%').height('100%')
     }
     .onRefreshing(() => {
       this.refreshing = true;
@@ -256,10 +255,58 @@ export struct DiscoverPage {
     .height('100%')
   }
 
-  /// Grid 在 Scroll 内需要显式高度:按两列估算。
-  private gridHeight(count: number): number {
-    const rows = Math.ceil(count / 2);
-    return rows * 230 + 20;
+  /// 未播完的历史:进度在 10s ~ 95% 且未标记已播完,最新在前,最多 15 条(与 Android 同口径)。
+  private continueEntries(): HistoryEntry[] {
+    return this.app.history.history.filter((h: HistoryEntry) => {
+      if (h.played) return false;
+      if (h.positionMs < 10000 || h.durationMs <= 0) return false;
+      return h.positionMs < h.durationMs * 0.95;
+    }).slice(0, 15);
+  }
+
+  /// 继续收听:横滑卡片,点按续播。
+  @Builder
+  continueStrip() {
+    Column({ space: 6 }) {
+      Text('继续收听')
+        .fontSize(TypeScale.titleSmall * this.fontScale)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.scheme.onBackground)
+        .padding({ left: Metrics.pagePadding })
+      Scroll() {
+        Row({ space: 12 }) {
+          ForEach(this.continueEntries(), (h: HistoryEntry) => {
+            Column({ space: 6 }) {
+              SquareArtwork({ scheme: this.scheme, url: h.episode.artworkUrl, corner: 12 })
+              Text(h.episode.title)
+                .fontSize(TypeScale.caption * this.fontScale)
+                .fontColor(this.scheme.onBackground)
+                .maxLines(2)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .width('100%')
+              // 细进度条
+              Stack({ alignContent: Alignment.Start }) {
+                Row().width('100%').height(3)
+                  .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.2)).borderRadius(2)
+                Row().width(`${Math.min(100, h.positionMs / h.durationMs * 100)}%`).height(3)
+                  .backgroundColor(this.scheme.primary).borderRadius(2)
+              }
+              .width('100%').height(3)
+            }
+            .width(112)
+            .onClick(() => this.onPlayEpisode(h.episode, this.continueEntries().map((x: HistoryEntry) => x.episode)))
+          }, (h: HistoryEntry) => h.episode.id)
+        }
+        .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding })
+      }
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .width('100%')
+      .align(Alignment.Start)
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .padding({ top: 4, bottom: 10 })
   }
 
   @Builder
