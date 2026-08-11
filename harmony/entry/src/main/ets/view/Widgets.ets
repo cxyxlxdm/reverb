@@ -137,15 +137,14 @@ export struct Artwork {
 
   build() {
     Stack() {
+      // 占位色块垫底:加载中/失败都显示低饱和底,不露出应用图标
+      Row()
+        .width(this.dim).height(this.dim)
+        .backgroundColor(withAlpha(this.scheme.primary, 0.18))
       if (this.url.length > 0) {
         Image(this.url)
           .width(this.dim).height(this.dim)
           .objectFit(ImageFit.Cover)
-          .alt($r('app.media.startIcon'))
-      } else {
-        Row()
-          .width(this.dim).height(this.dim)
-          .backgroundColor(withAlpha(this.scheme.primary, 0.18))
       }
     }
     .width(this.dim).height(this.dim)
@@ -163,16 +162,15 @@ export struct SquareArtwork {
 
   build() {
     Stack() {
+      Row()
+        .width('100%')
+        .aspectRatio(1)
+        .backgroundColor(withAlpha(this.scheme.primary, 0.18))
       if (this.url.length > 0) {
         Image(this.url)
           .width('100%')
           .aspectRatio(1)
           .objectFit(ImageFit.Cover)
-      } else {
-        Row()
-          .width('100%')
-          .aspectRatio(1)
-          .backgroundColor(withAlpha(this.scheme.primary, 0.18))
       }
     }
     .width('100%')
