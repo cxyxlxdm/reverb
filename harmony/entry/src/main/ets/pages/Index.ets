@@ -1,6 +1,6 @@
 import { Theme, Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { SettingsStore } from '../store/SettingsStore';
-import { Prefs } from '../store/Prefs';
+import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint } from '../view/Widgets';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
@@ -17,8 +17,9 @@ struct Index {
   aboutToAppear(): void {
     // getContext() 已废弃,API 12+ 用 UIContext 取宿主 context
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
-    Prefs.init(ctx);
-    this.settings.load();
+    const app = AppContainer.get();
+    app.boot(ctx);
+    this.settings = app.settings;
     // 设备深色模式(mode 0 跟随系统时使用)
     const cfgMode: number | undefined = ctx.config?.colorMode;
     this.systemDark = cfgMode === 0;   // ColorMode.COLOR_MODE_DARK = 0
