@@ -1,45 +1,54 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 余音绕梁：金色横梁 + 环绕向上的青瓷色声波，中心一点为声源 -->
+<!--
+  余音绕梁:金色横梁 + 环绕向上的青瓷色声波,中心一点为声源。
+
+  几何按 macOS 版图标的比例对齐(那版观感最匀):
+  · 自适应图标的**可见区只有中心 72/108**,故图案宽度取 48dp(占可见区 ~67%),
+    横向 x 30..78、留出足够留白 —— 旧版是 20..88(68dp),几乎顶满可见区,显得"撑满"。
+  · 金色横梁宽 38.6dp = 外圈弧直径(48dp)的 **80%**,居中且略短于半圆直径 —— 旧版横梁 68dp
+    比声波还宽,是最刺眼的地方。
+  · 竖向:图案总高约 28dp,在 108 画布内居中(横梁顶 39.9,弧心 65.3)。
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 梁 · 横梁主体 -->
+    <!-- 梁 · 横梁主体(圆角矩形,居中,略短于外圈弧直径) -->
     <path
         android:fillColor="#E9C879"
-        android:pathData="M24,31 h60 a4,4 0 0 1 4,4 v6 a4,4 0 0 1 -4,4 h-60 a4,4 0 0 1 -4,-4 v-6 a4,4 0 0 1 4,-4 z" />
+        android:pathData="M36.5,39.9 h35 a1.8,1.8 0 0 1 1.8,1.8 v4.8 a1.8,1.8 0 0 1 -1.8,1.8 h-35 a1.8,1.8 0 0 1 -1.8,-1.8 v-4.8 a1.8,1.8 0 0 1 1.8,-1.8 z" />
     <!-- 斗拱两端支点 -->
     <path
         android:fillColor="#D8B45E"
-        android:pathData="M30,45 h7 v7 h-7 z M71,45 h7 v7 h-7 z" />
+        android:pathData="M38.2,48.3 h4.9 v5.3 h-4.9 z M65.3,48.3 h4.9 v5.3 h-4.9 z" />
 
-    <!-- 余音 · 三道环绕横梁的声波（越外越淡） -->
+    <!-- 余音 · 三道环绕横梁的声波(越外越淡) -->
     <path
         android:strokeColor="#8FE0CE"
-        android:strokeWidth="5"
+        android:strokeWidth="3.2"
         android:strokeLineCap="round"
         android:strokeAlpha="1.0"
         android:fillColor="#00000000"
-        android:pathData="M40,70 A14,14 0 0 1 68,70" />
+        android:pathData="M43.2,65.3 A10.8,10.8 0 0 1 64.8,65.3" />
     <path
         android:strokeColor="#6FCBB8"
-        android:strokeWidth="5"
+        android:strokeWidth="3.2"
         android:strokeLineCap="round"
         android:strokeAlpha="0.72"
         android:fillColor="#00000000"
-        android:pathData="M30,70 A24,24 0 0 1 78,70" />
+        android:pathData="M36.6,65.3 A17.4,17.4 0 0 1 71.4,65.3" />
     <path
         android:strokeColor="#57B6A4"
-        android:strokeWidth="5"
+        android:strokeWidth="3.2"
         android:strokeLineCap="round"
         android:strokeAlpha="0.46"
         android:fillColor="#00000000"
-        android:pathData="M20,70 A34,34 0 0 1 88,70" />
+        android:pathData="M30,65.3 A24,24 0 0 1 78,65.3" />
 
     <!-- 声源 -->
     <path
         android:fillColor="#F4E7C4"
-        android:pathData="M54,70 m-4,0 a4,4 0 1 0 8,0 a4,4 0 1 0 -8,0" />
+        android:pathData="M54,65.3 m-2.9,0 a2.9,2.9 0 1 0 5.8,0 a2.9,2.9 0 1 0 -5.8,0" />
 </vector>

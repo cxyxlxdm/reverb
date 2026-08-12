@@ -329,3 +329,17 @@
 - **解法**:新建 `FeedUpdateExtension`(实现 `onWorkStart/onWorkStop`)并在 `module.json5` 的 `extensionAbilities` 里声明。
 - **注意**:扩展跑在**独立上下文**里,拿不到 UI 侧的 `AppContainer` 单例,须自行最小化装配(`L`/`Prefs`/`JsonFile`/订阅/repository);且它的 `context` 是 `ExtensionContext` 而非 `UIAbilityContext` —— 相关初始化接口的形参应放宽到 `common.Context`,别强转(强转会被 ArkTS 直接拒绝)。
 - **另外**:`notificationManager.requestEnableNotification()` 的无参重载自 API 12 废弃,要传 `UIAbilityContext`(授权弹窗需挂在具体界面上)。
+
+### H17. 锁屏时间数字 `--:--`:`updateTime` 要的是开机 uptime,不是 epoch(H9 的真正原因)
+
+- **现场**:见 H9 —— 锁屏卡片封面/标题/控制键都对、**进度条随播放推进**,但两端时间数字一直 `--:--`。
+  修掉「元信息写太早导致 duration=0」后仍未解决,一度被我判为"该机型渲染行为、无解"。
+- **根因**:`AVPlaybackState.position.updateTime` 的文档写的是「设置 elapsedTime 时的 **system time**」,
+  这里指的是**开机以来的 uptime**(`systemDateTime.getUptime(TimeType.STARTUP)`,量级约 1e7),
+  而我传的是 `Date.now()` 的 epoch 毫秒(约 1.7e12)。**差 5 个数量级** ⇒ 系统据此推算的播放偏移完全离谱,
+  于是拒绝渲染时间数字;而进度条只吃 `elapsedTime` 与 metadata 的 `duration`,所以照样会动 ——
+  这个"部分能用"的表象正是误判的来源。
+- **解法**:`updateTime: systemDateTime.getUptime(systemDateTime.TimeType.STARTUP, false)`。
+- **教训 / 规律**:两条。① **"system time" 这类含糊措辞要当心**,系统 API 里它常指单调时钟而非墙钟;
+  传错不会报错,只会静默算错。② **"一半能用"比全坏更容易误诊** —— 进度条能动让我以为数据已被正确消费,
+  从而把问题归给平台。遇到部分生效的现象,应逐个字段核对语义,而不是先归因于"系统限制"。
