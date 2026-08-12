@@ -1,7 +1,6 @@
 import avSession from '@ohos.multimedia.avsession';
 import backgroundTaskManager from '@ohos.resourceschedule.backgroundTaskManager';
 import wantAgent from '@ohos.app.ability.wantAgent';
-import systemDateTime from '@ohos.systemDateTime';
 import type common from '@ohos.app.ability.common';
 import { PlayerController } from './PlayerController';
 import { Log } from '../util/Logger';
@@ -89,12 +88,13 @@ export class AvSessionBridge {
       await s.setAVPlaybackState({
         state: player.isPlaying ? avSession.PlaybackState.PLAYBACK_STATE_PLAY
           : avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-        // updateTime 要的是「设置 elapsedTime 时的系统时间」= **开机以来的 uptime**,
-        // 不是 Date.now() 的 epoch 毫秒。两者差 5 个数量级,系统据此算出的偏移离谱,
-        // 锁屏卡片就会拒绝渲染两端的时间数字(进度条仍会动,所以容易误判成"系统限制")。
+        // updateTime = 「设置 elapsedTime 时的系统时间」,实测就是 **epoch 毫秒**
+        // (`Date.now()`)。系统按 elapsedTime + (now − updateTime) 外推当前位置,
+        // 传开机 uptime(量级小 5 个数量级)会让外推值溢出、被钳到时长 ——
+        // 表现为锁屏两端都显示总时长、进度条满格。详见 TROUBLESHOOTING H17。
         position: {
           elapsedTime: player.positionMs,
-          updateTime: systemDateTime.getUptime(systemDateTime.TimeType.STARTUP, false)
+          updateTime: new Date().getTime()
         },
         speed: player.speed
       });
