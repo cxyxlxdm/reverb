@@ -1,3 +1,25 @@
+/**
+ * XML/HTML 实体反转义。Android 与 macOS 的 OPML 走系统 XML 解析器,属性值天然已反转义;
+ * 鸿蒙这边是自己抠字符串,必须显式补这一步。
+ *
+ * `&amp;` **必须放在最后**替换:否则 `&amp;lt;`(转义过的字面量 `&lt;`)会先被
+ * 当成 `&lt;` 解成 `<`,再把 `&amp;` 收尾,结果丢掉一层转义。
+ */
+export function xmlUnescape(s: string): string {
+  if (s.indexOf('&') < 0) return s;
+  let t = s
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'");
+  // 数字实体(十进制 / 十六进制),真实 OPML 里 `&#38;` 写法不少见
+  t = t.replace(/&#[xX]([0-9a-fA-F]+);/g, (_m: string, hex: string) =>
+    String.fromCharCode(parseInt(hex, 16)));
+  t = t.replace(/&#(\d+);/g, (_m: string, dec: string) =>
+    String.fromCharCode(parseInt(dec, 10)));
+  return t.replace(/&amp;/g, '&');
+}
+
 /// HTML → 带段落换行的纯文本。移植 Android `RssParser.htmlToText`
 /// 与 `ITunesSource` 里近似的那份,合并为一处(三端行为对齐)。
 export function htmlToText(input: string): string {
@@ -11,14 +33,9 @@ export function htmlToText(input: string): string {
   t = t.replace(/<[^>]*>/g, '');
   // 常见实体
   t = t.replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'")
     .replace(/&mdash;/g, '—')
     .replace(/&hellip;/g, '…');
+  t = xmlUnescape(t);
   // 行内空白压缩(不动换行);去行首尾空格;多余空行收敛
   t = t.replace(/[ \t]+/g, ' ');
   t = t.replace(/ *\n */g, '\n');

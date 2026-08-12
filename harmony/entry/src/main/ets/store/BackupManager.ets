@@ -3,6 +3,7 @@ import { Codec } from './Codec';
 import { Stamp } from './StampStore';
 import { AppContainer } from '../AppContainer';
 import { J } from '../net/Http';
+import { xmlUnescape } from '../util/HtmlText';
 import { Log } from '../util/Logger';
 
 /// 可备份的数据分区(与 Android / macOS 的 7 项一致)。
@@ -250,15 +251,24 @@ export class BackupManager {
     return `<?xml version="1.0" encoding="UTF-8"?>\n<opml version="2.0">\n  <head><title>余音订阅</title></head>\n  <body>\n${body}  </body>\n</opml>\n`;
   }
 
-  /// 从 OPML 里抽出 feed 地址(容忍 xmlUrl / xmlurl 两种写法),去重。
+  /**
+   * 从 OPML 里抽出 feed 地址,去重。大小写不敏感(xmlUrl / xmlurl / XMLURL)。
+   *
+   * 两个坑,都是「自家导出的文件自家导不回来」:
+   *  1) 属性值**单引号**也合法(`xmlUrl='...'`),部分导出器就这么写,只匹配双引号会整份漏掉;
+   *  2) 导出时把 `&` 转义成了 `&amp;`,**必须反转义**回来 —— 否则带查询参数的地址
+   *     (`?id=x&format=rss`,播客源里很常见)会变成 `?id=x&amp;format=rss`,订阅直接拉不动。
+   * Android/macOS 用系统 XML 解析器,这两件事解析器替它们做了;鸿蒙抠字符串就得自己来。
+   */
   static extractFeedUrls(opml: string): string[] {
     const out: string[] = [];
     const seen = new Set<string>();
-    const re = /xmlurl\s*=\s*"([^"]+)"/gi;
+    const re = /xmlurl\s*=\s*(?:"([^"]*)"|'([^']*)')/gi;
     while (true) {
       const m = re.exec(opml);
       if (m === null) break;
-      const u = m[1].trim();
+      const raw: string = m[1] !== undefined ? m[1] : m[2];
+      const u = xmlUnescape(raw).trim();
       if (u.length === 0 || seen.has(u)) continue;
       seen.add(u);
       out.push(u);
