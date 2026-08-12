@@ -1,14 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  【备选】无底版前景:配 @drawable/ic_launcher_background_none(透明底)使用,
-  图案直接落在壁纸上。切换方法:把 mipmap-anydpi-v26/ic_launcher.xml 里的两层改为
-    <background android:drawable="@drawable/ic_launcher_background_none" />
-    <foreground android:drawable="@drawable/ic_launcher_foreground_nobg" />
+  无外框版前景(配 @drawable/ic_launcher_background_none 透明底):图案直接落在壁纸上。
 
-  与深色底版的唯一区别:**声波弧改为不透明的深浅梯度**(内亮外深)。
-  深色底版的弧是半透明(0.46/0.72),那是为压在水墨底上设计的;一旦去掉底,
-  半透明弧在浅色壁纸上会发虚,所以必须换成实色梯度才立得住。
-  几何与深色底版完全相同(图案宽 48dp = 可见区 67%,横梁 38.6dp = 外弧直径 80%)。
+  与深色底版的两处区别:
+  1) **放大**:没了深色圆角矩形做视觉容器,图案要占更多面积才立得住 ——
+     宽度 48dp → **58dp**(占可见区 72dp 的 80%,深色底版是 67%);
+     外弧半径 29dp,左右各留 7dp 余量(x 25..83,仍在可见区 18..90 内)。
+  2) **声波弧改为不透明的深浅梯度**(内亮 → 外深)。深色底版的弧是半透明(0.46/0.72),
+     那是为压在水墨底上设计的;去掉底后半透明弧在浅色壁纸上会发虚,必须换实色。
+
+  几何比例仍守两条规则(与 macOS 版一致):横梁 = 外弧直径的 80% 且居中略短于半圆;
+  图案在 108 画布内竖向居中。
 -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
@@ -16,37 +18,37 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 梁 · 横梁主体 -->
+    <!-- 梁 · 横梁主体(46.6dp ≈ 外弧直径 58dp 的 80%) -->
     <path
         android:fillColor="#E9C879"
-        android:pathData="M36.5,39.9 h35 a1.8,1.8 0 0 1 1.8,1.8 v4.8 a1.8,1.8 0 0 1 -1.8,1.8 h-35 a1.8,1.8 0 0 1 -1.8,-1.8 v-4.8 a1.8,1.8 0 0 1 1.8,-1.8 z" />
+        android:pathData="M32.9,36.9 h42.2 a2.2,2.2 0 0 1 2.2,2.2 v5.8 a2.2,2.2 0 0 1 -2.2,2.2 h-42.2 a2.2,2.2 0 0 1 -2.2,-2.2 v-5.8 a2.2,2.2 0 0 1 2.2,-2.2 z" />
     <!-- 斗拱两端支点 -->
     <path
         android:fillColor="#C9A252"
-        android:pathData="M38.2,48.3 h4.9 v5.3 h-4.9 z M65.3,48.3 h4.9 v5.3 h-4.9 z" />
+        android:pathData="M34.9,47.1 h5.9 v6.4 h-5.9 z M67.7,47.1 h5.9 v6.4 h-5.9 z" />
 
     <!-- 余音 · 三道声波(不透明梯度:内亮 → 外深) -->
     <path
         android:strokeColor="#6FC9B6"
-        android:strokeWidth="3.2"
+        android:strokeWidth="3.9"
         android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M43.2,65.3 A10.8,10.8 0 0 1 64.8,65.3" />
+        android:pathData="M40.95,67.6 A13.05,13.05 0 0 1 67.05,67.6" />
     <path
         android:strokeColor="#3E9E8C"
-        android:strokeWidth="3.2"
+        android:strokeWidth="3.9"
         android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M36.6,65.3 A17.4,17.4 0 0 1 71.4,65.3" />
+        android:pathData="M32.98,67.6 A21.02,21.02 0 0 1 75.02,67.6" />
     <path
         android:strokeColor="#2A6F63"
-        android:strokeWidth="3.2"
+        android:strokeWidth="3.9"
         android:strokeLineCap="round"
         android:fillColor="#00000000"
-        android:pathData="M30,65.3 A24,24 0 0 1 78,65.3" />
+        android:pathData="M25,67.6 A29,29 0 0 1 83,67.6" />
 
     <!-- 声源(无底版用略深的金,免得在浅壁纸上糊掉) -->
     <path
         android:fillColor="#E0B462"
-        android:pathData="M54,65.3 m-2.9,0 a2.9,2.9 0 1 0 5.8,0 a2.9,2.9 0 1 0 -5.8,0" />
+        android:pathData="M54,67.6 m-3.5,0 a3.5,3.5 0 1 0 7,0 a3.5,3.5 0 1 0 -7,0" />
 </vector>

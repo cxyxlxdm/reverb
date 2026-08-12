@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  当前:深色水墨底版(与 macOS / 鸿蒙三端一致)。
-  想换成「无外层圆角矩形」的备选版,把下面两行换成:
-    <background android:drawable="@drawable/ic_launcher_background_none" />
+  深色水墨底版(与 macOS / 鸿蒙三端一致):图案宽 48dp = 可见区(72dp)的 67%,
+  金色横梁 38.6dp = 外弧直径的 80%,居中且略短于半圆直径。
+
+  【实测结论:本机无法做到"无外框"】某国产定制 ROM(Android 16)上试过三种路子,
+  都拿不到无框效果:
+    1. adaptive + 透明填充的 vector 背景 → 被合成成纯黑圆角方块;
+    2. adaptive + @android:color/transparent 背景 → 同样是纯黑圆角方块;
+    3. legacy 透明 PNG(去掉 adaptive)→ 确实无框了,但启动器把 legacy 图标
+       强行缩到内圈,再怎么铺满画布也明显小于同屏其它图标。
+  故保留本版。无外框素材仍留在 ic_launcher_foreground_nobg.xml,
+  在原生 Pixel 启动器一类环境下可用,切换只需把下面两行改成:
+    <background android:drawable="@android:color/transparent" />
     <foreground android:drawable="@drawable/ic_launcher_foreground_nobg" />
 -->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
