@@ -14,6 +14,7 @@ import { PlayerController } from './playback/PlayerController';
 import { AvSessionBridge } from './playback/AvSessionBridge';
 import { RadioStation } from './playback/RadioStation';
 import { Log } from './util/Logger';
+import { L } from './util/L';
 
 /// 手写依赖容器(与 Android AppContainer / macOS AppEnvironment 同一形态,不引 DI 框架)。
 /// 全局单例:UI 直接取用,避免 per-page ViewModel 的样板代码。
@@ -51,6 +52,10 @@ export class AppContainer {
     this.booted = true;
     Prefs.init(ctx);
     JsonFile.init(ctx.filesDir);
+    // 文案必须在任何 UI 取串之前装配。漏了这一句的后果不是崩溃,而是界面**原样显示键名**
+    // (L.s 取不到 rm 就返回 name),且 workScheduler 扩展那边单独 init 过,
+    // 于是通知文案正常、主界面全是 nav_discover / search_placeholder 之类。
+    L.init(ctx);
 
     this.settings.load();
     this.subscriptions.load();
