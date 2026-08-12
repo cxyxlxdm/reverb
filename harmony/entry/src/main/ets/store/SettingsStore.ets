@@ -64,9 +64,14 @@ export class SettingsStore {
 
   /// 设置界面语言。"" = 跟随系统。写入应用级偏好语言,资源随即按新语言解析。
   setLanguage(v: string): void {
+    // 同值必须短路掉重建。恢复备份时 `BackupManager.apply` 只要备份里有 language 键
+    // 就会调进来,语言通常**根本没变**;若照旧重建整棵树,界面会被踢回发现页,
+    // 连「已恢复」提示一起冲掉 —— 用户无从确认恢复是否成功。详见 H23。
+    const changed = v !== this.language;
     this.language = v;
     Prefs.put('app_language', v);
     SettingsStore.applyLanguage(v);
+    if (!changed) return;
     const reload = SettingsStore.onLanguageChanged;
     if (reload !== null) {
       // 延后一帧再重建:此刻还在下拉菜单的点击回调里,立即销毁整棵树会连带销毁
