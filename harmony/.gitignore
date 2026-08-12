@@ -1,0 +1,14 @@
+.DS_Store
+# hvigor 构建输出与缓存(每次构建都变,18M 量级,不入库)
+/.hvigor
+/build
+/entry/build
+/oh_modules
+/entry/oh_modules
+# ohpm 依赖锁(工程零三方依赖,锁文件由 ohpm 自行生成)
+oh-package-lock.json5
+# 本地路径/签名材料,不同机器不同,且含私钥口令
+/local.properties
+*.p12
+*.cer
+*.p7b
