@@ -9,8 +9,22 @@ import { Files } from '../util/Files';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
 
+/// 一次「选一项」的请求。存进 @State 后弹出居中对话框;为 null 表示没在选。
+class PickerSpec {
+  title: string = '';
+  options: string[] = [];
+  selected: number = 0;
+  onPick: (i: number) => void = () => {};
+
+  constructor(title: string, options: string[], selected: number, onPick: (i: number) => void) {
+    this.title = title;
+    this.options = options;
+    this.selected = selected;
+    this.onPick = onPick;
+  }
+}
+
 /// 精简设置:外观(主题/配色/字号)、内容(地区)、播放(默认倍速/快退快进)。
-/// 首版不含备份恢复/日志/关于(后续轮次)。
 @Component
 export struct SettingsPage {
   @Prop scheme: Scheme;
@@ -21,6 +35,8 @@ export struct SettingsPage {
   onOpenAbout: () => void = () => {};
 
   @State hint: string = '';
+  /// 正在进行的「选一项」;null = 无。
+  @State picker: PickerSpec | null = null;
 
   private app: AppContainer = AppContainer.get();
   private themeLabels(): string[] { return [L.s('theme_system'), L.s('theme_light'), L.s('theme_dark'), L.s('theme_white')]; }
@@ -33,7 +49,8 @@ export struct SettingsPage {
   private skipFwdOpts: number[] = [15, 30, 45, 60];
 
   build() {
-    Column() {
+    Stack() {
+      Column() {
       TopBar({
         scheme: this.scheme, fontScale: this.fontScale,
         title: L.s('settings_title'), onBack: () => this.onBack()
@@ -102,6 +119,87 @@ export struct SettingsPage {
       .scrollBar(BarState.Off)
       .layoutWeight(1)
       .align(Alignment.Top)
+      }
+      .width('100%')
+      .height('100%')
+
+      // 选项对话框:null → 非 null 时整段重建,故值参数拿到的是最新的 spec
+      if (this.picker !== null) {
+        this.pickerDialog(this.picker)
+      }
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  /// 居中单选对话框(与 Android 的 ChoiceDialog 同形态:标题 + 单选列表 + 取消)。
+  /// 为什么不用挂在行上的下拉菜单:行是满宽的,菜单锚点取行的左边缘 ⇒ 贴着屏幕左侧弹;
+  /// 给了 `Placement.BottomRight` 后短列表正常,但**选项一多(地区 12 项)菜单放不下**,
+  /// ArkUI 会自动换到别的 placement,相对满宽锚点又被挤回屏幕中间 —— 位置不可控。
+  /// 居中对话框没有锚点,长短列表都稳,且与 Android 设计一致。
+  @Builder
+  pickerDialog(spec: PickerSpec) {
+    Stack() {
+      // 遮罩:点击空白处关闭
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(withAlpha('#000000', 0.45))
+        .onClick(() => { this.picker = null; })
+
+      Column() {
+        Text(spec.title)
+          .fontSize(TypeScale.titleMedium * this.fontScale)
+          .fontColor(this.scheme.onBackground)
+          .margin({ bottom: 6 })
+          .alignSelf(ItemAlign.Start)
+
+        Scroll() {
+          Column() {
+            ForEach(spec.options, (label: string, idx: number) => {
+              Row({ space: 10 }) {
+                // 单选圈:选中时内填实心点(与配色行的选中环同一手法,不引入 Radio 的自带配色)
+                Stack() {
+                  Circle()
+                    .width(18).height(18)
+                    .fillOpacity(0)
+                    .stroke(idx === spec.selected ? this.scheme.primary : this.scheme.onSurfaceVariant)
+                    .strokeWidth(1.5)
+                  if (idx === spec.selected) {
+                    Circle().width(10).height(10).fill(this.scheme.primary)
+                  }
+                }
+                .width(18).height(18)
+
+                Text(label)
+                  .fontSize(TypeScale.body * this.fontScale)
+                  .fontColor(this.scheme.onBackground)
+                  .layoutWeight(1)
+              }
+              .width('100%')
+              .padding({ top: 11, bottom: 11 })
+              .onClick(() => {
+                this.picker = null;
+                spec.onPick(idx);
+              })
+            }, (label: string, idx: number) => `${idx}-${label}`)
+          }
+          .width('100%')
+        }
+        .scrollBar(BarState.Off)
+        .constraintSize({ maxHeight: 360 })
+
+        Text(L.s('action_cancel'))
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.scheme.primary)
+          .padding({ top: 12, left: 8, right: 8 })
+          .alignSelf(ItemAlign.End)
+          .onClick(() => { this.picker = null; })
+      }
+      .width('78%')
+      .padding(20)
+      .backgroundColor(this.scheme.surface)
+      .borderRadius(18)
     }
     .width('100%')
     .height('100%')
@@ -151,7 +249,9 @@ export struct SettingsPage {
     }
     .width('100%')
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 14, bottom: 14 })
-    .bindMenu(this.pickMenu(options, onPick))
+    .onClick(() => {
+      this.picker = new PickerSpec(title, options, selectedOf(), onPick);
+    })
   }
 
   private ctx(): common.UIAbilityContext {
@@ -240,15 +340,6 @@ export struct SettingsPage {
 
   private valueLabel(options: string[], selected: number): string {
     return selected >= 0 && selected < options.length ? options[selected] : '';
-  }
-
-  @Builder
-  pickMenu(options: string[], onPick: (i: number) => void) {
-    Menu() {
-      ForEach(options, (label: string, idx: number) => {
-        MenuItem({ content: label }).onClick(() => onPick(idx))
-      }, (label: string, idx: number) => `${idx}-${label}`)
-    }
   }
 
   /// 配色:四个圆形色块直选。
