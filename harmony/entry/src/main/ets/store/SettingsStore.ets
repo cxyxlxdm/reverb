@@ -54,11 +54,25 @@ export class SettingsStore {
     this.fontIndex = v;
     Prefs.put('font_index', v);
   }
+  /// 语言切换后由入口 Ability 注入:重新 loadContent 让整棵界面树重建。
+  /// 为什么必须整树重建,而不是靠状态刷新:
+  ///  1) `@Builder` 的**值参数是一次性**的(见 H6),设置页的行标题都是值参,状态变化不重算;
+  ///  2) 其它已挂载页面(发现/音阁)把 `L.s()` 写在 build 里,但**并不观察语言**这个状态,
+  ///     没有任何信号会触发它们重建。
+  /// 与 Android「切换语言重建界面」同一策略。播放层是树外单例,重建不打断播放。
+  static onLanguageChanged: (() => void) | null = null;
+
   /// 设置界面语言。"" = 跟随系统。写入应用级偏好语言,资源随即按新语言解析。
   setLanguage(v: string): void {
     this.language = v;
     Prefs.put('app_language', v);
     SettingsStore.applyLanguage(v);
+    const reload = SettingsStore.onLanguageChanged;
+    if (reload !== null) {
+      // 延后一帧再重建:此刻还在下拉菜单的点击回调里,立即销毁整棵树会连带销毁
+      // 正在收起的菜单。
+      setTimeout(() => { reload(); }, 150);
+    }
   }
 
   /// 启动时把已存的语言偏好套用到系统(否则重启后回落系统语言)。
