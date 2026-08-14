@@ -1,8 +1,67 @@
 import { Scheme, TypeScale, withAlpha, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 
-/// 通用小部件:页头 / 返回顶栏 / 空态 / 加载态 / 封面。
+/// 通用小部件:图标 / 页头 / 返回顶栏 / 空态 / 加载态 / 封面。
 /// 对应 Android `ui/screens/Widgets.kt` + 部分 `ui/components/Components.kt`。
+
+/**
+ * 统一图标。**全项目的图标都走这里**,不要各处散写 `Image($r('sys.media...'))`。
+ *
+ * 为什么用 `SymbolGlyph` 而不是 `sys.media.*` 图片:`sys.media.ohos_ic_public_*` 只有 66 个,
+ * 没有齿轮/柱状图/宫格/列表/罗盘/随机/心形/月亮/下载/队列 —— 当初只能拿文字("宫格""清空""下载")
+ * 和近似图标(设置用 ⋯、收听时长用喇叭)凑,与 Android 的 Material Rounded 一套对不上。
+ * 鸿蒙另有 Symbol 字体(4000+ 个,SF Symbols 风格命名),`SymbolGlyph` 自 API 11 起可用,
+ * 这才是平台原生做法。名称见 `Sym`。
+ *
+ * 注意 `fontColor` 收的是**数组**(Symbol 支持分层多色),单色就传一个元素。
+ */
+@Component
+export struct Glyph {
+  /// `sys.symbol.*` 资源,用 `Sym` 里的常量
+  @Prop symbol: Resource;
+  /// 字号即图标视觉尺寸。**不能叫 `size`** —— 与 CustomComponent 自带的 `.size()` 属性冲突,
+  /// 编译期报 "Property 'size' ... is not assignable to the same property in base type"。
+  @Prop dim: number;
+  @Prop color: ResourceColor;
+
+  build() {
+    SymbolGlyph(this.symbol)
+      .fontSize(this.dim)
+      .fontColor([this.color])
+  }
+}
+
+/**
+ * Symbol 名称表。与 Android 的 Material Rounded 图标一一对应,改哪端都要同步另一端。
+ * 左侧注释即 Android 侧用的图标名,便于双端比对。
+ */
+export class Sym {
+  static readonly settings: Resource = $r('sys.symbol.gearshape');              // Rounded.Settings
+  static readonly listenStats: Resource = $r('sys.symbol.histogram');           // Rounded.BarChart
+  static readonly grid: Resource = $r('sys.symbol.square_grid_2x2');            // Rounded.GridView
+  static readonly list: Resource = $r('sys.symbol.list_bullet');                // AutoMirrored.ViewList
+  static readonly discover: Resource = $r('sys.symbol.discover');               // Rounded.Explore
+  static readonly library: Resource = $r('sys.symbol.music_note_list');         // Rounded.LibraryMusic
+  static readonly shuffle: Resource = $r('sys.symbol.shuffle');                 // Rounded.Shuffle
+  static readonly sun: Resource = $r('sys.symbol.sun_max');                     // Rounded.WbSunny
+  static readonly twilight: Resource = $r('sys.symbol.cloud_and_sun_fill');     // Rounded.WbTwilight
+  static readonly moon: Resource = $r('sys.symbol.moon');                       // 情境电台·夜间
+  static readonly sleep: Resource = $r('sys.symbol.moon_fill');                 // Rounded.Bedtime
+  static readonly favorite: Resource = $r('sys.symbol.heart_fill');             // Rounded.Favorite
+  static readonly favoriteOff: Resource = $r('sys.symbol.heart');               // Rounded.FavoriteBorder
+  static readonly download: Resource = $r('sys.symbol.download');               // Rounded.Download
+  static readonly downloaded: Resource = $r('sys.symbol.square_and_arrow_down_badge_checkmark'); // Rounded.DownloadDone
+  static readonly queue: Resource = $r('sys.symbol.music_note_list');           // AutoMirrored.QueueMusic
+  static readonly share: Resource = $r('sys.symbol.share');                     // Rounded.Share
+  static readonly playing: Resource = $r('sys.symbol.hi_waveform_2');           // Rounded.GraphicEq
+  static readonly played: Resource = $r('sys.symbol.checkmark');                // Rounded.Check(裸对勾)
+  static readonly more: Resource = $r('sys.symbol.more');                   // Rounded.MoreVert
+  static readonly close: Resource = $r('sys.symbol.xmark');                     // Rounded.Close
+  static readonly up: Resource = $r('sys.symbol.chevron_up');                   // Rounded.KeyboardArrowUp
+  static readonly down: Resource = $r('sys.symbol.chevron_down');               // Rounded.KeyboardArrowDown
+  static readonly speed: Resource = $r('sys.symbol.slider_horizontal_2');       // Rounded.Tune(倍速)
+  static readonly footprint: Resource = $r('sys.symbol.checkmark_square_fill'); // 听觉足迹(印记)
+}
 
 /// 顶层页大标题头:标题 + 可选副标 + 右侧动作插槽 + 下方一道「梁金」细线。
 @Component
@@ -142,6 +201,11 @@ export struct Artwork {
       Row()
         .width(this.dim).height(this.dim)
         .backgroundColor(withAlpha(this.scheme.primary, 0.18))
+      // 无封面时叠一枚波形图标(对齐 Android Artwork 的 GraphicEq 占位)。
+      // 注:此前注释写了"波形图标占位",但代码里只有色块、并没有画图标 —— sys.media.* 无此形状。
+      if (this.url.length === 0) {
+        Glyph({ symbol: Sym.playing, dim: Math.max(14, this.dim * 0.42), color: this.scheme.primary })
+      }
       if (this.url.length > 0) {
         Image(this.url)
           .width(this.dim).height(this.dim)
@@ -167,6 +231,9 @@ export struct SquareArtwork {
         .width('100%')
         .aspectRatio(1)
         .backgroundColor(withAlpha(this.scheme.primary, 0.18))
+      if (this.url.length === 0) {
+        Glyph({ symbol: Sym.playing, dim: 30, color: this.scheme.primary })
+      }
       if (this.url.length > 0) {
         Image(this.url)
           .width('100%')

@@ -2,7 +2,7 @@ import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { Episode } from '../model/Models';
 import { PlayerController } from '../playback/PlayerController';
-import { TopBar, EmptyHint, Artwork } from './Widgets';
+import { TopBar, EmptyHint, Artwork, Glyph, Sym } from './Widgets';
 import { formatDurationSec } from './Components';
 
 /// 播放队列(up next):上移 / 下移 / 移除 / 清空。
@@ -74,16 +74,16 @@ export struct QueuePage {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      // 上移 / 下移 / 移除
-      this.iconBtn($r('sys.media.ohos_ic_public_play_last'), idx > 0, () => {
+      // 上移 / 下移 / 移除。图标与 Android QueueScreen 对齐:
+      // KeyboardArrowUp / KeyboardArrowDown(折角,非实心箭头)/ Close。
+      // 原先借「上一集/下一集」图标旋转 90° 充当上下移,形状是横向三角+竖线,语义不对。
+      this.iconBtn(Sym.up, idx > 0, () => {
         this.player.moveInQueue(idx, idx - 1);
       })
-      this.iconBtn($r('sys.media.ohos_ic_public_play_next'), idx < this.player.userQueue.length - 1, () => {
+      this.iconBtn(Sym.down, idx < this.player.userQueue.length - 1, () => {
         this.player.moveInQueue(idx, idx + 1);
       })
-      Text(L.s('action_remove'))
-        .fontSize(TypeScale.caption * this.fontScale)
-        .fontColor(this.scheme.onSurfaceVariant)
+      Glyph({ symbol: Sym.close, dim: 18, color: this.scheme.onSurfaceVariant })
         .onClick(() => this.player.removeFromQueue(e.id))
     }
     .width('100%')
@@ -93,10 +93,10 @@ export struct QueuePage {
 
   @Builder
   iconBtn(icon: Resource, enabled: boolean, action: () => void) {
-    Image(icon)
-      .width(18).height(18)
-      .rotate({ angle: 90 })   // 借用上下集图标旋转成上/下移
-      .fillColor(enabled ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.3))
+    Glyph({
+      symbol: icon, dim: 20,
+      color: enabled ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.3)
+    })
       .onClick(() => { if (enabled) action(); })
   }
 }

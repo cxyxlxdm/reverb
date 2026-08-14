@@ -2,8 +2,11 @@ import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { PlayerController } from '../playback/PlayerController';
 import { AppContainer } from '../AppContainer';
-import { Artwork } from './Widgets';
+import { Artwork, Glyph, Sym } from './Widgets';
 import { InkWave } from './InkWave';
+import { FavoriteStore } from '../store/Stores';
+import { StampStore } from '../store/StampStore';
+import { SettingsStore } from '../store/SettingsStore';
 import { formatTime } from './Components';
 import { htmlToText } from '../util/HtmlText';
 import { sealOptions, SealOption } from '../store/StampStore';
@@ -18,6 +21,11 @@ export struct PlayerPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
   @ObjectLink player: PlayerController;
+  /// 收藏心形、印记选中态、快退快进秒数都依赖这些 store,必须被观察(同 H27)。
+  /// 原先读 `this.app.favorites` 等裸对象 —— 点收藏心形不会变色。
+  @ObjectLink favorites: FavoriteStore;
+  @ObjectLink stamps: StampStore;
+  @ObjectLink settings: SettingsStore;
   onBack: () => void = () => {};
   onOpenQueue: () => void = () => {};
 
@@ -41,16 +49,18 @@ export struct PlayerPage {
       // 顶栏:收起 + 倍速 + 睡眠 + 收藏
       Row({ space: 6 }) {
         Button() {
-          Image($r('sys.media.ohos_ic_back'))
-            .width(20).height(20).fillColor(this.scheme.onBackground)
+          // 收起播放页:与 Android 一致用「下折角」(KeyboardArrowDown),不是返回箭头 ——
+          // 这是"把全屏播放页收下去"的语义,和二级页返回不同。
+          Glyph({ symbol: Sym.down, dim: 22, color: this.scheme.onBackground })
         }
         .type(ButtonType.Circle).backgroundColor(Color.Transparent)
         .width(40).height(40)
         .onClick(() => this.onBack())
         Blank()
-        Image($r('sys.media.ohos_ic_public_albums'))
-          .width(20).height(20)
-          .fillColor(this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
+        Glyph({
+          symbol: Sym.queue, dim: 21,
+          color: this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant
+        })
           .onClick(() => this.onOpenQueue())
         this.speedChip()
         this.sleepChip()
@@ -275,7 +285,7 @@ export struct PlayerPage {
       Image(forward ? $r('sys.media.ohos_ic_public_play_next') : $r('sys.media.ohos_ic_public_play_last'))
         .width(19).height(19)
         .fillColor(this.scheme.onSurfaceVariant)
-      Text(`${forward ? this.app.settings.skipForwardSec : this.app.settings.skipBackSec}`)
+      Text(`${forward ? this.settings.skipForwardSec : this.settings.skipBackSec}`)
         .fontSize(9 * this.fontScale)
         .fontColor(this.scheme.onSurfaceVariant)
     }
@@ -286,11 +296,15 @@ export struct PlayerPage {
 
   @Builder
   speedChip() {
-    Text(`${this.player.speed}×`)
-      .fontSize(TypeScale.caption * this.fontScale)
-      .fontColor(this.scheme.onBackground)
+    // 与 Android SpeedChip 一致:倍速数字 + 下拉小三角,强调色
+    Row({ space: 2 }) {
+      Text(`${this.player.speed}×`)
+        .fontSize(TypeScale.caption * this.fontScale)
+        .fontColor(this.scheme.primary)
+      Glyph({ symbol: Sym.down, dim: 14, color: this.scheme.primary })
+    }
       .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.12))
-      .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+      .padding({ left: 10, right: 8, top: 5, bottom: 5 })
       .borderRadius(12)
       .bindMenu(this.speedMenu())
   }
@@ -307,10 +321,11 @@ export struct PlayerPage {
 
   @Builder
   sleepChip() {
-    Image($r('sys.media.ohos_ic_public_device_sound_filled'))
-      .width(20).height(20)
-      .fillColor(this.player.sleepRemainingMs > 0 || this.player.sleepEndOfEpisode
-        ? this.scheme.primary : this.scheme.onSurfaceVariant)
+    Glyph({
+      symbol: Sym.sleep, dim: 20,
+      color: this.player.sleepRemainingMs > 0 || this.player.sleepEndOfEpisode
+        ? this.scheme.primary : this.scheme.onSurfaceVariant
+    })
       .bindMenu(this.sleepMenu())
   }
 
@@ -342,7 +357,7 @@ export struct PlayerPage {
 
   private currentSeal(): string {
     const e = this.player.current;
-    return e === null ? '' : this.app.stamps.sealFor(e.id);
+    return e === null ? '' : this.stamps.sealFor(e.id);
   }
 
   @Builder
@@ -372,8 +387,8 @@ export struct PlayerPage {
             .onClick(() => {
               const e = this.player.current;
               if (e === null) return;
-              if (this.currentSeal() === o.seal) this.app.stamps.remove(e.id);
-              else this.app.stamps.set(e.id, o.seal, e.title, e.podcastTitle);
+              if (this.currentSeal() === o.seal) this.stamps.remove(e.id);
+              else this.stamps.set(e.id, o.seal, e.title, e.podcastTitle);
               this.showSeals = false;
             })
           }
@@ -418,17 +433,18 @@ export struct PlayerPage {
 
   @Builder
   favoriteChip() {
-    Image($r('sys.media.ohos_ic_public_albums'))
-      .width(20).height(20)
-      .fillColor(this.isFav() ? this.scheme.primary : this.scheme.onSurfaceVariant)
+    Glyph({
+      symbol: this.isFav() ? Sym.favorite : Sym.favoriteOff, dim: 20,
+      color: this.isFav() ? this.scheme.primary : this.scheme.onSurfaceVariant
+    })
       .onClick(() => {
         const e = this.player.current;
-        if (e !== null) this.app.favorites.toggle(e);
+        if (e !== null) this.favorites.toggle(e);
       })
   }
 
   private isFav(): boolean {
     const e = this.player.current;
-    return e === null ? false : this.app.favorites.isFavorite(e.id);
+    return e === null ? false : this.favorites.isFavorite(e.id);
   }
 }

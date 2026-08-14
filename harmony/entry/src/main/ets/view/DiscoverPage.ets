@@ -3,7 +3,7 @@ import { L } from '../util/L';
 import { Podcast, Episode, SearchOutcome, HistoryEntry } from '../model/Models';
 import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
-import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork } from './Widgets';
+import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, Sym } from './Widgets';
 import { PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
 import { SettingsStore } from '../store/SettingsStore';
@@ -149,22 +149,32 @@ export struct DiscoverPage {
     .height('100%')
   }
 
+  /// 情境电台的时段图标。**分界与 Android `contextualRadioIcon()` 逐段一致**:
+  /// 5–10 晨曦 / 11–16 白日 / 17–19 黄昏 / 其余 夜。
+  /// 注:`RadioStation.contextualPhase()` 的文字分界(5–8/9–17/18–21)与此不同,
+  /// 它只用于长按提示,不参与这里的图标选择 —— 两端图标口径以 Android 为准。
+  private radioIcon(): Resource {
+    if (!this.settings.contextualRadio) return Sym.shuffle;
+    const h = new Date().getHours();
+    if (h >= 5 && h <= 10) return Sym.twilight;
+    if (h >= 11 && h <= 16) return Sym.sun;
+    if (h >= 17 && h <= 19) return Sym.twilight;
+    return Sym.moon;
+  }
+
   /// 电台按钮:未开台点击开台;在台时点击换下一首,长按停台。
-  /// 情境模式显示当前时段(清晨/白日/日落/深夜),与 Android 的时段图标同义。
+  /// 与 Android `RadioActionButton` 一致 —— **只有一个图标**,不带时段文字;
+  /// 随机模式用 Shuffle,情境模式用时段图标。原先用喇叭图标 + "白日"这类文字,是自创的。
   @Builder
   radioButton() {
     Row({ space: 5 }) {
       if (this.radio.preparing !== null) {
         LoadingProgress().width(18).height(18).color(this.scheme.primary)
       } else {
-        Image($r('sys.media.ohos_ic_public_device_soundx_filled'))
-          .width(20).height(20)
-          .fillColor(this.radio.mode !== null ? this.scheme.primary : this.scheme.onSurfaceVariant)
-      }
-      if (this.settings.contextualRadio) {
-        Text(RadioStation.contextualPhase())
-          .fontSize(TypeScale.caption * this.fontScale)
-          .fontColor(this.radio.mode !== null ? this.scheme.primary : this.scheme.onSurfaceVariant)
+        Glyph({
+          symbol: this.radioIcon(), dim: 21,
+          color: this.radio.mode !== null ? this.scheme.primary : this.scheme.onSurfaceVariant
+        })
       }
     }
     .alignItems(VerticalAlign.Center)

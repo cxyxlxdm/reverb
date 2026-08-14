@@ -1,7 +1,7 @@
 import { Scheme, TypeScale, withAlpha, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
-import { Artwork, SquareArtwork } from './Widgets';
+import { Artwork, SquareArtwork, Glyph, Sym } from './Widgets';
 import { formatPubDate } from '../util/DateParse';
 import { DownloadState } from '../playback/DownloadManager';
 
@@ -143,12 +143,23 @@ export struct EpisodeListItem {
     Row({ space: 12 }) {
       Artwork({ scheme: this.scheme, url: this.episode.artworkUrl, dim: 52, corner: 10 })
       Column({ space: 5 }) {
-        Text(this.episode.title)
-          .fontSize(TypeScale.titleSmall * this.fontScale)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.titleColor())
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // 标题 + 已播对勾(与 Android 一致:对勾紧跟标题,16 号,onSurfaceVariant 色)
+        Row({ space: 6 }) {
+          Text(this.episode.title)
+            .fontSize(TypeScale.titleSmall * this.fontScale)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.titleColor())
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            // 不用 layoutWeight(1):那会让标题撑满、把对勾推到行最右。
+            // Android 是 weight(1f, fill = false) —— 文字按内容宽、必要时收缩,对勾紧跟其后。
+            .flexShrink(1)
+          if (this.played) {
+            Glyph({ symbol: Sym.played, dim: 16, color: this.scheme.onSurfaceVariant })
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
         if (this.meta().length > 0) {
           Text(this.meta())
             .fontSize(TypeScale.caption * this.fontScale)
@@ -160,18 +171,16 @@ export struct EpisodeListItem {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
-      // 下载三态:未下载(下载)/ 进行中(转圈)/ 已下载(已存,可点删)
+      // 下载三态,与 Android `DownloadControl` 一一对应:
+      // 已下载 = DownloadDone(强调色,点击删除)/ 进行中·排队 = 进度圈 / 未下载 = Download
+      // 原先用「已存」「下载」文字代替 —— sys.media.* 没有这两个图标,换 Symbol 后有正主。
       if (this.downloadState === DownloadState.DOWNLOADING || this.downloadState === DownloadState.QUEUED) {
-        LoadingProgress().width(18).height(18).color(this.scheme.primary)
+        LoadingProgress().width(20).height(20).color(this.scheme.primary)
       } else if (this.downloadState === DownloadState.COMPLETED) {
-        Text(L.s('downloaded'))
-          .fontSize(TypeScale.caption * this.fontScale)
-          .fontColor(this.scheme.primary)
+        Glyph({ symbol: Sym.downloaded, dim: 20, color: this.scheme.primary })
           .onClick(() => this.onDeleteDownload())
       } else if (this.downloadState >= 0) {
-        Text(L.s('action_download'))
-          .fontSize(TypeScale.caption * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
+        Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
           .onClick(() => this.onDownload())
       }
 

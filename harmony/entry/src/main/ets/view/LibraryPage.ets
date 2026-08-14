@@ -9,7 +9,7 @@ import { DownloadStore } from '../store/DownloadStore';
 import { StampStore } from '../store/StampStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
-import { ScreenHeader, EmptyHint, LoadingBox } from './Widgets';
+import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym } from './Widgets';
 import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow } from './Components';
 import { Log } from '../util/Logger';
 
@@ -81,9 +81,11 @@ export struct LibraryPage {
           onSelect: (i: number) => { this.seg = i; }
         })
         if (this.seg === 0 && this.subscriptions.subscriptions.length > 0) {
-          Text(this.settings.subsGrid ? L.s('layout_list') : L.s('layout_grid'))
-            .fontSize(TypeScale.caption * this.fontScale)
-            .fontColor(this.scheme.primary)
+          // 与 Android 一致:图标按钮,且**图标表示切换后的目标布局**(当前是宫格就显示"列表")
+          Glyph({
+            symbol: this.settings.subsGrid ? Sym.list : Sym.grid,
+            dim: 20, color: this.scheme.onSurfaceVariant
+          })
             .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
             .backgroundColor(this.scheme.background)
             .onClick(() => { this.settings.setSubsGrid(!this.settings.subsGrid); })
@@ -117,23 +119,15 @@ export struct LibraryPage {
     .height('100%')
   }
 
+  /// 与 Android `LibraryScreen.kt` 一致:只有「收听时长」「设置」两个图标按钮。
+  /// 「听觉足迹」在 Android 是设置页里的一条(`SettingsScreen.kt` 的 set_footprint),
+  /// 不在页头 —— 鸿蒙原先在这儿放了个「印」字按钮,是自创的,已移入设置页对齐。
   @Builder
   headerActions() {
-    Row({ space: 14 }) {
-      // 听觉足迹
-      Text(L.s('footprint_short'))
-        .fontSize(TypeScale.label * this.fontScale)
-        .fontWeight(FontWeight.Bold)
-        .fontColor(this.stamps.stamps.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
-        .onClick(() => this.onOpenFootprint())
-      // 收听时长
-      Image($r('sys.media.ohos_ic_public_device_sound_filled'))
-        .width(21).height(21)
-        .fillColor(this.scheme.onSurfaceVariant)
+    Row({ space: 18 }) {
+      Glyph({ symbol: Sym.listenStats, dim: 22, color: this.scheme.onSurfaceVariant })
         .onClick(() => this.onOpenListenStats())
-      Image($r('sys.media.ohos_ic_public_more'))
-        .width(22).height(22)
-        .fillColor(this.scheme.onSurfaceVariant)
+      Glyph({ symbol: Sym.settings, dim: 22, color: this.scheme.onSurfaceVariant })
         .onClick(() => this.onOpenSettings())
     }
   }

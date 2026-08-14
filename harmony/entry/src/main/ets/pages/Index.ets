@@ -8,7 +8,7 @@ import { ListenStatsStore } from '../store/ListenStatsStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { RadioStation } from '../playback/RadioStation';
 import { AppContainer } from '../AppContainer';
-import { ScreenHeader, EmptyHint } from '../view/Widgets';
+import { ScreenHeader, EmptyHint, Glyph, Sym } from '../view/Widgets';
 import { DiscoverPage } from '../view/DiscoverPage';
 import { PodcastDetailPage } from '../view/PodcastDetailPage';
 import { PlayerPage } from '../view/PlayerPage';
@@ -152,6 +152,9 @@ struct Index {
           scheme: this.scheme(),
           fontScale: this.fontScale(),
           player: this.player,
+          favorites: this.favorites,
+          stamps: this.stamps,
+          settings: this.settings,
           onBack: () => { this.stack.pop(); },
           onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
         })
@@ -252,7 +255,7 @@ struct Index {
             onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
           })
         }
-        .tabBar(this.tabBarItem($r('app.string.nav_discover'), $r('sys.media.ohos_ic_public_search_filled'), 0))
+        .tabBar(this.tabBarItem($r('app.string.nav_discover'), Sym.discover, 0))
 
         TabContent() {
           LibraryPage({
@@ -274,7 +277,7 @@ struct Index {
             onOpenFootprint: () => { this.stack.pushPathByName('footprint', null); }
           })
         }
-        .tabBar(this.tabBarItem($r('app.string.nav_library'), $r('sys.media.ohos_ic_public_albums'), 1))
+        .tabBar(this.tabBarItem($r('app.string.nav_library'), Sym.library, 1))
       }
       .barMode(BarMode.Fixed)
       .barBackgroundColor(this.scheme().surface)
@@ -297,12 +300,16 @@ struct Index {
     .backgroundColor(this.scheme().background)
   }
 
+  /// 底部 tab 项。图标与 Android 对齐:发现 = Explore(罗盘/发现),音阁 = LibraryMusic(音乐列表)。
+  /// 原先误用了放大镜与相册 —— `sys.media.*` 里没有这两个形状,只能拿近似的凑;
+  /// 换成 Symbol 字体后有正主(见 Sym)。
   @Builder
   tabBarItem(label: Resource, icon: Resource, index: number) {
     Column({ space: 3 }) {
-      Image(icon)
-        .width(23).height(23)
-        .fillColor(this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant)
+      Glyph({
+        symbol: icon, dim: 23,
+        color: this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant
+      })
       Text(label)
         .fontSize(TypeScale.caption * this.fontScale())
         .fontColor(this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant)
