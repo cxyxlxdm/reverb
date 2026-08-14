@@ -171,6 +171,7 @@ struct Index {
       NavDestination() {
         ListenStatsPage({
           scheme: this.scheme(), fontScale: this.fontScale(),
+          listenStats: this.listenStats,
           onBack: () => { this.stack.pop(); }
         })
       }
@@ -204,6 +205,7 @@ struct Index {
       NavDestination() {
         FootprintPage({
           scheme: this.scheme(), fontScale: this.fontScale(),
+          stamps: this.stamps,
           onBack: () => { this.stack.pop(); }
         })
       }

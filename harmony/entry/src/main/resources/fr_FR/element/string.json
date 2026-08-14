@@ -863,6 +863,54 @@
     {
       "name": "more",
       "value": "Plus"
+    },
+    {
+      "name": "sleep",
+      "value": "Minuteur"
+    },
+    {
+      "name": "sleep_current",
+      "value": "Épisode"
+    },
+    {
+      "name": "footprint_save",
+      "value": "Enregistrer dans la galerie"
+    },
+    {
+      "name": "footprint_share",
+      "value": "Partager l'empreinte"
+    },
+    {
+      "name": "about_app",
+      "value": "Reverb · 余音"
+    },
+    {
+      "name": "about_version",
+      "value": "Version 1.0.0"
+    },
+    {
+      "name": "about_h_what",
+      "value": "Qu'est-ce que c'est"
+    },
+    {
+      "name": "about_p_what",
+      "value": "Reverb est un client de podcasts léger à l'esthétique encre et lavis. Découvrez, abonnez-vous, téléchargez hors ligne et reprenez à tout moment — centré sur l'écoute."
+    },
+    {
+      "name": "about_h_features",
+      "value": "Fonctionnalités"
+    },
+    {
+      "name": "about_p_features",
+      "value": "· Découvrir : classements du jour par région et catégorie ; réorganiser et glisser\n· Rechercher : par nom ou URL RSS\n· Bibliothèque : Abonnements, Téléchargements et Historique\n· Hors ligne : mise en cache pendant l'écoute, Wi-Fi seul en option\n· Lecture : vitesse, saut, minuteur, reprise, contrôles en arrière-plan\n· Notes de l'épisode : glisser sur le lecteur\n· Notifications de nouveaux épisodes\n· Apparence : sombre/clair/système, taille, couleur, langues"
+    },
+    {
+      "name": "about_h_philosophy",
+      "value": "Conception"
+    },
+    {
+      "name": "about_p_philosophy",
+      "value": "L'esthétique s'inspire de l'encre, du céladon et de l'or des poutres — le nom et l'icône évoquent « un écho tournant autour des poutres ».\n\nLes sources restent entièrement gratuites, sans compte ni clé API : recherche via des annuaires publics (Apple, fyyd, gpodder), puis retour au RSS d'origine de l'éditeur pour diffuser l'audio original — respect du droit d'auteur, coût nul.\n\nCôté vie privée, abonnements, historique et téléchargements restent sur votre appareil — jamais envoyés, jamais suivis."
     }
   ]
 }

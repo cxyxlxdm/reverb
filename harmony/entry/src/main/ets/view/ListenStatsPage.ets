@@ -1,7 +1,7 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { ChannelListen, listenedMsOf } from '../model/Models';
-import { AppContainer } from '../AppContainer';
+import { ListenStatsStore } from '../store/ListenStatsStore';
 import { TopBar, EmptyHint, Artwork } from './Widgets';
 import { formatListenDuration } from './Components';
 
@@ -13,10 +13,11 @@ export struct ListenStatsPage {
   @Prop fontScale: number;
   onBack: () => void = () => {};
 
-  private app: AppContainer = AppContainer.get();
+  /// 播放中统计会持续增长,须被观察(Android 侧是 collectAsStateWithLifecycle,实时刷新)
+  @ObjectLink listenStats: ListenStatsStore;
 
   private rows(): ChannelListen[] {
-    return this.app.listenStats.stats.filter((c: ChannelListen) => listenedMsOf(c) > 0);
+    return this.listenStats.stats.filter((c: ChannelListen) => listenedMsOf(c) > 0);
   }
 
   private maxMs(): number {

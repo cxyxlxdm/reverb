@@ -73,6 +73,31 @@ export async function snapshotToPng(ui: UIContext, ctx: common.UIAbilityContext,
     Log.e('Moment', `截图失败 ${(e as Error).message}`);
     return null;
   }
+  return await packPng(pm, ctx, name);
+}
+
+/**
+ * 把一个 `@Builder` **离屏**渲染成 PNG(足迹海报用)。
+ *
+ * 为什么不能沿用按 id 截屏:足迹网格是可滚动的,内容通常比视口高,截屏只能拿到可见那一屏。
+ * Android 侧是用 Canvas 程序化合成整张海报(`ShareCards.footprintPoster`),
+ * 鸿蒙的对等手段是 `createFromBuilder` —— 把一棵不在界面上的子树按其自然尺寸渲染出来。
+ */
+export async function builderToPng(ui: UIContext, ctx: common.UIAbilityContext,
+                                   builder: CustomBuilder, name: string): Promise<string | null> {
+  let pm: image.PixelMap | null = null;
+  try {
+    pm = await ui.getComponentSnapshot().createFromBuilder(builder, 320, true);
+  } catch (e) {
+    Log.e('Moment', `离屏渲染失败 ${(e as Error).message}`);
+    return null;
+  }
+  return await packPng(pm, ctx, name);
+}
+
+/// PixelMap → filesDir 下的 PNG。返回路径,失败 null。
+async function packPng(pm: image.PixelMap, ctx: common.UIAbilityContext,
+                       name: string): Promise<string | null> {
   const path = `${ctx.filesDir}/${name}`;
   let file: fs.File | null = null;
   const packer = image.createImagePacker();

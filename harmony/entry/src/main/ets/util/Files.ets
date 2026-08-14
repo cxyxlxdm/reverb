@@ -2,6 +2,7 @@ import { picker } from '@kit.CoreFileKit';
 import fs from '@ohos.file.fs';
 import util from '@ohos.util';
 import { systemShare } from '@kit.ShareKit';
+import fileUri from '@ohos.file.fileuri';
 import { uniformTypeDescriptor as utd } from '@kit.ArkData';
 import type common from '@ohos.app.ability.common';
 import { Log } from './Logger';
@@ -35,13 +36,20 @@ export class Files {
     }
   }
 
-  /// 唤起系统分享面板分享一张本地图片(剪藏「分享此刻」用)。
-  /// 与 shareText 的区别只在 utd 与载荷:图片走 uri,文本走 content。
+  /**
+   * 唤起系统分享面板分享一张本地图片(剪藏「分享此刻」、足迹海报用)。
+   * 与 shareText 的区别只在 utd 与载荷:图片走 uri,文本走 content。
+   *
+   * **URI 必须用 `fileUri.getUriFromPath()` 生成**,不能自己拼 `file://` + 沙箱绝对路径:
+   * 图片在应用私有目录里,别的应用没有读权限;`getUriFromPath` 产出的是带 bundle 归属的
+   * 应用文件 URI,分享框架据此做临时授权。拼裸路径的表现是**面板压根不弹**(而不是报错),
+   * 很容易误判成"分享 API 没生效"—— 这次就是先看到海报 PNG 已生成、才定位到是 URI 的问题。
+   */
   static async shareImage(ctx: common.UIAbilityContext, title: string, pngPath: string): Promise<boolean> {
     try {
       const data = new systemShare.SharedData({
         utd: utd.UniformDataType.IMAGE,
-        uri: `file://${pngPath}`,
+        uri: fileUri.getUriFromPath(pngPath),
         title: title
       });
       await new systemShare.ShareController(data).show(ctx, {

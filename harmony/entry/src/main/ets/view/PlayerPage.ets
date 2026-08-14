@@ -47,29 +47,25 @@ export struct PlayerPage {
 
   build() {
     Column() {
-      // 顶栏:收起 + 倍速 + 睡眠 + 收藏
-      Row({ space: 6 }) {
-        Button() {
-          // 收起播放页:与 Android 一致用「下折角」(KeyboardArrowDown),不是返回箭头 ——
-          // 这是"把全屏播放页收下去"的语义,和二级页返回不同。
-          Glyph({ symbol: Sym.down, dim: 22, color: this.scheme.onBackground })
-        }
-        .type(ButtonType.Circle).backgroundColor(Color.Transparent)
-        .width(40).height(40)
-        .onClick(() => this.onBack())
+      // 顶栏:收起 | 队列 · 倍速 · 睡眠 · 收藏 · 更多(三项在「更多」里,同 Android)
+      Row() {
+        // 收起播放页:与 Android 一致用「下折角」(KeyboardArrowDown),不是返回箭头 ——
+        // 这是"把全屏播放页收下去"的语义,和二级页返回不同。
+        this.iconAction(Sym.down, this.scheme.onBackground, () => this.onBack())
         Blank()
-        Glyph({
-          symbol: Sym.queue, dim: 21,
-          color: this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant
-        })
-          .onClick(() => this.onOpenQueue())
-        this.speedChip()
-        this.sleepChip()
-        this.favoriteChip()
-        this.moreMenuChip()
+        Row({ space: 8 }) {
+          this.iconAction(Sym.queue,
+            this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant,
+            () => this.onOpenQueue())
+          this.speedChip()
+          this.sleepChip()
+          this.favoriteChip()
+          this.moreMenuChip()
+        }
+        .alignItems(VerticalAlign.Center)
       }
       .width('100%')
-      .padding({ left: 4, right: 12, top: 4, bottom: 4 })
+      .padding({ left: 4, right: 8, top: 4, bottom: 4 })
       .alignItems(VerticalAlign.Center)
 
       // 轮播:封面(带水墨)/ shownotes
@@ -320,13 +316,34 @@ export struct PlayerPage {
   }
 
   @Builder
+  /// 睡眠定时。与 Android `SleepChip` 一致:**药丸形,图标 + 文字**
+  /// (剩余时间 / 「本集」/ 「睡眠」),激活时整体转强调色。原先只有一枚裸月亮图标。
   sleepChip() {
-    Glyph({
-      symbol: Sym.sleep, dim: 20,
-      color: this.player.sleepRemainingMs > 0 || this.player.sleepEndOfEpisode
-        ? this.scheme.primary : this.scheme.onSurfaceVariant
-    })
-      .bindMenu(this.sleepMenu())
+    Row({ space: 4 }) {
+      Glyph({ symbol: Sym.sleep, dim: 18, color: this.sleepTint() })
+      Text(this.sleepLabel())
+        .fontSize(TypeScale.caption * this.fontScale)
+        .fontColor(this.sleepTint())
+    }
+    .padding({ left: 10, right: 10, top: 5, bottom: 5 })
+    .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.12))
+    .borderRadius(20)
+    .alignItems(VerticalAlign.Center)
+    .bindMenu(this.sleepMenu())
+  }
+
+  private sleepActive(): boolean {
+    return this.player.sleepRemainingMs > 0 || this.player.sleepEndOfEpisode;
+  }
+
+  private sleepTint(): string {
+    return this.sleepActive() ? this.scheme.primary : this.scheme.onSurfaceVariant;
+  }
+
+  private sleepLabel(): string {
+    if (this.player.sleepRemainingMs > 0) return formatTime(this.player.sleepRemainingMs);
+    if (this.player.sleepEndOfEpisode) return L.s('sleep_current');
+    return L.s('sleep');
   }
 
   @Builder
@@ -342,6 +359,21 @@ export struct PlayerPage {
   }
 
   /**
+   * 一个图标动作。**必须带 40×40 的触摸盒**,不能直接摆裸图标:
+   * Android 侧每个动作都是 `IconButton`(48dp 触摸盒),图标之间因此天然有留白;
+   * 鸿蒙这边原先是 20vp 裸图标 + 6vp 间隔,挤成一排且不好点。
+   */
+  @Builder
+  iconAction(symbol: Resource, color: ResourceColor, action: () => void) {
+    Row() {
+      Glyph({ symbol: symbol, dim: 21, color: color })
+    }
+    .width(40).height(40)
+    .justifyContent(FlexAlign.Center)
+    .onClick(action)
+  }
+
+  /**
    * 「更多」溢出菜单:保存此刻 / 剪藏·分享此刻 / 盖章。
    *
    * 与 Android `MoreMenu` 一致 —— Android 的注释写明这三项**收进溢出菜单是为了避免顶栏按钮过多**。
@@ -354,9 +386,13 @@ export struct PlayerPage {
    */
   @Builder
   moreMenuChip() {
-    GlyphImage({ icon: $r('sys.media.ohos_ic_public_more'), dim: 21, color: this.scheme.onSurfaceVariant })
-      .bindMenu(this.moreMenu())
-      .bindSheet($$this.showSeals, this.sealSheet(), { height: 330 })
+    Row() {
+      GlyphImage({ icon: $r('sys.media.ohos_ic_public_more'), dim: 21, color: this.scheme.onSurfaceVariant })
+    }
+    .width(40).height(40)
+    .justifyContent(FlexAlign.Center)
+    .bindMenu(this.moreMenu())
+    .bindSheet($$this.showSeals, this.sealSheet(), { height: 330 })
   }
 
   @Builder
@@ -453,11 +489,9 @@ export struct PlayerPage {
 
   @Builder
   favoriteChip() {
-    Glyph({
-      symbol: this.isFav() ? Sym.favorite : Sym.favoriteOff, dim: 20,
-      color: this.isFav() ? this.scheme.primary : this.scheme.onSurfaceVariant
-    })
-      .onClick(() => {
+    this.iconAction(this.isFav() ? Sym.favorite : Sym.favoriteOff,
+      this.isFav() ? this.scheme.primary : this.scheme.onSurfaceVariant,
+      () => {
         const e = this.player.current;
         if (e !== null) this.favorites.toggle(e);
       })

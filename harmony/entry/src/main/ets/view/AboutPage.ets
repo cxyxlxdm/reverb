@@ -2,54 +2,43 @@ import { Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 import { TopBar } from './Widgets';
 
-/// 关于 + 开源许可(两端同款的静态页,合成一页两段)。
+/**
+ * 关于页。对应 Android `AboutScreen.kt`:应用名 + slogan + 版本,再三段正文
+ * (这是什么 / 主要功能 / 设计理念)。
+ *
+ * 原先这一页把「开源库 + 取源顺序」也塞在里面(当时还没有独立的许可页),
+ * 与 Android 的两页分工不符。取源与许可现已迁到 `LicensesPage`,本页只留 Android 的三段。
+ */
 @Component
 export struct AboutPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
   onBack: () => void = () => {};
 
-  private libs: string[] = [
-    'HarmonyOS SDK (ArkTS / ArkUI) — Apache-2.0',
-    'Apple iTunes Search / Charts — 公开接口,无需鉴权',
-    'fyyd.de API — 公开接口',
-    'gpodder.net API — 公开接口'
-  ];
-
   build() {
     Column() {
       TopBar({
         scheme: this.scheme, fontScale: this.fontScale,
-        title: L.s('about_title'), onBack: () => this.onBack()
+        title: L.s('sec_about'), onBack: () => this.onBack()
       })
       Scroll() {
-        Column({ space: 10 }) {
-          Text(L.f('about_line', '1.0.0'))
-            .fontSize(TypeScale.titleMedium * this.fontScale)
-            .fontWeight(FontWeight.Medium)
+        Column({ space: 6 }) {
+          Text(L.s('about_app'))
+            .fontSize(TypeScale.headlineMedium * this.fontScale)
+            .fontWeight(FontWeight.Bold)
             .fontColor(this.scheme.onBackground)
-          Text(L.s('about_body'))
+          Text(L.s('app_slogan'))
             .fontSize(TypeScale.body * this.fontScale)
-            .fontColor(this.scheme.onSurfaceVariant)
-            .lineHeight(22)
-
-          Text(L.s('licenses_title'))
-            .fontSize(TypeScale.titleSmall * this.fontScale)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.scheme.onBackground)
-            .margin({ top: 16 })
-          ForEach(this.libs, (s: string) => {
-            Text(s)
-              .fontSize(TypeScale.label * this.fontScale)
-              .fontColor(this.scheme.onSurfaceVariant)
-              .width('100%')
-          }, (s: string) => s)
-
-          Text(L.s('about_sources'))
+            .fontColor(this.scheme.secondary)
+          Text(L.s('about_version'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
-            .lineHeight(20)
-            .margin({ top: 16, bottom: 24 })
+
+          this.section(L.s('about_h_what'), L.s('about_p_what'))
+          this.section(L.s('about_h_features'), L.s('about_p_features'))
+          this.section(L.s('about_h_philosophy'), L.s('about_p_philosophy'))
+
+          Row().height(24)
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
@@ -61,5 +50,22 @@ export struct AboutPage {
     }
     .width('100%')
     .height('100%')
+  }
+
+  @Builder
+  section(title: string, body: string) {
+    Column({ space: 4 }) {
+      Text(title)
+        .fontSize(TypeScale.titleMedium * this.fontScale)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.scheme.onBackground)
+      Text(body)
+        .fontSize(TypeScale.body * this.fontScale)
+        .fontColor(this.scheme.onSurfaceVariant)
+        .lineHeight(23)
+    }
+    .alignItems(HorizontalAlign.Start)
+    .width('100%')
+    .margin({ top: 18 })
   }
 }
