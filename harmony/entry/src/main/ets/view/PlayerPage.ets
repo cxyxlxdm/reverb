@@ -51,12 +51,19 @@ export struct PlayerPage {
       Row() {
         // 收起播放页:与 Android 一致用「下折角」(KeyboardArrowDown),不是返回箭头 ——
         // 这是"把全屏播放页收下去"的语义,和二级页返回不同。
-        this.iconAction(Sym.down, this.scheme.onBackground, () => this.onBack())
+        this.iconAction(Sym.down, this.scheme.onBackground, 0, 0, () => this.onBack())
         Blank()
-        Row({ space: 8 }) {
+        // 间距统一由这里决定(各元素的视觉盒都贴紧内容,见 iconAction 注释)
+        Row({ space: 14 }) {
+          // 各图标带一点负边距,把「墨迹内缩」抵掉,可见间距才真正齐平。
+          //
+          // 为什么不是放大图标:图标是**等比缩放**的,放大时内部留白同比例变大 ——
+          // 试过把「更多」从 21 调到 26,间距反而从 18.7vp 涨到 20.0vp。
+          // 内缩量是字形自带的,只能用负边距抵消。数值来自真机像素实测
+          // (队列墨宽 19.7 / 更多 16.0 / 收藏 22.7,字形盒均为 21)。
           this.iconAction(Sym.queue,
             this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant,
-            () => this.onOpenQueue())
+            0, -2, () => this.onOpenQueue())
           this.speedChip()
           this.sleepChip()
           this.favoriteChip()
@@ -65,7 +72,7 @@ export struct PlayerPage {
         .alignItems(VerticalAlign.Center)
       }
       .width('100%')
-      .padding({ left: 4, right: 8, top: 4, bottom: 4 })
+      .padding({ left: 16, right: 16, top: 10, bottom: 6 })
       .alignItems(VerticalAlign.Center)
 
       // 轮播:封面(带水墨)/ shownotes
@@ -359,18 +366,24 @@ export struct PlayerPage {
   }
 
   /**
-   * 一个图标动作。**必须带 40×40 的触摸盒**,不能直接摆裸图标:
-   * Android 侧每个动作都是 `IconButton`(48dp 触摸盒),图标之间因此天然有留白;
-   * 鸿蒙这边原先是 20vp 裸图标 + 6vp 间隔,挤成一排且不好点。
+   * 一个图标动作。
+   *
+   * **视觉盒子必须贴紧图标本身,不能套透明的 40×40 盒**:顶栏里混了两种元素 ——
+   * 纯图标(透明背景)和药丸(有背景色)。若给图标套 40 宽的透明盒,可见间距就变成三种:
+   * 图标↔图标 = space + 两侧各约 9.5 的透明内缩、药丸↔药丸 = space、图标↔药丸 = 居中值,
+   * 看起来就是"倍速和睡眠挨得近、别的散得开"。
+   *
+   * 所以布局尺寸就用图标尺寸,间距**统一交给 Row 的 space**;点击区域改用
+   * `responseRegion` 单独外扩(它只影响命中测试、不参与布局),这样既整齐又好点。
    */
+  /// nudge:抵掉该字形墨迹相对字形盒的内缩量(见上方注释)。只对需要的一侧生效。
   @Builder
-  iconAction(symbol: Resource, color: ResourceColor, action: () => void) {
-    Row() {
-      Glyph({ symbol: symbol, dim: 21, color: color })
-    }
-    .width(40).height(40)
-    .justifyContent(FlexAlign.Center)
-    .onClick(action)
+  iconAction(symbol: Resource, color: ResourceColor, nudgeL: number, nudgeR: number,
+             action: () => void) {
+    Glyph({ symbol: symbol, dim: 21, color: color })
+      .margin({ left: nudgeL, right: nudgeR })
+      .responseRegion({ x: -11, y: -11, width: 43, height: 43 })
+      .onClick(action)
   }
 
   /**
@@ -386,13 +399,11 @@ export struct PlayerPage {
    */
   @Builder
   moreMenuChip() {
-    Row() {
-      GlyphImage({ icon: $r('sys.media.ohos_ic_public_more'), dim: 21, color: this.scheme.onSurfaceVariant })
-    }
-    .width(40).height(40)
-    .justifyContent(FlexAlign.Center)
-    .bindMenu(this.moreMenu())
-    .bindSheet($$this.showSeals, this.sealSheet(), { height: 330 })
+    GlyphImage({ icon: $r('sys.media.ohos_ic_public_more'), dim: 21, color: this.scheme.onSurfaceVariant })
+      .margin({ left: -2.5 })
+      .responseRegion({ x: -11, y: -11, width: 43, height: 43 })
+      .bindMenu(this.moreMenu())
+      .bindSheet($$this.showSeals, this.sealSheet(), { height: 330 })
   }
 
   @Builder
@@ -491,7 +502,7 @@ export struct PlayerPage {
   favoriteChip() {
     this.iconAction(this.isFav() ? Sym.favorite : Sym.favoriteOff,
       this.isFav() ? this.scheme.primary : this.scheme.onSurfaceVariant,
-      () => {
+      -1, 0, () => {
         const e = this.player.current;
         if (e !== null) this.favorites.toggle(e);
       })

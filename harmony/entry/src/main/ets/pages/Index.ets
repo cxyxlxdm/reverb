@@ -77,6 +77,7 @@ struct Index {
     const cfgMode: number | undefined = ctx.config?.colorMode;
     this.systemDark = cfgMode === 0;   // ColorMode.COLOR_MODE_DARK = 0
     this.readInsets();
+    this.applySystemBar();
     Log.i('UI', `外壳就绪 systemDark=${this.systemDark}`);
   }
 
@@ -96,6 +97,33 @@ struct Index {
       });
     } catch (e) {
       Log.w('UI', '读取避让区异常');
+    }
+  }
+
+  /**
+   * 把状态栏/导航条的**内容色**调成与当前主题相反,否则在沉浸式下看不见。
+   *
+   * 应用开了 `setWindowLayoutFullScreen(true)`,内容铺到状态栏底下;但系统栏图标的颜色
+   * **不会跟着应用背景自动变** —— 默认是为浅色背景准备的深色图标,压在水墨深色底上
+   * 几乎不可见(时间/WiFi/电量全糊成一团)。必须显式声明:深色主题用白色内容,浅色用黑色。
+   *
+   * 主题可在设置里随时改,所以除了启动,`onChanged` 里也要再调一次。
+   */
+  private applySystemBar(): void {
+    const light = this.scheme().isDark ? '#FFFFFF' : '#000000';
+    try {
+      window.getLastWindow(this.getUIContext().getHostContext()).then((w: window.Window) => {
+        w.setWindowSystemBarProperties({
+          statusBarContentColor: light,
+          navigationBarContentColor: light
+        }).catch((e: Error) => {
+          Log.w('UI', `设置系统栏内容色失败 ${e.message}`);
+        });
+      }).catch((e: Error) => {
+        Log.w('UI', `取窗口失败 ${e.message}`);
+      });
+    } catch (e) {
+      Log.w('UI', '设置系统栏内容色异常');
     }
   }
 
@@ -139,7 +167,11 @@ struct Index {
           // 传对象本体:设置页以 @ObjectLink 观察它,改了字段本页才会重渲(见 SettingsPage 注释)
           settings: this.settings,
           onBack: () => { this.stack.pop(); },
-          onChanged: () => { this.tick = this.tick + 1; },
+          onChanged: () => {
+            this.tick = this.tick + 1;
+            // 主题可能刚被改过,系统栏内容色要跟着翻
+            this.applySystemBar();
+          },
           onOpenAbout: () => { this.stack.pushPathByName('about', null); },
           onOpenLicenses: () => { this.stack.pushPathByName('licenses', null); },
           // 听觉足迹入口移到设置页(与 Android 一致),音阁页头不再放
