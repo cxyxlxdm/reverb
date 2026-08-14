@@ -109,6 +109,12 @@ export struct LibraryPage {
       .loop(false)
       .indicator(false)
       .cachedCount(1)
+      // 手势一松就把 chips 高亮切过去,**不要只依赖 onChange**:
+      // `onChange` 在翻页动画**结束后**才回调,横滑时页面已经过去了、chips 还停在原处,
+      // 观感就是"tab 总慢一拍"。`onAnimationStart` 在动画开始时给出 targetIndex,
+      // 正是手势被确认的时刻。Android 侧 Compose 的 pagerState.currentPage 过半即更新,
+      // 手感与此一致。
+      .onAnimationStart((_i: number, target: number) => { this.seg = target; })
       .onChange((i: number) => { this.seg = i; })
       .layoutWeight(1)
     }

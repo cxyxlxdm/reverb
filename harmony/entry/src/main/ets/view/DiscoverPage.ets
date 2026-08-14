@@ -140,6 +140,10 @@ export struct DiscoverPage {
         .loop(false)
         .indicator(false)
         .cachedCount(1)
+        // 同 LibraryPage:chips 高亮在动画开始时就切,不等落位(理由见那边注释)。
+        // 榜单加载仍留在 onChange 里 —— 那是真正"停在这一页"之后才该做的事,
+        // 放到 animationStart 会让快速连滑时每划过一页都触发一次网络请求。
+        .onAnimationStart((_i: number, target: number) => { this.catIndex = target; })
         .onChange((i: number) => {
           this.catIndex = i;
           if (this.lists[i].length === 0) this.loadCategory(i, false);
