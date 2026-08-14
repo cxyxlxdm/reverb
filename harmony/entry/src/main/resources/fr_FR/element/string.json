@@ -839,6 +839,30 @@
     {
       "name": "log_size",
       "value": "Journaux actuels %1$s"
+    },
+    {
+      "name": "clip_save",
+      "value": "Enregistrer cet instant"
+    },
+    {
+      "name": "clip_moment",
+      "value": "Extrait · Partager cet instant"
+    },
+    {
+      "name": "clip_share",
+      "value": "Partager cet instant"
+    },
+    {
+      "name": "stamp_add",
+      "value": "Sceau · Empreinte d'écoute"
+    },
+    {
+      "name": "stamp_edit",
+      "value": "Modifier le sceau · Empreinte d'écoute"
+    },
+    {
+      "name": "more",
+      "value": "Plus"
     }
   ]
 }

@@ -839,6 +839,30 @@
     {
       "name": "log_size",
       "value": "当前日志 %1$s"
+    },
+    {
+      "name": "clip_save",
+      "value": "保存此刻到相册"
+    },
+    {
+      "name": "clip_moment",
+      "value": "剪藏 · 分享此刻"
+    },
+    {
+      "name": "clip_share",
+      "value": "分享此刻"
+    },
+    {
+      "name": "stamp_add",
+      "value": "盖章 · 听觉印记"
+    },
+    {
+      "name": "stamp_edit",
+      "value": "改章 · 听觉印记"
+    },
+    {
+      "name": "more",
+      "value": "更多"
     }
   ]
 }

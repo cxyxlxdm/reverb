@@ -2,8 +2,9 @@ import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { PlayerController } from '../playback/PlayerController';
 import { AppContainer } from '../AppContainer';
-import { Artwork, Glyph, Sym } from './Widgets';
+import { Artwork, Glyph, GlyphImage, Sym } from './Widgets';
 import { InkWave } from './InkWave';
+import { Files } from '../util/Files';
 import { FavoriteStore } from '../store/Stores';
 import { StampStore } from '../store/StampStore';
 import { SettingsStore } from '../store/SettingsStore';
@@ -65,8 +66,7 @@ export struct PlayerPage {
         this.speedChip()
         this.sleepChip()
         this.favoriteChip()
-        this.sealChip()
-        this.momentChip()
+        this.moreMenuChip()
       }
       .width('100%')
       .padding({ left: 4, right: 12, top: 4, bottom: 4 })
@@ -341,18 +341,34 @@ export struct PlayerPage {
     }
   }
 
-  /// 盖章:3×3 情绪印章;再点同一枚即取消。
+  /**
+   * 「更多」溢出菜单:保存此刻 / 剪藏·分享此刻 / 盖章。
+   *
+   * 与 Android `MoreMenu` 一致 —— Android 的注释写明这三项**收进溢出菜单是为了避免顶栏按钮过多**。
+   * 鸿蒙原先把「章」「藏」两个文字按钮直接摊在顶栏,连收起共 7 个,挤成一排。
+   *
+   * 盖章的半模态**绑在本节点上、由菜单项置位**。原先是把 `.onClick(showSeals = true)` 和
+   * `.bindSheet($$this.showSeals, ...)` 挂在**同一个节点**上:`$$` 是双向绑定,点空白处关闭时
+   * ArkUI 自己把状态置 false,而同节点的 onClick 又会把它置回 true —— 两者竞争,表现就是
+   * 「收回去 → 又弹一次 → 才最终收起」的偶发抖动。菜单项与 sheet 不在同一节点,冲突消失。
+   */
   @Builder
-  sealChip() {
-    Text(this.currentSeal().length > 0 ? this.currentSeal() : L.s('seal_short'))
-      .fontSize(TypeScale.caption * this.fontScale)
-      .fontWeight(FontWeight.Bold)
-      .fontColor(this.currentSeal().length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
-      .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.12))
-      .padding({ left: 9, right: 9, top: 5, bottom: 5 })
-      .borderRadius(12)
-      .onClick(() => { this.showSeals = true; })
+  moreMenuChip() {
+    GlyphImage({ icon: $r('sys.media.ohos_ic_public_more'), dim: 21, color: this.scheme.onSurfaceVariant })
+      .bindMenu(this.moreMenu())
       .bindSheet($$this.showSeals, this.sealSheet(), { height: 330 })
+  }
+
+  @Builder
+  moreMenu() {
+    Menu() {
+      MenuItem({ content: L.s('clip_save') })
+        .onClick(() => { this.saveMoment(); })
+      MenuItem({ content: L.s('clip_moment') })
+        .onClick(() => { this.shareMoment(); })
+      MenuItem({ content: this.currentSeal().length > 0 ? L.s('stamp_edit') : L.s('stamp_add') })
+        .onClick(() => { this.showSeals = true; })
+    }
   }
 
   private currentSeal(): string {
@@ -404,16 +420,20 @@ export struct PlayerPage {
     .backgroundColor(this.scheme.surface)
   }
 
-  /// 剪藏此刻:把卡片截图存成 PNG,并尝试存入相册。
-  @Builder
-  momentChip() {
-    Text(L.s('moment_short'))
-      .fontSize(TypeScale.caption * this.fontScale)
-      .fontColor(this.scheme.onSurfaceVariant)
-      .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.12))
-      .padding({ left: 9, right: 9, top: 5, bottom: 5 })
-      .borderRadius(12)
-      .onClick(() => { this.saveMoment(); })
+  /// 剪藏 · 分享此刻:同样截图成 PNG,但交给系统分享面板而不是存相册。
+  /// 对应 Android MoreMenu 的 onClip(那边走 ShareCards.share)。
+  private async shareMoment(): Promise<void> {
+    const e = this.player.current;
+    if (e === null) return;
+    const ui = this.getUIContext();
+    const ctx = ui.getHostContext() as common.UIAbilityContext;
+    const png = await snapshotToPng(ui, ctx, 'reverb-moment-card', 'reverb-moment.png');
+    if (png === null) {
+      this.momentHint = L.s('moment_failed');
+      return;
+    }
+    const ok = await Files.shareImage(ctx, L.s('clip_share'), png);
+    if (!ok) this.momentHint = L.s('moment_failed');
   }
 
   private async saveMoment(): Promise<void> {

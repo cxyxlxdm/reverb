@@ -35,6 +35,27 @@ export class Files {
     }
   }
 
+  /// 唤起系统分享面板分享一张本地图片(剪藏「分享此刻」用)。
+  /// 与 shareText 的区别只在 utd 与载荷:图片走 uri,文本走 content。
+  static async shareImage(ctx: common.UIAbilityContext, title: string, pngPath: string): Promise<boolean> {
+    try {
+      const data = new systemShare.SharedData({
+        utd: utd.UniformDataType.IMAGE,
+        uri: `file://${pngPath}`,
+        title: title
+      });
+      await new systemShare.ShareController(data).show(ctx, {
+        previewMode: systemShare.SharePreviewMode.DETAIL,
+        selectionMode: systemShare.SelectionMode.SINGLE
+      });
+      Log.i('Files', '已唤起图片分享面板');
+      return true;
+    } catch (e) {
+      Log.e('Files', `图片分享失败 ${(e as Error).message}`);
+      return false;
+    }
+  }
+
   /// 让用户选一个保存位置并写入文本。返回是否成功。
   static async saveText(ctx: common.UIAbilityContext, suggestName: string, text: string): Promise<boolean> {
     try {

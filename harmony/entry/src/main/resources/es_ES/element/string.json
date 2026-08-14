@@ -839,6 +839,30 @@
     {
       "name": "log_size",
       "value": "Registros actuales %1$s"
+    },
+    {
+      "name": "clip_save",
+      "value": "Guardar este momento"
+    },
+    {
+      "name": "clip_moment",
+      "value": "Recorte · Compartir este momento"
+    },
+    {
+      "name": "clip_share",
+      "value": "Compartir este momento"
+    },
+    {
+      "name": "stamp_add",
+      "value": "Sello · Marca de escucha"
+    },
+    {
+      "name": "stamp_edit",
+      "value": "Editar sello · Marca de escucha"
+    },
+    {
+      "name": "more",
+      "value": "Más"
     }
   ]
 }

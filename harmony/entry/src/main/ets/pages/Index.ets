@@ -1,4 +1,4 @@
-import { Theme, Scheme, TypeScale, Metrics } from '../theme/Theme';
+import { Theme, Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
 import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
 import { InboxStore } from '../store/InboxStore';
@@ -270,7 +270,7 @@ struct Index {
             onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
           })
         }
-        .tabBar(this.tabBarItem($r('app.string.nav_discover'), Sym.discover, 0))
+
 
         TabContent() {
           LibraryPage({
@@ -290,10 +290,15 @@ struct Index {
             onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); }
           })
         }
-        .tabBar(this.tabBarItem($r('app.string.nav_library'), Sym.library, 1))
+
       }
+      // 隐掉 Tabs 自带的 bar,底部栏自绘。
+      // 为什么:迷你播放条必须在 tab 栏**上方**(与 Android 的 bottomBar 顺序一致:
+      // 迷你条 → 分隔线 → NavigationBar)。而 Tabs 自带的 bar 属于 Tabs 组件自身、
+      // 固定在它的底边,任何作为 Tabs **兄弟节点**排在其后的东西都只能落到 tab 栏下面 ——
+      // 原先迷你条就是这么跑到 tab 下面去的。
+      .barHeight(0)
       .barMode(BarMode.Fixed)
-      .barBackgroundColor(this.scheme().surface)
       .scrollable(false)
       .onChange((i: number) => { this.tab = i; })
       .layoutWeight(1)
@@ -305,12 +310,30 @@ struct Index {
           player: this.player,
           onExpand: () => { this.stack.pushPathByName('player', null); }
         })
+        // 仅在迷你条出现时画分隔线(与 Android 一致)
+        Divider()
+          .strokeWidth(0.5)
+          .color(withAlpha(this.scheme().outline, 0.6))
       }
+
+      this.bottomBar()
     }
     .width('100%')
     .height('100%')
     .padding({ top: this.topInset, bottom: this.bottomInset })
     .backgroundColor(this.scheme().background)
+  }
+
+  /// 自绘底部 tab 栏(替代 Tabs 自带 bar,理由见 shell() 注释)。
+  @Builder
+  bottomBar() {
+    Row() {
+      this.tabBarItem($r('app.string.nav_discover'), Sym.discover, 0)
+      this.tabBarItem($r('app.string.nav_library'), Sym.library, 1)
+    }
+    .width('100%')
+    .height(56)
+    .backgroundColor(this.scheme().surface)
   }
 
   /// 底部 tab 项。图标与 Android 对齐:发现 = Explore(罗盘/发现),音阁 = LibraryMusic(音乐列表)。
@@ -327,9 +350,10 @@ struct Index {
         .fontSize(TypeScale.caption * this.fontScale())
         .fontColor(this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant)
     }
-    .width('100%')
+    .layoutWeight(1)
     .height('100%')
     .justifyContent(FlexAlign.Center)
+    .onClick(() => { this.tab = index; })
   }
 
 }

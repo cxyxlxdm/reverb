@@ -839,6 +839,30 @@
     {
       "name": "log_size",
       "value": "Current logs %1$s"
+    },
+    {
+      "name": "clip_save",
+      "value": "Save this moment"
+    },
+    {
+      "name": "clip_moment",
+      "value": "Clip · Share this moment"
+    },
+    {
+      "name": "clip_share",
+      "value": "Share this moment"
+    },
+    {
+      "name": "stamp_add",
+      "value": "Stamp · Listening mark"
+    },
+    {
+      "name": "stamp_edit",
+      "value": "Edit stamp · Listening mark"
+    },
+    {
+      "name": "more",
+      "value": "More"
     }
   ]
 }

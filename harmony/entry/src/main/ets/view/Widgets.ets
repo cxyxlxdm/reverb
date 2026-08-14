@@ -31,6 +31,20 @@ export struct Glyph {
   }
 }
 
+/// 系统 media 图标(少数 Symbol 字体里没有对等形状的场合用它)。
+@Component
+export struct GlyphImage {
+  @Prop icon: Resource;
+  @Prop dim: number;
+  @Prop color: ResourceColor;
+
+  build() {
+    Image(this.icon)
+      .width(this.dim).height(this.dim)
+      .fillColor(this.color)
+  }
+}
+
 /**
  * Symbol 名称表。与 Android 的 Material Rounded 图标一一对应,改哪端都要同步另一端。
  * 左侧注释即 Android 侧用的图标名,便于双端比对。
@@ -55,7 +69,10 @@ export class Sym {
   static readonly share: Resource = $r('sys.symbol.share');                     // Rounded.Share
   static readonly playing: Resource = $r('sys.symbol.hi_waveform_2');           // Rounded.GraphicEq
   static readonly played: Resource = $r('sys.symbol.checkmark');                // Rounded.Check(裸对勾)
-  static readonly more: Resource = $r('sys.symbol.more');                   // Rounded.MoreVert
+  // 注:Symbol 字体里 `more` 是「更多应用」的 2×2 方块,不是省略号;纯省略号只有
+  // ellipsis_bubble / ellipsis_circle 这类带容器的变体。三点用系统 media 里的标准件
+  // `ohos_ic_public_more`(见 Widgets.GlyphImage) —— Android 是竖排三点 MoreVert,
+  // 鸿蒙的平台惯例是横排三点,按「缺资源按平台特性补齐」取鸿蒙形态。
   static readonly close: Resource = $r('sys.symbol.xmark');                     // Rounded.Close
   static readonly up: Resource = $r('sys.symbol.chevron_up');                   // Rounded.KeyboardArrowUp
   static readonly down: Resource = $r('sys.symbol.chevron_down');               // Rounded.KeyboardArrowDown
