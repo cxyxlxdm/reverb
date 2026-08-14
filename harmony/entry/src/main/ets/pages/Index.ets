@@ -111,6 +111,8 @@ struct Index {
         SettingsPage({
           scheme: this.scheme(),
           fontScale: this.fontScale(),
+          // 传对象本体:设置页以 @ObjectLink 观察它,改了字段本页才会重渲(见 SettingsPage 注释)
+          settings: this.settings,
           onBack: () => { this.stack.pop(); },
           onChanged: () => { this.tick = this.tick + 1; },
           onOpenAbout: () => { this.stack.pushPathByName('about', null); }
