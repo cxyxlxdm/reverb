@@ -25,6 +25,8 @@ export class SettingsStore {
   contextualRadio: boolean = false;
   /// 订阅更新提醒(周期检查 + 本地通知)
   updatesEnabled: boolean = false;
+  /// 是否允许蜂窝网络下载(false = 仅 Wi-Fi)。与 Android allowCellular 同名同义。
+  allowCellular: boolean = true;
 
   load(): void {
     this.themeMode = Prefs.getNumber('theme_mode', 0);
@@ -38,6 +40,7 @@ export class SettingsStore {
     this.subsGrid = Prefs.getBool('subs_grid', false);
     this.contextualRadio = Prefs.getBool('contextual_radio', false);
     this.updatesEnabled = Prefs.getBool('updates_enabled', false);
+    this.allowCellular = Prefs.getBool('allow_cellular', true);
     SettingsStore.applyLanguage(this.language);
     Log.i('Settings', `加载 theme=${this.themeMode} accent=${this.accentIndex} font=${this.fontIndex} region=${this.regionOverride === '' ? 'auto' : this.regionOverride}`);
   }
@@ -112,6 +115,10 @@ export class SettingsStore {
   setUpdatesEnabled(v: boolean): void {
     this.updatesEnabled = v;
     Prefs.put('updates_enabled', v);
+  }
+  setAllowCellular(v: boolean): void {
+    this.allowCellular = v;
+    Prefs.put('allow_cellular', v);
   }
   setSubsGrid(v: boolean): void {
     this.subsGrid = v;

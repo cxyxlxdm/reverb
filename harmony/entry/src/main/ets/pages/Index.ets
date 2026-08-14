@@ -19,6 +19,7 @@ import { ListenStatsPage } from '../view/ListenStatsPage';
 import { QueuePage } from '../view/QueuePage';
 import { FootprintPage } from '../view/FootprintPage';
 import { AboutPage } from '../view/AboutPage';
+import { LicensesPage } from '../view/LicensesPage';
 import { PlayerController } from '../playback/PlayerController';
 import { Podcast, Episode, emptyPodcast } from '../model/Models';
 import { Log } from '../util/Logger';
@@ -139,7 +140,10 @@ struct Index {
           settings: this.settings,
           onBack: () => { this.stack.pop(); },
           onChanged: () => { this.tick = this.tick + 1; },
-          onOpenAbout: () => { this.stack.pushPathByName('about', null); }
+          onOpenAbout: () => { this.stack.pushPathByName('about', null); },
+          onOpenLicenses: () => { this.stack.pushPathByName('licenses', null); },
+          // 听觉足迹入口移到设置页(与 Android 一致),音阁页头不再放
+          onOpenFootprint: () => { this.stack.pushPathByName('footprint', null); }
         })
       }
       .hideTitleBar(true)
@@ -177,6 +181,17 @@ struct Index {
     else if (name === 'about') {
       NavDestination() {
         AboutPage({
+          scheme: this.scheme(), fontScale: this.fontScale(),
+          onBack: () => { this.stack.pop(); }
+        })
+      }
+      .hideTitleBar(true)
+      .padding({ top: this.topInset, bottom: this.bottomInset })
+      .backgroundColor(this.scheme().background)
+    }
+    else if (name === 'licenses') {
+      NavDestination() {
+        LicensesPage({
           scheme: this.scheme(), fontScale: this.fontScale(),
           onBack: () => { this.stack.pop(); }
         })
@@ -269,12 +284,10 @@ struct Index {
             downloads: this.downloads,
             history: this.history,
             downloadManager: this.downloadManager,
-            stamps: this.stamps,
             onOpenPodcast: (p: Podcast) => this.openPodcast(p),
             onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q),
             onOpenSettings: () => { this.stack.pushPathByName('settings', null); },
-            onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); },
-            onOpenFootprint: () => { this.stack.pushPathByName('footprint', null); }
+            onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); }
           })
         }
         .tabBar(this.tabBarItem($r('app.string.nav_library'), Sym.library, 1))

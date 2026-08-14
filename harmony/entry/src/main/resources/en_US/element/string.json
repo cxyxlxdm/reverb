@@ -655,6 +655,190 @@
     {
       "name": "action_about",
       "value": "About Reverb"
+    },
+    {
+      "name": "sec_reminder",
+      "value": "Notifications"
+    },
+    {
+      "name": "sec_storage",
+      "value": "Storage"
+    },
+    {
+      "name": "sec_about",
+      "value": "About"
+    },
+    {
+      "name": "set_footprint",
+      "value": "Listening footprint"
+    },
+    {
+      "name": "set_footprint_sub",
+      "value": "All your stamps, gathered into one poster"
+    },
+    {
+      "name": "set_wifi_only",
+      "value": "Download on Wi-Fi only"
+    },
+    {
+      "name": "set_wifi_only_sub",
+      "value": "Turn off to allow downloads on cellular"
+    },
+    {
+      "name": "set_clear_cache",
+      "value": "Clear cache"
+    },
+    {
+      "name": "set_clear_cache_sub",
+      "value": "Charts &amp; image cache · %s"
+    },
+    {
+      "name": "set_clear_downloads",
+      "value": "Clear downloads"
+    },
+    {
+      "name": "set_clear_downloads_sub",
+      "value": "Downloaded audio · %s"
+    },
+    {
+      "name": "set_clear_history",
+      "value": "Clear play history"
+    },
+    {
+      "name": "confirm_clear_cache",
+      "value": "This clears the charts and image cache. Subscriptions and downloads are unaffected."
+    },
+    {
+      "name": "confirm_clear_downloads",
+      "value": "This deletes all downloaded audio files and cannot be undone."
+    },
+    {
+      "name": "confirm_clear_history",
+      "value": "This clears all listening history and resume positions."
+    },
+    {
+      "name": "set_share_log",
+      "value": "Share logs"
+    },
+    {
+      "name": "set_share_log_sub",
+      "value": "Send runtime logs to the developer to help diagnose rare issues"
+    },
+    {
+      "name": "set_clear_log",
+      "value": "Clear logs"
+    },
+    {
+      "name": "log_clear_confirm",
+      "value": "Clear all logs?"
+    },
+    {
+      "name": "set_licenses",
+      "value": "Open-source licenses"
+    },
+    {
+      "name": "set_version",
+      "value": "Version"
+    },
+    {
+      "name": "set_about",
+      "value": "About Reverb"
+    },
+    {
+      "name": "set_updates_sub",
+      "value": "Notify me when a subscription has a new episode"
+    },
+    {
+      "name": "set_logs",
+      "value": "Logs"
+    },
+    {
+      "name": "set_export_opml",
+      "value": "Export subscriptions (OPML)"
+    },
+    {
+      "name": "set_export_opml_sub",
+      "value": "Standard format, importable by other podcast apps"
+    },
+    {
+      "name": "set_import_opml",
+      "value": "Import subscriptions (OPML)"
+    },
+    {
+      "name": "set_import_opml_sub",
+      "value": "Import an OPML from another app"
+    },
+    {
+      "name": "set_full_backup",
+      "value": "Full backup"
+    },
+    {
+      "name": "set_full_backup_sub",
+      "value": "Subscriptions · downloads · history · settings, for migration / backup"
+    },
+    {
+      "name": "set_restore",
+      "value": "Restore backup"
+    },
+    {
+      "name": "set_restore_sub",
+      "value": "Import from a Reverb backup file"
+    },
+    {
+      "name": "action_clear_confirm",
+      "value": "Clear"
+    },
+    {
+      "name": "action_delete",
+      "value": "Delete"
+    },
+    {
+      "name": "unit_seconds",
+      "value": "%d sec"
+    },
+    {
+      "name": "size_calculating",
+      "value": "Calculating…"
+    },
+    {
+      "name": "dlg_accent_title",
+      "value": "Accent color"
+    },
+    {
+      "name": "accent_celadon",
+      "value": "Celadon"
+    },
+    {
+      "name": "accent_blue",
+      "value": "Indigo"
+    },
+    {
+      "name": "accent_red",
+      "value": "Crimson"
+    },
+    {
+      "name": "accent_green",
+      "value": "Bamboo"
+    },
+    {
+      "name": "licenses_intro",
+      "value": "Reverb is built with the following open-source software, with thanks."
+    },
+    {
+      "name": "licenses_h_libs",
+      "value": "Libraries"
+    },
+    {
+      "name": "licenses_h_sources",
+      "value": "Data sources"
+    },
+    {
+      "name": "licenses_sources_note",
+      "value": "These are public podcast directory/search APIs, used only for search and charts; audio always comes from the publisher\\'s original RSS. This app never re-hosts or proxies it."
+    },
+    {
+      "name": "log_size",
+      "value": "Current logs %1$s"
     }
   ]
 }

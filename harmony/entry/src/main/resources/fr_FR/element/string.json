@@ -655,6 +655,190 @@
     {
       "name": "action_about",
       "value": "À propos de Reverb"
+    },
+    {
+      "name": "sec_reminder",
+      "value": "Notifications"
+    },
+    {
+      "name": "sec_storage",
+      "value": "Stockage"
+    },
+    {
+      "name": "sec_about",
+      "value": "À propos"
+    },
+    {
+      "name": "set_footprint",
+      "value": "Empreinte d\\'écoute"
+    },
+    {
+      "name": "set_footprint_sub",
+      "value": "Tous vos sceaux réunis en une affiche"
+    },
+    {
+      "name": "set_wifi_only",
+      "value": "Télécharger en Wi-Fi seulement"
+    },
+    {
+      "name": "set_wifi_only_sub",
+      "value": "Désactivez pour autoriser les données mobiles"
+    },
+    {
+      "name": "set_clear_cache",
+      "value": "Vider le cache"
+    },
+    {
+      "name": "set_clear_cache_sub",
+      "value": "Classements &amp; images · %s"
+    },
+    {
+      "name": "set_clear_downloads",
+      "value": "Effacer les téléchargements"
+    },
+    {
+      "name": "set_clear_downloads_sub",
+      "value": "Audio téléchargé · %s"
+    },
+    {
+      "name": "set_clear_history",
+      "value": "Effacer l\\'historique"
+    },
+    {
+      "name": "confirm_clear_cache",
+      "value": "Vide les classements et le cache d\\'images. Abonnements et téléchargements non affectés."
+    },
+    {
+      "name": "confirm_clear_downloads",
+      "value": "Supprime tous les fichiers audio téléchargés. Irréversible."
+    },
+    {
+      "name": "confirm_clear_history",
+      "value": "Efface tout l\\'historique et les positions de reprise."
+    },
+    {
+      "name": "set_share_log",
+      "value": "Partager les journaux"
+    },
+    {
+      "name": "set_share_log_sub",
+      "value": "Envoyez les journaux au développeur pour aider à diagnostiquer les problèmes occasionnels"
+    },
+    {
+      "name": "set_clear_log",
+      "value": "Effacer les journaux"
+    },
+    {
+      "name": "log_clear_confirm",
+      "value": "Effacer tous les journaux ?"
+    },
+    {
+      "name": "set_licenses",
+      "value": "Licences open source"
+    },
+    {
+      "name": "set_version",
+      "value": "Version"
+    },
+    {
+      "name": "set_about",
+      "value": "À propos de Reverb"
+    },
+    {
+      "name": "set_updates_sub",
+      "value": "Me notifier des nouveaux épisodes"
+    },
+    {
+      "name": "set_logs",
+      "value": "Journaux"
+    },
+    {
+      "name": "set_export_opml",
+      "value": "Exporter les abonnements (OPML)"
+    },
+    {
+      "name": "set_export_opml_sub",
+      "value": "Format standard, importable par d\\'autres apps"
+    },
+    {
+      "name": "set_import_opml",
+      "value": "Importer des abonnements (OPML)"
+    },
+    {
+      "name": "set_import_opml_sub",
+      "value": "Importer un OPML d\\'une autre app"
+    },
+    {
+      "name": "set_full_backup",
+      "value": "Sauvegarde complète"
+    },
+    {
+      "name": "set_full_backup_sub",
+      "value": "Abonnements · téléchargements · historique · réglages"
+    },
+    {
+      "name": "set_restore",
+      "value": "Restaurer"
+    },
+    {
+      "name": "set_restore_sub",
+      "value": "Importer depuis un fichier de sauvegarde Reverb"
+    },
+    {
+      "name": "action_clear_confirm",
+      "value": "Effacer"
+    },
+    {
+      "name": "action_delete",
+      "value": "Supprimer"
+    },
+    {
+      "name": "unit_seconds",
+      "value": "%d s"
+    },
+    {
+      "name": "size_calculating",
+      "value": "Calcul…"
+    },
+    {
+      "name": "dlg_accent_title",
+      "value": "Couleur d\\'accent"
+    },
+    {
+      "name": "accent_celadon",
+      "value": "Céladon"
+    },
+    {
+      "name": "accent_blue",
+      "value": "Indigo"
+    },
+    {
+      "name": "accent_red",
+      "value": "Carmin"
+    },
+    {
+      "name": "accent_green",
+      "value": "Bambou"
+    },
+    {
+      "name": "licenses_intro",
+      "value": "Reverb utilise les logiciels open source suivants, avec nos remerciements."
+    },
+    {
+      "name": "licenses_h_libs",
+      "value": "Bibliothèques"
+    },
+    {
+      "name": "licenses_h_sources",
+      "value": "Sources de données"
+    },
+    {
+      "name": "licenses_sources_note",
+      "value": "Annuaires/API publics, utilisés uniquement pour la recherche et les classements ; l\\'audio provient toujours du RSS d\\'origine. L\\'app ne l\\'héberge ni ne le relaie."
+    },
+    {
+      "name": "log_size",
+      "value": "Journaux actuels %1$s"
     }
   ]
 }

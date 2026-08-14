@@ -655,6 +655,190 @@
     {
       "name": "action_about",
       "value": "Acerca de Reverb"
+    },
+    {
+      "name": "sec_reminder",
+      "value": "Notificaciones"
+    },
+    {
+      "name": "sec_storage",
+      "value": "Almacenamiento"
+    },
+    {
+      "name": "sec_about",
+      "value": "Acerca de"
+    },
+    {
+      "name": "set_footprint",
+      "value": "Huella de escucha"
+    },
+    {
+      "name": "set_footprint_sub",
+      "value": "Todos tus sellos, reunidos en un póster"
+    },
+    {
+      "name": "set_wifi_only",
+      "value": "Descargar solo con Wi-Fi"
+    },
+    {
+      "name": "set_wifi_only_sub",
+      "value": "Desactívalo para permitir datos móviles"
+    },
+    {
+      "name": "set_clear_cache",
+      "value": "Borrar caché"
+    },
+    {
+      "name": "set_clear_cache_sub",
+      "value": "Listas e imágenes · %s"
+    },
+    {
+      "name": "set_clear_downloads",
+      "value": "Borrar descargas"
+    },
+    {
+      "name": "set_clear_downloads_sub",
+      "value": "Audio descargado · %s"
+    },
+    {
+      "name": "set_clear_history",
+      "value": "Borrar historial"
+    },
+    {
+      "name": "confirm_clear_cache",
+      "value": "Borra listas y caché de imágenes. Las suscripciones y descargas no se ven afectadas."
+    },
+    {
+      "name": "confirm_clear_downloads",
+      "value": "Elimina todos los audios descargados. No se puede deshacer."
+    },
+    {
+      "name": "confirm_clear_history",
+      "value": "Borra todo el historial y las posiciones de reanudación."
+    },
+    {
+      "name": "set_share_log",
+      "value": "Compartir registros"
+    },
+    {
+      "name": "set_share_log_sub",
+      "value": "Envía los registros al desarrollador para ayudar a diagnosticar problemas ocasionales"
+    },
+    {
+      "name": "set_clear_log",
+      "value": "Borrar registros"
+    },
+    {
+      "name": "log_clear_confirm",
+      "value": "¿Borrar todos los registros?"
+    },
+    {
+      "name": "set_licenses",
+      "value": "Licencias de código abierto"
+    },
+    {
+      "name": "set_version",
+      "value": "Versión"
+    },
+    {
+      "name": "set_about",
+      "value": "Acerca de Reverb"
+    },
+    {
+      "name": "set_updates_sub",
+      "value": "Avisarme cuando haya un nuevo episodio"
+    },
+    {
+      "name": "set_logs",
+      "value": "Registros"
+    },
+    {
+      "name": "set_export_opml",
+      "value": "Exportar suscripciones (OPML)"
+    },
+    {
+      "name": "set_export_opml_sub",
+      "value": "Formato estándar, importable por otras apps"
+    },
+    {
+      "name": "set_import_opml",
+      "value": "Importar suscripciones (OPML)"
+    },
+    {
+      "name": "set_import_opml_sub",
+      "value": "Importar un OPML de otra app"
+    },
+    {
+      "name": "set_full_backup",
+      "value": "Copia completa"
+    },
+    {
+      "name": "set_full_backup_sub",
+      "value": "Suscripciones · descargas · historial · ajustes"
+    },
+    {
+      "name": "set_restore",
+      "value": "Restaurar"
+    },
+    {
+      "name": "set_restore_sub",
+      "value": "Importar desde un archivo de copia de Reverb"
+    },
+    {
+      "name": "action_clear_confirm",
+      "value": "Borrar"
+    },
+    {
+      "name": "action_delete",
+      "value": "Eliminar"
+    },
+    {
+      "name": "unit_seconds",
+      "value": "%d s"
+    },
+    {
+      "name": "size_calculating",
+      "value": "Calculando…"
+    },
+    {
+      "name": "dlg_accent_title",
+      "value": "Color de acento"
+    },
+    {
+      "name": "accent_celadon",
+      "value": "Celadón"
+    },
+    {
+      "name": "accent_blue",
+      "value": "Índigo"
+    },
+    {
+      "name": "accent_red",
+      "value": "Carmesí"
+    },
+    {
+      "name": "accent_green",
+      "value": "Bambú"
+    },
+    {
+      "name": "licenses_intro",
+      "value": "Reverb usa el siguiente software de código abierto, con agradecimiento."
+    },
+    {
+      "name": "licenses_h_libs",
+      "value": "Bibliotecas"
+    },
+    {
+      "name": "licenses_h_sources",
+      "value": "Fuentes de datos"
+    },
+    {
+      "name": "licenses_sources_note",
+      "value": "Directorios/API públicos, usados solo para búsqueda y listas; el audio siempre proviene del RSS original del editor. La app no lo aloja ni lo redirige."
+    },
+    {
+      "name": "log_size",
+      "value": "Registros actuales %1$s"
     }
   ]
 }

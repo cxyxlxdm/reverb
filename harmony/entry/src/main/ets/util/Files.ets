@@ -1,12 +1,40 @@
 import { picker } from '@kit.CoreFileKit';
 import fs from '@ohos.file.fs';
 import util from '@ohos.util';
+import { systemShare } from '@kit.ShareKit';
+import { uniformTypeDescriptor as utd } from '@kit.ArkData';
 import type common from '@ohos.app.ability.common';
 import { Log } from './Logger';
 
 /// 文档选择/保存(备份导出导入、OPML、日志导出都走这里)。
 /// 用系统文件选择器,**不申请任何存储权限**——用户选到哪就写到哪。
 export class Files {
+  /**
+   * 唤起系统分享面板分享一段文本(设置页「分享日志」用)。
+   *
+   * Android 侧是「分享日志」+「发送日志到开发者邮箱」两条,因为 Android 要靠显式的
+   * ACTION_SEND / mailto Intent 分别处理;鸿蒙的系统分享面板本身就把邮件、即时通讯、
+   * 存文件等去向都列在一起 —— **平台原生做法是一条**,故这里合成一项。
+   */
+  static async shareText(ctx: common.UIAbilityContext, title: string, text: string): Promise<boolean> {
+    try {
+      const data = new systemShare.SharedData({
+        utd: utd.UniformDataType.PLAIN_TEXT,
+        content: text,
+        title: title
+      });
+      await new systemShare.ShareController(data).show(ctx, {
+        previewMode: systemShare.SharePreviewMode.DETAIL,
+        selectionMode: systemShare.SelectionMode.SINGLE
+      });
+      Log.i('Files', '已唤起系统分享面板');
+      return true;
+    } catch (e) {
+      Log.e('Files', `分享失败 ${(e as Error).message}`);
+      return false;
+    }
+  }
+
   /// 让用户选一个保存位置并写入文本。返回是否成功。
   static async saveText(ctx: common.UIAbilityContext, suggestName: string, text: string): Promise<boolean> {
     try {

@@ -655,6 +655,190 @@
     {
       "name": "action_about",
       "value": "关于余音"
+    },
+    {
+      "name": "sec_reminder",
+      "value": "提醒"
+    },
+    {
+      "name": "sec_storage",
+      "value": "存储"
+    },
+    {
+      "name": "sec_about",
+      "value": "关于"
+    },
+    {
+      "name": "set_footprint",
+      "value": "听觉足迹"
+    },
+    {
+      "name": "set_footprint_sub",
+      "value": "你盖下的所有印记，汇成一张足迹图"
+    },
+    {
+      "name": "set_wifi_only",
+      "value": "仅在 Wi-Fi 下载"
+    },
+    {
+      "name": "set_wifi_only_sub",
+      "value": "关闭后蜂窝网络也允许下载"
+    },
+    {
+      "name": "set_clear_cache",
+      "value": "清除缓存"
+    },
+    {
+      "name": "set_clear_cache_sub",
+      "value": "热门榜与图片缓存 · %s"
+    },
+    {
+      "name": "set_clear_downloads",
+      "value": "清除下载"
+    },
+    {
+      "name": "set_clear_downloads_sub",
+      "value": "已下载音频 · %s"
+    },
+    {
+      "name": "set_clear_history",
+      "value": "清空播放历史"
+    },
+    {
+      "name": "confirm_clear_cache",
+      "value": "将清除热门榜与图片缓存，不影响订阅与下载。"
+    },
+    {
+      "name": "confirm_clear_downloads",
+      "value": "将删除全部已下载的音频文件，无法恢复。"
+    },
+    {
+      "name": "confirm_clear_history",
+      "value": "将清空全部收听记录与续播位置。"
+    },
+    {
+      "name": "set_share_log",
+      "value": "分享日志"
+    },
+    {
+      "name": "set_share_log_sub",
+      "value": "把运行日志发给开发者协助排查偶发问题"
+    },
+    {
+      "name": "set_clear_log",
+      "value": "清空日志"
+    },
+    {
+      "name": "log_clear_confirm",
+      "value": "确定清空日志?"
+    },
+    {
+      "name": "set_licenses",
+      "value": "开源许可"
+    },
+    {
+      "name": "set_version",
+      "value": "版本"
+    },
+    {
+      "name": "set_about",
+      "value": "关于余音"
+    },
+    {
+      "name": "set_updates_sub",
+      "value": "订阅有新一期时通知你"
+    },
+    {
+      "name": "set_logs",
+      "value": "日志"
+    },
+    {
+      "name": "set_export_opml",
+      "value": "导出订阅（OPML）"
+    },
+    {
+      "name": "set_export_opml_sub",
+      "value": "标准格式，可导入其他播客 App"
+    },
+    {
+      "name": "set_import_opml",
+      "value": "导入订阅（OPML）"
+    },
+    {
+      "name": "set_import_opml_sub",
+      "value": "从其他 App 的 OPML 导入"
+    },
+    {
+      "name": "set_full_backup",
+      "value": "完整备份"
+    },
+    {
+      "name": "set_full_backup_sub",
+      "value": "订阅 · 下载 · 历史 · 设置，用于换机 / 备份"
+    },
+    {
+      "name": "set_restore",
+      "value": "恢复备份"
+    },
+    {
+      "name": "set_restore_sub",
+      "value": "从余音备份文件导入"
+    },
+    {
+      "name": "action_clear_confirm",
+      "value": "清空"
+    },
+    {
+      "name": "action_delete",
+      "value": "删除"
+    },
+    {
+      "name": "unit_seconds",
+      "value": "%d 秒"
+    },
+    {
+      "name": "size_calculating",
+      "value": "计算中…"
+    },
+    {
+      "name": "dlg_accent_title",
+      "value": "主题配色"
+    },
+    {
+      "name": "accent_celadon",
+      "value": "青瓷"
+    },
+    {
+      "name": "accent_blue",
+      "value": "黛蓝"
+    },
+    {
+      "name": "accent_red",
+      "value": "绯红"
+    },
+    {
+      "name": "accent_green",
+      "value": "竹青"
+    },
+    {
+      "name": "licenses_intro",
+      "value": "余音使用了以下开源软件，谨致谢意。"
+    },
+    {
+      "name": "licenses_h_libs",
+      "value": "开源库"
+    },
+    {
+      "name": "licenses_h_sources",
+      "value": "数据来源"
+    },
+    {
+      "name": "licenses_sources_note",
+      "value": "以下为公开的播客目录/检索接口，仅用于检索与榜单；音频始终来自发布方原始 RSS，本应用不转存、不代理。"
+    },
+    {
+      "name": "log_size",
+      "value": "当前日志 %1$s"
     }
   ]
 }

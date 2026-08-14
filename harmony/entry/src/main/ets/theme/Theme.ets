@@ -23,6 +23,9 @@ export interface Scheme {
   surfaceVariant: string;
   onSurfaceVariant: string;
   outline: string;
+  /// 危险操作色(清除下载/清空历史的确认按钮)。Android 侧直接用 Material 默认的
+  /// `colorScheme.error`,鸿蒙的 Scheme 是自建的,故取 Material 3 同值以保持一致。
+  error: string;
   isDark: boolean;
 }
 
@@ -90,6 +93,7 @@ function darkScheme(a: AccentPalette): Scheme {
     surfaceVariant: lerpColor(INK_SURFACE_HI, a.primaryDark, 0.12),
     onSurfaceVariant: '#95A3A0',
     outline: lerpColor('#33413F', a.primaryDark, 0.15),
+    error: '#F2B8B5',
     isDark: true
   };
 }
@@ -107,6 +111,7 @@ function lightScheme(a: AccentPalette): Scheme {
     surfaceVariant: lerpColor(PAPER_SURFACE_HI, a.primaryLight, 0.12),
     onSurfaceVariant: '#6B6255',
     outline: lerpColor('#CFC6B4', a.primaryLight, 0.2),
+    error: '#B3261E',
     isDark: false
   };
 }
@@ -125,6 +130,7 @@ function whiteScheme(a: AccentPalette): Scheme {
     surfaceVariant: '#EEF1F3',
     onSurfaceVariant: '#5A6169',
     outline: '#D5DADE',
+    error: '#B3261E',
     isDark: false
   };
 }

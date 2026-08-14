@@ -25,7 +25,49 @@ class PickerSpec {
   }
 }
 
-/// 精简设置:外观(主题/配色/字号)、内容(地区)、播放(默认倍速/快退快进)。
+/// 一次破坏性操作的二次确认请求(对应 Android ConfirmDialog)。
+class ConfirmSpec {
+  title: string = '';
+  message: string = '';
+  confirmLabel: string = '';
+  onConfirm: () => void = () => {};
+
+  constructor(title: string, message: string, confirmLabel: string, onConfirm: () => void) {
+    this.title = title;
+    this.message = message;
+    this.confirmLabel = confirmLabel;
+    this.onConfirm = onConfirm;
+  }
+
+  static cache(page: SettingsPage): ConfirmSpec {
+    return new ConfirmSpec(L.s('set_clear_cache'), L.s('confirm_clear_cache'), L.s('action_clear'),
+      () => page.doClearCache());
+  }
+  static downloads(page: SettingsPage): ConfirmSpec {
+    return new ConfirmSpec(L.s('set_clear_downloads'), L.s('confirm_clear_downloads'), L.s('action_delete'),
+      () => page.doClearDownloads());
+  }
+  static history(page: SettingsPage): ConfirmSpec {
+    return new ConfirmSpec(L.s('set_clear_history'), L.s('confirm_clear_history'), L.s('action_clear_confirm'),
+      () => page.doClearHistory());
+  }
+  static log(page: SettingsPage): ConfirmSpec {
+    return new ConfirmSpec(L.s('set_clear_log'), L.s('log_clear_confirm'), L.s('action_clear_confirm'),
+      () => page.doClearLog());
+  }
+}
+
+/// 字节数 → 人类可读。与 Android `human()` 同档位(B / KB / MB 一位小数 / GB 两位)。
+function humanBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${Math.round(kb)} KB`;
+  const mb = kb / 1024;
+  if (mb < 1024) return `${mb.toFixed(1)} MB`;
+  return `${(mb / 1024).toFixed(2)} GB`;
+}
+
+/// 设置页。分区与条目对齐 Android `SettingsScreen.kt`。
 @Component
 export struct SettingsPage {
   @Prop scheme: Scheme;
@@ -44,10 +86,18 @@ export struct SettingsPage {
   /// 设置变更后通知外层重渲(主题/字号即时生效)
   onChanged: () => void = () => {};
   onOpenAbout: () => void = () => {};
+  onOpenLicenses: () => void = () => {};
+  onOpenFootprint: () => void = () => {};
 
   @State hint: string = '';
   /// 正在进行的「选一项」;null = 无。
   @State picker: PickerSpec | null = null;
+  /// 正在确认的破坏性操作;null = 无。
+  @State confirm: ConfirmSpec | null = null;
+  /// 缓存/下载/日志占用。-1 表示还在算(与 Android 的 size_calculating 一致)。
+  @State cacheBytes: number = -1;
+  @State dlBytes: number = -1;
+  @State logBytes: number = -1;
 
   private app: AppContainer = AppContainer.get();
   private themeLabels(): string[] { return [L.s('theme_system'), L.s('theme_light'), L.s('theme_dark'), L.s('theme_white')]; }
@@ -67,50 +117,76 @@ export struct SettingsPage {
         title: L.s('settings_title'), onBack: () => this.onBack()
       })
       Scroll() {
-        Column({ space: 4 }) {
-          this.sectionLabel(L.s('sec_appearance'))
-          this.choiceRow(L.s('set_theme'), this.themeLabels(), () => this.settings.themeMode,
-            (i: number) => { this.settings.setThemeMode(i); this.onChanged(); })
-          this.accentRow()
-          this.choiceRow(L.s('set_font'), this.fontLabels(), () => this.settings.fontIndex,
-            (i: number) => { this.settings.setFontIndex(i); this.onChanged(); })
-
-          this.choiceRow(L.s('set_language'), this.langLabels(), () => this.langIndex(),
-            (i: number) => { this.settings.setLanguage(this.langCodes[i]); this.onChanged(); })
-
+        // 分区顺序与 Android `SettingsScreen.kt` 逐段一致:
+        // 内容 → 外观 → 播放 → 提醒 → 存储 → 备份 → 日志 → 关于。
+        // (原先是 外观 → 内容 → 播放 → 备份 → 其他,自成一套。)
+        Column({ space: 0 }) {
           this.sectionLabel(L.s('sec_content'))
-          this.choiceRow(L.s('set_region'), REGIONS.map((r: RegionOption) => regionLabel(r)),
+          this.choiceRow(L.s('set_region'), () => '', REGIONS.map((r: RegionOption) => regionLabel(r)),
             () => this.regionIndex(),
             (i: number) => { this.settings.setRegionOverride(REGIONS[i].code); this.onChanged(); })
-
-          this.choiceRow(L.s('set_radio_mode'), [L.s('radio_random'), L.s('radio_contextual')],
+          // 听觉足迹:Android 也是放在这一段的一条,不在音阁页头
+          this.actionRow(L.s('set_footprint'), () => L.s('set_footprint_sub'), () => this.onOpenFootprint())
+          this.choiceRow(L.s('set_radio_mode'), () => '', [L.s('radio_random'), L.s('radio_contextual')],
             () => this.settings.contextualRadio ? 1 : 0,
             (i: number) => { this.settings.setContextualRadio(i === 1); this.onChanged(); })
 
+          this.sectionLabel(L.s('sec_appearance'))
+          this.choiceRow(L.s('set_theme'), () => '', this.themeLabels(), () => this.settings.themeMode,
+            (i: number) => { this.settings.setThemeMode(i); this.onChanged(); })
+          this.choiceRow(L.s('set_font'), () => '', this.fontLabels(), () => this.settings.fontIndex,
+            (i: number) => { this.settings.setFontIndex(i); this.onChanged(); })
+          this.accentRow()
+          this.choiceRow(L.s('set_language'), () => '', this.langLabels(), () => this.langIndex(),
+            (i: number) => { this.settings.setLanguage(this.langCodes[i]); this.onChanged(); })
+          // 真实频谱:鸿蒙**没有**这一项。Android 靠 Visualizer(0) 抓系统输出混音,
+          // 鸿蒙的 SOURCE_TYPE_PLAYBACK_CAPTURE 自 API 12 废弃、改用需录屏授权的
+          // OH_AVScreenCapture,为一个封面动效索取录屏权限不成比例。详见 TROUBLESHOOTING。
+
           this.sectionLabel(L.s('sec_playback'))
-          this.choiceRow(L.s('set_default_speed'), this.speeds.map((s: number) => `${s}×`),
+          this.choiceRow(L.s('set_default_speed'), () => '', this.speeds.map((s: number) => `${s}×`),
             () => this.speedIndex(),
             (i: number) => { this.settings.setDefaultSpeed(this.speeds[i]); this.onChanged(); })
-          this.choiceRow(L.s('set_skip_back'), this.skipBackOpts.map((s: number) => L.f('sec_n', s)),
+          this.choiceRow(L.s('set_skip_back'), () => '', this.skipBackOpts.map((s: number) => L.f('unit_seconds', s)),
             () => this.optIndex(this.skipBackOpts, this.settings.skipBackSec),
             (i: number) => { this.settings.setSkipBackSec(this.skipBackOpts[i]); this.onChanged(); })
-          this.choiceRow(L.s('set_skip_forward'), this.skipFwdOpts.map((s: number) => L.f('sec_n', s)),
+          this.choiceRow(L.s('set_skip_forward'), () => '', this.skipFwdOpts.map((s: number) => L.f('unit_seconds', s)),
             () => this.optIndex(this.skipFwdOpts, this.settings.skipForwardSec),
             (i: number) => { this.settings.setSkipForwardSec(this.skipFwdOpts[i]); this.onChanged(); })
+          this.switchRow(L.s('set_wifi_only'), () => L.s('set_wifi_only_sub'),
+            !this.settings.allowCellular,
+            (on: boolean) => { this.settings.setAllowCellular(!on); })
+
+          this.sectionLabel(L.s('sec_reminder'))
+          this.switchRow(L.s('set_updates'), () => L.s('set_updates_sub'),
+            this.settings.updatesEnabled,
+            (on: boolean) => { this.toggleUpdates(on); })
+          this.actionRow(L.s('update_check_now'), () => '', () => this.checkUpdates())
+
+          this.sectionLabel(L.s('sec_storage'))
+          this.actionRow(L.s('set_clear_cache'), () => L.f('set_clear_cache_sub', this.cacheStr()),
+            () => { this.confirm = ConfirmSpec.cache(this); })
+          this.actionRow(L.s('set_clear_downloads'), () => L.f('set_clear_downloads_sub', this.dlStr()),
+            () => { this.confirm = ConfirmSpec.downloads(this); })
+          this.actionRow(L.s('set_clear_history'), () => '',
+            () => { this.confirm = ConfirmSpec.history(this); })
 
           this.sectionLabel(L.s('sec_backup'))
-          this.actionRow(L.s('backup_export'), () => this.exportBackup())
-          this.actionRow(L.s('backup_import'), () => this.importBackup())
-          this.actionRow(L.s('opml_export'), () => this.exportOpml())
-          this.actionRow(L.s('opml_import'), () => this.importOpml())
+          this.actionRow(L.s('set_export_opml'), () => L.s('set_export_opml_sub'), () => this.exportOpml())
+          this.actionRow(L.s('set_import_opml'), () => L.s('set_import_opml_sub'), () => this.importOpml())
+          this.actionRow(L.s('set_full_backup'), () => L.s('set_full_backup_sub'), () => this.exportBackup())
+          this.actionRow(L.s('set_restore'), () => L.s('set_restore_sub'), () => this.importBackup())
 
-          this.sectionLabel(L.s('sec_other'))
-          this.choiceRow(L.s('set_updates'), [L.s('off'), L.s('on')],
-            () => this.settings.updatesEnabled ? 1 : 0,
-            (i: number) => { this.toggleUpdates(i === 1); })
-          this.actionRow(L.s('update_check_now'), () => this.checkUpdates())
-          this.actionRow(L.s('log_export'), () => this.exportLog())
-          this.actionRow(L.s('action_about'), () => this.onOpenAbout())
+          this.sectionLabel(L.s('set_logs'))
+          this.actionRow(L.s('set_share_log'), () => L.s('set_share_log_sub'), () => this.shareLog())
+          this.actionRow(L.s('log_export'), () => '', () => this.exportLog())
+          this.actionRow(L.s('set_clear_log'), () => L.f('log_size', this.logStr()),
+            () => { this.confirm = ConfirmSpec.log(this); })
+
+          this.sectionLabel(L.s('sec_about'))
+          this.actionRow(L.s('set_about'), () => '', () => this.onOpenAbout())
+          this.actionRow(L.s('set_licenses'), () => '', () => this.onOpenLicenses())
+          this.plainRow(L.s('set_version'), '1.0.0')
 
           if (this.hint.length > 0) {
             Text(this.hint)
@@ -118,11 +194,7 @@ export struct SettingsPage {
               .fontColor(this.scheme.primary)
               .padding({ left: Metrics.pagePadding, top: 10 })
           }
-
-          Text(L.f('about_line', '1.0.0'))
-            .fontSize(TypeScale.caption * this.fontScale)
-            .fontColor(this.scheme.onSurfaceVariant)
-            .margin({ top: 24, bottom: 24 })
+          Row().height(24)
         }
         .alignItems(HorizontalAlign.Start)
         .width('100%')
@@ -137,6 +209,9 @@ export struct SettingsPage {
       // 选项对话框:null → 非 null 时整段重建,故值参数拿到的是最新的 spec
       if (this.picker !== null) {
         this.pickerDialog(this.picker)
+      }
+      if (this.confirm !== null) {
+        this.confirmDialog(this.confirm)
       }
     }
     .width('100%')
@@ -241,24 +316,120 @@ export struct SettingsPage {
     return i < 0 ? 0 : i;
   }
 
+  /// 分区标签。颜色用 **primary**(与 Android SectionLabel 一致);原先用 secondary(梁金)。
   @Builder
   sectionLabel(text: string) {
     Text(text)
       .fontSize(TypeScale.caption * this.fontScale)
-      .fontColor(this.scheme.secondary)
-      .padding({ left: Metrics.pagePadding, top: 18, bottom: 6 })
+      .fontColor(this.scheme.primary)
+      .padding({ left: Metrics.pagePadding, top: 18, bottom: 2 })
+  }
+
+  /**
+   * 一行的标题 + 可选副标题(Android 的每个 SettingRow 都可带副标题;鸿蒙原先只有标题)。
+   *
+   * 副标题**必须一路以闭包传到这里**再求值,`subOf()` 空串即不显示。
+   * 踩过两次:第一次把动态副标题当字符串传给 `actionRow`,第二次改成闭包但在 `actionRow` 里
+   * 就 `subOf()` 求好值、再把字符串传给本 @Builder —— **等于把一次性值参数往下挪了一层**,
+   * 清除缓存后文件都删了,副标题照旧显示旧的 KB 数。`@Builder` 的值参数是一次性的
+   * (H6/H19/H27 同一族);闭包之所以有效,是因为它在 builder 体里被调用时才读状态。
+   */
+  @Builder
+  rowText(title: string, subOf: () => string) {
+    Column({ space: 2 }) {
+      Text(title)
+        .fontSize(TypeScale.body * this.fontScale)
+        .fontColor(this.scheme.onBackground)
+      if (subOf().length > 0) {
+        Text(subOf())
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+      }
+    }
+    .alignItems(HorizontalAlign.Start)
+    .layoutWeight(1)
+  }
+
+  /// 开关行(Android SettingSwitch)。原先把开关做成「关/开」两项的单选对话框 ——
+  /// 两次点击才能切一个布尔值,且看不出这是开关。
+  @Builder
+  switchRow(title: string, subOf: () => string, on: boolean, onChange: (v: boolean) => void) {
+    Row() {
+      this.rowText(title, subOf)
+      Toggle({ type: ToggleType.Switch, isOn: on })
+        .selectedColor(this.scheme.primary)
+        .onChange((v: boolean) => { onChange(v); })
+    }
+    .width('100%')
+    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 6, bottom: 6 })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  /// 只展示不可点的一行(版本号)。
+  @Builder
+  plainRow(title: string, value: string) {
+    Row() {
+      this.rowText(title, () => '')
+      Text(value)
+        .fontSize(TypeScale.label * this.fontScale)
+        .fontColor(this.scheme.onSurfaceVariant)
+    }
+    .width('100%')
+    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 14, bottom: 14 })
+    .alignItems(VerticalAlign.Center)
+  }
+
+  /// 破坏性操作的二次确认(Android ConfirmDialog):标题 + 说明 + 危险色确认 + 取消。
+  @Builder
+  confirmDialog(spec: ConfirmSpec) {
+    Stack() {
+      Column()
+        .width('100%').height('100%')
+        .backgroundColor(withAlpha('#000000', 0.45))
+        .onClick(() => { this.confirm = null; })
+      Column() {
+        Text(spec.title)
+          .fontSize(TypeScale.titleMedium * this.fontScale)
+          .fontColor(this.scheme.onBackground)
+          .alignSelf(ItemAlign.Start)
+          .margin({ bottom: 12 })
+        Text(spec.message)
+          .fontSize(TypeScale.body * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .alignSelf(ItemAlign.Start)
+        Row({ space: 22 }) {
+          Text(L.s('action_cancel'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .onClick(() => { this.confirm = null; })
+          Text(spec.confirmLabel)
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.error)
+            .onClick(() => {
+              const run = spec.onConfirm;
+              this.confirm = null;
+              run();
+            })
+        }
+        .margin({ top: 22 })
+        .alignSelf(ItemAlign.End)
+      }
+      .width('78%')
+      .padding({ left: 22, right: 22, top: 22, bottom: 16 })
+      .backgroundColor(this.scheme.surface)
+      .borderRadius(18)
+    }
+    .width('100%')
+    .height('100%')
   }
 
   /// 一行设置:标题 + 当前值 + 下拉菜单选择。
   /// 注意:当前值用**闭包**取而不是值参数 —— ArkUI 的 @Builder 值参数是一次性的,
   /// 状态变化后不会重新求值,会导致改了设置但显示的值不变。
   @Builder
-  choiceRow(title: string, options: string[], selectedOf: () => number, onPick: (i: number) => void) {
+  choiceRow(title: string, subOf: () => string, options: string[], selectedOf: () => number, onPick: (i: number) => void) {
     Row() {
-      Text(title)
-        .fontSize(TypeScale.body * this.fontScale)
-        .fontColor(this.scheme.onBackground)
-        .layoutWeight(1)
+      this.rowText(title, subOf)
       Text(this.valueLabel(options, selectedOf()))
         .fontSize(TypeScale.label * this.fontScale)
         .fontColor(this.scheme.onSurfaceVariant)
@@ -270,21 +441,75 @@ export struct SettingsPage {
     })
   }
 
+  aboutToAppear(): void {
+    this.recomputeSizes();
+  }
+
+  /// 重算三处占用。进页面时算一次,清理后再算一次(与 Android 的 refreshTick 同思路)。
+  private recomputeSizes(): void {
+    this.cacheBytes = this.app.popularCache.sizeBytes();
+    this.dlBytes = this.app.downloadManager.usageBytes();
+    this.logBytes = Log.sizeBytes();
+  }
+
+  private cacheStr(): string {
+    return this.cacheBytes < 0 ? L.s('size_calculating') : humanBytes(this.cacheBytes);
+  }
+  private dlStr(): string {
+    return this.dlBytes < 0 ? L.s('size_calculating') : humanBytes(this.dlBytes);
+  }
+  private logStr(): string {
+    return this.logBytes < 0 ? L.s('size_calculating') : humanBytes(this.logBytes);
+  }
+
+  /// 破坏性操作的实际执行体。由 ConfirmSpec 在用户确认后调用 —— 故必须是公开方法。
+  doClearCache(): void {
+    this.app.popularCache.clear();
+    this.recomputeSizes();
+    this.hint = L.s('set_clear_cache');
+    Log.i('Settings', '已清除热门榜缓存');
+  }
+
+  doClearDownloads(): void {
+    this.app.downloadManager.deleteAll();
+    this.recomputeSizes();
+    this.hint = L.s('set_clear_downloads');
+    Log.i('Settings', '已清除全部下载');
+  }
+
+  doClearHistory(): void {
+    this.app.history.clear();
+    this.hint = L.s('set_clear_history');
+  }
+
+  doClearLog(): void {
+    Log.clear();
+    this.recomputeSizes();
+  }
+
+  private async shareLog(): Promise<void> {
+    const ok = await Files.shareText(this.ctx(), L.s('set_share_log'), Log.dump());
+    if (!ok) this.hint = L.s('backup_failed');
+  }
+
   private ctx(): common.UIAbilityContext {
     return this.getUIContext().getHostContext() as common.UIAbilityContext;
   }
 
-  /// 一行「点了就干活」的操作(备份/日志/关于)。
+  /**
+   * 一行「点了就干活」的操作(备份/日志/关于)。
+   *
+   * 副标题必须用**闭包**取,不能传字符串:`@Builder` 的值参数是一次性的(H6/H19/H27 同一族),
+   * 状态变了不会重算。踩过一次 —— 清除缓存后文件确实删了,可副标题仍显示旧的「257 KB」。
+   * 本文件的 `choiceRow` 早就为此把当前值做成 `selectedOf()` 闭包,这里同理。
+   *
+   * Android 的 SettingRow 没有尾部箭头,这里也去掉 —— 原先用「下一集」图标当箭头,
+   * 形状是三角+竖线,并不是右尖括号。
+   */
   @Builder
-  actionRow(title: string, action: () => void) {
+  actionRow(title: string, subOf: () => string, action: () => void) {
     Row() {
-      Text(title)
-        .fontSize(TypeScale.body * this.fontScale)
-        .fontColor(this.scheme.onBackground)
-        .layoutWeight(1)
-      Image($r('sys.media.ohos_ic_public_play_next'))
-        .width(16).height(16)
-        .fillColor(this.scheme.onSurfaceVariant)
+      this.rowText(title, subOf)
     }
     .width('100%')
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 14, bottom: 14 })
@@ -358,39 +583,39 @@ export struct SettingsPage {
     return selected >= 0 && selected < options.length ? options[selected] : '';
   }
 
-  /// 配色:四个圆形色块直选。
+  /// 配色行。与 Android 一致:**标题 + 当前配色名 + 一个色点**,点开选择对话框;
+  /// 原先是四个圆点直接排在行里(自成一套),与其它设置项的交互也不统一。
   @Builder
   accentRow() {
-    Row() {
-      Text(L.s('set_accent'))
-        .fontSize(TypeScale.body * this.fontScale)
-        .fontColor(this.scheme.onBackground)
-        .layoutWeight(1)
-      Row({ space: 10 }) {
-        ForEach(ACCENTS, (a: AccentPalette, idx: number) => {
-          Stack() {
-            // 选中环同样用 border 画(理由见 radio():Circle().stroke() 会被裁掉外侧半宽)
-            if (this.settings.accentIndex === idx) {
-              Column()
-                .width(34).height(34)
-                .borderRadius(17)
-                .borderWidth(1.5)
-                .borderColor(this.scheme.onBackground)
-            }
-            Circle()
-              .width(26).height(26)
-              .fill(this.scheme.isDark ? a.primaryDark : a.primaryLight)
-          }
-          .width(34).height(34)
-          .onClick(() => {
-            this.settings.setAccentIndex(idx);
-            this.onChanged();
-          })
-        }, (a: AccentPalette, idx: number) => `${idx}`)
-      }
+    Row({ space: 10 }) {
+      this.rowText(L.s('set_accent'), () => '')
+      Text(this.accentLabels()[this.accentIndex()])
+        .fontSize(TypeScale.label * this.fontScale)
+        .fontColor(this.scheme.onSurfaceVariant)
+      Circle()
+        .width(20).height(20)
+        .fill(this.accentColor(this.accentIndex()))
     }
     .width('100%')
-    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 10, bottom: 10 })
+    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 14, bottom: 14 })
     .alignItems(VerticalAlign.Center)
+    .onClick(() => {
+      this.picker = new PickerSpec(L.s('dlg_accent_title'), this.accentLabels(), this.accentIndex(),
+        (i: number) => { this.settings.setAccentIndex(i); this.onChanged(); });
+    })
+  }
+
+  private accentLabels(): string[] {
+    return [L.s('accent_celadon'), L.s('accent_blue'), L.s('accent_red'), L.s('accent_green')];
+  }
+
+  private accentIndex(): number {
+    const i = this.settings.accentIndex;
+    return i >= 0 && i < ACCENTS.length ? i : 0;
+  }
+
+  private accentColor(idx: number): string {
+    const a: AccentPalette = ACCENTS[idx];
+    return this.scheme.isDark ? a.primaryDark : a.primaryLight;
   }
 }

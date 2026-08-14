@@ -32,9 +32,23 @@ function remember(level: string, tag: string, msg: string): void {
 
 /// 统一日志(对齐 Android util/Logger 与 macOS Log 的 tag 风格)。
 export class Log {
-  /// 导出最近日志文本(设置页「导出日志」用)。
+  /// 导出最近日志文本(设置页「分享日志」用)。
   static dump(): string {
     return ring.join('\n');
+  }
+
+  /// 日志占用(字节)。鸿蒙侧日志只在内存环形缓冲里,不落盘,所以就是文本字节数;
+  /// Android/macOS 是落盘文件,取文件大小 —— 两端展示口径一致(都显示"日志占用"),
+  /// 实现不同是因为鸿蒙这边刻意不做日志文件(避免无谓 IO,见本类顶部注释)。
+  static sizeBytes(): number {
+    let n = 0;
+    for (let i = 0; i < ring.length; i++) n += ring[i].length * 3;   // UTF-8 中文按 3 字节估
+    return n;
+  }
+
+  static clear(): void {
+    ring.length = 0;
+    Log.i('Log', '日志已清空');
   }
 
   static d(tag: string, msg: string): void {

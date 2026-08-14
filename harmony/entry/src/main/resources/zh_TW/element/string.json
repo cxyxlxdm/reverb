@@ -655,6 +655,190 @@
     {
       "name": "action_about",
       "value": "關於餘音"
+    },
+    {
+      "name": "sec_reminder",
+      "value": "提醒"
+    },
+    {
+      "name": "sec_storage",
+      "value": "儲存"
+    },
+    {
+      "name": "sec_about",
+      "value": "關於"
+    },
+    {
+      "name": "set_footprint",
+      "value": "聽覺足跡"
+    },
+    {
+      "name": "set_footprint_sub",
+      "value": "你蓋下的所有印記，匯成一張足跡圖"
+    },
+    {
+      "name": "set_wifi_only",
+      "value": "僅在 Wi-Fi 下載"
+    },
+    {
+      "name": "set_wifi_only_sub",
+      "value": "關閉後行動網路也允許下載"
+    },
+    {
+      "name": "set_clear_cache",
+      "value": "清除快取"
+    },
+    {
+      "name": "set_clear_cache_sub",
+      "value": "熱門榜與圖片快取 · %s"
+    },
+    {
+      "name": "set_clear_downloads",
+      "value": "清除下載"
+    },
+    {
+      "name": "set_clear_downloads_sub",
+      "value": "已下載音訊 · %s"
+    },
+    {
+      "name": "set_clear_history",
+      "value": "清空播放歷史"
+    },
+    {
+      "name": "confirm_clear_cache",
+      "value": "將清除熱門榜與圖片快取，不影響訂閱與下載。"
+    },
+    {
+      "name": "confirm_clear_downloads",
+      "value": "將刪除全部已下載的音訊檔，無法復原。"
+    },
+    {
+      "name": "confirm_clear_history",
+      "value": "將清空全部收聽記錄與續播位置。"
+    },
+    {
+      "name": "set_share_log",
+      "value": "分享日誌"
+    },
+    {
+      "name": "set_share_log_sub",
+      "value": "把執行日誌傳給開發者協助排查偶發問題"
+    },
+    {
+      "name": "set_clear_log",
+      "value": "清空日誌"
+    },
+    {
+      "name": "log_clear_confirm",
+      "value": "確定清空日誌?"
+    },
+    {
+      "name": "set_licenses",
+      "value": "開源授權"
+    },
+    {
+      "name": "set_version",
+      "value": "版本"
+    },
+    {
+      "name": "set_about",
+      "value": "關於餘音"
+    },
+    {
+      "name": "set_updates_sub",
+      "value": "訂閱有新一集時通知你"
+    },
+    {
+      "name": "set_logs",
+      "value": "日誌"
+    },
+    {
+      "name": "set_export_opml",
+      "value": "匯出訂閱（OPML）"
+    },
+    {
+      "name": "set_export_opml_sub",
+      "value": "標準格式，可匯入其他播客 App"
+    },
+    {
+      "name": "set_import_opml",
+      "value": "匯入訂閱（OPML）"
+    },
+    {
+      "name": "set_import_opml_sub",
+      "value": "從其他 App 的 OPML 匯入"
+    },
+    {
+      "name": "set_full_backup",
+      "value": "完整備份"
+    },
+    {
+      "name": "set_full_backup_sub",
+      "value": "訂閱 · 下載 · 歷史 · 設定，用於換機 / 備份"
+    },
+    {
+      "name": "set_restore",
+      "value": "還原備份"
+    },
+    {
+      "name": "set_restore_sub",
+      "value": "從餘音備份檔匯入"
+    },
+    {
+      "name": "action_clear_confirm",
+      "value": "清空"
+    },
+    {
+      "name": "action_delete",
+      "value": "刪除"
+    },
+    {
+      "name": "unit_seconds",
+      "value": "%d 秒"
+    },
+    {
+      "name": "size_calculating",
+      "value": "計算中…"
+    },
+    {
+      "name": "dlg_accent_title",
+      "value": "主題配色"
+    },
+    {
+      "name": "accent_celadon",
+      "value": "青瓷"
+    },
+    {
+      "name": "accent_blue",
+      "value": "黛藍"
+    },
+    {
+      "name": "accent_red",
+      "value": "緋紅"
+    },
+    {
+      "name": "accent_green",
+      "value": "竹青"
+    },
+    {
+      "name": "licenses_intro",
+      "value": "餘音使用了以下開源軟體，謹致謝意。"
+    },
+    {
+      "name": "licenses_h_libs",
+      "value": "開源庫"
+    },
+    {
+      "name": "licenses_h_sources",
+      "value": "資料來源"
+    },
+    {
+      "name": "licenses_sources_note",
+      "value": "以下為公開的播客目錄/檢索介面，僅用於檢索與榜單；音訊始終來自發布方原始 RSS，本應用不轉存、不代理。"
+    },
+    {
+      "name": "log_size",
+      "value": "目前日誌 %1$s"
     }
   ]
 }

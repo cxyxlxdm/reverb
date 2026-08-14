@@ -6,7 +6,6 @@ import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
 import { InboxStore } from '../store/InboxStore';
 import { DownloadStore } from '../store/DownloadStore';
-import { StampStore } from '../store/StampStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym } from './Widgets';
@@ -35,12 +34,10 @@ export struct LibraryPage {
   @ObjectLink downloads: DownloadStore;
   @ObjectLink history: HistoryStore;
   @ObjectLink downloadManager: DownloadManager;
-  @ObjectLink stamps: StampStore;
   onOpenPodcast: (p: Podcast) => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
   onOpenSettings: () => void = () => {};
   onOpenListenStats: () => void = () => {};
-  onOpenFootprint: () => void = () => {};
 
   @State seg: number = 0;
 
