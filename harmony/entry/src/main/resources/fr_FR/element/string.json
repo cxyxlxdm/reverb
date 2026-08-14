@@ -9,8 +9,12 @@
       "value": "Bibliothèque"
     },
     {
+      "name": "app_title",
+      "value": "Reverb"
+    },
+    {
       "name": "app_slogan",
-      "value": "Écoutez la réverbération"
+      "value": "Chaque écho persiste."
     },
     {
       "name": "loading",

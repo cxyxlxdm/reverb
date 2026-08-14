@@ -109,7 +109,9 @@ export struct DiscoverPage {
       ScreenHeader({
         scheme: this.scheme,
         fontScale: this.fontScale,
-        title: L.s('nav_discover'),
+        // 与 Android 一致:发现页顶部是**应用名 + slogan**,不是「发现」二字
+        // (「发现」只作底部 tab 的标签)。
+        title: L.s('app_title'),
         subtitle: L.s('app_slogan'),
         action: () => { this.radioButton() }
       })

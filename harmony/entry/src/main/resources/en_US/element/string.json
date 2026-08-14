@@ -9,8 +9,12 @@
       "value": "Library"
     },
     {
+      "name": "app_title",
+      "value": "Reverb"
+    },
+    {
       "name": "app_slogan",
-      "value": "Hear the reverb"
+      "value": "Every echo lingers."
     },
     {
       "name": "loading",

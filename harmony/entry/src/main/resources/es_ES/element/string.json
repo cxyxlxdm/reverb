@@ -9,8 +9,12 @@
       "value": "Biblioteca"
     },
     {
+      "name": "app_title",
+      "value": "Reverb"
+    },
+    {
       "name": "app_slogan",
-      "value": "Escucha el eco"
+      "value": "Cada eco perdura."
     },
     {
       "name": "loading",
