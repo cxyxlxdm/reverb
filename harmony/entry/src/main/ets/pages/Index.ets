@@ -1,5 +1,12 @@
 import { Theme, Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { SettingsStore } from '../store/SettingsStore';
+import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
+import { InboxStore } from '../store/InboxStore';
+import { DownloadStore } from '../store/DownloadStore';
+import { StampStore } from '../store/StampStore';
+import { ListenStatsStore } from '../store/ListenStatsStore';
+import { DownloadManager } from '../playback/DownloadManager';
+import { RadioStation } from '../playback/RadioStation';
 import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint } from '../view/Widgets';
 import { DiscoverPage } from '../view/DiscoverPage';
@@ -23,7 +30,25 @@ import window from '@ohos.window';
 @Entry
 @Component
 struct Index {
-  @State settings: SettingsStore = new SettingsStore();
+  /**
+   * 各 store 一律由外壳以 `@State` 持有、再以 `@ObjectLink` 下发给页面。
+   *
+   * 为什么不让页面自己 `AppContainer.get().xxx` 取(那样代码更短):那样拿到的是
+   * **未被 ArkUI 观察**的裸对象,改了字段页面不会重渲。音阁的宫格切换/清空历史/删除下载、
+   * 「最新」刷新结果上屏,以及设置页的配色,都曾因此点了没反应 —— 有些看着正常,
+   * 只是恰好被别的 `@State` 变化(切分段、关对话框、播放状态 tick)顺带刷新了,属偶然。
+   * 详见 TROUBLESHOOTING H26 / H27。
+   */
+  @State settings: SettingsStore = AppContainer.get().settings;
+  @State subscriptions: SubscriptionStore = AppContainer.get().subscriptions;
+  @State favorites: FavoriteStore = AppContainer.get().favorites;
+  @State history: HistoryStore = AppContainer.get().history;
+  @State inbox: InboxStore = AppContainer.get().inbox;
+  @State downloads: DownloadStore = AppContainer.get().downloads;
+  @State stamps: StampStore = AppContainer.get().stamps;
+  @State listenStats: ListenStatsStore = AppContainer.get().listenStats;
+  @State downloadManager: DownloadManager = AppContainer.get().downloadManager;
+  @State radio: RadioStation = AppContainer.get().radio;
   @State tab: number = 0;
   @State systemDark: boolean = false;
   @State stack: NavPathStack = new NavPathStack();
@@ -41,7 +66,6 @@ struct Index {
     const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
     const app = AppContainer.get();
     app.boot(ctx);
-    this.settings = app.settings;
     this.player = app.player;
     // 播放状态变化时驱动界面刷新
     const prev = app.player.onStateChanged;
@@ -188,6 +212,10 @@ struct Index {
             scheme: this.scheme(),
             fontScale: this.fontScale(),
             seed: this.detailSeed,
+            subscriptions: this.subscriptions,
+            downloadManager: this.downloadManager,
+            history: this.history,
+            listenStats: this.listenStats,
             onBack: () => { this.stack.pop(); },
             onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
           })
@@ -217,6 +245,9 @@ struct Index {
           DiscoverPage({
             scheme: this.scheme(),
             fontScale: this.fontScale(),
+            settings: this.settings,
+            history: this.history,
+            radio: this.radio,
             onOpenPodcast: (p: Podcast) => this.openPodcast(p),
             onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
           })
@@ -228,6 +259,14 @@ struct Index {
             scheme: this.scheme(),
             fontScale: this.fontScale(),
             player: this.player,
+            settings: this.settings,
+            subscriptions: this.subscriptions,
+            inbox: this.inbox,
+            favorites: this.favorites,
+            downloads: this.downloads,
+            history: this.history,
+            downloadManager: this.downloadManager,
+            stamps: this.stamps,
             onOpenPodcast: (p: Podcast) => this.openPodcast(p),
             onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q),
             onOpenSettings: () => { this.stack.pushPathByName('settings', null); },

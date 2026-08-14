@@ -6,6 +6,8 @@ import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork } from './Widgets';
 import { PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
+import { SettingsStore } from '../store/SettingsStore';
+import { HistoryStore } from '../store/Stores';
 import { Log } from '../util/Logger';
 
 /// 发现页:分类热门榜(缓存秒开 + 后台刷新 + 下拉刷新)+ 搜索(节目/单集双分段)
@@ -14,6 +16,11 @@ import { Log } from '../util/Logger';
 export struct DiscoverPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
+  /// 见 LibraryPage 同名注释:驱动界面的 store 必须被观察,不能 `this.app.xxx` 直读。
+  /// 电台按钮(图标/激活态/准备中)与「继续收听」都依赖它们。
+  @ObjectLink settings: SettingsStore;
+  @ObjectLink history: HistoryStore;
+  @ObjectLink radio: RadioStation;
   onOpenPodcast: (p: Podcast) => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
 
@@ -147,30 +154,30 @@ export struct DiscoverPage {
   @Builder
   radioButton() {
     Row({ space: 5 }) {
-      if (this.app.radio.preparing !== null) {
+      if (this.radio.preparing !== null) {
         LoadingProgress().width(18).height(18).color(this.scheme.primary)
       } else {
         Image($r('sys.media.ohos_ic_public_device_soundx_filled'))
           .width(20).height(20)
-          .fillColor(this.app.radio.mode !== null ? this.scheme.primary : this.scheme.onSurfaceVariant)
+          .fillColor(this.radio.mode !== null ? this.scheme.primary : this.scheme.onSurfaceVariant)
       }
-      if (this.app.settings.contextualRadio) {
+      if (this.settings.contextualRadio) {
         Text(RadioStation.contextualPhase())
           .fontSize(TypeScale.caption * this.fontScale)
-          .fontColor(this.app.radio.mode !== null ? this.scheme.primary : this.scheme.onSurfaceVariant)
+          .fontColor(this.radio.mode !== null ? this.scheme.primary : this.scheme.onSurfaceVariant)
       }
     }
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
-      if (this.app.radio.mode !== null) {
-        this.app.radio.skip();
+      if (this.radio.mode !== null) {
+        this.radio.skip();
       } else {
-        const mode = this.app.settings.contextualRadio ? RadioMode.CONTEXTUAL : RadioMode.RANDOM;
-        this.app.radio.start(mode);
+        const mode = this.settings.contextualRadio ? RadioMode.CONTEXTUAL : RadioMode.RANDOM;
+        this.radio.start(mode);
       }
     })
     .gesture(LongPressGesture().onAction(() => {
-      if (this.app.radio.mode !== null) this.app.radio.stop();
+      if (this.radio.mode !== null) this.radio.stop();
     }))
   }
 
@@ -258,7 +265,7 @@ export struct DiscoverPage {
 
   /// 未播完的历史:进度在 10s ~ 95% 且未标记已播完,最新在前,最多 15 条(与 Android 同口径)。
   private continueEntries(): HistoryEntry[] {
-    return this.app.history.history.filter((h: HistoryEntry) => {
+    return this.history.history.filter((h: HistoryEntry) => {
       if (h.played) return false;
       if (h.positionMs < 10000 || h.durationMs <= 0) return false;
       return h.positionMs < h.durationMs * 0.95;
@@ -357,7 +364,7 @@ export struct DiscoverPage {
                 EpisodeListItem({
                   scheme: this.scheme, fontScale: this.fontScale, episode: e,
                   showPodcastTitle: true,
-                  played: this.app.history.isPlayed(e.id),
+                  played: this.history.isPlayed(e.id),
                   onPlay: () => this.onPlayEpisode(e, this.searchEpisodes)
                 })
               }

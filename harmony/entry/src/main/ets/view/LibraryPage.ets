@@ -2,6 +2,12 @@ import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
 import { AppContainer } from '../AppContainer';
+import { SettingsStore } from '../store/SettingsStore';
+import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
+import { InboxStore } from '../store/InboxStore';
+import { DownloadStore } from '../store/DownloadStore';
+import { StampStore } from '../store/StampStore';
+import { DownloadManager } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, LoadingBox } from './Widgets';
 import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow } from './Components';
@@ -14,6 +20,22 @@ export struct LibraryPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
   @ObjectLink player: PlayerController;
+  /**
+   * 本页渲染用到的 store 一律经 `@ObjectLink` 接收(各 store 均已 `@Observed`,
+   * 且都是「复制后整体赋值」,故字段变化能被观察到)。
+   *
+   * 不要退回 `this.app.xxx` 直读:那是未被观察的裸对象。本页原先四处交互
+   * (宫格切换 / 清空历史 / 删除下载 / 「最新」刷新完成)都没有任何本地状态变化,
+   * 于是点了界面不动;偶尔看着正常,是切分段或播放状态 tick 顺带刷新的。详见 H27。
+   */
+  @ObjectLink settings: SettingsStore;
+  @ObjectLink subscriptions: SubscriptionStore;
+  @ObjectLink inbox: InboxStore;
+  @ObjectLink favorites: FavoriteStore;
+  @ObjectLink downloads: DownloadStore;
+  @ObjectLink history: HistoryStore;
+  @ObjectLink downloadManager: DownloadManager;
+  @ObjectLink stamps: StampStore;
   onOpenPodcast: (p: Podcast) => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
   onOpenSettings: () => void = () => {};
@@ -33,11 +55,11 @@ export struct LibraryPage {
   /// 刷新「最新」。loading 状态由 store 自己持有(inbox.refreshing):
   /// 若用本地标志,被重入拒绝的那次调用会把转圈提前关掉——Android 上踩过这个坑。
   private async refreshInbox(force: boolean): Promise<void> {
-    const subs = this.app.subscriptions.subscriptions;
+    const subs = this.subscriptions.subscriptions;
     if (subs.length === 0) return;
-    if (force) await this.app.inbox.refresh(subs, this.app.repository);
-    else await this.app.inbox.refreshIfStale(subs, this.app.repository);
-    Log.i('Library', `最新:当前 ${this.app.inbox.episodes.length} 条`);
+    if (force) await this.inbox.refresh(subs, this.app.repository);
+    else await this.inbox.refreshIfStale(subs, this.app.repository);
+    Log.i('Library', `最新:当前 ${this.inbox.episodes.length} 条`);
   }
 
   build() {
@@ -58,21 +80,21 @@ export struct LibraryPage {
           selected: this.seg,
           onSelect: (i: number) => { this.seg = i; }
         })
-        if (this.seg === 0 && this.app.subscriptions.subscriptions.length > 0) {
-          Text(this.app.settings.subsGrid ? L.s('layout_list') : L.s('layout_grid'))
+        if (this.seg === 0 && this.subscriptions.subscriptions.length > 0) {
+          Text(this.settings.subsGrid ? L.s('layout_list') : L.s('layout_grid'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.primary)
             .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
             .backgroundColor(this.scheme.background)
-            .onClick(() => { this.app.settings.setSubsGrid(!this.app.settings.subsGrid); })
+            .onClick(() => { this.settings.setSubsGrid(!this.settings.subsGrid); })
         }
-        if (this.seg === 4 && this.app.history.history.length > 0) {
+        if (this.seg === 4 && this.history.history.length > 0) {
           Text(L.s('action_clear'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.primary)
             .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
             .backgroundColor(this.scheme.background)
-            .onClick(() => { this.app.history.clear(); })
+            .onClick(() => { this.history.clear(); })
         }
       }
       .width('100%')
@@ -102,7 +124,7 @@ export struct LibraryPage {
       Text(L.s('footprint_short'))
         .fontSize(TypeScale.label * this.fontScale)
         .fontWeight(FontWeight.Bold)
-        .fontColor(this.app.stamps.stamps.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
+        .fontColor(this.stamps.stamps.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
         .onClick(() => this.onOpenFootprint())
       // 收听时长
       Image($r('sys.media.ohos_ic_public_device_sound_filled'))
@@ -120,12 +142,12 @@ export struct LibraryPage {
   @Builder
   subscriptionsSection() {
     Column() {
-      if (this.app.subscriptions.subscriptions.length === 0) {
+      if (this.subscriptions.subscriptions.length === 0) {
         EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_subscriptions') })
-      } else if (this.app.settings.subsGrid) {
+      } else if (this.settings.subsGrid) {
         Scroll() {
           Grid() {
-            ForEach(this.app.subscriptions.subscriptions, (p: Podcast) => {
+            ForEach(this.subscriptions.subscriptions, (p: Podcast) => {
               GridItem() {
                 PodcastGridItem({
                   scheme: this.scheme, fontScale: this.fontScale, podcast: p,
@@ -138,13 +160,13 @@ export struct LibraryPage {
           .columnsGap(Metrics.gridSpacing)
           .rowsGap(Metrics.gridSpacing + 4)
           .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 20 })
-          .height(Math.ceil(this.app.subscriptions.subscriptions.length / 2) * 230 + 20)
+          .height(Math.ceil(this.subscriptions.subscriptions.length / 2) * 230 + 20)
         }
         .scrollBar(BarState.Off)
         .width('100%').height('100%').align(Alignment.Top)
       } else {
         List() {
-          ForEach(this.app.subscriptions.subscriptions, (p: Podcast) => {
+          ForEach(this.subscriptions.subscriptions, (p: Podcast) => {
             ListItem() {
               PodcastListItem({
                 scheme: this.scheme, fontScale: this.fontScale, podcast: p,
@@ -163,27 +185,27 @@ export struct LibraryPage {
   // ── 最新(收件箱)──
   @Builder
   inboxSection() {
-    Refresh({ refreshing: this.app.inbox.refreshing }) {
+    Refresh({ refreshing: this.inbox.refreshing }) {
       Column() {
-        if (this.app.subscriptions.subscriptions.length === 0) {
+        if (this.subscriptions.subscriptions.length === 0) {
           EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox_nosubs') })
-        } else if (this.app.inbox.episodes.length === 0) {
-          if (this.app.inbox.refreshing) {
+        } else if (this.inbox.episodes.length === 0) {
+          if (this.inbox.refreshing) {
             LoadingBox({ scheme: this.scheme, fontScale: this.fontScale })
           } else {
             EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox') })
           }
         } else {
           List() {
-            ForEach(this.app.inbox.episodes, (e: Episode) => {
+            ForEach(this.inbox.episodes, (e: Episode) => {
               ListItem() {
                 EpisodeListItem({
                   scheme: this.scheme, fontScale: this.fontScale, episode: e,
                   showPodcastTitle: true,
                   isCurrent: this.player.current !== null && this.player.current.id === e.id,
                   isPlaying: this.player.isPlaying,
-                  played: this.app.history.isPlayed(e.id),
-                  onPlay: () => this.onPlayEpisode(e, this.app.inbox.episodes)
+                  played: this.history.isPlayed(e.id),
+                  onPlay: () => this.onPlayEpisode(e, this.inbox.episodes)
                 })
               }
             }, (e: Episode) => e.id)
@@ -202,19 +224,19 @@ export struct LibraryPage {
   @Builder
   favoritesSection() {
     Column() {
-      if (this.app.favorites.favorites.length === 0) {
+      if (this.favorites.favorites.length === 0) {
         EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_favorites') })
       } else {
         List() {
-          ForEach(this.app.favorites.favorites, (e: Episode) => {
+          ForEach(this.favorites.favorites, (e: Episode) => {
             ListItem() {
               EpisodeListItem({
                 scheme: this.scheme, fontScale: this.fontScale, episode: e,
                 showPodcastTitle: true,
                 isCurrent: this.player.current !== null && this.player.current.id === e.id,
                 isPlaying: this.player.isPlaying,
-                played: this.app.history.isPlayed(e.id),
-                onPlay: () => this.onPlayEpisode(e, this.app.favorites.favorites)
+                played: this.history.isPlayed(e.id),
+                onPlay: () => this.onPlayEpisode(e, this.favorites.favorites)
               })
             }
           }, (e: Episode) => e.id)
@@ -230,21 +252,21 @@ export struct LibraryPage {
   @Builder
   downloadsSection() {
     Column() {
-      if (this.app.downloads.downloads.length === 0) {
+      if (this.downloads.downloads.length === 0) {
         EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_downloads') })
       } else {
         List() {
-          ForEach(this.app.downloads.downloads, (d: DownloadRow) => {
+          ForEach(this.downloads.downloads, (d: DownloadRow) => {
             ListItem() {
               EpisodeListItem({
                 scheme: this.scheme, fontScale: this.fontScale, episode: d.episode,
                 showPodcastTitle: true,
                 isCurrent: this.player.current !== null && this.player.current.id === d.episode.id,
                 isPlaying: this.player.isPlaying,
-                played: this.app.history.isPlayed(d.episode.id),
+                played: this.history.isPlayed(d.episode.id),
                 downloadState: 2,
                 onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes()),
-                onDeleteDownload: () => { this.app.downloadManager.delete(d.episode.id); }
+                onDeleteDownload: () => { this.downloadManager.delete(d.episode.id); }
               })
             }
           }, (d: DownloadRow) => d.episode.id)
@@ -257,18 +279,18 @@ export struct LibraryPage {
   }
 
   private downloadEpisodes(): Episode[] {
-    return this.app.downloads.downloads.map((d: DownloadRow) => d.episode);
+    return this.downloads.downloads.map((d: DownloadRow) => d.episode);
   }
 
   // ── 历史 ──
   @Builder
   historySection() {
     Column() {
-      if (this.app.history.history.length === 0) {
+      if (this.history.history.length === 0) {
         EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_history') })
       } else {
         List() {
-          ForEach(this.app.history.history, (h: HistoryRow) => {
+          ForEach(this.history.history, (h: HistoryRow) => {
             ListItem() {
               EpisodeListItem({
                 scheme: this.scheme, fontScale: this.fontScale, episode: h.episode,
@@ -289,7 +311,7 @@ export struct LibraryPage {
   }
 
   private historyEpisodes(): Episode[] {
-    return this.app.history.history.map((h: HistoryRow) => h.episode);
+    return this.history.history.map((h: HistoryRow) => h.episode);
   }
 }
 

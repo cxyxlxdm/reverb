@@ -2,6 +2,9 @@ import { Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 import { Podcast, Episode, FeedResult } from '../model/Models';
 import { AppContainer } from '../AppContainer';
+import { SubscriptionStore, HistoryStore } from '../store/Stores';
+import { ListenStatsStore } from '../store/ListenStatsStore';
+import { DownloadManager } from '../playback/DownloadManager';
 import { TopBar, EmptyHint, LoadingBox, Artwork } from './Widgets';
 import { EpisodeListItem, formatListenDuration } from './Components';
 import { Log } from '../util/Logger';
@@ -21,20 +24,31 @@ export struct PodcastDetailPage {
   @State loading: boolean = false;
   @State failed: boolean = false;
   @State descExpanded: boolean = false;
-  @State subscribed: boolean = false;
-  /// 下载态变化后驱动重渲(DownloadManager 的 states 是整体替换)
-  @State dlTick: number = 0;
+  /**
+   * 订阅态与下载态**直接从被观察的 store 读**,不再镜像成本地 @State。
+   *
+   * 原先用 `@State subscribed` 镜像 + `@State dlTick` 自增来"驱动重渲",其中 dlTick
+   * **只写从不读** —— ArkUI 按依赖刷新,没有元素依赖它,自增触发不了任何重渲,
+   * 下载态能变纯属被别的重渲蹭上。详见 H27。
+   */
+  @ObjectLink subscriptions: SubscriptionStore;
+  @ObjectLink downloadManager: DownloadManager;
+  @ObjectLink history: HistoryStore;
+  @ObjectLink listenStats: ListenStatsStore;
 
   private app: AppContainer = AppContainer.get();
 
   aboutToAppear(): void {
-    this.subscribed = this.app.subscriptions.isSubscribed(this.seed.feedUrl);
     this.load();
+  }
+
+  private isSubscribed(): boolean {
+    return this.subscriptions.isSubscribed(this.display().feedUrl);
   }
 
   /// 该集下载态:已下载 2 / 进行中 1 / 排队 0 / 未下载 3(用 3 表示"可下载")
   private dlState(id: string): number {
-    const s = this.app.downloadManager.stateOf(id);
+    const s = this.downloadManager.stateOf(id);
     if (s === null) return 3;   // 未下载 → 显示「下载」
     return s.state;
   }
@@ -43,7 +57,7 @@ export struct PodcastDetailPage {
   private listenedMs(): number {
     const d = this.display();
     const key = d.feedUrl.length > 0 ? d.feedUrl : d.title;
-    return this.app.listenStats.listenedMsFor(key);
+    return this.listenStats.listenedMsFor(key);
   }
 
   private display(): Podcast {
@@ -112,11 +126,11 @@ export struct PodcastDetailPage {
                 scheme: this.scheme,
                 fontScale: this.fontScale,
                 episode: e,
-                played: this.app.history.isPlayed(e.id),
+                played: this.history.isPlayed(e.id),
                 downloadState: this.dlState(e.id),
                 onPlay: () => this.onPlayEpisode(e, this.episodes),
-                onDownload: () => { this.app.downloadManager.download(e); this.dlTick++; },
-                onDeleteDownload: () => { this.app.downloadManager.delete(e.id); this.dlTick++; }
+                onDownload: () => { this.downloadManager.download(e); },
+                onDeleteDownload: () => { this.downloadManager.delete(e.id); }
               })
             }
           }, (e: Episode) => e.id)
@@ -161,19 +175,16 @@ export struct PodcastDetailPage {
       .alignItems(VerticalAlign.Top)
 
       // 订阅 / 已订阅
-      Button(this.subscribed ? L.s('action_subscribed') : L.s('action_subscribe'))
+      Button(this.isSubscribed() ? L.s('action_subscribed') : L.s('action_subscribe'))
         .fontSize(TypeScale.label * this.fontScale)
-        .fontColor(this.subscribed ? this.scheme.primary : this.scheme.onPrimary)
-        .backgroundColor(this.subscribed ? Color.Transparent : this.scheme.primary)
-        .borderWidth(this.subscribed ? 1 : 0)
+        .fontColor(this.isSubscribed() ? this.scheme.primary : this.scheme.onPrimary)
+        .backgroundColor(this.isSubscribed() ? Color.Transparent : this.scheme.primary)
+        .borderWidth(this.isSubscribed() ? 1 : 0)
         .borderColor(this.scheme.primary)
         .borderRadius(18)
         .height(36)
         .padding({ left: 22, right: 22 })
-        .onClick(() => {
-          this.app.subscriptions.toggle(this.display());
-          this.subscribed = this.app.subscriptions.isSubscribed(this.display().feedUrl);
-        })
+        .onClick(() => { this.subscriptions.toggle(this.display()); })
 
       if (this.display().description.length > 0) {
         Column({ space: 4 }) {

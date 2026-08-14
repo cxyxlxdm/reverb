@@ -60,14 +60,14 @@ export class UpdateNotifier {
       if (feed === null || feed.episodes.length === 0) continue;
       const latest: Episode = feed.episodes[0];
       const key = `${SEEN_PREFIX}${UpdateNotifier.hash(p.feedUrl)}`;
-      const seen = Prefs.getString(key, '');
+      const seen = Prefs.seenGet(key);
       if (seen.length === 0) {
         // 首次记录:只登记不提醒(否则一开就轰炸)
-        Prefs.put(key, latest.id);
+        Prefs.seenPut(key, latest.id);
         continue;
       }
       if (seen === latest.id) continue;
-      Prefs.put(key, latest.id);
+      Prefs.seenPut(key, latest.id);
       found += 1;
       await UpdateNotifier.notify(p.title, latest.title);
     }
