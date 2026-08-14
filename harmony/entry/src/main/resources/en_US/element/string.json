@@ -690,7 +690,7 @@
     },
     {
       "name": "set_clear_cache_sub",
-      "value": "Charts &amp; image cache · %s"
+      "value": "Charts & image cache · %s"
     },
     {
       "name": "set_clear_downloads",
@@ -834,7 +834,7 @@
     },
     {
       "name": "licenses_sources_note",
-      "value": "These are public podcast directory/search APIs, used only for search and charts; audio always comes from the publisher\\'s original RSS. This app never re-hosts or proxies it."
+      "value": "These are public podcast directory/search APIs, used only for search and charts; audio always comes from the publisher's original RSS. This app never re-hosts or proxies it."
     },
     {
       "name": "log_size",

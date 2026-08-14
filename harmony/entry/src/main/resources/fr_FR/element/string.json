@@ -670,7 +670,7 @@
     },
     {
       "name": "set_footprint",
-      "value": "Empreinte d\\'écoute"
+      "value": "Empreinte d'écoute"
     },
     {
       "name": "set_footprint_sub",
@@ -690,7 +690,7 @@
     },
     {
       "name": "set_clear_cache_sub",
-      "value": "Classements &amp; images · %s"
+      "value": "Classements & images · %s"
     },
     {
       "name": "set_clear_downloads",
@@ -702,11 +702,11 @@
     },
     {
       "name": "set_clear_history",
-      "value": "Effacer l\\'historique"
+      "value": "Effacer l'historique"
     },
     {
       "name": "confirm_clear_cache",
-      "value": "Vide les classements et le cache d\\'images. Abonnements et téléchargements non affectés."
+      "value": "Vide les classements et le cache d'images. Abonnements et téléchargements non affectés."
     },
     {
       "name": "confirm_clear_downloads",
@@ -714,7 +714,7 @@
     },
     {
       "name": "confirm_clear_history",
-      "value": "Efface tout l\\'historique et les positions de reprise."
+      "value": "Efface tout l'historique et les positions de reprise."
     },
     {
       "name": "set_share_log",
@@ -758,7 +758,7 @@
     },
     {
       "name": "set_export_opml_sub",
-      "value": "Format standard, importable par d\\'autres apps"
+      "value": "Format standard, importable par d'autres apps"
     },
     {
       "name": "set_import_opml",
@@ -766,7 +766,7 @@
     },
     {
       "name": "set_import_opml_sub",
-      "value": "Importer un OPML d\\'une autre app"
+      "value": "Importer un OPML d'une autre app"
     },
     {
       "name": "set_full_backup",
@@ -802,7 +802,7 @@
     },
     {
       "name": "dlg_accent_title",
-      "value": "Couleur d\\'accent"
+      "value": "Couleur d'accent"
     },
     {
       "name": "accent_celadon",
@@ -834,7 +834,7 @@
     },
     {
       "name": "licenses_sources_note",
-      "value": "Annuaires/API publics, utilisés uniquement pour la recherche et les classements ; l\\'audio provient toujours du RSS d\\'origine. L\\'app ne l\\'héberge ni ne le relaie."
+      "value": "Annuaires/API publics, utilisés uniquement pour la recherche et les classements ; l'audio provient toujours du RSS d'origine. L'app ne l'héberge ni ne le relaie."
     },
     {
       "name": "log_size",

@@ -463,23 +463,24 @@ export struct SettingsPage {
   }
 
   /// 破坏性操作的实际执行体。由 ConfirmSpec 在用户确认后调用 —— 故必须是公开方法。
+  /// 清理类操作**不再额外弹提示**:反馈就是本行副标题的占用变成 0 B、列表随即清空
+  /// (与 Android 一致)。此前把行标题原样赋给 hint,底部就多出一行「清除缓存」,
+  /// 除了占地方没有任何信息量。
   doClearCache(): void {
     this.app.popularCache.clear();
     this.recomputeSizes();
-    this.hint = L.s('set_clear_cache');
     Log.i('Settings', '已清除热门榜缓存');
   }
 
   doClearDownloads(): void {
     this.app.downloadManager.deleteAll();
     this.recomputeSizes();
-    this.hint = L.s('set_clear_downloads');
     Log.i('Settings', '已清除全部下载');
   }
 
   doClearHistory(): void {
     this.app.history.clear();
-    this.hint = L.s('set_clear_history');
+    Log.i('Settings', '已清空播放历史');
   }
 
   doClearLog(): void {
