@@ -1,0 +1,48 @@
+# 余音 · 鸿蒙端 代码混淆规则
+#
+# 官方说明:https://developer.huawei.com/consumer/cn/doc/harmonyos-guides-V5/source-obfuscation-V5
+#
+# ── 为什么只开这几项(不是照抄 SDK 模板) ─────────────────────────────
+# DevEco 模板默认把四项全开(property / toplevel / filename / export)。
+# 本工程**刻意不开**其中三项,理由逐条如下 —— 要开也可以,但必须先在真机上把
+# 下面列的场景全过一遍,不能只看编译通过。
+#
+# ✗ -enable-property-obfuscation(改属性名)风险最高:
+#     · ArkUI 的 @Observed / @ObjectLink / @State 依赖**属性名**做变更追踪。
+#       本工程刚把全部 store 改成 @ObjectLink 观察(见 TROUBLESHOOTING H26/H27),
+#       属性名一改,最坏情况是"界面不刷新"这类静默失效 —— 正是最难在提交复核前发现的一类。
+#     · 直接交给系统 API 的对象字面量必须保持原名:
+#       systemShare.SharedData({ utd, uri, title })、avSession.setAVMetadata({ assetId, ... })、
+#       notificationManager.publish({ content: { normal: { title, text } } })、
+#       workScheduler.WorkInfo({ workId, bundleName, abilityName, ... })。
+#     · Codec 的 JSON 键虽是字符串字面量(不受影响),但备份/偏好的**读写两端**
+#       一旦有一侧被改名,表现是数据"看起来丢了",排查代价极大。
+#
+# ✗ -enable-filename-obfuscation(改文件名):路由与入口按路径引用 ——
+#     module.json5 的 srcEntry、resources 下的 main_pages.json、
+#     以及 loadContent('pages/Index')。改名后这些引用要靠工具链全部同步,
+#     出错即启动白屏。
+#
+# ✗ -enable-export-obfuscation(改导出名):本工程单 HAP,收益有限;
+#     而 EntryAbility / FeedUpdateExtension 由配置按名引用,风险大于收益。
+#
+# ✓ 已开启的两项:
+#     -enable-toplevel-obfuscation 全局作用域内的名字(函数/类/变量)
+#     -compact                     去掉多余空白与换行
+#   这两项不改变任何"按名字找东西"的运行时行为,是首次发布的安全底线。
+#
+# ── namecache ─────────────────────────────────────────────────────
+# 打开 -print-namecache 并**把产出的 nameCache.json 一并入库**:
+# 后续版本用 -apply-namecache 复用同一份映射,保证跨版本混淆结果稳定
+# (崩溃栈可还原、增量更新不会因改名而全量替换)。
+
+-enable-toplevel-obfuscation
+-compact
+
+-print-namecache ./obfuscation-namecache.json
+
+# ── 保留名单 ──────────────────────────────────────────────────────
+# 由 module.json5 / 系统按名字拉起的入口,一律不改名。
+-keep-global-name
+EntryAbility
+FeedUpdateExtension

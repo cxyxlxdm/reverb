@@ -747,3 +747,30 @@
      判据很简单:算包内那张的 md5,拿去和各层级源文件比对,一次就定位;
   3. 这一条我连续错了两次(先怀疑缓存、清了缓存还不行才想到层级),说明**"配置对不对"和
      "取的是哪份文件"是两个独立问题**,要分开验。
+
+### H40. 首次发布开混淆:不要照抄 SDK 模板,并且**必须真机冒烟**
+
+- **背景**:release 构建会 WARN「若需要混淆请在本次构建启用,否则将来可能无法混淆」——
+  首版必须开。但 DevEco 模板的 `obfuscation-rules.txt` 默认把四项全开
+  (property / toplevel / filename / export),对本工程风险不对等。
+- **逐项判断(为什么只开两项)**:
+  - ✗ `-enable-property-obfuscation`:ArkUI 的 `@Observed / @ObjectLink / @State` **靠属性名**
+    做变更追踪(本工程刚把全部 store 改成 @ObjectLink,见 H26/H27)。属性名一改,最坏是
+    「界面不刷新」这类**静默失效** —— 恰好是提交复核前最难发现的一类。另外直接交给系统 API 的
+    对象字面量必须保原名:`SharedData({utd,uri,title})`、`setAVMetadata({assetId,...})`、
+    `notificationManager.publish({content:{normal:{title,text}}})`、`WorkInfo({workId,...})`。
+  - ✗ `-enable-filename-obfuscation`:路由/入口按**路径**引用(`srcEntry`、`main_pages.json`、
+    `loadContent('pages/Index')`),改名出错即启动白屏。
+  - ✗ `-enable-export-obfuscation`:单 HAP 收益有限,而 `EntryAbility` / `FeedUpdateExtension`
+    由配置按名拉起。
+  - ✓ `-enable-toplevel-obfuscation` + `-compact`:不改变任何"按名字找东西"的运行时行为。
+- **namecache 要入库**:开 `-print-namecache`,把 `obfuscation-namecache.json` 一并提交;
+  后续版本 `-apply-namecache` 复用同一映射,崩溃栈才能还原、增量更新不会因改名全量替换。
+- **必须真机冒烟,且要挑"依赖名字"的路径验**:启动 → 榜单加载 → 继续收听(读历史) →
+  起播与续播位置 → 音阁五分段 → 历史列表 → 设置页各项读出。本次逐项通过。
+- **教训 / 规律**:
+  1. **混淆是"改代码"**,编译通过不代表功能没坏 —— 它坏的方式通常是静默的(读不到、不刷新),
+     所以验收要**专挑按名字寻址的路径**:序列化字段、响应式属性、按名拉起的入口、传给系统 API 的字面量;
+  2. **模板给的默认值是给"典型工程"的**,不是给你的工程的。开每一项前先问:本工程有没有
+     依赖这个名字的地方?答不上来就先别开;
+  3. **发布前一天不是开激进选项的时候**。要开 property/filename,应当留到有完整回归的版本。

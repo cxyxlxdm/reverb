@@ -12,3 +12,10 @@ oh-package-lock.json5
 *.p12
 *.cer
 *.p7b
+*.csr
+*.keystore
+*.jks
+# 发布签名材料整目录不入库。**这里放的是能给 com.yuyin.reverb 签发新版本的私钥**,
+# 一旦提交就等于把发布身份写进历史(即便之后删除,历史里依然在)。
+# 注意仓库根用的是 `git add -A`,不加这条规则一次提交就会把 p12 带进去。
+/signature/

@@ -3,11 +3,17 @@
   "buildOption": {},
   "buildOptionSet": [
     {
+      // release 构建开启混淆。规则见 ./obfuscation-rules.txt —— 那里逐条写明了
+      // 为什么只开保守子集,以及要再开 property/filename/export 前必须在真机验哪些场景。
+      // 首次发布就必须开:构建日志里那条 WARN 说的就是这个,首版没开,后续再想开会受限。
       "name": "release",
       "arkOptions": {
         "obfuscation": {
           "ruleOptions": {
-            "enable": false
+            "enable": true,
+            "files": [
+              "./obfuscation-rules.txt"
+            ]
           }
         }
       }
