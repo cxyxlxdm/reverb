@@ -23,6 +23,19 @@ HVIGOR="${HVIGOR:-/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvig
 
 [ -x "$HVIGOR" ] || { echo "✗ 找不到 hvigorw:$HVIGOR(可用 HVIGOR=... 覆盖)"; exit 1; }
 
+# build-profile.json5 不入库(存签名口令),新 clone 后需从模板复制再填
+if [ ! -f build-profile.json5 ]; then
+  echo "✗ 缺 build-profile.json5(它不入版本管理,因为存签名口令)"
+  echo "    cp build-profile.template.json5 build-profile.json5"
+  echo "  然后在 DevEco → Project Structure → Signing Configs 给 release 那条填三项口令。"
+  exit 1
+fi
+if grep -q '"name": "release"' build-profile.json5 && \
+   sed -n '/"name": "release"/,/}/p' build-profile.json5 | grep -q '"keyAlias": ""'; then
+  echo "✗ build-profile.json5 里 release 签名的 keyAlias 还是空的,请先在 DevEco 里填。"
+  exit 1
+fi
+
 # 缺任何一样签名材料都会在 SignHap 阶段失败,提前说清楚比看 hvigor 的报错友好
 MISSING=()
 for f in signature/reverb.p12 signature/reverb.cer signature/reverb.p7b; do

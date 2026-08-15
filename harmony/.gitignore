@@ -1,4 +1,7 @@
 .DS_Store
+# 真实构建配置**不入库**:里面存签名口令。
+# 版本管理的是 build-profile.template.json5(机密字段留空),新机器 cp 一份再填。
+/build-profile.json5
 # 打包产物(build-release.sh 的输出),不入库
 /dist
 # hvigor 构建输出与缓存(每次构建都变,18M 量级,不入库)
