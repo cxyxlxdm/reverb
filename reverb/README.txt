@@ -19,8 +19,8 @@
 
 【其他发布物料】
   应用图标   harmony/store/appicon-216.png(备用 512 / 1024)
-  安装包     harmony/build/outputs/release/harmony-release-signed.app  ← 选 signed
-  符号文件   harmony/build/outputs/release/symbol/release/app-symbol.zip
+  安装包     harmony/dist/reverb.app          ← 跑 harmony/build-release.sh 生成
+  符号文件   harmony/dist/reverb-symbol.zip
   文案       harmony/store/发布文案.txt
   包名       com.yuyin.reverb
   版本       versionCode 1000000 / versionName 1.0.0

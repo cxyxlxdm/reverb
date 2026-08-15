@@ -1,4 +1,6 @@
 .DS_Store
+# 打包产物(build-release.sh 的输出),不入库
+/dist
 # hvigor 构建输出与缓存(每次构建都变,18M 量级,不入库)
 /.hvigor
 /build
