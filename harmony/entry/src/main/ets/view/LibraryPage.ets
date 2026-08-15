@@ -40,6 +40,17 @@ export struct LibraryPage {
   onOpenListenStats: () => void = () => {};
 
   @State seg: number = 0;
+  /**
+   * chips 高亮专用索引,**与驱动 Swiper `.index()` 的 seg 分开**。
+   *
+   * 为什么不共用一个:拖动过程中要让高亮跟着手指走(位移过半就切),但
+   * `.index()` 是 Swiper 的受控属性 —— 手势进行中改它有把页面强行跳走的风险。
+   * 拆成两个后:seg 只由「点 chip」和 onChange(落位)改;chipSel 由手势/动画开始改,
+   * 只影响 chips 的显示。
+   */
+  @State chipSel: number = 0;
+  /// Swiper 实测宽度,用来判断拖动是否过半
+  @State pageW: number = 0;
 
   private app: AppContainer = AppContainer.get();
   private segments(): string[] { return [L.s('lib_subscriptions'), L.s('lib_inbox'), L.s('lib_favorites'), L.s('lib_downloads'), L.s('lib_history')]; }
@@ -74,8 +85,8 @@ export struct LibraryPage {
           scheme: this.scheme,
           fontScale: this.fontScale,
           labels: this.segments(),
-          selected: this.seg,
-          onSelect: (i: number) => { this.seg = i; }
+          selected: this.chipSel,
+          onSelect: (i: number) => { this.seg = i; this.chipSel = i; }
         })
         if (this.seg === 0 && this.subscriptions.subscriptions.length > 0) {
           // 与 Android 一致:图标按钮,且**图标表示切换后的目标布局**(当前是宫格就显示"列表")
@@ -109,17 +120,28 @@ export struct LibraryPage {
       .loop(false)
       .indicator(false)
       .cachedCount(1)
-      // 手势一松就把 chips 高亮切过去,**不要只依赖 onChange**:
-      // `onChange` 在翻页动画**结束后**才回调,横滑时页面已经过去了、chips 还停在原处,
-      // 观感就是"tab 总慢一拍"。`onAnimationStart` 在动画开始时给出 targetIndex,
-      // 正是手势被确认的时刻。Android 侧 Compose 的 pagerState.currentPage 过半即更新,
-      // 手感与此一致。
-      .onAnimationStart((_i: number, target: number) => { this.seg = target; })
-      .onChange((i: number) => { this.seg = i; })
+      .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
+      // chips 高亮**跟着手指走**:拖动位移过半即切换,与 Compose 的
+      // pagerState.currentPage(过半更新)手感一致。只改 chipSel,不碰 seg —— 见 chipSel 注释。
+      .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
+        this.chipSel = this.dragTarget(index, e.currentOffset);
+      })
+      // 松手后动画开始就定下目标页(`onChange` 要等动画**结束**才回调,那样 chips 慢一拍)
+      .onAnimationStart((_i: number, target: number) => { this.chipSel = target; })
+      .onChange((i: number) => { this.seg = i; this.chipSel = i; })
       .layoutWeight(1)
     }
     .width('100%')
     .height('100%')
+  }
+
+  /// 拖动位移 → 目标页。位移过半才算切,并夹在合法范围内。
+  /// 正负号不写死:不同版本/方向下 currentOffset 的符号可能相反,用绝对值加方向判断。
+  private dragTarget(index: number, offset: number): number {
+    if (this.pageW <= 0) return index;
+    if (Math.abs(offset) < this.pageW / 2) return index;
+    const next = offset < 0 ? index + 1 : index - 1;
+    return Math.max(0, Math.min(this.segments().length - 1, next));
   }
 
   /// 与 Android `LibraryScreen.kt` 一致:只有「收听时长」「设置」两个图标按钮。

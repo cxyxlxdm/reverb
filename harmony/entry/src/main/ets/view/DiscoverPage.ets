@@ -25,6 +25,10 @@ export struct DiscoverPage {
   onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
 
   @State catIndex: number = 0;
+  /// chips 高亮专用索引,与驱动 Swiper `.index()` 的 catIndex 分开(理由见 LibraryPage 同名注释)
+  @State chipSel: number = 0;
+  /// Swiper 实测宽度,用于判断拖动是否过半
+  @State pageW: number = 0;
   @State lists: Podcast[][] = [];          // 每个分类一份榜单
   @State loadingFlags: boolean[] = [];
   @State refreshing: boolean = false;
@@ -125,9 +129,10 @@ export struct DiscoverPage {
           scheme: this.scheme,
           fontScale: this.fontScale,
           labels: DISCOVER_CATEGORIES.map((c: DiscoverCategory) => categoryLabel(c)),
-          selected: this.catIndex,
+          selected: this.chipSel,
           onSelect: (i: number) => {
             this.catIndex = i;
+            this.chipSel = i;
             if (this.lists[i].length === 0) this.loadCategory(i, false);
           }
         })
@@ -140,12 +145,17 @@ export struct DiscoverPage {
         .loop(false)
         .indicator(false)
         .cachedCount(1)
-        // 同 LibraryPage:chips 高亮在动画开始时就切,不等落位(理由见那边注释)。
-        // 榜单加载仍留在 onChange 里 —— 那是真正"停在这一页"之后才该做的事,
-        // 放到 animationStart 会让快速连滑时每划过一页都触发一次网络请求。
-        .onAnimationStart((_i: number, target: number) => { this.catIndex = target; })
+        .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
+        // chips 高亮跟着手指走(位移过半即切),只改 chipSel、不碰 catIndex —— 详见 LibraryPage 注释
+        .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
+          this.chipSel = this.dragTarget(index, e.currentOffset);
+        })
+        .onAnimationStart((_i: number, target: number) => { this.chipSel = target; })
+        // 榜单加载**只在落位后**做:放到 gestureSwipe/animationStart 会让快速连滑时
+        // 每划过一页都发一次网络请求。
         .onChange((i: number) => {
           this.catIndex = i;
+          this.chipSel = i;
           if (this.lists[i].length === 0) this.loadCategory(i, false);
         })
         .layoutWeight(1)
@@ -153,6 +163,14 @@ export struct DiscoverPage {
     }
     .width('100%')
     .height('100%')
+  }
+
+  /// 拖动位移 → 目标页(过半才切,并夹在合法范围)。符号不写死,用绝对值 + 方向判断。
+  private dragTarget(index: number, offset: number): number {
+    if (this.pageW <= 0) return index;
+    if (Math.abs(offset) < this.pageW / 2) return index;
+    const next = offset < 0 ? index + 1 : index - 1;
+    return Math.max(0, Math.min(DISCOVER_CATEGORIES.length - 1, next));
   }
 
   /// 情境电台的时段图标。**分界与 Android `contextualRadioIcon()` 逐段一致**:

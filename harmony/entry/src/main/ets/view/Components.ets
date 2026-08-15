@@ -214,8 +214,29 @@ export struct ChipsRow {
   @Prop selected: number;
   onSelect: (i: number) => void = () => {};
 
+  private scroller: Scroller = new Scroller();
+  /// 上一次已滚动到的选中项,避免每次重渲都重复下发滚动指令
+  private scrolledTo: number = -1;
+
+  /**
+   * 选中项变化时把它滚进可视区。
+   * 发现页有 19 个分类,横滑几页之后选中的 chip 往往已经在屏幕外 ——
+   * 高亮变了却看不见,观感上就是"分类没跟着动"。
+   */
+  private revealSelected(): void {
+    if (this.selected === this.scrolledTo) return;
+    this.scrolledTo = this.selected;
+    // 估算:每个 chip 约 (字数×字号 + 左右各 14 内边距 + 8 间距),够用即可 ——
+    // 目的只是把选中项带进视野,不追求精确居中。
+    let x = 0;
+    for (let i = 0; i < this.selected && i < this.labels.length; i++) {
+      x += this.labels[i].length * TypeScale.label * this.fontScale * 0.6 + 36;
+    }
+    this.scroller.scrollTo({ xOffset: Math.max(0, x - 80), yOffset: 0, animation: { duration: 260, curve: Curve.EaseOut } });
+  }
+
   build() {
-    Scroll() {
+    Scroll(this.scroller) {
       Row({ space: 8 }) {
         ForEach(this.labels, (label: string, idx: number) => {
           Text(label)
@@ -224,10 +245,14 @@ export struct ChipsRow {
             .backgroundColor(this.selected === idx ? this.scheme.primary : withAlpha(this.scheme.onSurfaceVariant, 0.10))
             .padding({ left: 14, right: 14, top: 7, bottom: 7 })
             .borderRadius(16)
+            // 高亮做淡入淡出,不要硬切。原先 backgroundColor/fontColor 是直接按三元赋值,
+            // 状态一变颜色瞬间跳过去,配上页面的滑动动画就显得生硬。
+            .animation({ duration: 200, curve: Curve.EaseOut })
             .onClick(() => this.onSelect(idx))
         }, (label: string, idx: number) => `${idx}-${label}`)
       }
       .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding })
+      .onAreaChange(() => { this.revealSelected(); })
     }
     .scrollable(ScrollDirection.Horizontal)
     .scrollBar(BarState.Off)
