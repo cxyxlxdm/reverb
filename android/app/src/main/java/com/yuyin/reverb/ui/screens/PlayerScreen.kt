@@ -60,6 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.Episode
@@ -96,8 +97,11 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
         ContextCompat.checkSelfPermission(appContext, android.Manifest.permission.RECORD_AUDIO) ==
             android.content.pm.PackageManager.PERMISSION_GRANTED
     }
-    // 仅在开启真频谱、已授权且正在播放时采集,其余走程序化墨纹
-    val spectrum by rememberSpectrumState(active = spectrumEnabled && hasAudioPerm && isPlaying)
+    // 仅在开启真频谱、已授权且正在播放时采集,其余走程序化墨纹。
+    // BuildConfig.SPECTRUM 为渠道门控:商店渠道不含该功能,恒为 false(见 app/build.gradle)。
+    val spectrum by rememberSpectrumState(
+        active = BuildConfig.SPECTRUM && spectrumEnabled && hasAudioPerm && isPlaying
+    )
 
     val episode = current
     if (episode == null) {

@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.imageLoader
 import com.yuyin.reverb.AppContainer
+import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.local.BackupManager
@@ -201,13 +202,18 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 trailing = { ColorSwatch(accentColor(accentIndex)) }
             ) { dlg = Dlg.ACCENT }
             SettingRow(stringResource(R.string.set_language), langLabels[LANG_TAGS.indexOf(language).coerceAtLeast(0)]) { dlg = Dlg.LANGUAGE }
-            SettingSwitch(stringResource(R.string.set_spectrum), stringResource(R.string.set_spectrum_sub), checked = spectrumEnabled) { on ->
-                if (on) {
-                    if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
-                        PackageManager.PERMISSION_GRANTED
-                    ) settings.setSpectrumEnabled(true)
-                    else recordAudioLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
-                } else settings.setSpectrumEnabled(false)
+            // 真实频谱仅默认渠道提供。商店渠道 BuildConfig.SPECTRUM=false:
+            // 该市场把录音列为敏感隐私权限、需逐次举证,而这只是一个视觉效果,
+            // 故那个渠道既不声明权限也不显示本开关(见 app/build.gradle 的 flavor 注释)。
+            if (BuildConfig.SPECTRUM) {
+                SettingSwitch(stringResource(R.string.set_spectrum), stringResource(R.string.set_spectrum_sub), checked = spectrumEnabled) { on ->
+                    if (on) {
+                        if (ContextCompat.checkSelfPermission(context, android.Manifest.permission.RECORD_AUDIO) ==
+                            PackageManager.PERMISSION_GRANTED
+                        ) settings.setSpectrumEnabled(true)
+                        else recordAudioLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+                    } else settings.setSpectrumEnabled(false)
+                }
             }
 
             SectionLabel(stringResource(R.string.sec_playback))

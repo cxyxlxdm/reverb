@@ -43,6 +43,9 @@ android {
         // 默认渠道:com.yuyin.reverb —— 不加后缀,与既有版本一致
         'default' {
             dimension "channel"
+            // 真实频谱(Visualizer 读播放输出做 FFT,需 RECORD_AUDIO)。
+            // 权限声明放在 src/default/AndroidManifest.xml,商店渠道那份 manifest 里没有。
+            buildConfigField "boolean", "SPECTRUM", "true"
         }
         // 应用市场:com.yuyin.reverb.android
         // 只改 applicationId;namespace 仍是 com.yuyin.reverb(R 类与 manifest 包名无需变),
@@ -50,6 +53,13 @@ android {
         store {
             dimension "channel"
             applicationIdSuffix ".android"
+            // 应用市场把 RECORD_AUDIO 列为敏感隐私权限,需逐次举证并提供场景截图。
+            // 该权限在本应用只服务于「真实频谱」这一个视觉效果(默认关闭),
+            // 收益与举证成本不成比例,故商店渠道**整块去掉**:
+            // 既不声明权限(见 src/default 与 src/store 各自的 manifest),
+            // 也不显示设置项(下面这个开关为 false,设置页与播放页都按它门控)。
+            // 播放页统一走程序化水墨动效 —— 与鸿蒙端一致。
+            buildConfigField "boolean", "SPECTRUM", "false"
         }
     }
 

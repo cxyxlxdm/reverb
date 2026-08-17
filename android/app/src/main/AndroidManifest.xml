@@ -7,9 +7,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- 真实频谱可视化(默认关闭,用户在设置中主动开启后才请求) -->
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- 真实频谱所需的 RECORD_AUDIO / MODIFY_AUDIO_SETTINGS **不在这里声明** ——
+         它们只属于 default 渠道,见 src/default/AndroidManifest.xml。
+         商店渠道不含该功能,故其 APK 里不出现录音权限。 -->
     <!-- 保存图片到相册:Android 10+ 用 MediaStore 免权限,仅 9 及以下需要写外存 -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
