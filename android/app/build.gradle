@@ -35,6 +35,24 @@ android {
         }
     }
 
+    // 渠道维度。起因:鸿蒙端已在应用市场占用了 com.yuyin.reverb,
+    // 同一市场内包名不能重复,故商店渠道单独换一个 applicationId。
+    // **默认渠道(default)的包名保持不变**,其它分发途径与已装用户不受影响。
+    flavorDimensions "channel"
+    productFlavors {
+        // 默认渠道:com.yuyin.reverb —— 不加后缀,与既有版本一致
+        'default' {
+            dimension "channel"
+        }
+        // 应用市场:com.yuyin.reverb.android
+        // 只改 applicationId;namespace 仍是 com.yuyin.reverb(R 类与 manifest 包名无需变),
+        // FileProvider 用的是 ${applicationId}.fileprovider 占位符,会自动跟随。
+        store {
+            dimension "channel"
+            applicationIdSuffix ".android"
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true

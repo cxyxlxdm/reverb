@@ -6,8 +6,12 @@
 #   reverb-mapping.txt   R8 混淆映射 —— **务必留档并上传**,否则崩溃栈无法还原
 #
 # 用法:
-#   ./build-release.sh            打 release APK
-#   ./build-release.sh --bundle   同时打 AAB(Google Play 需要 AAB,应用市场用 APK)
+#   ./build-release.sh                 默认渠道 → dist/reverb.apk          (com.yuyin.reverb)
+#   ./build-release.sh --store        商店渠道 → dist/reverb-store.apk   (com.yuyin.reverb.android)
+#   ./build-release.sh [渠道] --bundle 同时打 AAB(Google Play 需要 AAB)
+#
+# 为什么有商店渠道:鸿蒙端已在应用市场占用 com.yuyin.reverb,同一市场包名不能重复,
+# 故该渠道单独用 com.yuyin.reverb.android。默认渠道包名不变。
 #
 set -euo pipefail
 
@@ -27,22 +31,40 @@ if [ ! -f keystore.properties ]; then
   echo "  该文件与 .jks 都不入版本管理。"
 fi
 
+# 解析渠道参数
+CHANNEL=default
+BUNDLE=0
+for a in "$@"; do
+  case "$a" in
+    --store) CHANNEL=store ;;
+    --bundle) BUNDLE=1 ;;
+    *) echo "✗ 未知参数:$a"; exit 1 ;;
+  esac
+done
+if [ "$CHANNEL" = "store" ]; then
+  GRADLE_FLAVOR=Store; APP_ID="com.yuyin.reverb.android"; OUT_APK=reverb-store.apk
+else
+  GRADLE_FLAVOR=Default; APP_ID="com.yuyin.reverb";        OUT_APK=reverb.apk
+fi
+
 VER_NAME=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' app/build.gradle | head -1)
 VER_CODE=$(sed -n 's/.*versionCode \([0-9]*\).*/\1/p' app/build.gradle | head -1)
 echo "▸ 余音 Reverb (Android)  versionName=$VER_NAME  versionCode=$VER_CODE"
+echo "  渠道=$CHANNEL  applicationId=$APP_ID"
 
 echo "▸ 构建 release(R8 混淆 + 资源压缩)"
-./gradlew assembleRelease -q
-if [ "${1:-}" = "--bundle" ]; then
+./gradlew "assemble${GRADLE_FLAVOR}Release" -q
+if [ "$BUNDLE" = "1" ]; then
   echo "▸ 构建 AAB"
-  ./gradlew bundleRelease -q
+  ./gradlew "bundle${GRADLE_FLAVOR}Release" -q
 fi
 
 DIST="$ROOT/dist"
 mkdir -p "$DIST"
-rm -f "$DIST"/reverb.apk "$DIST"/reverb-unsigned.apk "$DIST"/reverb.aab "$DIST"/reverb-mapping.txt
+VARIANT_DIR=$(echo "$CHANNEL" | tr 'A-Z' 'a-z')Release
+rm -f "$DIST/$OUT_APK" "$DIST/${OUT_APK%.apk}-unsigned.apk" "$DIST/${OUT_APK%.apk}.aab" "$DIST/${OUT_APK%.apk}-mapping.txt"
 
-APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+APK=$(find "app/build/outputs/apk/$CHANNEL/release" -name "*.apk" 2>/dev/null | head -1)
 [ -n "$APK" ] || { echo "✗ 没找到 release APK"; exit 1; }
 
 # 用 apksigner 判定是否真的签了,以及签名者是谁 —— 不靠"有没有 keystore.properties"猜。
@@ -61,28 +83,38 @@ if [ "$IS_SIGNED" = "1" ]; then
       echo "✗ 这个包是**调试证书**签的($SIGNER_DN),发布会被拒。检查 keystore.properties。"
       exit 1;;
   esac
-  cp "$APK" "$DIST/reverb.apk"
-  OUT_NAME="reverb.apk"
+  cp "$APK" "$DIST/$OUT_APK"
+  OUT_NAME="$OUT_APK"
 else
-  cp "$APK" "$DIST/reverb-unsigned.apk"
-  OUT_NAME="reverb-unsigned.apk"
+  OUT_NAME="${OUT_APK%.apk}-unsigned.apk"
+  cp "$APK" "$DIST/$OUT_NAME"
+fi
+
+# 校验产物里的 applicationId 与渠道一致 —— 渠道搞错会传错包,而两个包长得一模一样
+AAPT=$(ls "$SDK"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1 || true)
+if [ -n "$AAPT" ]; then
+  REAL_ID=$("$AAPT" dump packagename "$DIST/$OUT_NAME" 2>/dev/null || true)
+  if [ -n "$REAL_ID" ] && [ "$REAL_ID" != "$APP_ID" ]; then
+    echo "✗ 产物包名是 $REAL_ID,与渠道 $CHANNEL 期望的 $APP_ID 不一致"; exit 1
+  fi
+  echo "  产物包名校验通过:$REAL_ID"
 fi
 
 # R8 映射:发布后要靠它还原崩溃栈,每个版本都必须留档
-MAP=$(find app/build/outputs/mapping/release -name mapping.txt 2>/dev/null | head -1 || true)
-[ -n "$MAP" ] && cp "$MAP" "$DIST/reverb-mapping.txt"
-AAB=$(find app/build/outputs/bundle/release -name "*.aab" 2>/dev/null | head -1 || true)
-[ -n "$AAB" ] && cp "$AAB" "$DIST/reverb.aab"
+MAP=$(find "app/build/outputs/mapping/${CHANNEL}Release" -name mapping.txt 2>/dev/null | head -1 || true)
+[ -n "$MAP" ] && cp "$MAP" "$DIST/${OUT_APK%.apk}-mapping.txt"
+AAB=$(find "app/build/outputs/bundle/${CHANNEL}Release" -name "*.aab" 2>/dev/null | head -1 || true)
+[ -n "$AAB" ] && cp "$AAB" "$DIST/${OUT_APK%.apk}.aab"
 
 echo
 echo "▸ 产物(android/dist/):"
-for f in reverb.apk reverb-unsigned.apk reverb.aab reverb-mapping.txt; do
+for f in "$OUT_APK" "${OUT_APK%.apk}-unsigned.apk" "${OUT_APK%.apk}.aab" "${OUT_APK%.apk}-mapping.txt"; do
   [ -f "$DIST/$f" ] && printf '    %-22s %6s KB\n' "$f" "$(( $(stat -f%z "$DIST/$f") / 1024 ))"
 done
 echo
 if [ "$IS_SIGNED" = "1" ]; then
   echo "✓ 已签名:$SIGNER_DN"
-  echo "  发布传 dist/$OUT_NAME;dist/reverb-mapping.txt 请一并上传(崩溃栈还原)"
+  echo "  发布传 dist/$OUT_NAME;dist/${OUT_APK%.apk}-mapping.txt 请一并上传(崩溃栈还原)"
 else
   echo "✗ 未签名 —— dist/$OUT_NAME 不能发布"
   exit 1
