@@ -931,6 +931,30 @@
     {
       "name": "about_p_philosophy",
       "value": "La estética se inspira en la tinta, el celadón y el oro de las vigas — el nombre y el icono evocan «un eco girando entre las vigas».\n\nLas fuentes son totalmente gratuitas, sin cuenta ni clave API: busca en directorios públicos (Apple, fyyd, gpodder) y siempre vuelve al RSS original del editor para reproducir el audio — sin problemas de derechos, coste cero.\n\nEn cuanto a privacidad, suscripciones, historial y descargas solo viven en tu dispositivo — nunca se suben ni se rastrean."
+    },
+    {
+      "name": "queue_play_next",
+      "value": "Reproducir a continuación"
+    },
+    {
+      "name": "queue_add",
+      "value": "Añadir a la cola"
+    },
+    {
+      "name": "mark_played",
+      "value": "Marcar como escuchado"
+    },
+    {
+      "name": "mark_unplayed",
+      "value": "Marcar como no escuchado"
+    },
+    {
+      "name": "a11y_favorite",
+      "value": "Favorito"
+    },
+    {
+      "name": "a11y_unfavorite",
+      "value": "Quitar de favoritos"
     }
   ]
 }

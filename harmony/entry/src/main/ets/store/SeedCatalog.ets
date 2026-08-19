@@ -17,11 +17,21 @@ export class SeedCatalog {
   private lists: Record<string, Podcast[]> = {};
   private generated: string = '';
   private loaded: boolean = false;
+  private ctx: common.UIAbilityContext | null = null;
 
-  /// 从 rawfile 装载。失败一律退化为空(等同没有这个功能),不影响发现页联网路径。
-  load(ctx: common.UIAbilityContext): void {
+  /// boot 里只记下上下文,**不读文件** —— 真正装载推迟到第一次 get()。
+  /// 原先在 boot 同步读 50KB + JSON.parse,和其他几个 store 的同步读叠在一起拖慢首帧;
+  /// 而这份数据只在"热榜缓存为空"时才用得上,绝大多数启动压根不需要。
+  attach(ctx: common.UIAbilityContext): void {
+    this.ctx = ctx;
+  }
+
+  /// 从 rawfile 装载(惰性,首次 get 时触发)。失败一律退化为空,不影响发现页联网路径。
+  private load(): void {
     if (this.loaded) return;
     this.loaded = true;
+    const ctx = this.ctx;
+    if (ctx === null) return;
     try {
       const bytes = ctx.resourceManager.getRawFileContentSync('seed_podcasts.json');
       const text = new util.TextDecoder('utf-8').decodeToString(bytes);
@@ -57,12 +67,14 @@ export class SeedCatalog {
 
   /// 该地区+分类的内置清单;没有则空。genreId 为 0 表示综合推荐(与 repository 一致)。
   get(genreId: number, region: string): Podcast[] {
+    this.load();
     const v = this.lists[`${SeedCatalog.seedRegion(region)}:${genreId > 0 ? genreId : 0}`];
     return v === undefined ? [] : v;
   }
 
   /// 清单生成日期(yyyy-MM-dd)。
   generatedAt(): string {
+    this.load();
     return this.generated;
   }
 

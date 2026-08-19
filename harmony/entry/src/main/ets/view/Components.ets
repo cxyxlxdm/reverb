@@ -123,6 +123,33 @@ export struct EpisodeListItem {
   onPlay: () => void = () => {};
   onDownload: () => void = () => {};
   onDeleteDownload: () => void = () => {};
+  /// 行内收藏心形。与 Android 一致:**只在「音阁 · 收藏」这类需要就地取消收藏的列表显示**
+  /// (Android 是 onToggleFavorite != null 才画,ArkTS 没有可空回调的惯例,用显式开关)。
+  @Prop showFavorite: boolean = false;
+  @Prop isFavorite: boolean = false;
+  onToggleFavorite: () => void = () => {};
+  /// 「标记已播完」只在发现页的搜索结果里出现(与 Android 一致)。
+  /// 长按菜单本身**所有单集列表都有**,故不设开关 —— 鸿蒙端此前压根没有长按手势,
+  /// 外部反馈的「长按单集不能加入队列」即此。调用方必须接好 onPlayNext / onEnqueue。
+  @Prop showPlayedToggle: boolean = false;
+  onPlayNext: () => void = () => {};
+  onEnqueue: () => void = () => {};
+  onTogglePlayed: () => void = () => {};
+
+  /// 长按弹出的菜单。项与 Android `EpisodeListItem` 的 DropdownMenu 一一对应。
+  @Builder
+  contextMenu() {
+    Menu() {
+      MenuItem({ content: L.s('queue_play_next') })
+        .onClick(() => this.onPlayNext())
+      MenuItem({ content: L.s('queue_add') })
+        .onClick(() => this.onEnqueue())
+      if (this.showPlayedToggle) {
+        MenuItem({ content: this.played ? L.s('mark_unplayed') : L.s('mark_played') })
+          .onClick(() => this.onTogglePlayed())
+      }
+    }
+  }
 
   private meta(): string {
     const parts: string[] = [];
@@ -171,6 +198,19 @@ export struct EpisodeListItem {
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
 
+      // 行内收藏心形(与 Android 同位置:元信息之后、下载控件之前)
+      if (this.showFavorite) {
+        Glyph({
+          symbol: this.isFavorite ? Sym.favorite : Sym.favoriteOff,
+          dim: 20,
+          color: this.isFavorite ? this.scheme.primary : this.scheme.onSurfaceVariant
+        })
+          // 图标只有 20,命中区外扩到 36 见方,免得点不中(行本身的 onClick 是播放,
+          // 命中区重叠会被行吃掉,所以这里必须显式外扩)
+          .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+          .onClick(() => this.onToggleFavorite())
+      }
+
       // 下载三态,与 Android `DownloadControl` 一一对应:
       // 已下载 = DownloadDone(强调色,点击删除)/ 进行中·排队 = 进度圈 / 未下载 = Download
       // 原先用「已存」「下载」文字代替 —— sys.media.* 没有这两个图标,换 Symbol 后有正主。
@@ -202,6 +242,7 @@ export struct EpisodeListItem {
     .alignItems(VerticalAlign.Center)
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 10, bottom: 10 })
     .onClick(() => this.onPlay())
+    .bindContextMenu(this.contextMenu(), ResponseType.LongPress, { enableArrow: true })
   }
 }
 

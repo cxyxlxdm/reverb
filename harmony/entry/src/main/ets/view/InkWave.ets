@@ -22,7 +22,14 @@ const SEGMENTS = 56;
 @Component
 export struct InkWave {
   @Prop color: string;
-  @Prop animating: boolean;
+  /**
+   * **必须带 @Watch**:Prop 变化只会让 build 重跑,而启停动画是副作用,
+   * build 里不会调用 applyAnimating。原先只在 aboutToAppear / onReady /
+   * onVisibleAreaChange 里同步状态,于是**暂停后 30fps 定时器照旧在跑** ——
+   * 只要起播过一次就永久占着主线程重绘,离开播放页(组件仍在导航栈里、不销毁)也不停。
+   * 这是外部反馈「单线程负载持续 1 分钟超过 70%」的一个直接来源。
+   */
+  @Prop @Watch('onAnimatingChange') animating: boolean;
 
   @State private phaseA: number = 0;
   @State private phaseB: number = 0;
@@ -33,6 +40,10 @@ export struct InkWave {
   private ctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(this.settings);
 
   aboutToAppear(): void {
+    this.applyAnimating();
+  }
+
+  onAnimatingChange(): void {
     this.applyAnimating();
   }
 

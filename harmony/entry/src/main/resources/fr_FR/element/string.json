@@ -931,6 +931,30 @@
     {
       "name": "about_p_philosophy",
       "value": "L'esthétique s'inspire de l'encre, du céladon et de l'or des poutres — le nom et l'icône évoquent « un écho tournant autour des poutres ».\n\nLes sources restent entièrement gratuites, sans compte ni clé API : recherche via des annuaires publics (Apple, fyyd, gpodder), puis retour au RSS d'origine de l'éditeur pour diffuser l'audio original — respect du droit d'auteur, coût nul.\n\nCôté vie privée, abonnements, historique et téléchargements restent sur votre appareil — jamais envoyés, jamais suivis."
+    },
+    {
+      "name": "queue_play_next",
+      "value": "Lire ensuite"
+    },
+    {
+      "name": "queue_add",
+      "value": "Ajouter à la file"
+    },
+    {
+      "name": "mark_played",
+      "value": "Marquer comme écouté"
+    },
+    {
+      "name": "mark_unplayed",
+      "value": "Marquer comme non écouté"
+    },
+    {
+      "name": "a11y_favorite",
+      "value": "Favori"
+    },
+    {
+      "name": "a11y_unfavorite",
+      "value": "Retirer des favoris"
     }
   ]
 }

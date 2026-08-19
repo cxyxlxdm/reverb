@@ -931,6 +931,30 @@
     {
       "name": "about_p_philosophy",
       "value": "Visually it draws on ink, celadon and beam-gold — the name and icon echo “an echo circling the rafters.”\n\nFor sources it stays entirely free, no login, no API key: it searches open directories like Apple, fyyd and gpodder, then always returns to the publisher's own RSS and streams the original audio — copyright-clean, zero cost.\n\nFor privacy, subscriptions, history and downloads live only on your device — never uploaded, never tracked."
+    },
+    {
+      "name": "queue_play_next",
+      "value": "Play next"
+    },
+    {
+      "name": "queue_add",
+      "value": "Add to queue"
+    },
+    {
+      "name": "mark_played",
+      "value": "Mark as played"
+    },
+    {
+      "name": "mark_unplayed",
+      "value": "Mark as unplayed"
+    },
+    {
+      "name": "a11y_favorite",
+      "value": "Favorite"
+    },
+    {
+      "name": "a11y_unfavorite",
+      "value": "Remove from favorites"
     }
   ]
 }

@@ -8,6 +8,9 @@ import { HistoryStore } from '../store/Stores';
 import { SettingsStore } from '../store/SettingsStore';
 import { Log } from '../util/Logger';
 
+/// 播放请求的 User-Agent。与 Http.ets 的 UA 同一形态 —— 不少播客 CDN 会按 UA 拒绝请求。
+const PLAYER_UA = 'Reverb/1.0 (HarmonyOS podcast client)';
+
 /**
  * 播放门面。与 Android `PlayerController.kt` / macOS `PlayerController.swift` 行为对齐:
  * 队列上下文(上/下一集)、倍速 6 档、睡眠定时 + 渐弱、淡入、进度续播、收听时长计数。
@@ -158,7 +161,7 @@ export class PlayerController {
         this.localFile = f;
         p.fdSrc = { fd: f.fd };
       } else {
-        p.url = e.audioUrl;
+        await this.setNetworkSource(p, e.audioUrl);
       }
       // prepare 在 stateChange 的 'initialized' 分支触发
     } catch (err) {
@@ -166,6 +169,28 @@ export class PlayerController {
       this.handleLoadFailure(e);
     }
     this.notify();
+  }
+
+  /**
+   * 装载网络音源。**带 User-Agent**,而不是直接 `p.url = ...`。
+   *
+   * 起因:外部反馈「播放会提示加载失败,但偶尔可以播」。RSS/榜单那一侧一直正常,因为
+   * `Http.ets` 每个请求都带 UA;而 `p.url = ...` 用的是 AVPlayer 默认请求头,相当多的
+   * 播客 CDN(Libsyn / Megaphone / Podbean / 喜马拉雅一类)对无 UA 或陌生 UA 直接 403,
+   * 于是"大部分节目放不出、少数能放"。Android 侧 ExoPlayer 默认就会带 UA,故无此问题。
+   *
+   * `createMediaSourceWithUrl` + `setMediaSource` 自 API 12 起提供。低版本或调用失败时
+   * **回落到直接赋 url**,保持原行为,不至于因为这个增强反而放不出声。
+   */
+  private async setNetworkSource(p: media.AVPlayer, url: string): Promise<void> {
+    try {
+      const src = media.createMediaSourceWithUrl(url, { 'User-Agent': PLAYER_UA });
+      await p.setMediaSource(src);
+      return;
+    } catch (err) {
+      Log.w('Player', `setMediaSource 不可用,回落直接赋 url:${(err as Error).message}`);
+    }
+    p.url = url;
   }
 
   private async ensurePlayer(): Promise<void> {

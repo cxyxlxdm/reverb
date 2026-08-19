@@ -194,7 +194,7 @@ export class HistoryStore {
   private persist(): void {
     const arr: Object[] = [];
     for (let i = 0; i < this.history.length; i++) arr.push(Codec.historyToJson(this.history[i]));
-    JsonFile.writeJson(HistoryStore.FILE, arr);
+    JsonFile.writeJsonDebounced(HistoryStore.FILE, arr);
   }
 }
 
@@ -249,6 +249,6 @@ export class PopularCacheStore {
       for (let j = 0; j < list.length; j++) arr.push(Codec.podcastToJson(list[j]));
       out[keys[i]] = arr;
     }
-    JsonFile.writeJson(PopularCacheStore.FILE, out);
+    JsonFile.writeJsonDebounced(PopularCacheStore.FILE, out);
   }
 }

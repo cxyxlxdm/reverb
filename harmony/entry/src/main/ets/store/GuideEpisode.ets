@@ -27,22 +27,34 @@ export class GuideEpisode {
   /// 落地后的绝对路径;空串表示不可用(资源缺失/拷贝失败),此时不显示入口。
   private static localPath: string = '';
 
-  /// 首次启动时把 rawfile 拷到 filesDir。已存在且大小一致则跳过。
-  static prepare(ctx: common.UIAbilityContext): void {
+  /**
+   * 把 rawfile 拷到 filesDir。已存在且大小一致则跳过。
+   *
+   * **全程异步**:138KB 的读 + 写如果同步做在 boot 里,会和其他 store 的同步读叠加,
+   * 一起拖长首帧、加重 THREAD_BLOCK 风险。这份数据只有首次使用者会用到,
+   * 晚几十毫秒就绪毫无影响(未就绪时 available() 返回 false,引导卡先不显示)。
+   */
+  static async prepare(ctx: common.UIAbilityContext): Promise<void> {
     const dest = `${ctx.filesDir}/${GuideEpisode.RAW}`;
     try {
-      const bytes = ctx.resourceManager.getRawFileContentSync(GuideEpisode.RAW);
+      // 先看是否已落地:命中就完全不读 rawfile
+      const bytes = await ctx.resourceManager.getRawFileContent(GuideEpisode.RAW);
       let needWrite = true;
       try {
-        // 已经拷过且字节数一致就不重写(避免每次启动都写 138KB)
-        if (fs.accessSync(dest) && fs.statSync(dest).size === bytes.byteLength) needWrite = false;
+        if (await fs.access(dest)) {
+          const st = await fs.stat(dest);
+          if (st.size === bytes.byteLength) needWrite = false;
+        }
       } catch (e) {
         needWrite = true;
       }
       if (needWrite) {
-        const f = fs.openSync(dest, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
-        fs.writeSync(f.fd, bytes.buffer as ArrayBuffer);
-        fs.closeSync(f);
+        const f = await fs.open(dest, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+        try {
+          await fs.write(f.fd, bytes.buffer as ArrayBuffer);
+        } finally {
+          await fs.close(f);
+        }
         Log.i('Guide', `引导音频落地 ${bytes.byteLength} 字节`);
       }
       GuideEpisode.localPath = dest;

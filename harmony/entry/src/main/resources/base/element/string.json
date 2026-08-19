@@ -931,6 +931,30 @@
     {
       "name": "about_p_philosophy",
       "value": "美学上取「水墨 + 青瓷 + 梁金」的底色，名字与图标呼应「余音绕梁」——声波环绕横梁，余韵不散。\n\n取源上坚持全链路免费、无需登录、无需任何 API Key：以 Apple、fyyd、gpodder 等公开目录做检索，最终始终回到发布方自己的 RSS，直接流式播放原始音频——版权干净、成本为零。\n\n隐私上，订阅、历史、下载全部只存在你的设备本地，不上传、不追踪。"
+    },
+    {
+      "name": "queue_play_next",
+      "value": "下一个播放"
+    },
+    {
+      "name": "queue_add",
+      "value": "加入队列"
+    },
+    {
+      "name": "mark_played",
+      "value": "标记已播完"
+    },
+    {
+      "name": "mark_unplayed",
+      "value": "标记未播完"
+    },
+    {
+      "name": "a11y_favorite",
+      "value": "收藏"
+    },
+    {
+      "name": "a11y_unfavorite",
+      "value": "取消收藏"
     }
   ]
 }

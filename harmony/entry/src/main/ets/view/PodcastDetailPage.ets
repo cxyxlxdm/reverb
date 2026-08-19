@@ -155,7 +155,10 @@ export struct PodcastDetailPage {
                 downloadState: this.dlState(e.id),
                 onPlay: () => this.onPlayEpisode(e, this.episodes),
                 onDownload: () => { this.downloadManager.download(e); },
-                onDeleteDownload: () => { this.downloadManager.delete(e.id); }
+                onDeleteDownload: () => { this.downloadManager.delete(e.id); },
+                // 纯动作,不参与本页渲染,直接用容器单例即可(理由同 DiscoverPage)
+                onPlayNext: () => { this.app.player.playNext(e); },
+                onEnqueue: () => { this.app.player.enqueue(e); }
               })
             }
           }, (e: Episode) => e.id)

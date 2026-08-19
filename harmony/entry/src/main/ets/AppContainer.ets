@@ -68,10 +68,11 @@ export class AppContainer {
     this.history.load();
     this.inbox.load();
     this.popularCache.load();
-    // 内置精选清单(rawfile,约 50KB):热门缓存为空时给发现页兜底
-    this.seedCatalog.load(ctx);
+    // 内置精选清单:这里只记上下文,真正读 rawfile 推迟到第一次用(见 SeedCatalog.attach)
+    this.seedCatalog.attach(ctx);
     this.feedCache.load();
-    // 内置引导音频:把 rawfile 拷到 filesDir 一份,随后复用已有的本地文件播放路径
+    // 内置引导音频:把 rawfile 拷到 filesDir 一份,随后复用已有的本地文件播放路径。
+    // 异步进行,不阻塞首帧;未就绪时引导卡不显示(见 GuideEpisode.available)。
     GuideEpisode.prepare(ctx);
     this.stamps.load();
     this.downloads.load();

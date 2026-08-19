@@ -169,6 +169,6 @@ export class ListenStatsStore {
   private persist(): void {
     const arr: Object[] = [];
     this.table.forEach((c: ChannelListen) => arr.push(Codec.channelListenToJson(c, listenedMsOf(c))));
-    JsonFile.writeJson(ListenStatsStore.FILE, arr);
+    JsonFile.writeJsonDebounced(ListenStatsStore.FILE, arr);
   }
 }

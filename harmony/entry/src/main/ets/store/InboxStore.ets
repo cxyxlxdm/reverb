@@ -151,6 +151,6 @@ export class InboxStore {
   private persist(): void {
     const arr: Object[] = [];
     for (let i = 0; i < this.episodes.length; i++) arr.push(Codec.episodeToJson(this.episodes[i]));
-    JsonFile.writeJson(InboxStore.FILE, arr);
+    JsonFile.writeJsonDebounced(InboxStore.FILE, arr);
   }
 }

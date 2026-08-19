@@ -224,7 +224,9 @@ export struct LibraryPage {
                   isCurrent: this.player.current !== null && this.player.current.id === e.id,
                   isPlaying: this.player.isPlaying,
                   played: this.history.isPlayed(e.id),
-                  onPlay: () => this.onPlayEpisode(e, this.inbox.episodes)
+                  onPlay: () => this.onPlayEpisode(e, this.inbox.episodes),
+                  onPlayNext: () => { this.player.playNext(e); },
+                  onEnqueue: () => { this.player.enqueue(e); }
                 })
               }
             }, (e: Episode) => e.id)
@@ -255,7 +257,12 @@ export struct LibraryPage {
                 isCurrent: this.player.current !== null && this.player.current.id === e.id,
                 isPlaying: this.player.isPlaying,
                 played: this.history.isPlayed(e.id),
-                onPlay: () => this.onPlayEpisode(e, this.favorites.favorites)
+                onPlay: () => this.onPlayEpisode(e, this.favorites.favorites),
+                showFavorite: true,
+                isFavorite: this.favorites.isFavorite(e.id),
+                onToggleFavorite: () => { this.favorites.toggle(e); },
+                onPlayNext: () => { this.player.playNext(e); },
+                onEnqueue: () => { this.player.enqueue(e); }
               })
             }
           }, (e: Episode) => e.id)
@@ -285,7 +292,9 @@ export struct LibraryPage {
                 played: this.history.isPlayed(d.episode.id),
                 downloadState: 2,
                 onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes()),
-                onDeleteDownload: () => { this.downloadManager.delete(d.episode.id); }
+                onDeleteDownload: () => { this.downloadManager.delete(d.episode.id); },
+                onPlayNext: () => { this.player.playNext(d.episode); },
+                onEnqueue: () => { this.player.enqueue(d.episode); }
               })
             }
           }, (d: DownloadRow) => d.episode.id)
@@ -317,7 +326,9 @@ export struct LibraryPage {
                 isCurrent: this.player.current !== null && this.player.current.id === h.episode.id,
                 isPlaying: this.player.isPlaying,
                 played: h.played,
-                onPlay: () => this.onPlayEpisode(h.episode, this.historyEpisodes())
+                onPlay: () => this.onPlayEpisode(h.episode, this.historyEpisodes()),
+                onPlayNext: () => { this.player.playNext(h.episode); },
+                onEnqueue: () => { this.player.enqueue(h.episode); }
               })
             }
           }, (h: HistoryRow) => h.episode.id)

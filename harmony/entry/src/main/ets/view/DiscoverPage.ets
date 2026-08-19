@@ -462,7 +462,13 @@ export struct DiscoverPage {
                   scheme: this.scheme, fontScale: this.fontScale, episode: e,
                   showPodcastTitle: true,
                   played: this.history.isPlayed(e.id),
-                  onPlay: () => this.onPlayEpisode(e, this.searchEpisodes)
+                  onPlay: () => this.onPlayEpisode(e, this.searchEpisodes),
+                  showPlayedToggle: true,
+                  onTogglePlayed: () => { this.history.markPlayed(e.id, !this.history.isPlayed(e.id)); },
+                  // 这两个只是**写**操作,不参与本页渲染,故可直接用容器里的单例;
+                  // H26 说的"必须 @ObjectLink"针对的是**渲染读取**,不是这种纯动作。
+                  onPlayNext: () => { this.app.player.playNext(e); },
+                  onEnqueue: () => { this.app.player.enqueue(e); }
                 })
               }
             }, (e: Episode) => e.id)

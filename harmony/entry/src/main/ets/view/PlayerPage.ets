@@ -51,7 +51,7 @@ export struct PlayerPage {
       Row() {
         // 收起播放页:与 Android 一致用「下折角」(KeyboardArrowDown),不是返回箭头 ——
         // 这是"把全屏播放页收下去"的语义,和二级页返回不同。
-        this.iconAction(Sym.down, this.scheme.onBackground, 0, 0, () => this.onBack())
+        this.iconAction(() => Sym.down, () => this.scheme.onBackground, 0, 0, () => this.onBack())
         Blank()
         // 间距统一由这里决定(各元素的视觉盒都贴紧内容,见 iconAction 注释)
         Row({ space: 14 }) {
@@ -61,8 +61,8 @@ export struct PlayerPage {
           // 试过把「更多」从 21 调到 26,间距反而从 18.7vp 涨到 20.0vp。
           // 内缩量是字形自带的,只能用负边距抵消。数值来自真机像素实测
           // (队列墨宽 19.7 / 更多 16.0 / 收藏 22.7,字形盒均为 21)。
-          this.iconAction(Sym.queue,
-            this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant,
+          this.iconAction(() => Sym.queue,
+            () => this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant,
             0, -2, () => this.onOpenQueue())
           this.speedChip()
           this.sleepChip()
@@ -165,11 +165,28 @@ export struct PlayerPage {
     .align(Alignment.Top)
   }
 
+  /// 简介解析的记忆化缓存(**不能是 @State**:在 build 里赋值会触发再次重渲)。
+  /// 只在换集时重解析。
+  private noteId: string = '';
+  private noteVal: string = '';
+
+  /**
+   * 节目简介纯文本。
+   *
+   * **必须缓存**:本页观察 player,而播放中 500ms 一次 tick 就会重渲一遍,
+   * 原先每次重渲都把整段 HTML 重跑十道正则 —— 有些播客的 shownotes 有几十 KB,
+   * 于是主线程每秒被占两次,轻则 CPU 长期高位(外部反馈的第 3 项),
+   * 重则直接 THREAD_BLOCK_6S 卡死(第 1 项),连带点击与长按被丢弃(第 2 项)。
+   * macOS 端早先已做过同样的「解析移出渲染路径」,鸿蒙这边漏了。
+   */
   private noteText(): string {
     const e = this.player.current;
     if (e === null) return '';
-    const t = htmlToText(e.description);
-    return t.length > 0 ? t : L.s('shownotes_empty');
+    if (e.id !== this.noteId) {
+      this.noteId = e.id;
+      this.noteVal = htmlToText(e.description);
+    }
+    return this.noteVal.length > 0 ? this.noteVal : L.s('shownotes_empty');
   }
 
   @Builder
@@ -376,13 +393,25 @@ export struct PlayerPage {
    * 所以布局尺寸就用图标尺寸,间距**统一交给 Row 的 space**;点击区域改用
    * `responseRegion` 单独外扩(它只影响命中测试、不参与布局),这样既整齐又好点。
    */
-  /// nudge:抵掉该字形墨迹相对字形盒的内缩量(见上方注释)。只对需要的一侧生效。
+  /**
+   * nudge:抵掉该字形墨迹相对字形盒的内缩量(见上方注释)。只对需要的一侧生效。
+   *
+   * **symbol / color 必须是闭包,不能是值参数**:`@Builder` 的值参数只求值一次,
+   * 状态变化不会重新求值(踩过两次,见 H29)。此前收藏心形与队列图标就是把
+   * `isFav() ? Sym.favorite : Sym.favoriteOff` 当值传进来 —— 点一下 store 确实变了、
+   * 页面也重渲了,但图标被冻结在初始值,颜色永远不动,表现就是平台复核说的
+   * 「收藏按钮点击无响应」。闭包必须一路传到渲染那一层才有效。
+   *
+   * 命中区宽度取 21 + 14 = 35(图标宽 + Row 的 space),即向两侧各外扩 7 —— **刚好填满
+   * 半个间距、不与相邻图标重叠**。先前用 43 宽,相邻两个的命中区互相压 8vp,
+   * 重叠处由后一个兄弟节点吃掉点击,小目标更难点中。
+   */
   @Builder
-  iconAction(symbol: Resource, color: ResourceColor, nudgeL: number, nudgeR: number,
-             action: () => void) {
-    Glyph({ symbol: symbol, dim: 21, color: color })
+  iconAction(symbolOf: () => Resource, colorOf: () => ResourceColor,
+             nudgeL: number, nudgeR: number, action: () => void) {
+    Glyph({ symbol: symbolOf(), dim: 21, color: colorOf() })
       .margin({ left: nudgeL, right: nudgeR })
-      .responseRegion({ x: -11, y: -11, width: 43, height: 43 })
+      .responseRegion({ x: -7, y: -11, width: 35, height: 43 })
       .onClick(action)
   }
 
@@ -500,8 +529,8 @@ export struct PlayerPage {
 
   @Builder
   favoriteChip() {
-    this.iconAction(this.isFav() ? Sym.favorite : Sym.favoriteOff,
-      this.isFav() ? this.scheme.primary : this.scheme.onSurfaceVariant,
+    this.iconAction(() => this.isFav() ? Sym.favorite : Sym.favoriteOff,
+      () => this.isFav() ? this.scheme.primary : this.scheme.onSurfaceVariant,
       -1, 0, () => {
         const e = this.player.current;
         if (e !== null) this.favorites.toggle(e);

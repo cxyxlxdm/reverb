@@ -39,11 +39,13 @@ class StoredFeed {
 ///  2. **秒开**:详情页原本每次都从 LoadingBox 开始(RSS 动辄几百 KB)。
 ///
 /// 容量有意收紧(RSS 是这个 App 里最大的数据):最多 MAX_FEEDS 个频道、每频道 MAX_EPISODES 集,
-/// 超出按最近写入时间淘汰。整体 ~1-2MB,计入设置页缓存大小。
+/// 超出按最近写入时间淘汰。整体 ~600KB 量级,计入设置页缓存大小。
 export class FeedCacheStore {
   private static FILE = 'feed_cache.json';
-  private static MAX_FEEDS = 30;
-  private static MAX_EPISODES = 60;
+  // 容量比另两端更紧:鸿蒙这份是**单文件整份写回**,每次落盘都要 JSON.stringify 全量,
+  // 序列化仍在 UI 线程(只有写盘异步了)。20 × 50 约 600KB 量级,stringify 十几毫秒可接受。
+  private static MAX_FEEDS = 20;
+  private static MAX_EPISODES = 50;
 
   private mem: Record<string, FeedCacheEntry> = {};
 
@@ -113,6 +115,6 @@ export class FeedCacheStore {
       for (let j = 0; j < e.episodes.length; j++) eps.push(Codec.episodeToJson(e.episodes[j]));
       out[keys[i]] = new StoredFeed(e.fetchedAt, Codec.podcastToJson(e.podcast), eps);
     }
-    JsonFile.writeJson(FeedCacheStore.FILE, out);
+    JsonFile.writeJsonDebounced(FeedCacheStore.FILE, out);
   }
 }

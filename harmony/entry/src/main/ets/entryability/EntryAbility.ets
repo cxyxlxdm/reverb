@@ -3,6 +3,7 @@ import window from '@ohos.window';
 import type AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import type Want from '@ohos.app.ability.Want';
 import { SettingsStore } from '../store/SettingsStore';
+import { JsonFile } from '../store/JsonFile';
 import { Log } from '../util/Logger';
 
 /// 入口 Ability。负责建窗、铺满全屏(内容自行避让状态栏),并把 context 交给存储层。
@@ -37,7 +38,17 @@ export default class EntryAbility extends UIAbility {
     });
   }
 
+  /**
+   * 退到后台。**必须把去抖中的写入落盘**:历史进度/收听时长/缓存都走
+   * `JsonFile.writeJsonDebounced`(400ms 去抖 + 异步写,为的是不卡 UI 线程),
+   * 若此时进程被系统回收,未落盘的那一次就丢了 —— 表现会是"续播位置退回几秒"。
+   */
+  onBackground(): void {
+    JsonFile.flushPending();
+  }
+
   onDestroy(): void {
+    JsonFile.flushPending();
     SettingsStore.onLanguageChanged = null;
     this.stage = null;
     Log.i('App', '退出');
