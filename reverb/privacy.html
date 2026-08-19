@@ -32,7 +32,7 @@ blockquote { margin:24px 0 0; padding:12px 16px; border-left:3px solid var(--acc
 </head>
 <body><main>
 <h1>余音 Reverb 隐私政策</h1>
-<p><strong>最后更新：2026 年 8 月 15 日</strong></p>
+<p><strong>最后更新：2026 年 8 月 19 日</strong></p>
 <p>余音 Reverb（以下简称&quot;本应用&quot;）是一款播客客户端，提供 Android、macOS、HarmonyOS 三个版本。</p>
 <p>本应用<strong>没有服务器</strong>。我们不运营任何后端服务，因此<strong>在技术上不具备收集、接收或存储你的个人信息的能力</strong>。本政策说明本应用会读写哪些数据、会连接哪些网络地址，以及这些行为发生在何处。</p>
 <hr>
@@ -51,9 +51,21 @@ blockquote { margin:24px 0 0; padding:12px 16px; border-left:3px solid var(--acc
 <p>上述接口均为公开接口，本应用<strong>不携带任何鉴权凭据、不附加任何用户标识</strong>。播放与下载一律直连发布方提供的原始地址，本应用<strong>不转存、不代理、不改写</strong>任何音频内容。</p>
 <p>请注意：当你的设备访问上述第三方地址时，这些第三方可能按其自身政策记录访问日志（例如 IP 地址）。这属于你的设备与第三方之间的直接通信，本应用无法干预，也无从获知。相关处理规则请参见各第三方的隐私政策。</p>
 <h2>四、权限说明</h2>
-<table><thead><tr><th>权限</th><th>为什么需要</th><th>时机</th></tr></thead><tbody><tr><td>网络访问</td><td>检索播客、获取节目信息、播放与下载音频</td><td>始终</td></tr><tr><td>获取网络状态</td><td>判断当前是否为 Wi-Fi，以支持「仅在 Wi-Fi 下载」</td><td>始终</td></tr><tr><td>后台运行（长时任务，仅音频播放）</td><td>让你退到后台或锁屏后音频能继续播放</td><td>仅播放时申请，暂停即释放</td></tr><tr><td>通知</td><td>订阅有新一期时提醒你</td><td><strong>仅在你主动开启「订阅更新提醒」时</strong>征求你的同意，可随时关闭</td></tr></tbody></table>
+<table><thead><tr><th>权限</th><th>为什么需要</th><th>时机</th></tr></thead><tbody><tr><td>网络访问</td><td>检索播客、获取节目信息、播放与下载音频</td><td>始终</td></tr><tr><td>获取网络状态</td><td>判断当前是否为 Wi-Fi，以支持「仅在 Wi-Fi 下载」</td><td>始终</td></tr>
+<tr><td>无线网络名称（SSID）</td><td><strong>本应用不主动收集，见下方专项说明</strong></td><td>不适用</td></tr><tr><td>后台运行（长时任务，仅音频播放）</td><td>让你退到后台或锁屏后音频能继续播放</td><td>仅播放时申请，暂停即释放</td></tr><tr><td>通知</td><td>订阅有新一期时提醒你</td><td><strong>仅在你主动开启「订阅更新提醒」时</strong>征求你的同意，可随时关闭</td></tr></tbody></table>
 <p><strong>本应用不申请</strong>位置、通讯录、相机、麦克风、短信、通话记录、日历、读取已安装应用列表等任何权限。</p>
 <p>保存图片到相册时（剪藏此刻、听觉足迹海报），本应用通过系统提供的<strong>保存确认弹窗</strong>完成，由你逐次确认，<strong>不申请</strong>相册写入类敏感权限。</p>
+<h3>关于无线网络名称（SSID）的专项说明</h3>
+<p>本应用<strong>自身的代码不读取、不保存、不传输</strong>无线网络名称。之所以在此专门说明，是因为下述客观情况：</p>
+<p>Android 版使用了两个由 Google 提供的系统级基础库——媒体播放库（AndroidX Media3）与后台任务库（AndroidX WorkManager）。这两个库在<strong>判断当前网络类型</strong>（Wi-Fi / 移动网络 / 无网络）时，会调用 Android 系统接口 <code>ConnectivityManager.getActiveNetworkInfo()</code>。该接口返回的对象中，除网络类型外还附带一个描述字段，在 Wi-Fi 环境下该字段的内容为当前无线网络名称（SSID）。</p>
+<p>也就是说：<strong>SSID 是系统接口“顺带”返回的，并非本应用请求或使用的数据。</strong>本应用：</p>
+<ul>
+<li>不访问该字段、不将其写入任何本地文件、不将其包含在备份或日志中；</li>
+<li>没有服务器，也不存在任何上传数据的代码路径，因此不可能将其外发；</li>
+<li>该调用仅用于「仅在 Wi-Fi 下载」等网络类型判断，不涉及定位或身份识别。</li>
+</ul>
+<p>此外，自 2026 年 8 月版本起，本应用<strong>在你同意本隐私政策之后</strong>才会初始化上述两个库；在你同意之前，应用不会发生任何上述调用。</p>
+<p>macOS 版与 HarmonyOS 版不使用这两个库，不存在该情形。</p>
 <h2>五、数据的导出与分享，由你主动发起</h2>
 <p>以下操作<strong>只会在你主动点击时发生</strong>，且目标位置由你选择：</p>
 <ul><li><strong>导出备份 / 导出 OPML 订阅</strong>：通过系统文件选择器保存到你指定的位置</li><li><strong>分享日志 / 导出日志</strong>：交给你选择的应用或保存位置</li><li><strong>保存或分享图片</strong>（剪藏此刻、足迹海报）：保存到相册或通过系统分享面板发送</li></ul>

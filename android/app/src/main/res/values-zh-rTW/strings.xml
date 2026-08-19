@@ -70,6 +70,14 @@
     <string name="guide_title">餘音使用引導</string>
     <string name="guide_desc">隨應用內建的 30 秒引導音訊，無需連網即可播放。</string>
     <string name="guide_card_sub">30 秒 · 內建音訊，不連網也能播</string>
+    <string name="privacy_consent_title">隱私政策與資料說明</string>
+    <string name="privacy_consent_body">餘音是一款纯本地的播客客户端。在你开始使用前，请先了解我们如何处理你的数据。\n\n**我们不收集你的个人信息。**本应用没有服务器，不要求注册或登录，不接入任何第三方 SDK，不埋点、不做用户行为分析、不展示广告。\n\n**你的数据只存在這台设备上。**订阅、播放历史、收藏、下载、收听时长、听觉印记与应用设置，全部保存在应用私有目录，卸载即删除。\n\n**联网做什么。**为了检索和播放播客，你的设备会直接访问 Apple 播客目录、fyyd.de、gpodder.net 等公开接口，以及播客发布方自己的 RSS 地址与音频、封面原始链接。这些请求不携带任何鉴权凭据、也不附加任何用户标识。\n\n**关于网络状态权限。**本应用申请「获取网络状态」用于判断当前是否为 Wi‑Fi，以支持「仅在 Wi‑Fi 下载」。此外，本应用使用的系统播放库与后台任务库在判断网络类型时会调用系统接口，该接口返回的对象在 Wi‑Fi 环境下可能携带无线网络名称（SSID）。**本应用不读取、不保存、也不传输该名称。**\n\n**权限清单。**网络访问、获取网络状态、后台音频播放、通知（仅在你开启「订阅更新提醒」时征求同意）。本应用不申请位置、通讯录、相机、麦克风、短信、通话记录、日历等任何权限。\n\n点击「同意并继续」表示你已阅读并接受本政策。</string>
+    <string name="privacy_read_full">閱讀完整隱私政策</string>
+    <string name="privacy_accept">同意並繼續</string>
+    <string name="privacy_decline">不同意並退出</string>
+    <string name="privacy_url">https://cxyxl.eu.org/privacy/reverb.html</string>
+    <string name="set_privacy">隱私政策</string>
+    <string name="set_privacy_sub">我們如何處理你的資料</string>
     <string name="reorder_title">自訂分類排序</string>
     <string name="reorder_hint">長按拖曳排序</string>
     <string name="region_short_auto">自動</string>

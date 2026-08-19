@@ -78,8 +78,15 @@ class ReverbApp : Application() {
         PlayerController.bindListenStats(container.listenStatsStore)
         container.listenStatsStore.seedFromHistory(container.historyStore.history.value)
         Notifications.ensureChannel(this)
+        // **不在这里排 WorkManager 任务**:带网络约束的周期任务会让 WorkManager 的约束追踪器
+        // 读取系统网络状态,而 Application.onCreate 早于用户同意隐私政策。
+        // 改由 MainActivity 在同意之后调 scheduleFeedUpdates(见 startGatedComponents)。
+        // 这里只负责「已关掉提醒就取消既有任务」——取消不读任何网络信息。
+        // 连 cancelFeedUpdates 也要等同意之后:`WorkManager.getInstance()` 本身会初始化
+        // WorkManager,其 ForceStopRunnable 在重排既有任务时会挂上约束监听、进而读网络状态。
+        // 未同意的情况下压根没排过任务,也就无需取消。
         val updatesEnabled = container.settingsStore.updatesEnabled.value
-        if (updatesEnabled) scheduleFeedUpdates(this) else cancelFeedUpdates(this)
+        if (container.settingsStore.privacyAccepted.value && !updatesEnabled) cancelFeedUpdates(this)
 
         try {
             val region = container.regionStore.override.value ?: "auto"

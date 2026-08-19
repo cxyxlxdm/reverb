@@ -260,6 +260,20 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
 
             SectionLabel(stringResource(R.string.sec_about))
             SettingRow(stringResource(R.string.set_about), onClick = onOpenAbout)
+            // 隐私政策必须**在应用内随时可查**,不能只在首启弹一次(平台合规指引 7.5)
+            SettingRow(
+                stringResource(R.string.set_privacy),
+                stringResource(R.string.set_privacy_sub)
+            ) {
+                runCatching {
+                    context.startActivity(
+                        android.content.Intent(
+                            android.content.Intent.ACTION_VIEW,
+                            android.net.Uri.parse(context.getString(R.string.privacy_url))
+                        )
+                    )
+                }
+            }
             SettingRow(stringResource(R.string.set_licenses), onClick = onOpenLicenses)
             SettingRow(stringResource(R.string.set_version), stringResource(R.string.version_name))
             Spacer(Modifier.height(24.dp))

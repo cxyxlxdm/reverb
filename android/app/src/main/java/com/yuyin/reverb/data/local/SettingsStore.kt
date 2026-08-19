@@ -24,6 +24,14 @@ class SettingsStore(context: Context) {
     val contextualRadio = MutableStateFlow(prefs.getBoolean("contextual_radio", false)) // 电台模式:false 随机 / true 情境,默认随机
     val subsGrid = MutableStateFlow(prefs.getBoolean("subs_grid", false)) // 订阅排列:false 列表(一行一个)/ true 宫格,默认列表
 
+    /**
+     * 是否已同意隐私政策。**在同意之前不得初始化任何可能读取系统网络信息的组件**
+     * ——媒体库(media3)与 WorkManager 内部都会调 ConnectivityManager.getActiveNetworkInfo(),
+     * 应用市场把它判定为「获取 SSID」,且要求必须在用户同意之后才可发生。
+     * 详见 MainActivity 与 ReverbApp 里的门控。
+     */
+    val privacyAccepted = MutableStateFlow(prefs.getBoolean("privacy_accepted", false))
+
     fun setThemeMode(v: Int) { prefs.edit().putInt("theme_mode", v).apply(); themeMode.value = v }
     fun setFontScale(v: Float) { prefs.edit().putFloat("font_scale", v).apply(); fontScale.value = v }
     fun setAccentIndex(v: Int) { prefs.edit().putInt("accent_index", v).apply(); accentIndex.value = v }
@@ -36,4 +44,10 @@ class SettingsStore(context: Context) {
     fun setSpectrumEnabled(v: Boolean) { prefs.edit().putBoolean("spectrum_enabled", v).apply(); spectrumEnabled.value = v }
     fun setContextualRadio(v: Boolean) { prefs.edit().putBoolean("contextual_radio", v).apply(); contextualRadio.value = v }
     fun setSubsGrid(v: Boolean) { prefs.edit().putBoolean("subs_grid", v).apply(); subsGrid.value = v }
+
+    /** 同意隐私政策。用 commit() 而非 apply():紧接着就要启动此前被门控的组件,不能容忍异步写还没落盘。 */
+    fun acceptPrivacy() {
+        prefs.edit().putBoolean("privacy_accepted", true).commit()
+        privacyAccepted.value = true
+    }
 }

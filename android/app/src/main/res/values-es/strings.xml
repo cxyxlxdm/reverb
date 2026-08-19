@@ -70,6 +70,14 @@
     <string name="guide_title">Primeros pasos con Reverb</string>
     <string name="guide_desc">Introducción de 30 segundos incluida en la app. Se reproduce sin conexión.</string>
     <string name="guide_card_sub">30 s · incluido, sin conexión</string>
+    <string name="privacy_consent_title">Política de privacidad</string>
+    <string name="privacy_consent_body">Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\n**We collect no personal information.** There is no server, no account, no third-party SDKs, no analytics and no ads.\n\n**Your data stays on this device.** Subscriptions, history, favorites, downloads, listening time, stamps and settings are all stored in the app\'s private directory and removed on uninstall.\n\n**What the network is used for.** To search and play podcasts, your device directly contacts public directories (Apple Podcasts, fyyd.de, gpodder.net) and the publishers\' own RSS, audio and artwork URLs. No credentials and no user identifiers are attached.\n\n**About the network-state permission.** It is used to detect Wi‑Fi so that “download on Wi‑Fi only” works. In addition, the system playback and background-task libraries this app uses query the network type via a system API whose returned object may carry the Wi‑Fi network name (SSID). **This app does not read, store or transmit that name.**\n\n**Permissions.** Internet, network state, background audio playback, and notifications (requested only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping “Agree and continue” means you have read and accept this policy.</string>
+    <string name="privacy_read_full">Leer la política completa</string>
+    <string name="privacy_accept">Aceptar y continuar</string>
+    <string name="privacy_decline">Rechazar y salir</string>
+    <string name="privacy_url">https://cxyxl.eu.org/privacy/reverb.html</string>
+    <string name="set_privacy">Política de privacidad</string>
+    <string name="set_privacy_sub">Cómo se tratan tus datos</string>
     <string name="reorder_title">Reordenar categorías</string>
     <string name="reorder_hint">Mantén pulsado y arrastra para reordenar</string>
     <string name="region_short_auto">Auto</string>
