@@ -30,6 +30,7 @@
 /* Discover */
 "分类" = "Category";
 "每日热门" = "Daily Trending";
+"内置精选" = "Bundled Picks";
 "暂无内容" = "No content";
 "搜索节目、单集或粘贴 RSS 链接" = "Search shows, episodes or paste an RSS link";
 "搜索中…" = "Searching…";

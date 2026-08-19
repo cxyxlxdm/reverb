@@ -14,6 +14,7 @@ import com.yuyin.reverb.data.local.InboxStore
 import com.yuyin.reverb.data.local.ListenStatsStore
 import com.yuyin.reverb.data.local.PopularCacheStore
 import com.yuyin.reverb.data.local.RegionStore
+import com.yuyin.reverb.data.local.SeedCatalog
 import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.local.StampStore
 import com.yuyin.reverb.data.local.SubscriptionStore
@@ -36,9 +37,11 @@ class AppContainer(app: Application) {
         .build()
 
     val popularCache = PopularCacheStore(app)
+    // 随包内置的精选清单：缓存为空（首装/清缓存/无网）时给发现页兜底，避免首屏空白
+    val seedCatalog = SeedCatalog(app)
 
     // 全链路零配置：Apple + fyyd.de + gpodder.net + RSS/OPML，均免费无需 Key。
-    val repository = PodcastRepository(httpClient, popularCache)
+    val repository = PodcastRepository(httpClient, popularCache, seedCatalog)
 
     val subscriptionStore = SubscriptionStore(app)
     val inboxStore = InboxStore(app)

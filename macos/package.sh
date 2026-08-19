@@ -22,6 +22,14 @@ cp Info.plist "$BUNDLE/Contents/Info.plist"
 # 本地化资源:各语言 .lproj 拷入 Resources(zh-Hans 为基础语言,键即简体中文原文)
 cp -R Localization/*.lproj "$BUNDLE/Contents/Resources/"
 
+# 内置精选清单:发现页在无缓存/无网时的兜底内容(规范副本在 shared/seed/,由 sync.sh 分发)。
+# 缺了不会构建失败,只是退化成"首屏可能空白",所以这里显式提示一声。
+if [ -f "Resources/seed_podcasts.json" ]; then
+  cp "Resources/seed_podcasts.json" "$BUNDLE/Contents/Resources/seed_podcasts.json"
+else
+  echo "   ⚠ 缺 Resources/seed_podcasts.json,发现页将无内置兜底(跑 shared/seed/sync.sh 补上)"
+fi
+
 echo "==> ad-hoc codesign"
 codesign --force --deep --sign - "$BUNDLE"
 

@@ -85,6 +85,10 @@
       "value": "Populaires · %s"
     },
     {
+      "name": "discover_seed_list",
+      "value": "Sélection intégrée · %s"
+    },
+    {
       "name": "discover_empty",
       "value": "Rien pour l'instant, tirez pour actualiser"
     },

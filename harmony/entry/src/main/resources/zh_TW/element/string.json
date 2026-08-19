@@ -85,6 +85,10 @@
       "value": "每日熱門 · %s"
     },
     {
+      "name": "discover_seed_list",
+      "value": "內建精選 · %s"
+    },
+    {
       "name": "discover_empty",
       "value": "暫時沒有內容,下拉重試"
     },

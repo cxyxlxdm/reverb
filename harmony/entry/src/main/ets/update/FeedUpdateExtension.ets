@@ -5,6 +5,7 @@ import { JsonFile } from '../store/JsonFile';
 import { L } from '../util/L';
 import { SubscriptionStore, PopularCacheStore } from '../store/Stores';
 import { PodcastRepository } from '../net/PodcastRepository';
+import { SeedCatalog } from '../store/SeedCatalog';
 import { UpdateNotifier } from './UpdateNotifier';
 import { Log } from '../util/Logger';
 
@@ -34,7 +35,9 @@ export default class FeedUpdateExtension extends WorkSchedulerExtensionAbility {
       subs.load();
       if (subs.subscriptions.length === 0) return;
       const cache = new PopularCacheStore();
-      const repo = new PodcastRepository(cache);
+      // 这里只解析已订阅的 feed,用不到发现页的内置清单,故给一个**未装载**的空实例
+      // (不读 rawfile,省掉后台进程的一次 IO)。
+      const repo = new PodcastRepository(cache, new SeedCatalog());
       await UpdateNotifier.checkNow(subs.subscriptions, repo);
     } catch (e) {
       Log.e('Update', `后台检查失败 ${(e as Error).message}`);

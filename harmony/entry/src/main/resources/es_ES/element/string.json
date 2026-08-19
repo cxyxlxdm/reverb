@@ -85,6 +85,10 @@
       "value": "Top de hoy · %s"
     },
     {
+      "name": "discover_seed_list",
+      "value": "Selección incluida · %s"
+    },
+    {
       "name": "discover_empty",
       "value": "Nada aún, desliza para actualizar"
     },

@@ -62,6 +62,7 @@
     <string name="discover_featured">Sélection du jour · pour vous</string>
     <string name="discover_source">Source · %s</string>
     <string name="discover_daily_hot">Top du jour · %s</string>
+    <string name="discover_seed_list">Sélection intégrée · %s</string>
     <string name="discover_empty_category">Rien dans « %s » — essayez une autre catégorie</string>
     <string name="empty_discover">Cherchez un podcast, Reverb le trouvera</string>
     <string name="load_failed">Aucun résultat — essayez un autre mot ou plus tard</string>

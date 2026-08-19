@@ -10,6 +10,8 @@ final class PodcastRepository {
     private let gpodder = GpodderSource()
     private let rss = RssParser()
     private let cache = PopularCacheStore()
+    // 随包内置的精选清单:缓存为空(首启/清缓存/无网)时给发现页兜底,避免首屏空白
+    private let seed = SeedCatalog()
 
     init() {
         charts = AppleChartsSource(itunes: itunes)
@@ -59,10 +61,21 @@ final class PodcastRepository {
         "\(region):\(genreId.map(String.init) ?? "default")"
     }
 
-    /// 读取本地缓存的榜单。
+    /// 立即返回可展示的榜单。优先真实缓存;缓存为空(首启/清过缓存/一直无网)则回退到随包
+    /// 内置清单,保证首屏不空。种子**只读不写缓存**,联网刷新成功即被真数据取代。
     func cachedPopular(genreId: Int?, region: String) -> [Podcast] {
-        cache.get(cacheKey(genreId, region))
+        let real = cache.get(cacheKey(genreId, region))
+        if !real.isEmpty { return real }
+        return seed.get(genreId: genreId, region: region)
     }
+
+    /// 当前展示的是内置清单(而非联网取回的真榜单)——UI 据此把标题标成「内置精选」。
+    func isSeedList(genreId: Int?, region: String) -> Bool {
+        cache.get(cacheKey(genreId, region)).isEmpty && !seed.get(genreId: genreId, region: region).isEmpty
+    }
+
+    /// 内置清单的生成日期(yyyy-MM-dd)。
+    func seedGeneratedAt() -> String { seed.generatedAt() }
 
     /// 拉取并刷新榜单。综合榜为空时依次回退到 us 综合榜、fyyd 热门。非空即写入缓存。
     func refreshPopular(genreId: Int?, region: String) async -> [Podcast] {
@@ -103,7 +116,8 @@ final class PodcastRepository {
     /// 从各分类的热门频道里随机抽取一集可播放的内容。
     /// exclude 中的 episode id 会被排除。抽不到时返回 nil。
     func randomEpisode(region: String, genreIds: [Int?], exclude: Set<String> = []) async -> Episode? {
-        // 组池:遍历各分类的缓存榜单,按 feedUrl 去重。
+        // 组池:遍历各分类榜单,按 feedUrl 去重。cachedPopular 在缓存为空时给出内置清单,
+        // 所以首次启动点「随机」也能直接组出池子,省掉一次榜单往返。
         var pool: [Podcast] = []
         var seenFeeds = Set<String>()
         for genreId in genreIds {

@@ -64,6 +64,7 @@
     <string name="discover_featured">每日热门 · 循声而来</string>
     <string name="discover_source">来源 · %s</string>
     <string name="discover_daily_hot">每日热门 · %s</string>
+    <string name="discover_seed_list">内置精选 · %s</string>
     <string name="discover_empty_category">「%s」暂无内容，换个分类看看</string>
     <string name="empty_discover">搜索你想听的播客，余音为你循声而来</string>
     <string name="load_failed">没能取到声音，换个词或稍后再试</string>

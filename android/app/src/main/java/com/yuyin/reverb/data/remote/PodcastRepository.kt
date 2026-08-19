@@ -19,7 +19,8 @@ import kotlinx.coroutines.withContext
  */
 class PodcastRepository(
     client: okhttp3.OkHttpClient,
-    private val cache: com.yuyin.reverb.data.local.PopularCacheStore
+    private val cache: com.yuyin.reverb.data.local.PopularCacheStore,
+    private val seed: com.yuyin.reverb.data.local.SeedCatalog
 ) {
     private val itunes = ITunesSource(client)
     private val fyyd = FyydSource(client)
@@ -79,8 +80,22 @@ class PodcastRepository(
     // 发现页热门推荐：磁盘缓存(按 地区+分类) + 每日刷新。cachedPopular 立即返回上次结果，refreshPopular 走网络并回写。
     private fun cacheKey(genreId: Int?, region: String) = "$region:${genreId ?: "default"}"
 
-    /** 立即返回缓存（可能为空，也可能是上次的数据），供进入页面时秒开。 */
-    fun cachedPopular(genreId: Int? = null, region: String = "us"): List<Podcast> = cache.get(cacheKey(genreId, region))
+    /**
+     * 立即返回可展示的列表，供进入页面时秒开。优先真实缓存；缓存为空（首装/清过缓存/一直无网）
+     * 则回退到随包内置清单，保证首屏不空。种子**只读不写缓存**，联网刷新成功即被真数据取代。
+     */
+    fun cachedPopular(genreId: Int? = null, region: String = "us"): List<Podcast> {
+        val real = cache.get(cacheKey(genreId, region))
+        if (real.isNotEmpty()) return real
+        return seed.get(genreId, region)
+    }
+
+    /** 当前展示的是内置清单（而非联网取回的真榜单）——UI 据此把标题标成「内置精选」。 */
+    fun isSeedList(genreId: Int? = null, region: String = "us"): Boolean =
+        cache.get(cacheKey(genreId, region)).isEmpty() && seed.get(genreId, region).isNotEmpty()
+
+    /** 内置清单的生成日期（yyyy-MM-dd）。 */
+    fun seedGeneratedAt(): String = seed.generatedAt()
 
     /** 拉取最新榜单，成功则回写磁盘缓存并返回；失败返回空（保留旧缓存）。 */
     suspend fun refreshPopular(genreId: Int? = null, region: String = "us"): List<Podcast> {
@@ -112,10 +127,12 @@ class PodcastRepository(
         genreIds: List<Int?>,
         exclude: Set<String> = emptySet()
     ): Episode? = withContext(Dispatchers.IO) {
-        // 1) 组建候选节目池:各分类缓存榜单去重(按 feedUrl)
+        // 1) 组建候选节目池:各分类榜单去重(按 feedUrl)。
+        //    走 cachedPopular 而非裸缓存 —— 首次安装时缓存为空,内置清单能直接组出池子,
+        //    省掉一次榜单往返,冷启动点「随机」不必先等榜单。
         val pool = LinkedHashMap<String, Podcast>()
         for (g in genreIds.distinct()) {
-            cache.get(cacheKey(g, region)).forEach { if (it.feedUrl.isNotBlank()) pool.putIfAbsent(it.feedUrl, it) }
+            cachedPopular(g, region).forEach { if (it.feedUrl.isNotBlank()) pool.putIfAbsent(it.feedUrl, it) }
         }
         // 2) 池子太小 → 补拉综合热门榜
         if (pool.size < 10) {

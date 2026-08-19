@@ -2,15 +2,19 @@ import { Episode, Podcast, FeedResult, SearchOutcome } from '../model/Models';
 import { ITunesSource, AppleChartsSource, FyydSource, GpodderSource } from './Sources';
 import { RssParser } from './RssParser';
 import { PopularCacheStore } from '../store/Stores';
+import { SeedCatalog } from '../store/SeedCatalog';
 import { Log } from '../util/Logger';
 
 /// 取源门面。四层降级搜索、热门榜三层降级(失败保留旧缓存)、随机单集。
 /// 全链路免费无鉴权;播放一律回落发布方 RSS 的 enclosure 原始直链。
 export class PodcastRepository {
   private cache: PopularCacheStore;
+  /// 随包内置的精选清单:缓存为空(首装/清缓存/无网)时给发现页兜底,避免首屏空白
+  private seed: SeedCatalog;
 
-  constructor(cache: PopularCacheStore) {
+  constructor(cache: PopularCacheStore, seed: SeedCatalog) {
     this.cache = cache;
+    this.seed = seed;
   }
 
   /// 搜索频道:URL 直连 → Apple → fyyd → gpodder。
@@ -51,9 +55,23 @@ export class PodcastRepository {
     return `${region}:${genreId > 0 ? `${genreId}` : 'default'}`;
   }
 
-  /// 缓存秒返(零 IO),供 UI 立即渲染。
+  /// 秒返可展示列表(零 IO),供 UI 立即渲染。优先真实缓存;缓存为空(首装/清过缓存/一直无网)
+  /// 则回退到随包内置清单,保证首屏不空。种子**只读不写缓存**,联网刷新成功即被真数据取代。
   cachedPopular(genreId: number, region: string): Podcast[] {
-    return this.cache.get(this.cacheKey(genreId, region));
+    const real = this.cache.get(this.cacheKey(genreId, region));
+    if (real.length > 0) return real;
+    return this.seed.get(genreId, region);
+  }
+
+  /// 当前展示的是内置清单(而非联网取回的真榜单)——UI 据此把标题标成「内置精选」。
+  isSeedList(genreId: number, region: string): boolean {
+    return this.cache.get(this.cacheKey(genreId, region)).length === 0
+      && this.seed.get(genreId, region).length > 0;
+  }
+
+  /// 内置清单的生成日期(yyyy-MM-dd)。
+  seedGeneratedAt(): string {
+    return this.seed.generatedAt();
   }
 
   /// 刷新热门榜:分类榜/综合榜 → (综合榜且非 us 时)回落 us → fyyd hot。

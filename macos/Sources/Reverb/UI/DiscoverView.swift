@@ -41,6 +41,8 @@ struct DiscoverView: View {
     @State private var selected: DiscoverCategory = DiscoverCategory.all[0]
     @State private var popular: [Podcast] = []
     @State private var loading = false
+    /// 当前列表来自随包内置清单(而非联网榜单),据此改标题
+    @State private var isSeed = false
 
     @State private var searchText = ""
     @State private var submittedQuery = ""
@@ -120,7 +122,8 @@ struct DiscoverView: View {
                 if !continueItems.isEmpty { continueStrip }
 
                 HStack(spacing: 12) {
-                    Text("每日热门")
+                    // 内置清单是打包时的榜单快照,不是今天的榜,标成「每日热门」会误导
+                    Text(isSeed ? "内置精选" : "每日热门")
                         .font(.title2).fontWeight(.semibold)
                     if loading { ProgressView().controlSize(.small) }
                     Spacer(minLength: 12)
@@ -177,11 +180,16 @@ struct DiscoverView: View {
     private func loadPopular(initial: Bool) async {
         let genreId = selected.genreId
         let region = env.region
+        // 缓存为空时 cachedPopular 给出随包内置清单,首屏不空;联网刷新成功再替换
         popular = env.repository.cachedPopular(genreId: genreId, region: region)
+        isSeed = env.repository.isSeedList(genreId: genreId, region: region)
         loading = true
         let fresh = await env.repository.refreshPopular(genreId: genreId, region: region)
         guard selected.genreId == genreId else { return }
-        if !fresh.isEmpty { popular = fresh }
+        if !fresh.isEmpty {
+            popular = fresh
+            isSeed = false
+        }
         loading = false
     }
 

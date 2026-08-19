@@ -85,6 +85,10 @@
       "value": "Top today · %s"
     },
     {
+      "name": "discover_seed_list",
+      "value": "Bundled picks · %s"
+    },
+    {
       "name": "discover_empty",
       "value": "Nothing yet, pull to refresh"
     },

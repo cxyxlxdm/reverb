@@ -321,14 +321,17 @@ private fun CategoryPage(
     onOpen: (Podcast) -> Unit,
     continueEntries: List<HistoryEntry> = emptyList()
 ) {
-    // 先展示缓存，秒开；再后台刷新，数据回来替换。地区变化时按新地区重载。
+    // 先展示缓存（无缓存则用随包内置清单），秒开；再后台刷新，数据回来替换。地区变化时按新地区重载。
     var list by remember(category.key, region) { mutableStateOf(vm.cachedCategory(category, region)) }
+    // isSeed 决定标题是「每日热门」还是「内置精选」：内置清单是打包时的榜单快照，不是今天的榜，
+    // 标成每日热门会误导。联网刷新成功后置为 false。
+    var isSeed by remember(category.key, region) { mutableStateOf(vm.isSeedCategory(category, region)) }
     var loading by remember(category.key, region) { mutableStateOf(list.isEmpty()) }
     val pullState = rememberPullToRefreshState()
 
     LaunchedEffect(category.key, region) {
         val fresh = vm.refreshCategory(category, region)
-        if (fresh.isNotEmpty()) list = fresh
+        if (fresh.isNotEmpty()) { list = fresh; isSeed = false }
         loading = false
     }
     // 下拉刷新：强制重新拉取最新榜单。分类榜单接口很快（~0.4s），加一个最短可见时长，
@@ -340,7 +343,7 @@ private fun CategoryPage(
                     val fetch = async { vm.refreshCategory(category, region) }
                     delay(600)
                     val fresh = fetch.await()
-                    if (fresh.isNotEmpty()) list = fresh
+                    if (fresh.isNotEmpty()) { list = fresh; isSeed = false }
                 }
             } finally {
                 pullState.endRefresh()
@@ -356,7 +359,10 @@ private fun CategoryPage(
     ) {
         when {
             list.isNotEmpty() -> PodcastResultList(
-                header = stringResource(R.string.discover_daily_hot, stringResource(category.labelRes)),
+                header = stringResource(
+                    if (isSeed) R.string.discover_seed_list else R.string.discover_daily_hot,
+                    stringResource(category.labelRes)
+                ),
                 podcasts = list,
                 onOpen = onOpen,
                 topContent = if (continueEntries.isNotEmpty()) {

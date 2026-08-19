@@ -62,6 +62,7 @@
     <string name="discover_featured">Selección diaria · para ti</string>
     <string name="discover_source">Fuente · %s</string>
     <string name="discover_daily_hot">Top de hoy · %s</string>
+    <string name="discover_seed_list">Selección incluida · %s</string>
     <string name="discover_empty_category">Nada en «%s» — prueba otra categoría</string>
     <string name="empty_discover">Busca un pódcast y Reverb lo encontrará</string>
     <string name="load_failed">Sin resultados — prueba otra palabra o más tarde</string>

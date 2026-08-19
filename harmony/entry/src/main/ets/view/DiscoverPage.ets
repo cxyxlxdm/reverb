@@ -31,6 +31,9 @@ export struct DiscoverPage {
   @State pageW: number = 0;
   @State lists: Podcast[][] = [];          // 每个分类一份榜单
   @State loadingFlags: boolean[] = [];
+  /// 该分类当前展示的是随包内置清单(非联网榜单)。内置清单是打包时的榜单快照,
+  /// 标成「每日热门」会误导,故标题改为「内置精选」。
+  @State seedFlags: boolean[] = [];
   @State refreshing: boolean = false;
 
   // 搜索
@@ -48,12 +51,15 @@ export struct DiscoverPage {
     const n = DISCOVER_CATEGORIES.length;
     const l: Podcast[][] = [];
     const f: boolean[] = [];
+    const sd: boolean[] = [];
     for (let i = 0; i < n; i++) {
       l.push([]);
       f.push(false);
+      sd.push(false);
     }
     this.lists = l;
     this.loadingFlags = f;
+    this.seedFlags = sd;
     this.loadCategory(0, false);
   }
 
@@ -63,16 +69,21 @@ export struct DiscoverPage {
     const region = this.app.region();
     let hadCache = false;
     if (!force) {
+      // 缓存为空时 cachedPopular 给出内置清单,同样能秒显,首屏不空
       const cached = this.app.repository.cachedPopular(cat.genreId, region);
       if (cached.length > 0) {
         this.setList(idx, cached);
-        hadCache = true;   // 缓存秒显,但**继续往下走后台刷新**(不显转圈)
+        this.setSeed(idx, this.app.repository.isSeedList(cat.genreId, region));
+        hadCache = true;   // 秒显后**继续往下走后台刷新**(不显转圈)
       }
     }
     if (!hadCache) this.setLoading(idx, true);
     const fresh = await this.app.repository.refreshPopular(cat.genreId, region);
     if (!hadCache) this.setLoading(idx, false);
-    if (fresh.length > 0) this.setList(idx, fresh);
+    if (fresh.length > 0) {
+      this.setList(idx, fresh);
+      this.setSeed(idx, false);
+    }
     Log.i('Discover', `分类 ${cat.key} 加载 ${fresh.length} 条`);
   }
 
@@ -80,6 +91,13 @@ export struct DiscoverPage {
     const next = this.lists.slice();
     next[idx] = list;
     this.lists = next;
+  }
+
+  private setSeed(idx: number, v: boolean): void {
+    if (this.seedFlags[idx] === v) return;
+    const next = this.seedFlags.slice();
+    next[idx] = v;
+    this.seedFlags = next;
   }
 
   private setLoading(idx: number, v: boolean): void {
@@ -269,7 +287,8 @@ export struct DiscoverPage {
               }
             }
             ListItem() {
-              Text(L.f('discover_daily_hot', categoryLabel(DISCOVER_CATEGORIES[idx])))
+              Text(L.f(this.seedFlags[idx] ? 'discover_seed_list' : 'discover_daily_hot',
+                categoryLabel(DISCOVER_CATEGORIES[idx])))
                 .fontSize(TypeScale.caption * this.fontScale)
                 .fontColor(this.scheme.onSurfaceVariant)
                 .padding({ left: Metrics.pagePadding, top: 4, bottom: 4 })

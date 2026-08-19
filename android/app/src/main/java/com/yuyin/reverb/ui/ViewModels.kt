@@ -106,8 +106,11 @@ class DiscoverViewModel(
         categoryStore.saveOrder(newOrder.map { it.key })
     }
 
-    /** 立即返回该分类的缓存列表（秒开，可能为空）。 */
+    /** 立即返回该分类可展示的列表（秒开）。缓存为空时是随包内置清单，不会是空白。 */
     fun cachedCategory(category: Category, region: String): List<Podcast> = repo.cachedPopular(category.genreId, region)
+
+    /** 当前给出的是内置清单而非联网榜单 —— 标题据此显示「内置精选」。 */
+    fun isSeedCategory(category: Category, region: String): Boolean = repo.isSeedList(category.genreId, region)
 
     /** 拉取该分类最新列表（成功回写缓存）。 */
     suspend fun refreshCategory(category: Category, region: String): List<Podcast> = repo.refreshPopular(category.genreId, region)
