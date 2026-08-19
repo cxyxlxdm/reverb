@@ -67,6 +67,9 @@
     <string name="empty_discover">Busca un pódcast y Reverb lo encontrará</string>
     <string name="load_failed">Sin resultados — prueba otra palabra o más tarde</string>
     <string name="offline_cached_at">Copia sin conexión · actualizada %s</string>
+    <string name="guide_title">Primeros pasos con Reverb</string>
+    <string name="guide_desc">Introducción de 30 segundos incluida en la app. Se reproduce sin conexión.</string>
+    <string name="guide_card_sub">30 s · incluido, sin conexión</string>
     <string name="reorder_title">Reordenar categorías</string>
     <string name="reorder_hint">Mantén pulsado y arrastra para reordenar</string>
     <string name="region_short_auto">Auto</string>

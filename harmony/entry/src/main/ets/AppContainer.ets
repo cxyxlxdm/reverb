@@ -6,6 +6,7 @@ import { SubscriptionStore, FavoriteStore, HistoryStore, PopularCacheStore } fro
 import { InboxStore } from './store/InboxStore';
 import { SeedCatalog } from './store/SeedCatalog';
 import { FeedCacheStore } from './store/FeedCacheStore';
+import { GuideEpisode } from './store/GuideEpisode';
 import { ListenStatsStore } from './store/ListenStatsStore';
 import { DownloadStore } from './store/DownloadStore';
 import { StampStore } from './store/StampStore';
@@ -70,6 +71,8 @@ export class AppContainer {
     // 内置精选清单(rawfile,约 50KB):热门缓存为空时给发现页兜底
     this.seedCatalog.load(ctx);
     this.feedCache.load();
+    // 内置引导音频:把 rawfile 拷到 filesDir 一份,随后复用已有的本地文件播放路径
+    GuideEpisode.prepare(ctx);
     this.stamps.load();
     this.downloads.load();
     this.downloadManager.init(ctx.filesDir, this.downloads);
@@ -80,8 +83,13 @@ export class AppContainer {
 
     // 播放层装配:注入历史/设置,并把状态变化同步给系统媒体会话
     this.player.bind(this.history, this.settings);
-    // 已下载优先本地播放(闭包注入,解耦下载模块)
-    this.player.localFileProvider = (e: Episode) => this.downloadManager.localPath(e.id);
+    // 已下载优先本地播放(闭包注入,解耦下载模块)。
+    // 引导音频也走这条路:它的"本地文件"是从 rawfile 拷出来的那一份。
+    this.player.localFileProvider = (e: Episode) => {
+      const guide = GuideEpisode.pathFor(e.id);
+      if (guide !== null) return guide;
+      return this.downloadManager.localPath(e.id);
+    };
     this.player.bindListen(
       (e: Episode, delta: number) => { this.listenStats.add(e, delta); },
       () => { this.listenStats.flush(); });

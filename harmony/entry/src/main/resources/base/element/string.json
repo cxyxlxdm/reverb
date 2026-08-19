@@ -193,6 +193,18 @@
       "value": "离线内容 · 上次更新 %s"
     },
     {
+      "name": "guide_title",
+      "value": "余音使用引导"
+    },
+    {
+      "name": "guide_desc",
+      "value": "随应用内置的 30 秒引导音频，无需联网即可播放。"
+    },
+    {
+      "name": "guide_card_sub",
+      "value": "30 秒 · 内置音频，不联网也能播"
+    },
+    {
       "name": "episode_count",
       "value": "共 %d 集"
     },

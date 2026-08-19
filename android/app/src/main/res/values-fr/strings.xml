@@ -67,6 +67,9 @@
     <string name="empty_discover">Cherchez un podcast, Reverb le trouvera</string>
     <string name="load_failed">Aucun résultat — essayez un autre mot ou plus tard</string>
     <string name="offline_cached_at">Copie hors ligne · mise à jour %s</string>
+    <string name="guide_title">Premiers pas avec Reverb</string>
+    <string name="guide_desc">Introduction de 30 secondes intégrée à l’app. Lecture sans connexion.</string>
+    <string name="guide_card_sub">30 s · intégré, hors ligne</string>
     <string name="reorder_title">Réorganiser les catégories</string>
     <string name="reorder_hint">Appui long puis glisser pour réordonner</string>
     <string name="region_short_auto">Auto</string>

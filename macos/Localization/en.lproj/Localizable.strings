@@ -32,6 +32,9 @@
 "每日热门" = "Daily Trending";
 "内置精选" = "Bundled Picks";
 "离线内容 · 上次更新 %@" = "Offline copy · updated %@";
+"余音使用引导" = "Getting started with Reverb";
+"30 秒 · 内置音频，不联网也能播" = "30 sec · bundled, plays offline";
+"随应用内置的 30 秒引导音频，无需联网即可播放。" = "A 30-second bundled intro. Plays without a network connection.";
 "暂无内容" = "No content";
 "搜索节目、单集或粘贴 RSS 链接" = "Search shows, episodes or paste an RSS link";
 "搜索中…" = "Searching…";

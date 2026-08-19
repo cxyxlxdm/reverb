@@ -67,6 +67,9 @@
     <string name="empty_discover">搜尋你想聽的播客，餘音為你循聲而來</string>
     <string name="load_failed">沒能取到聲音，換個詞或稍後再試</string>
     <string name="offline_cached_at">離線內容 · 上次更新 %s</string>
+    <string name="guide_title">餘音使用引導</string>
+    <string name="guide_desc">隨應用內建的 30 秒引導音訊，無需連網即可播放。</string>
+    <string name="guide_card_sub">30 秒 · 內建音訊，不連網也能播</string>
     <string name="reorder_title">自訂分類排序</string>
     <string name="reorder_hint">長按拖曳排序</string>
     <string name="region_short_auto">自動</string>

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.PlayCircleOutline
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.WbSunny
 import androidx.compose.material.icons.rounded.WbTwilight
@@ -85,6 +86,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -92,6 +94,7 @@ import kotlin.math.roundToInt
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.HistoryEntry
+import com.yuyin.reverb.data.model.GuideEpisode
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.ui.Category
 import com.yuyin.reverb.ui.DiscoverState
@@ -141,6 +144,11 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                 !it.played
         }.take(15)
     }
+
+    // 全新用户(既没订阅也没听过任何东西)才展示内置引导音频入口。
+    // 一旦有任何使用痕迹就不再出现 —— 它是引导,不是常驻功能。
+    val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
+    val firstRun = subs.isEmpty() && history.isEmpty()
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
@@ -237,7 +245,8 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                     category = categories[page],
                     region = region,
                     onOpen = onOpen,
-                    continueEntries = inProgress
+                    continueEntries = inProgress,
+                    showGuide = firstRun
                 )
             }
         } else {
@@ -319,7 +328,8 @@ private fun CategoryPage(
     category: Category,
     region: String,
     onOpen: (Podcast) -> Unit,
-    continueEntries: List<HistoryEntry> = emptyList()
+    continueEntries: List<HistoryEntry> = emptyList(),
+    showGuide: Boolean = false
 ) {
     // 先展示缓存（无缓存则用随包内置清单），秒开；再后台刷新，数据回来替换。地区变化时按新地区重载。
     var list by remember(category.key, region) { mutableStateOf(vm.cachedCategory(category, region)) }
@@ -365,9 +375,11 @@ private fun CategoryPage(
                 ),
                 podcasts = list,
                 onOpen = onOpen,
-                topContent = if (continueEntries.isNotEmpty()) {
-                    { ContinueListeningStrip(continueEntries) }
-                } else null
+                topContent = when {
+                    continueEntries.isNotEmpty() -> { { ContinueListeningStrip(continueEntries) } }
+                    showGuide -> { { GuideCard() } }
+                    else -> null
+                }
             )
             loading -> LoadingBox()
             else -> EmptyHint(stringResource(R.string.discover_empty_category, stringResource(category.labelRes)))
@@ -494,6 +506,46 @@ private fun ReorderCategoriesDialog(
         confirmButton = { TextButton(onClick = { onSave(items.toList()) }) { Text(stringResource(R.string.action_done)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
     )
+}
+
+/**
+ * 首次使用时的引导卡：点一下播放随包内置的 30 秒音频。
+ *
+ * 存在意义是让「全新安装 + 没网」也能走通完整播放链路（播放条/进度/倍速/后台/锁屏），
+ * 而不是对着一片空白猜是 App 坏了还是网不通。有任何订阅或收听记录后即不再出现。
+ */
+@Composable
+private fun GuideCard() {
+    val context = LocalContext.current
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            .clickable { PlayerController.play(GuideEpisode.get(context)) }
+            .padding(horizontal = 14.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Rounded.PlayCircleOutline,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.guide_title),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium
+            )
+            Text(
+                stringResource(R.string.guide_card_sub),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
 }
 
 /** 继续收听:未听完的历史横滑卡片。封面 + 标题(2 行) + 进度条,点按续播。 */

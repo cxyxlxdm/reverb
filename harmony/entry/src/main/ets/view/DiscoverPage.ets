@@ -1,13 +1,14 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
+import { GuideEpisode } from '../store/GuideEpisode';
 import { Podcast, Episode, SearchOutcome, HistoryEntry } from '../model/Models';
 import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
-import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, Sym } from './Widgets';
+import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
 import { PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
 import { SettingsStore } from '../store/SettingsStore';
-import { HistoryStore } from '../store/Stores';
+import { SubscriptionStore, HistoryStore } from '../store/Stores';
 import { Log } from '../util/Logger';
 
 /// 发现页:分类热门榜(缓存秒开 + 后台刷新 + 下拉刷新)+ 搜索(节目/单集双分段)
@@ -20,6 +21,9 @@ export struct DiscoverPage {
   /// 电台按钮(图标/激活态/准备中)与「继续收听」都依赖它们。
   @ObjectLink settings: SettingsStore;
   @ObjectLink history: HistoryStore;
+  /// 只用于判断"是不是全新用户"(决定引导卡显不显示)。必须是 @ObjectLink 而非直接读
+  /// AppContainer 的裸对象 —— 否则订阅后返回本页,引导卡不会消失(同 H26 的坑)。
+  @ObjectLink subscriptions: SubscriptionStore;
   @ObjectLink radio: RadioStation;
   onOpenPodcast: (p: Podcast) => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
@@ -285,6 +289,10 @@ export struct DiscoverPage {
               ListItem() {
                 this.continueStrip()
               }
+            } else if (this.showGuide()) {
+              ListItem() {
+                this.guideCard()
+              }
             }
             ListItem() {
               Text(L.f(this.seedFlags[idx] ? 'discover_seed_list' : 'discover_daily_hot',
@@ -323,6 +331,42 @@ export struct DiscoverPage {
       if (h.positionMs < 10000 || h.durationMs <= 0) return false;
       return h.positionMs < h.durationMs * 0.95;
     }).slice(0, 15);
+  }
+
+  /// 全新用户(既没订阅也没听过任何东西)才展示引导入口。
+  /// 一旦有任何使用痕迹就不再出现 —— 它是引导,不是常驻功能。
+  private showGuide(): boolean {
+    return GuideEpisode.available()
+      && this.subscriptions.subscriptions.length === 0
+      && this.history.history.length === 0;
+  }
+
+  /// 首次使用时的引导卡:点一下播放随包内置的 30 秒音频。
+  /// 意义是让「全新安装 + 没网」也能走通完整播放链路,而不是对着空白猜是 App 坏了还是网不通。
+  @Builder
+  guideCard() {
+    Row({ space: 12 }) {
+      // 用 sys.media 的标准播放件而非 Symbol 字体:Symbol 名要到真机字体里才解析,
+      // 写错不报错、直接空白渲染。这个件播放页已在用,确认可渲。
+      GlyphImage({ icon: $r('sys.media.ohos_ic_public_play'), dim: 22, color: this.scheme.primary })
+      Column({ space: 2 }) {
+        Text(L.s('guide_title'))
+          .fontSize(TypeScale.body * this.fontScale)
+          .fontColor(this.scheme.onBackground)
+        Text(L.s('guide_card_sub'))
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .padding({ left: 14, right: 14, top: 12, bottom: 12 })
+    .margin({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 4 })
+    .backgroundColor(withAlpha(this.scheme.primary, 0.08))
+    .borderRadius(12)
+    .alignItems(VerticalAlign.Center)
+    .onClick(() => this.onPlayEpisode(GuideEpisode.make(), [GuideEpisode.make()]))
   }
 
   /// 继续收听:横滑卡片,点按续播。

@@ -214,10 +214,12 @@ object PlayerController {
             if (playbackState == Player.STATE_ENDED) {
                 val stopAfterThis = _sleepEndOfEpisode.value // 睡眠「本集结束」优先于电台/队列续播
                 _sleepEndOfEpisode.value = false
-                // 自然听完:进度归零并标记已播完
+                // 自然听完:进度归零并标记已播完(引导音频除外 —— 它不进历史)
                 _current.value?.let {
-                    history?.updatePosition(it.id, 0, c?.duration ?: 0)
-                    history?.markPlayed(it.id, true)
+                    if (!com.yuyin.reverb.data.model.GuideEpisode.isGuide(it.id)) {
+                        history?.updatePosition(it.id, 0, c?.duration ?: 0)
+                        history?.markPlayed(it.id, true)
+                    }
                 }
                 listenStats?.flush()
                 when {
@@ -296,8 +298,11 @@ object PlayerController {
         }
         _position.value = 0
         _duration.value = 0
-        history?.record(episode, System.currentTimeMillis())
-        pendingSeekMs = history?.positionFor(episode.id) ?: 0L
+        // 内置引导音频不是一集真正的播客：不进历史、不计收听时长，
+        // 否则"收听时长"榜首会是引导音频，「继续收听」里也会挂着它。
+        val isGuide = com.yuyin.reverb.data.model.GuideEpisode.isGuide(episode.id)
+        if (!isGuide) history?.record(episode, System.currentTimeMillis())
+        pendingSeekMs = if (isGuide) 0L else history?.positionFor(episode.id) ?: 0L
         listenStats?.flush()   // 结算上一集残余
         lastCountedEpId = episode.id     // 统计基线对齐续播起点，避免把 resume 跳转记成收听
         lastCountedPosMs = pendingSeekMs
@@ -467,6 +472,8 @@ object PlayerController {
     private fun saveProgress() {
         val c = controller ?: return
         val ep = _current.value ?: return
+        // 引导音频不写历史：playEpisode 已跳过 record，这里若还写就会又建出一条
+        if (com.yuyin.reverb.data.model.GuideEpisode.isGuide(ep.id)) return
         history?.updatePosition(ep.id, c.currentPosition.coerceAtLeast(0), if (c.duration > 0) c.duration else 0)
     }
 
@@ -476,6 +483,7 @@ object PlayerController {
      */
     private fun countListening() {
         val ep = _current.value ?: run { lastCountedEpId = ""; return }
+        if (com.yuyin.reverb.data.model.GuideEpisode.isGuide(ep.id)) return   // 引导音频不计时长
         val pos = _position.value
         if (ep.id == lastCountedEpId) {
             val delta = pos - lastCountedPosMs

@@ -1,5 +1,6 @@
 import media from '@ohos.multimedia.media';
 import { L } from '../util/L';
+import { GuideEpisode } from '../store/GuideEpisode';
 import fs from '@ohos.file.fs';
 import audio from '@ohos.multimedia.audio';
 import { Episode } from '../model/Models';
@@ -126,8 +127,11 @@ export class PlayerController {
     this.durationMs = 0;
     if (this.onListenFlush !== null) this.onListenFlush();   // 结算上一集残余
 
-    if (this.history !== null) this.history.record(e, Date.now());
-    const resumeMs = this.history === null ? 0 : this.history.positionFor(e.id);
+    // 内置引导音频不是一集真正的播客:不进历史、不计收听时长,
+    // 否则"收听时长"榜首会是引导音频,「继续收听」里也会挂着它。
+    const isGuide = GuideEpisode.isGuide(e.id);
+    if (!isGuide && this.history !== null) this.history.record(e, Date.now());
+    const resumeMs = (isGuide || this.history === null) ? 0 : this.history.positionFor(e.id);
     this.pendingSeekMs = resumeMs;
     // 统计基线对齐续播起点,避免把 resume 跳转记成收听
     this.lastCountedEpId = e.id;
@@ -257,7 +261,7 @@ export class PlayerController {
       this.isPlaying = false;
       this.stopTicker();
       const cur = this.current;
-      if (cur !== null && this.history !== null) {
+      if (cur !== null && this.history !== null && !GuideEpisode.isGuide(cur.id)) {
         this.history.updatePosition(cur.id, 0, this.durationMs);
         this.history.markPlayed(cur.id, true);
       }
@@ -598,6 +602,8 @@ export class PlayerController {
   private saveProgress(): void {
     const e = this.current;
     if (e === null || this.history === null) return;
+    // 引导音频不写历史:playEpisode 已跳过 record,这里若还写就会又建出一条
+    if (GuideEpisode.isGuide(e.id)) return;
     this.history.updatePosition(e.id, Math.max(0, this.positionMs), Math.max(0, this.durationMs));
   }
 
@@ -609,6 +615,7 @@ export class PlayerController {
       this.lastCountedEpId = '';
       return;
     }
+    if (GuideEpisode.isGuide(e.id)) return;   // 引导音频不计时长
     if (e.id === this.lastCountedEpId) {
       const delta = this.positionMs - this.lastCountedPosMs;
       if (this.isPlaying && delta >= 1 && delta <= 3000 && this.onListened !== null) {

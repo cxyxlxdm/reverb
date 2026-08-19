@@ -193,6 +193,18 @@
       "value": "Offline copy · updated %s"
     },
     {
+      "name": "guide_title",
+      "value": "Getting started with Reverb"
+    },
+    {
+      "name": "guide_desc",
+      "value": "A 30-second bundled intro. Plays without a network connection."
+    },
+    {
+      "name": "guide_card_sub",
+      "value": "30 sec · bundled, plays offline"
+    },
+    {
       "name": "episode_count",
       "value": "%d episodes"
     },

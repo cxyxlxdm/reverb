@@ -299,6 +299,7 @@ struct Index {
             fontScale: this.fontScale(),
             settings: this.settings,
             history: this.history,
+            subscriptions: this.subscriptions,
             radio: this.radio,
             onOpenPodcast: (p: Podcast) => this.openPodcast(p),
             onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)

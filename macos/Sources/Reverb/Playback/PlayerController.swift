@@ -181,8 +181,11 @@ final class PlayerController: ObservableObject {
         positionMs = 0
         durationMs = 0
         listenStats?.flush()   // 结算上一集残余
-        history?.record(episode, at: Date().timeIntervalSince1970)
-        let resumeMs = history?.positionFor(episode.id) ?? 0
+        // 内置引导音频不是一集真正的播客:不进历史、不计收听时长,
+        // 否则"收听时长"榜首会是引导音频,「继续收听」里也会挂着它。
+        let isGuide = GuideEpisode.isGuide(episode.id)
+        if !isGuide { history?.record(episode, at: Date().timeIntervalSince1970) }
+        let resumeMs = isGuide ? 0 : (history?.positionFor(episode.id) ?? 0)
         // 统计基线对齐到续播起点,避免把 resume 跳转记成收听
         lastCountedEpId = episode.id
         lastCountedPosMs = resumeMs
@@ -483,7 +486,7 @@ final class PlayerController: ObservableObject {
                 let stopAfter = self.sleepEndOfEpisode
                 self.sleepEndOfEpisode = false
                 Log.i("Player", "播放结束 id=\(self.current?.id ?? "-") radio=\(self.radioMode) userQueue=\(self.userQueue.count) 本集结束停止=\(stopAfter)")
-                if let ep = self.current {
+                if let ep = self.current, !GuideEpisode.isGuide(ep.id) {
                     self.history?.updatePosition(ep.id, positionMs: 0, durationMs: self.durationMs)
                     self.history?.markPlayed(ep.id, true)   // 自然播完:标记已播完
                 }
@@ -502,6 +505,8 @@ final class PlayerController: ObservableObject {
 
     private func saveProgress() {
         guard let ep = current else { return }
+        // 引导音频不写历史:playEpisode 已跳过 record,这里若还写就会又建出一条
+        if GuideEpisode.isGuide(ep.id) { return }
         history?.updatePosition(ep.id, positionMs: max(0, positionMs), durationMs: max(0, durationMs))
     }
 
@@ -509,6 +514,7 @@ final class PlayerController: ObservableObject {
     /// 快进/快退的大跳变(越界)与暂停(增量≈0)自然被剔除;倍速下按内容时长计。
     private func countListening() {
         guard let ep = current else { lastCountedEpId = ""; return }
+        if GuideEpisode.isGuide(ep.id) { return }   // 引导音频不计时长
         if ep.id == lastCountedEpId {
             let delta = positionMs - lastCountedPosMs
             if isPlaying && delta >= 1 && delta <= 3000 {

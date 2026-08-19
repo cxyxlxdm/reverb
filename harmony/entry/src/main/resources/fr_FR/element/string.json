@@ -193,6 +193,18 @@
       "value": "Copie hors ligne · mise à jour %s"
     },
     {
+      "name": "guide_title",
+      "value": "Premiers pas avec Reverb"
+    },
+    {
+      "name": "guide_desc",
+      "value": "Introduction de 30 secondes intégrée. Lecture sans connexion."
+    },
+    {
+      "name": "guide_card_sub",
+      "value": "30 s · intégré, hors ligne"
+    },
+    {
       "name": "episode_count",
       "value": "%d épisodes"
     },

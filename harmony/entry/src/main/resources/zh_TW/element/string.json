@@ -193,6 +193,18 @@
       "value": "離線內容 · 上次更新 %s"
     },
     {
+      "name": "guide_title",
+      "value": "餘音使用引導"
+    },
+    {
+      "name": "guide_desc",
+      "value": "隨應用內建的 30 秒引導音訊，無需連網即可播放。"
+    },
+    {
+      "name": "guide_card_sub",
+      "value": "30 秒 · 內建音訊，不連網也能播"
+    },
+    {
       "name": "episode_count",
       "value": "共 %d 集"
     },

@@ -67,6 +67,9 @@
     <string name="empty_discover">Search for a podcast and Reverb will find it</string>
     <string name="load_failed">Couldn\'t fetch anything — try another term or later</string>
     <string name="offline_cached_at">Offline copy · updated %s</string>
+    <string name="guide_title">Getting started with Reverb</string>
+    <string name="guide_desc">A 30-second bundled intro. Plays without a network connection.</string>
+    <string name="guide_card_sub">30 sec · bundled, plays offline</string>
     <string name="reorder_title">Reorder categories</string>
     <string name="reorder_hint">Long-press and drag to reorder</string>
     <string name="region_short_auto">Auto</string>

@@ -32,6 +32,9 @@
 "每日热门" = "Tendencias del día";
 "内置精选" = "Selección incluida";
 "离线内容 · 上次更新 %@" = "Copia sin conexión · actualizada %@";
+"余音使用引导" = "Primeros pasos con Reverb";
+"30 秒 · 内置音频，不联网也能播" = "30 s · incluido, sin conexión";
+"随应用内置的 30 秒引导音频，无需联网即可播放。" = "Introducción de 30 segundos incluida. Se reproduce sin conexión.";
 "暂无内容" = "Sin contenido";
 "搜索节目、单集或粘贴 RSS 链接" = "Busca programas, episodios o pega un enlace RSS";
 "搜索中…" = "Buscando…";

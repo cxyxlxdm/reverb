@@ -99,6 +99,38 @@ struct DiscoverView: View {
             .prefix(15))
     }
 
+    /// 全新用户(既没订阅也没听过任何东西)才展示引导入口。
+    /// 一旦有任何使用痕迹就不再出现 —— 它是引导,不是常驻功能。
+    private var firstRun: Bool {
+        env.subscriptions.subscriptions.isEmpty && env.history.history.isEmpty
+    }
+
+    /// 首次使用时的引导卡:点一下播放随包内置的 30 秒音频。
+    /// 意义是让「全新安装 + 没网」也能走通完整播放链路,而不是对着空白猜是 App 坏了还是网不通。
+    @ViewBuilder
+    private var guideCard: some View {
+        if let ep = GuideEpisode.make() {
+            Button {
+                player.playQueue([ep], startIndex: 0)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "play.circle")
+                        .font(.title2)
+                        .foregroundStyle(accent)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("余音使用引导").font(.body)
+                        Text("30 秒 · 内置音频，不联网也能播")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                .background(accent.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
     private var continueStrip: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("继续收听").font(.title3).fontWeight(.semibold)
@@ -119,7 +151,11 @@ struct DiscoverView: View {
     private var popularContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
-                if !continueItems.isEmpty { continueStrip }
+                if !continueItems.isEmpty {
+                    continueStrip
+                } else if firstRun {
+                    guideCard
+                }
 
                 HStack(spacing: 12) {
                     // 内置清单是打包时的榜单快照,不是今天的榜,标成「每日热门」会误导

@@ -193,6 +193,18 @@
       "value": "Copia sin conexión · actualizada %s"
     },
     {
+      "name": "guide_title",
+      "value": "Primeros pasos con Reverb"
+    },
+    {
+      "name": "guide_desc",
+      "value": "Introducción de 30 segundos incluida. Se reproduce sin conexión."
+    },
+    {
+      "name": "guide_card_sub",
+      "value": "30 s · incluido, sin conexión"
+    },
+    {
       "name": "episode_count",
       "value": "%d episodios"
     },

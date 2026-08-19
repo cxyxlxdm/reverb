@@ -30,6 +30,13 @@ else
   echo "   ⚠ 缺 Resources/seed_podcasts.json,发现页将无内置兜底(跑 shared/seed/sync.sh 补上)"
 fi
 
+# 内置引导音频:首次使用时可直接播放,用来验证整条播放链路(规范副本在 shared/guide/)
+if [ -f "Resources/guide_intro.m4a" ]; then
+  cp "Resources/guide_intro.m4a" "$BUNDLE/Contents/Resources/guide_intro.m4a"
+else
+  echo "   ⚠ 缺 Resources/guide_intro.m4a,首启不显示引导入口(跑 shared/guide/sync.sh 补上)"
+fi
+
 echo "==> ad-hoc codesign"
 codesign --force --deep --sign - "$BUNDLE"
 
