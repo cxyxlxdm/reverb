@@ -813,3 +813,87 @@
      (是一次性缓存,无害,但必须说明);
   3. Android 侧同类验证有更干净的路子:debug 包的 applicationId 带 `.debug` 后缀,
      天然是独立包名 + 空数据,直接就是"全新安装"。
+
+### H43. 厂商复核未通过四连:一个 @Builder 值参数 + 一处渲染路径解析,牵出卡死/高 CPU/"点击无响应"
+
+- **反馈原文(鸿蒙)**:① AppFreeze `THREAD_BLOCK_6S`;② 播放常提示"加载失败"偶尔可播、
+  收藏按钮点击无响应、长按单集不能加入队列;③ 单线程负载持续 1 分钟超过 70%。
+- **「收藏按钮点击无响应」= H29 的漏网之鱼**。`PlayerPage.iconAction` 是 `@Builder`,
+  而 `symbol`/`color` 是**值参数** —— ArkUI 的 @Builder 值参数只求值一次,状态变化不重新求值。
+  点收藏后 store 确实变了、页面也重渲了,但心形图标冻结在初始值,颜色永不变化。
+  **"点击无响应"其实是"视觉无反馈"**,功能一直是好的。队列图标高亮同理失效。
+  改法:把 symbol/color 换成闭包 `() => Resource`,一路传到 `Glyph()` 那一层。
+- **顺带一个命中区错误**:图标 21 宽、`Row({space:14})`,而 `responseRegion` 给了 43 宽,
+  相邻两个的命中区互相压 8vp,重叠处被**后一个兄弟节点**吃掉点击。改成 35(= 21 + 14),
+  即向两侧各外扩 7、刚好填满半个间距、互不重叠。
+- **卡死与高 CPU 同源:解析跑在渲染路径里**。`PlayerPage.noteText()` 直接调 `htmlToText()`,
+  而本页观察 `player`,播放中 500ms 一次 tick 就重渲一遍 —— 于是整段 shownotes
+  (有的几十 KB、十道正则)每秒被解析两次。macOS 早先已做过「解析移出渲染路径」,鸿蒙漏了。
+  改法:按 episode id 记忆化,只在换集时解析。**缓存字段不能是 `@State`** ——
+  在 build 里赋值会再触发一次重渲。
+- **高 CPU 的第二个来源:`@Prop` 没有 `@Watch`**。`InkWave.animating` 变化只让 build 重跑,
+  而启停定时器是**副作用**,build 不会去调 `applyAnimating()`。原先只在 aboutToAppear /
+  onReady / onVisibleAreaChange 里同步,于是**起播过一次,30fps 定时器就永久在跑**:
+  暂停不停,离开播放页(组件在导航栈里不销毁)也不停。补 `@Watch` 即可。
+- **卡死的第二个来源:主线程同步 IO**。`JsonFile.writeText` 用 `fs.writeSync`,而
+  历史每 5s 整份写回、feed 缓存每次解析整份写回、热榜每次刷新整份写回。新增
+  `writeJsonDebounced`(400ms 去抖 + fs Promise 异步写),并在 `onBackground`/`onDestroy`
+  调 `flushPending()` —— 否则进程被回收会丢最后一次写入(表现是续播位置退回几秒)。
+  小而关键的数据(订阅/收藏/印记/下载)**仍走同步**:宁可稳。
+- **「长按不能加入队列」是真缺功能**:鸿蒙 `EpisodeListItem` 压根没有长按手势。
+  补 `bindContextMenu(..., ResponseType.LongPress)`,并对齐 Android 在全部单集列表接好回调。
+- **教训 / 规律**:
+  1. **"点击无响应"要先分清是"没执行"还是"没反馈"**。这次代码执行得好好的,只是图标没变色;
+     若一开始就去查点击链路会完全找错方向。判断方法:看那次操作有没有**持久化副作用**
+     (收藏是否真的写进了 favorites.json);
+  2. **同一个坑会在同一个项目里复发**。H29 记的是"@Builder 值参数会冻结",但只修了当时那处;
+     这次的正确收尾是**扫一遍全部带参 @Builder**,而不是只修被投诉的那一个;
+  3. **外部反馈的三条常常是同一个根因的三种表现**。主线程被占满 → 帧率掉 →
+     watchdog 报 THREAD_BLOCK、CPU 报高位、输入被丢弃报"无响应"。先找共因,别急着分头修。
+
+### H44. 厂商「获取 SSID」不是自己的代码:AndroidX 库调 getActiveNetworkInfo() 也算
+
+- **反馈原文(Android)**:应用获取用户信息 SSID,未在隐私政策说明;且在用户同意隐私政策前获取。
+- **先定位到底是谁在调**。自有代码 grep `WifiManager|getSSID|getConnectionInfo` 一处没有,
+  也没声明 `ACCESS_WIFI_STATE`。于是直接扫产物 dex(`aapt2` 同目录的 `dexdump -d`),
+  只找到一个相关 API:
+  ```
+  Landroid/net/ConnectivityManager;.getActiveNetworkInfo
+  ```
+  再按前一行的 `Class descriptor` 反查调用方,得三个,**全是 AndroidX**:
+  `media3.common.util.NetworkTypeObserver`、`media3.exoplayer.scheduler.Requirements`、
+  `androidx.work.impl.constraints.trackers.NetworkStateTrackerKt`(混淆名 `L1.j`,
+  用 release 的 mapping.txt 反查得到)。
+  它返回的 `NetworkInfo` 带 `extraInfo`,WiFi 下内容即 SSID —— 厂商扫描按 API 家族判定,
+  不看你有没有真去读那个字段。
+- **"同意前获取"的具体路径**:`MainActivity.onCreate` 里 `PlayerController.init` 会连
+  `PlaybackService` → 创建 ExoPlayer → media3 初始化 `NetworkTypeObserver`;
+  `Application.onCreate` 又排了带网络约束的 WorkManager 周期任务。两处都早于同意。
+- **改法**:持久化一个 `privacyAccepted`,未同意时界面树**只有同意页**,
+  被门控的组件一个都不启动;同意后才 init 播放器与排任务。连 `cancelFeedUpdates` 也要门控
+  —— `WorkManager.getInstance()` 本身就会初始化 WorkManager,其 `ForceStopRunnable`
+  重排既有任务时会挂约束监听、进而读网络状态。
+- **披露而非删除**:这三处都在第三方库里,删不掉(除非自己 fork)。因此在隐私政策里
+  如实写明:该字段由系统接口顺带返回、本应用不读取/不保存/不传输、仅用于判断网络类型。
+- **教训 / 规律**:
+  1. **合规扫描扫的是 API 调用,不是你的意图**。判断"有没有采集"要以**产物里有没有这个调用**
+     为准,`grep` 自己的源码会得出错误的"我们没有"结论;
+  2. **dex + mapping 是最直接的证据链**:`dexdump -d` 找调用点 → 前一条 `Class descriptor`
+     找调用方 → 混淆名用 mapping.txt 还原。比猜依赖快得多;
+  3. 第三方库带来的合规项,**能门控就门控、不能删除就披露**,两者都要做:厂商这次同时提了
+     "未说明"和"同意前获取",只做一样过不了。
+
+### H45. Android 字符串资源里的裸撇号会让资源编译失败,而报错信息完全不指向它
+
+- **现象**:新增一段英文隐私政策文案后,`values-en/es/fr` 三个文件资源编译失败:
+  `java.lang.IllegalStateException: Can not extract resource from ...ParsedResource@xxx`。
+  XML 本身用 `ElementTree` 校验是**合法**的,zh 那份也照常通过。
+- **真因**:文案里有 `app's` 和 `publishers'` —— Android 资源里裸 `'` 非法,必须写 `\'`。
+  gradle 报的那句话与撇号毫无关系;**直接调 `aapt2 compile` 才给出真话**:
+  `error: unescaped apostrophe in string`。
+- **教训 / 规律**:
+  1. 资源编译失败时,**别在 gradle 的输出里找答案**,把那一个文件单独喂给 `aapt2 compile`,
+     它会指出行号与具体原因;
+  2. 这是 H30 的反方向:H30 是"Android 转义被原样搬进 JSON",这次是"往 Android 搬文案时忘了转义"。
+     跨端搬文案,**两个方向都要过一遍转义规则**;
+  3. 只有 en/es/fr 失败而 zh 通过,本身就是提示 —— 差异一定在**文案内容**里,不在结构里。
