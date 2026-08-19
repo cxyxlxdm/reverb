@@ -66,6 +66,7 @@
     <string name="discover_empty_category">Nothing in “%s” yet — try another category</string>
     <string name="empty_discover">Search for a podcast and Reverb will find it</string>
     <string name="load_failed">Couldn\'t fetch anything — try another term or later</string>
+    <string name="offline_cached_at">Offline copy · updated %s</string>
     <string name="reorder_title">Reorder categories</string>
     <string name="reorder_hint">Long-press and drag to reorder</string>
     <string name="region_short_auto">Auto</string>

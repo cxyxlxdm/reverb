@@ -87,6 +87,20 @@ function parseOffset(raw: string): number {
 }
 
 /// 展示用短日期(与 Android/macOS 的「yyyy年M月d日」一致);解析失败原样截断。
+/**
+ * 缓存时刻的短格式:`MM-DD HH:mm`(本机时区)。
+ *
+ * 刻意用纯数字格式而不带"年月日":这串会拼进 5 种语言的「离线内容 · 上次更新 %s」,
+ * 数字格式在各语言下都读得通,不必为此再加 5 条本地化。
+ * 同理不用 `toISOString()` —— 它固定输出 UTC,显示会比用户手机上的时间差若干小时。
+ */
+export function formatCachedAt(ms: number): string {
+  if (ms <= 0) return '';
+  const d = new Date(ms);
+  const p = (n: number): string => n < 10 ? `0${n}` : `${n}`;
+  return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export function formatPubDate(raw: string): string {
   const ms = parsePubMillis(raw);
   if (ms === 0) return raw.trim().substring(0, 16);

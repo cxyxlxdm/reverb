@@ -66,6 +66,7 @@
     <string name="discover_empty_category">Nada en «%s» — prueba otra categoría</string>
     <string name="empty_discover">Busca un pódcast y Reverb lo encontrará</string>
     <string name="load_failed">Sin resultados — prueba otra palabra o más tarde</string>
+    <string name="offline_cached_at">Copia sin conexión · actualizada %s</string>
     <string name="reorder_title">Reordenar categorías</string>
     <string name="reorder_hint">Mantén pulsado y arrastra para reordenar</string>
     <string name="region_short_auto">Auto</string>

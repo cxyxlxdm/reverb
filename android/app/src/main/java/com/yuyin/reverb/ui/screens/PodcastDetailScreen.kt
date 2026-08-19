@@ -91,6 +91,10 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                     Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 24.dp)
                 ) {
+                    // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
+                    if (s.staleAt != 0L) {
+                        item { OfflineNotice(s.staleAt) }
+                    }
                     item {
                         val channelKey = s.podcast.feedUrl.ifBlank { s.podcast.title }
                         val listenedMs = listenStats.firstOrNull { it.key == channelKey }?.listenedMs ?: 0L

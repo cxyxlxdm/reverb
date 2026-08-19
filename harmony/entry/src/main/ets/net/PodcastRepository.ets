@@ -3,6 +3,7 @@ import { ITunesSource, AppleChartsSource, FyydSource, GpodderSource } from './So
 import { RssParser } from './RssParser';
 import { PopularCacheStore } from '../store/Stores';
 import { SeedCatalog } from '../store/SeedCatalog';
+import { FeedCacheStore } from '../store/FeedCacheStore';
 import { Log } from '../util/Logger';
 
 /// 取源门面。四层降级搜索、热门榜三层降级(失败保留旧缓存)、随机单集。
@@ -11,10 +12,13 @@ export class PodcastRepository {
   private cache: PopularCacheStore;
   /// 随包内置的精选清单:缓存为空(首装/清缓存/无网)时给发现页兜底,避免首屏空白
   private seed: SeedCatalog;
+  /// 频道详情(解析后的 RSS)缓存:详情页秒开,且断网时仍能看已访问过的频道
+  private feedCache: FeedCacheStore;
 
-  constructor(cache: PopularCacheStore, seed: SeedCatalog) {
+  constructor(cache: PopularCacheStore, seed: SeedCatalog, feedCache: FeedCacheStore) {
     this.cache = cache;
     this.seed = seed;
+    this.feedCache = feedCache;
   }
 
   /// 搜索频道:URL 直连 → Apple → fyyd → gpodder。
@@ -96,10 +100,26 @@ export class PodcastRepository {
     return list;
   }
 
-  /// 解析某个 feed(频道详情 / 最新聚合都走这里)。
+  /// 解析某个 feed(频道详情 / 最新聚合都走这里)。成功回写磁盘缓存;
+  /// 失败返回 null(旧缓存保留,由调用方决定是否用)。
   async feed(feedUrl: string): Promise<FeedResult | null> {
     if (feedUrl.trim().length === 0) return null;
-    return RssParser.fetch(feedUrl);
+    const r = await RssParser.fetch(feedUrl);
+    if (r !== null && r.episodes.length > 0) this.feedCache.put(feedUrl, r);
+    return r;
+  }
+
+  /// 立即返回上次解析结果(可能过时,可能为 null),供进入详情页时秒开、断网时兜底。
+  cachedFeed(feedUrl: string): FeedResult | null {
+    const e = this.feedCache.get(feedUrl);
+    if (e === null) return null;
+    return { podcast: e.podcast, episodes: e.episodes };
+  }
+
+  /// 该 feed 缓存的落盘时刻(毫秒);无缓存返回 0。用于「上次更新于 X」提示。
+  feedCachedAt(feedUrl: string): number {
+    const e = this.feedCache.get(feedUrl);
+    return e === null ? 0 : e.fetchedAt;
   }
 
   /// 随机取一集(随机/情境电台用)。先用缓存榜单组池,零联网;池不够再补拉一次。

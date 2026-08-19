@@ -447,7 +447,7 @@ export struct SettingsPage {
 
   /// 重算三处占用。进页面时算一次,清理后再算一次(与 Android 的 refreshTick 同思路)。
   private recomputeSizes(): void {
-    this.cacheBytes = this.app.popularCache.sizeBytes();
+    this.cacheBytes = this.app.popularCache.sizeBytes() + this.app.feedCache.sizeBytes();
     this.dlBytes = this.app.downloadManager.usageBytes();
     this.logBytes = Log.sizeBytes();
   }
@@ -468,8 +468,9 @@ export struct SettingsPage {
   /// 除了占地方没有任何信息量。
   doClearCache(): void {
     this.app.popularCache.clear();
+    this.app.feedCache.clear();
     this.recomputeSizes();
-    Log.i('Settings', '已清除热门榜缓存');
+    Log.i('Settings', '已清除热门榜与频道缓存');
   }
 
   doClearDownloads(): void {

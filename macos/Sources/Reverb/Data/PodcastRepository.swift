@@ -12,6 +12,8 @@ final class PodcastRepository {
     private let cache = PopularCacheStore()
     // 随包内置的精选清单:缓存为空(首启/清缓存/无网)时给发现页兜底,避免首屏空白
     private let seed = SeedCatalog()
+    // 频道详情(解析后的 RSS)缓存:详情页秒开,且断网时仍能看已访问过的频道
+    let feedCache = FeedCacheStore()
 
     init() {
         charts = AppleChartsSource(itunes: itunes)
@@ -106,10 +108,24 @@ final class PodcastRepository {
 
     // MARK: - 订阅源
 
-    /// 解析订阅源。
+    /// 解析订阅源。成功则回写磁盘缓存;失败返回 nil(旧缓存保留,由调用方决定是否用)。
+    /// 与 cachedFeed 配合成「先缓存秒开、再后台刷新、刷新失败退回缓存」。
     func feed(_ feedUrl: String) async -> FeedResult? {
-        await rss.fetch(feedUrl)
+        let result = await rss.fetch(feedUrl)
+        if let result, !result.episodes.isEmpty {
+            feedCache.put(feedUrl, result)
+        }
+        return result
     }
+
+    /// 立即返回上次解析结果(可能过时,可能为 nil),供进入详情页时秒开、断网时兜底。
+    func cachedFeed(_ feedUrl: String) -> FeedResult? {
+        guard let e = feedCache.get(feedUrl) else { return nil }
+        return FeedResult(podcast: e.podcast, episodes: e.episodes)
+    }
+
+    /// 该 feed 缓存的落盘时刻;无缓存返回 nil。用于「上次更新于 X」提示。
+    func feedCachedAt(_ feedUrl: String) -> Date? { feedCache.get(feedUrl)?.fetchedAt }
 
     // MARK: - 随机一集
 

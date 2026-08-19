@@ -7,6 +7,7 @@ import { ListenStatsStore } from '../store/ListenStatsStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { TopBar, EmptyHint, LoadingBox, Artwork } from './Widgets';
 import { EpisodeListItem, formatListenDuration } from './Components';
+import { formatCachedAt } from '../util/DateParse';
 import { Log } from '../util/Logger';
 
 /// 频道详情:头部(封面/标题/作者/集数/订阅/可展开简介/付费/赞助)+ 单集列表。
@@ -23,6 +24,9 @@ export struct PodcastDetailPage {
   @State episodes: Episode[] = [];
   @State loading: boolean = false;
   @State failed: boolean = false;
+  /// 非 0 表示当前内容来自磁盘缓存、联网刷新还没成功(值为缓存落盘时刻),
+  /// 据此显示「离线内容 · 上次更新 X」。刷新成功置 0。
+  @State staleAt: number = 0;
   @State descExpanded: boolean = false;
   /**
    * 订阅态与下载态**直接从被观察的 store 读**,不再镜像成本地 @State。
@@ -69,16 +73,29 @@ export struct PodcastDetailPage {
       this.failed = true;
       return;
     }
-    this.loading = true;
+    // 先出缓存:秒开,且断网时也有内容可看
+    const cached = this.app.repository.cachedFeed(this.seed.feedUrl);
+    if (cached !== null && cached.episodes.length > 0) {
+      this.applyFeed(cached);
+      this.staleAt = this.app.repository.feedCachedAt(this.seed.feedUrl);
+    }
+    this.loading = this.episodes.length === 0;
     this.failed = false;
     const feed: FeedResult | null = await this.app.repository.feed(this.seed.feedUrl);
     this.loading = false;
     if (feed === null) {
-      this.failed = true;
-      Log.w('Detail', `解析失败 ${this.seed.feedUrl}`);
+      // 有缓存就继续展示缓存(仅标为陈旧),只有连缓存都没有才算失败
+      this.failed = this.episodes.length === 0;
+      Log.w('Detail', `解析失败 ${this.seed.feedUrl}${this.episodes.length > 0 ? ',沿用缓存' : ''}`);
       return;
     }
-    // 用 RSS 结果补全,但保留列表页已有的封面/标题(RSS 有时缺图)
+    this.staleAt = 0;
+    this.applyFeed(feed);
+    Log.i('Detail', `"${this.display().title}" 共 ${feed.episodes.length} 集`);
+  }
+
+  /// 把解析结果落到页面状态。用 RSS 结果补全,但保留列表页已有的封面/标题(RSS 有时缺图)。
+  private applyFeed(feed: FeedResult): void {
     const p = feed.podcast;
     if (p.artworkUrl.length === 0) p.artworkUrl = this.seed.artworkUrl;
     if (p.title.length === 0) p.title = this.seed.title;
@@ -86,7 +103,6 @@ export struct PodcastDetailPage {
     p.isPaid = this.seed.isPaid;
     this.loaded = p;
     this.episodes = feed.episodes;
-    Log.i('Detail', `"${p.title}" 共 ${feed.episodes.length} 集`);
   }
 
   build() {
@@ -103,6 +119,15 @@ export struct PodcastDetailPage {
         List() {
           ListItem() {
             this.header()
+          }
+          // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
+          if (this.staleAt > 0) {
+            ListItem() {
+              Text(L.f('offline_cached_at', formatCachedAt(this.staleAt)))
+                .fontSize(TypeScale.caption * this.fontScale)
+                .fontColor(this.scheme.onSurfaceVariant)
+                .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 2, bottom: 6 })
+            }
           }
           if (this.failed && this.episodes.length === 0) {
             ListItem() {

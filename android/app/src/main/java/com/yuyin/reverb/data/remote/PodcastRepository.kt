@@ -20,7 +20,8 @@ import kotlinx.coroutines.withContext
 class PodcastRepository(
     client: okhttp3.OkHttpClient,
     private val cache: com.yuyin.reverb.data.local.PopularCacheStore,
-    private val seed: com.yuyin.reverb.data.local.SeedCatalog
+    private val seed: com.yuyin.reverb.data.local.SeedCatalog,
+    private val feedCache: com.yuyin.reverb.data.local.FeedCacheStore
 ) {
     private val itunes = ITunesSource(client)
     private val fyyd = FyydSource(client)
@@ -110,11 +111,24 @@ class PodcastRepository(
         return list
     }
 
+    /**
+     * 解析某个 feed。成功则回写磁盘缓存；失败返回 null（旧缓存保留，由调用方决定是否用）。
+     * 与 [cachedFeed] 配合成「先缓存秒开、再后台刷新、刷新失败退回缓存」。
+     */
     suspend fun feed(feedUrl: String): FeedResult? =
         rss.fetch(feedUrl).also {
             if (it == null) log.w(TAG, "feed empty/failed url=$feedUrl")
-            else log.i(TAG, "feed ok episodes=${it.episodes.size} title='${it.podcast.title}' url=$feedUrl")
+            else {
+                log.i(TAG, "feed ok episodes=${it.episodes.size} title='${it.podcast.title}' url=$feedUrl")
+                feedCache.put(feedUrl, it)
+            }
         }
+
+    /** 立即返回上次解析结果（可能过时，可能为 null），供进入详情页时秒开、断网时兜底。 */
+    fun cachedFeed(feedUrl: String): FeedResult? = feedCache.get(feedUrl)?.result
+
+    /** 该 feed 缓存的落盘时刻（毫秒）；无缓存返回 0。用于「上次更新于 X」提示。 */
+    fun feedCachedAt(feedUrl: String): Long = feedCache.get(feedUrl)?.fetchedAt ?: 0L
 
     /**
      * 随机电台：从热门榜单节目池里随机挑一档 → 解析其 RSS → 随机取一集可播放单集。

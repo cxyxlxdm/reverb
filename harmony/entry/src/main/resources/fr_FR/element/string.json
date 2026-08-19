@@ -189,6 +189,10 @@
       "value": "Échec du chargement, vérifiez le réseau"
     },
     {
+      "name": "offline_cached_at",
+      "value": "Copie hors ligne · mise à jour %s"
+    },
+    {
       "name": "episode_count",
       "value": "%d épisodes"
     },

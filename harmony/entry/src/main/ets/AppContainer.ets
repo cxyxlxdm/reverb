@@ -5,6 +5,7 @@ import { SettingsStore } from './store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore, PopularCacheStore } from './store/Stores';
 import { InboxStore } from './store/InboxStore';
 import { SeedCatalog } from './store/SeedCatalog';
+import { FeedCacheStore } from './store/FeedCacheStore';
 import { ListenStatsStore } from './store/ListenStatsStore';
 import { DownloadStore } from './store/DownloadStore';
 import { StampStore } from './store/StampStore';
@@ -29,6 +30,7 @@ export class AppContainer {
   readonly inbox: InboxStore = new InboxStore();
   readonly popularCache: PopularCacheStore = new PopularCacheStore();
   readonly seedCatalog: SeedCatalog = new SeedCatalog();
+  readonly feedCache: FeedCacheStore = new FeedCacheStore();
   readonly listenStats: ListenStatsStore = new ListenStatsStore();
   readonly stamps: StampStore = new StampStore();
   readonly downloads: DownloadStore = new DownloadStore();
@@ -38,7 +40,7 @@ export class AppContainer {
   readonly radio: RadioStation = RadioStation.get();
 
   private constructor() {
-    this.repository = new PodcastRepository(this.popularCache, this.seedCatalog);
+    this.repository = new PodcastRepository(this.popularCache, this.seedCatalog, this.feedCache);
   }
 
   static get(): AppContainer {
@@ -67,6 +69,7 @@ export class AppContainer {
     this.popularCache.load();
     // 内置精选清单(rawfile,约 50KB):热门缓存为空时给发现页兜底
     this.seedCatalog.load(ctx);
+    this.feedCache.load();
     this.stamps.load();
     this.downloads.load();
     this.downloadManager.init(ctx.filesDir, this.downloads);

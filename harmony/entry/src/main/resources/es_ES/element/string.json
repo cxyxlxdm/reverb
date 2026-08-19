@@ -189,6 +189,10 @@
       "value": "Error al cargar, revisa la red"
     },
     {
+      "name": "offline_cached_at",
+      "value": "Copia sin conexión · actualizada %s"
+    },
+    {
       "name": "episode_count",
       "value": "%d episodios"
     },

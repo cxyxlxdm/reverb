@@ -189,6 +189,10 @@
       "value": "載入失敗,請檢查網路"
     },
     {
+      "name": "offline_cached_at",
+      "value": "離線內容 · 上次更新 %s"
+    },
+    {
       "name": "episode_count",
       "value": "共 %d 集"
     },

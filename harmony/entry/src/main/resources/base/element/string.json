@@ -189,6 +189,10 @@
       "value": "加载失败,请检查网络"
     },
     {
+      "name": "offline_cached_at",
+      "value": "离线内容 · 上次更新 %s"
+    },
+    {
       "name": "episode_count",
       "value": "共 %d 集"
     },

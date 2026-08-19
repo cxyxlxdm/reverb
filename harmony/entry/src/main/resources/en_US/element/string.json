@@ -189,6 +189,10 @@
       "value": "Failed to load, check your network"
     },
     {
+      "name": "offline_cached_at",
+      "value": "Offline copy · updated %s"
+    },
+    {
       "name": "episode_count",
       "value": "%d episodes"
     },

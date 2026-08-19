@@ -31,6 +31,7 @@
 "分类" = "Catégorie";
 "每日热门" = "Tendances du jour";
 "内置精选" = "Sélection intégrée";
+"离线内容 · 上次更新 %@" = "Copie hors ligne · mise à jour %@";
 "暂无内容" = "Aucun contenu";
 "搜索节目、单集或粘贴 RSS 链接" = "Rechercher des émissions, épisodes ou coller un lien RSS";
 "搜索中…" = "Recherche…";

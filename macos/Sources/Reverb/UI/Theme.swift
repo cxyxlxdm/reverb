@@ -314,6 +314,28 @@ extension View {
     }
 }
 
+/// 「离线内容」提示条。当前展示的是磁盘缓存、联网刷新还没成功时显示。
+///
+/// 刻意做得很轻(一行小字、无图标、无边框):这不是错误,内容是可用的,
+/// 只是可能不是最新的 —— 做成警告色反而会让人以为出了问题。
+struct OfflineNotice: View {
+    let cachedAt: Date
+
+    var body: some View {
+        Text(String(format: NSLocalizedString("离线内容 · 上次更新 %@", comment: ""),
+                    Self.formatter.string(from: cachedAt)))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+    }
+
+    private static let formatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .short
+        f.timeStyle = .short
+        return f
+    }()
+}
+
 /// macOS 13 兼容的空 / 加载态占位,居中。
 struct StateView: View {
     var loading: Bool = false

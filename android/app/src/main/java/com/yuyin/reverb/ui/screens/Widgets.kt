@@ -60,6 +60,28 @@ fun EmptyHint(text: String) {
     }
 }
 
+/**
+ * 「离线内容」提示条。当前展示的是磁盘缓存、联网刷新还没成功时显示。
+ *
+ * 刻意做得很轻（一行小字、无图标、无边框）：这不是错误，内容是可用的，
+ * 只是可能不是最新的 —— 做成警告色反而会让人以为出了问题。
+ */
+@Composable
+fun OfflineNotice(cachedAt: Long) {
+    if (cachedAt <= 0L) return
+    val when_ = java.text.DateFormat
+        .getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT)
+        .format(java.util.Date(cachedAt))
+    Text(
+        stringResource(R.string.offline_cached_at, when_),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 6.dp)
+    )
+}
+
 /** 二级页面返回顶栏。 */
 @Composable
 fun TopBar(title: String, onBack: () -> Unit) {

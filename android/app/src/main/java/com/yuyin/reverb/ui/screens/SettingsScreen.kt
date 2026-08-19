@@ -119,6 +119,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     LaunchedEffect(refreshTick) {
         cacheBytes = withContext(Dispatchers.IO) {
             container.popularCache.sizeBytes() +
+                container.feedCache.sizeBytes() +
                 runCatching { context.imageLoader.diskCache?.size ?: 0L }.getOrDefault(0L)
         }
         dlBytes = withContext(Dispatchers.IO) { DownloadManager.usageBytes() }
@@ -320,6 +321,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
         stringResource(R.string.set_clear_cache), stringResource(R.string.confirm_clear_cache), stringResource(R.string.action_clear),
         onConfirm = {
             container.popularCache.clear()
+            container.feedCache.clear()
             runCatching {
                 val loader = context.imageLoader
                 loader.memoryCache?.clear(); loader.diskCache?.clear()

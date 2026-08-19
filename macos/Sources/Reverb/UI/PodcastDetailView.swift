@@ -12,6 +12,8 @@ struct PodcastDetailView: View {
     @State private var episodes: [Episode] = []
     @State private var loaded: Podcast?
     @State private var loading = false
+    /// 非 nil 表示当前内容来自磁盘缓存、联网刷新还没成功,据此显示「离线内容」提示
+    @State private var staleAt: Date?
 
     private var display: Podcast { loaded ?? podcast }
     private var accent: Color { Theme.accent(settings.accentIndex) }
@@ -22,6 +24,9 @@ struct PodcastDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
                 header
+
+                // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
+                if let staleAt { OfflineNotice(cachedAt: staleAt) }
 
                 if loading && episodes.isEmpty {
                     StateView(loading: true, text: "").frame(minHeight: 280)
@@ -122,6 +127,12 @@ struct PodcastDetailView: View {
 
     private func load(force: Bool = false) async {
         if !force && !episodes.isEmpty { return }
+        // 先出缓存:秒开,且断网时也有内容可看
+        if !force, let cached = env.repository.cachedFeed(podcast.feedUrl), !cached.episodes.isEmpty {
+            loaded = cached.podcast
+            episodes = cached.episodes
+            staleAt = env.repository.feedCachedAt(podcast.feedUrl)
+        }
         loading = true
         // 首次请求偶发失败(冷连接/重定向),重试至多 3 次再放弃
         var result = await env.repository.feed(podcast.feedUrl)
@@ -133,7 +144,10 @@ struct PodcastDetailView: View {
         }
         if let r = result {
             loaded = r.podcast
-            if !r.episodes.isEmpty { episodes = r.episodes }
+            if !r.episodes.isEmpty {
+                episodes = r.episodes
+                staleAt = nil          // 拿到新数据,撤掉离线提示
+            }
         }
         loading = false
     }

@@ -157,7 +157,16 @@ class DiscoverViewModel(
 sealed interface PodcastState {
     data object Loading : PodcastState
     data object Error : PodcastState
-    data class Loaded(val podcast: Podcast, val episodes: List<Episode>) : PodcastState
+
+    /**
+     * @param staleAt 非 0 表示这是**缓存内容**（联网刷新还没成功），值为缓存落盘时刻；
+     *                刷新成功后置 0。UI 据此显示「离线 · 上次更新于 X」。
+     */
+    data class Loaded(
+        val podcast: Podcast,
+        val episodes: List<Episode>,
+        val staleAt: Long = 0L
+    ) : PodcastState
 }
 
 class PodcastViewModel(private val repo: PodcastRepository) : ViewModel() {
@@ -166,17 +175,37 @@ class PodcastViewModel(private val repo: PodcastRepository) : ViewModel() {
 
     private var loadedFeed: String? = null
 
+    /**
+     * 先出缓存（秒开、断网也有内容），再后台刷新替换。
+     * 刷新失败时**保留缓存内容并标记为陈旧**，只有连缓存都没有才是 Error。
+     */
     fun load(feedUrl: String) {
         if (loadedFeed == feedUrl && state is PodcastState.Loaded) return
         loadedFeed = feedUrl
+        val cached = repo.cachedFeed(feedUrl)
+        state = if (cached != null) {
+            PodcastState.Loaded(cached.podcast, cached.episodes, repo.feedCachedAt(feedUrl))
+        } else {
+            PodcastState.Loading
+        }
         viewModelScope.launch {
-            state = PodcastState.Loading
             val result = repo.feed(feedUrl)
-            state = if (result == null) {
-                PodcastState.Error
-            } else {
-                PodcastState.Loaded(result.podcast, result.episodes)
+            // 期间用户可能已经翻到别的频道，别把结果盖到当前页上
+            if (loadedFeed != feedUrl) return@launch
+            state = when {
+                result != null -> PodcastState.Loaded(result.podcast, result.episodes)
+                cached != null -> PodcastState.Loaded(cached.podcast, cached.episodes, repo.feedCachedAt(feedUrl))
+                else -> PodcastState.Error
             }
+        }
+    }
+
+    /** 下拉刷新：强制重新拉取；失败保持现状（不把已有内容换成错误页）。 */
+    fun refresh(feedUrl: String) {
+        viewModelScope.launch {
+            val result = repo.feed(feedUrl)
+            if (loadedFeed != feedUrl) return@launch
+            if (result != null) state = PodcastState.Loaded(result.podcast, result.episodes)
         }
     }
 }

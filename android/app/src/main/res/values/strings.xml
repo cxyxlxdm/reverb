@@ -68,6 +68,7 @@
     <string name="discover_empty_category">「%s」暂无内容，换个分类看看</string>
     <string name="empty_discover">搜索你想听的播客，余音为你循声而来</string>
     <string name="load_failed">没能取到声音，换个词或稍后再试</string>
+    <string name="offline_cached_at">离线内容 · 上次更新 %s</string>
     <string name="reorder_title">自定义分类排序</string>
     <string name="reorder_hint">长按拖动排序</string>
     <string name="region_short_auto">自动</string>
