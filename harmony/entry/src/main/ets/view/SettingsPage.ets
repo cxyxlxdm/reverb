@@ -185,6 +185,8 @@ export struct SettingsPage {
 
           this.sectionLabel(L.s('sec_about'))
           this.actionRow(L.s('set_about'), () => '', () => this.onOpenAbout())
+          // 隐私政策必须**在应用内随时可查**,不能只在首启弹一次(平台合规指引 7.5)
+          this.actionRow(L.s('set_privacy'), () => L.s('set_privacy_sub'), () => this.openPrivacy())
           this.actionRow(L.s('set_licenses'), () => '', () => this.onOpenLicenses())
           this.plainRow(L.s('set_version'), '1.0.0')
 
@@ -460,6 +462,21 @@ export struct SettingsPage {
   }
   private logStr(): string {
     return this.logBytes < 0 ? L.s('size_calculating') : humanBytes(this.logBytes);
+  }
+
+  /// 打开官网的完整隐私政策(隐式 Want 交给系统浏览器)。
+  private openPrivacy(): void {
+    try {
+      const ctx = this.getUIContext().getHostContext();
+      if (ctx === null || ctx === undefined) return;
+      (ctx as ESObject).startAbility({
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: L.s('privacy_url')
+      });
+    } catch (e) {
+      Log.w('Settings', `打开隐私政策失败 ${(e as Error).message}`);
+    }
   }
 
   /// 破坏性操作的实际执行体。由 ConfirmSpec 在用户确认后调用 —— 故必须是公开方法。

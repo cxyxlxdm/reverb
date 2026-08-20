@@ -82,6 +82,30 @@ export class AppContainer {
 
     Log.i('App', `本地数据就绪 订阅=${this.subscriptions.subscriptions.length} 收藏=${this.favorites.favorites.length} 历史=${this.history.history.length} 最新=${this.inbox.episodes.length}`);
 
+    // 以上全是**本地读写**,不联网、不读系统网络信息,可以在同意隐私政策之前做。
+    // 联网相关的装配一律推到 startGated(同意后由 Index 调用)。
+    if (this.settings.privacyAccepted) this.startGated(ctx);
+  }
+
+  private gatedStarted = false;
+
+  /**
+   * 装配「同意隐私政策之后才允许存在」的部分。
+   *
+   * 平台合规指引 7.5:同意之前不得申请个人信息或权限。这里涉及的是:
+   *  - 系统媒体会话(AVSession):会向系统注册播控身份;
+   *  - 电台配置 / 播放层:一旦起播即产生网络请求;
+   *  - 订阅更新的 workScheduler 周期任务:带 networkType 条件,由系统读取网络状态。
+   * Android 端就是因为在同意前连了 PlaybackService(→ 创建 ExoPlayer → 读系统网络信息)
+   * 被判定「同意前获取 SSID」而不通过,鸿蒙这边提前对齐,别再吃一轮。
+   *
+   * 幂等:同意后由 Index 调用一次,已同意的老用户则在 boot 里直接调用。
+   */
+  startGated(ctx: common.UIAbilityContext): void {
+    if (this.gatedStarted) return;
+    this.gatedStarted = true;
+    Log.i('App', '已同意隐私政策,装配联网相关组件');
+
     // 播放层装配:注入历史/设置,并把状态变化同步给系统媒体会话
     this.player.bind(this.history, this.settings);
     // 已下载优先本地播放(闭包注入,解耦下载模块)。

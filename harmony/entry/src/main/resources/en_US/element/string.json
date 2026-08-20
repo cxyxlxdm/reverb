@@ -955,6 +955,38 @@
     {
       "name": "a11y_unfavorite",
       "value": "Remove from favorites"
+    },
+    {
+      "name": "privacy_consent_title",
+      "value": "Privacy policy"
+    },
+    {
+      "name": "privacy_consent_body",
+      "value": "Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\nWe collect no personal information. There is no server, no account, no third-party SDKs, no analytics and no ads.\n\nYour data stays on this device. Subscriptions, history, favorites, downloads, listening time, stamps and settings are stored in the app's private directory and removed on uninstall.\n\nWhat the network is used for. To search and play podcasts, your device directly contacts public directories (Apple Podcasts, fyyd.de, gpodder.net) and the publishers' own RSS, audio and artwork URLs. No credentials and no user identifiers are attached.\n\nPermissions. Internet, network state (to detect Wi-Fi for \"download on Wi-Fi only\"), background audio playback, and notifications (only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
+    },
+    {
+      "name": "privacy_read_full",
+      "value": "Read the full privacy policy"
+    },
+    {
+      "name": "privacy_accept",
+      "value": "Agree and continue"
+    },
+    {
+      "name": "privacy_decline",
+      "value": "Decline and exit"
+    },
+    {
+      "name": "privacy_url",
+      "value": "https://cxyxl.eu.org/privacy/reverb.html"
+    },
+    {
+      "name": "set_privacy",
+      "value": "Privacy policy"
+    },
+    {
+      "name": "set_privacy_sub",
+      "value": "How your data is handled"
     }
   ]
 }

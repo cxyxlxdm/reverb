@@ -15,6 +15,7 @@ import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
 import { LibraryPage } from '../view/LibraryPage';
 import { SettingsPage } from '../view/SettingsPage';
+import { PrivacyConsentPage } from '../view/PrivacyConsentPage';
 import { ListenStatsPage } from '../view/ListenStatsPage';
 import { QueuePage } from '../view/QueuePage';
 import { FootprintPage } from '../view/FootprintPage';
@@ -146,15 +147,44 @@ struct Index {
   }
 
   build() {
-    Navigation(this.stack) {
-      this.shell()
+    // 未同意隐私政策时**整棵界面树只有同意页** —— 发现页一进来就会拉榜单,
+    // 只要它没被渲染,同意前就一个网络请求都不会发生(平台合规指引 7.5)。
+    if (!this.settings.privacyAccepted) {
+      PrivacyConsentPage({
+        scheme: this.scheme(),
+        fontScale: this.fontScale(),
+        onAccept: () => this.acceptPrivacy(),
+        onDecline: () => this.exitApp()
+      })
+    } else {
+      Navigation(this.stack) {
+        this.shell()
+      }
+      .navDestination(this.destination)
+      .mode(NavigationMode.Stack)
+      .hideTitleBar(true)
+      .width('100%')
+      .height('100%')
+      .backgroundColor(this.scheme().background)
     }
-    .navDestination(this.destination)
-    .mode(NavigationMode.Stack)
-    .hideTitleBar(true)
-    .width('100%')
-    .height('100%')
-    .backgroundColor(this.scheme().background)
+  }
+
+  /// 同意:落盘后立刻装配此前被门控的组件,再让界面切到主树。
+  private acceptPrivacy(): void {
+    this.settings.acceptPrivacy();
+    const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+    AppContainer.get().startGated(ctx);
+    // settings 是 @State 持有的 @Observed 对象,acceptPrivacy 改了字段即触发重渲
+  }
+
+  /// 不同意:退出应用。本应用没有可脱离网络使用的核心功能,不提供残缺状态。
+  private exitApp(): void {
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      ctx.terminateSelf();
+    } catch (e) {
+      Log.w('App', `退出失败 ${(e as Error).message}`);
+    }
   }
 
   @Builder

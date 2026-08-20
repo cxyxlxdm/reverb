@@ -27,6 +27,14 @@ export class SettingsStore {
   updatesEnabled: boolean = false;
   /// 是否允许蜂窝网络下载(false = 仅 Wi-Fi)。与 Android allowCellular 同名同义。
   allowCellular: boolean = true;
+  /**
+   * 是否已同意隐私政策。**同意之前不得装配任何会联网或读系统网络信息的东西** ——
+   * 平台合规指引 7.5 要求首次启动即显著提示阅读隐私政策,且同意前不申请个人信息/权限。
+   * Android 端已因此被不通过一次(见 MainActivity.startGatedComponents)。
+   * 鸿蒙这边的门控点:整棵界面树(发现页一进来就会拉榜单)、订阅更新的 workScheduler 周期任务、
+   * 系统媒体会话。详见 AppContainer.startGated 与 Index.build。
+   */
+  privacyAccepted: boolean = false;
 
   load(): void {
     this.themeMode = Prefs.getNumber('theme_mode', 0);
@@ -41,6 +49,7 @@ export class SettingsStore {
     this.contextualRadio = Prefs.getBool('contextual_radio', false);
     this.updatesEnabled = Prefs.getBool('updates_enabled', false);
     this.allowCellular = Prefs.getBool('allow_cellular', true);
+    this.privacyAccepted = Prefs.getBool('privacy_accepted', false);
     SettingsStore.applyLanguage(this.language);
     Log.i('Settings', `加载 theme=${this.themeMode} accent=${this.accentIndex} font=${this.fontIndex} region=${this.regionOverride === '' ? 'auto' : this.regionOverride}`);
   }
@@ -119,6 +128,11 @@ export class SettingsStore {
   setAllowCellular(v: boolean): void {
     this.allowCellular = v;
     Prefs.put('allow_cellular', v);
+  }
+  /// 同意隐私政策。紧接着就要装配此前被门控的组件,故先落盘再置内存态。
+  acceptPrivacy(): void {
+    Prefs.put('privacy_accepted', true);
+    this.privacyAccepted = true;
   }
   setSubsGrid(v: boolean): void {
     this.subsGrid = v;
