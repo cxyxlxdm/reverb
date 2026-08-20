@@ -192,6 +192,7 @@ private struct SettingsForm: View {
             FootprintView()
                 .environmentObject(env)
                 .environmentObject(settings)
+                .themedSheet(settings)
         }
         .sheet(isPresented: $showRestore) {
             RestoreSheet(
@@ -203,6 +204,7 @@ private struct SettingsForm: View {
                 },
                 onCancel: { showRestore = false })
             .tint(Theme.accent(settings.accentIndex))
+            .themedSheet(settings)
         }
     }
 

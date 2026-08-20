@@ -61,6 +61,7 @@ struct LibraryView: View {
             ListenStatsView()
                 .environmentObject(env.listenStats)
                 .environmentObject(settings)
+                .themedSheet(settings)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {

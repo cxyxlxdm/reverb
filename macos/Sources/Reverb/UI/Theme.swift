@@ -314,6 +314,18 @@ extension View {
     }
 }
 
+extension View {
+    /// 给 sheet 补上 App 主题的配色方案。
+    ///
+    /// **必须逐个 sheet 声明**:`.preferredColorScheme` 加在根视图上只作用于窗口本身,
+    /// sheet 是独立呈现、**不继承**它。漏了的表现是:App 主题设为深色而系统仍是浅色时,
+    /// sheet 的背景走主题(深),而其中未显式指定颜色的文字走系统语义色(黑)—— 看不见。
+    /// 收听时长页的频道名就是这么丢的。
+    func themedSheet(_ settings: SettingsStore) -> some View {
+        preferredColorScheme(Theme.colorScheme(settings.themeMode))
+    }
+}
+
 /// 「离线内容」提示条。当前展示的是磁盘缓存、联网刷新还没成功时显示。
 ///
 /// 刻意做得很轻(一行小字、无图标、无边框):这不是错误,内容是可用的,
