@@ -33,6 +33,13 @@ export struct AboutPage {
           Text(L.s('about_version'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
+          // 备案号。监管要求在应用内显著位置展示 APP备案号;号还没下来时
+          // beian_number 为空,整行不渲染 —— 不能先摆一个占位号糊弄。
+          if (L.s('beian_number').length > 0) {
+            Text(L.s('beian_number'))
+              .fontSize(TypeScale.caption * this.fontScale)
+              .fontColor(this.scheme.onSurfaceVariant)
+          }
 
           this.section(L.s('about_h_what'), L.s('about_p_what'))
           this.section(L.s('about_h_features'), L.s('about_p_features'))

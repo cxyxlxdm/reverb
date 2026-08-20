@@ -31,6 +31,13 @@ fun AboutScreen(onBack: () -> Unit) {
             Text(stringResource(R.string.slogan), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
             Spacer(Modifier.height(2.dp))
             Text(stringResource(R.string.about_version), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // 备案号。监管要求在应用内显著位置展示 APP备案号;号还没下来时
+            // beian_number 为空字符串,整行不渲染 —— 不能先摆一个占位号糊弄。
+            val beian = stringResource(R.string.beian_number)
+            if (beian.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text(beian, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
 
             SectionTitle(stringResource(R.string.about_h_what))
             Body(stringResource(R.string.about_p_what))

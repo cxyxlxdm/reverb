@@ -1,14 +1,14 @@
 余音 Reverb 官网 / 发布物料
 ================================
 
-【网站】上传到 cxyxl.eu.org/reverb/
+【网站】上传到 cxyxl.cn/reverb/  ← 域名已定为 cxyxl.cn(登记主体域名)
   index.html          官网首页(图标已内联,只依赖 shots/web/)
   privacy.html        隐私政策(分发平台填的 URL 指向它)
   shots/web/*.jpg     官网用截图(已压缩,17–91 KB)
 
   站点地址示例:
-    https://cxyxl.eu.org/reverb/
-    https://cxyxl.eu.org/reverb/privacy.html
+    https://cxyxl.cn/reverb/
+    https://cxyxl.cn/reverb/privacy.html
   注意:index.html 页脚的隐私链接写的是相对路径 privacy.html,
   若你把隐私页放在别处,记得同步改那一处。
 
@@ -24,3 +24,20 @@
   文案       harmony/store/发布文案.txt
   包名       com.yuyin.reverb
   版本       versionCode 1000000 / versionName 1.0.0
+
+【重要:目录结构不要改】
+    App 里的这两个 URL 是**写死在安装包里**的,挪一次就得重新打包提交:
+      https://cxyxl.cn/reverb/privacy.html        隐私政策(同意页外链 + 设置页入口)
+      https://cxyxl.cn/reverb/recommended.opml    推荐订阅清单(首屏「导入推荐订阅」)
+    因此:
+      - 用**子目录** /reverb/,不要用子域名 —— 子域名在阿里云可能要另加一条站点登记
+      - 以后加别的应用就放 /app2/,主体登记与服务器复用同一份
+
+【备案号】
+    登记通过后要在两处填:
+      1. 网站底部 —— index.html 与 privacy.html 末尾各有一段注释掉的备案号区块,
+         取消注释并填入即可(必须链到 beian.miit.gov.cn)
+      2. App 关于页 —— 文案键 beian_number:
+         Android  android/app/src/main/res/values*/strings.xml (5 个语言)
+         鸿蒙     harmony/entry/src/main/resources/*/element/string.json (5 个语言)
+         留空则关于页不显示该行;填了要**重新打包**
