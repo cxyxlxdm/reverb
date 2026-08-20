@@ -51,6 +51,14 @@ class PodcastRepository(
             }
         }
 
+        // 无内容目录的渠道到此为止:关键词检索返回的是节目列表,同样构成动态目录。
+        // 用 BuildConfig 这个**编译期常量**做门,R8 会把下面整段连同 iTunes/fyyd/gpodder
+        // 三个数据源一起消掉 —— 那个渠道的 APK 里因此连目录接口的地址字符串都不存在,
+        // 而不只是"界面上点不到"。
+        if (!com.yuyin.reverb.BuildConfig.CATALOG) {
+            return SearchOutcome(emptyList(), "", failed = true)
+        }
+
         // 1) 默认源 Apple（按地区）
         itunes.search(q, region).let {
             if (it.isNotEmpty()) { log.i(TAG, "search via Apple count=${it.size}"); return SearchOutcome(it, "Apple Podcasts") }
@@ -72,6 +80,8 @@ class PodcastRepository(
 
     /** 按关键字检索单集（可直接播放）。URL 输入直接指向频道，不参与单集检索。 */
     suspend fun searchEpisodes(query: String, region: String = ""): List<Episode> {
+        // 无内容目录的渠道不做单集检索(同 search 的理由);编译期常量门 → R8 剔掉 ITunesSource
+        if (!com.yuyin.reverb.BuildConfig.CATALOG) return emptyList()
         val q = query.trim()
         if (q.isBlank() || q.startsWith("http", true)) return emptyList()
         log.i(TAG, "searchEpisodes query='$q' region='$region'")
@@ -100,6 +110,8 @@ class PodcastRepository(
 
     /** 拉取最新榜单，成功则回写磁盘缓存并返回；失败返回空（保留旧缓存）。 */
     suspend fun refreshPopular(genreId: Int? = null, region: String = "us"): List<Podcast> {
+        // 同上:无内容目录的渠道压根不该发榜单请求。编译期常量门 → R8 连 AppleChartsSource 一起剔掉。
+        if (!com.yuyin.reverb.BuildConfig.CATALOG) return emptyList()
         log.i(TAG, "refreshPopular genre=${genreId ?: "all"} region='$region'")
         var list = if (genreId == null) charts.top(region, 30) else charts.topByGenre(region, genreId, 30)
         if (list.isEmpty() && genreId == null) {

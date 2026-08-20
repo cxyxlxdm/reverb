@@ -28,10 +28,15 @@ private val LIBS = listOf(
     Lib("AndroidX WorkManager", "Apache License 2.0")
 )
 
-private val SOURCES = listOf(
+// 数据来源按渠道列**实际用到的那些**。无内容目录的渠道压根不连目录接口
+// (R8 已把 iTunes/fyyd/gpodder 三个源整体剔除),照抄一份就是不实陈述。
+private val SOURCES = if (com.yuyin.reverb.BuildConfig.CATALOG) listOf(
     "Apple iTunes Search / Marketing RSS",
     "fyyd.de",
     "gpodder.net"
+) else listOf(
+    "播客发布方自己的 RSS 地址",
+    "本应用官网的推荐订阅清单(OPML)"
 )
 
 @Composable

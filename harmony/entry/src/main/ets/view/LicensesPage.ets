@@ -1,6 +1,7 @@
 import { Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 import { TopBar } from './Widgets';
+import { Features } from '../Features';
 
 /// 一项依赖及其许可。
 class Lib {
@@ -28,11 +29,11 @@ const LIBS: Lib[] = [
   new Lib('workScheduler / notificationManager', 'Apache License 2.0')
 ];
 
-const SOURCES: string[] = [
-  'Apple iTunes Search / Marketing RSS',
-  'fyyd.de',
-  'gpodder.net'
-];
+// 数据来源列**实际用到的那些**。无内容目录的渠道压根不连目录接口(见 Features.CATALOG),
+// 照抄一份就是不实陈述。
+const SOURCES: string[] = Features.CATALOG
+  ? ['Apple iTunes Search / Marketing RSS', 'fyyd.de', 'gpodder.net']
+  : ['播客发布方自己的 RSS 地址', '本应用官网的推荐订阅清单(OPML)'];
 
 @Component
 export struct LicensesPage {

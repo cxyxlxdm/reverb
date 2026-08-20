@@ -670,7 +670,7 @@
     },
     {
       "name": "about_sources",
-      "value": "Ordre des sources : Apple → fyyd.de → gpodder.net → RSS direct, tous gratuits et sans clé. La lecture utilise toujours l'URL d'origine de l'éditeur."
+      "value": "Sources : adresses RSS fournies par l'utilisateur et liste recommandée importée ; la lecture utilise toujours le lien d'origine de l'éditeur."
     },
     {
       "name": "action_about",
@@ -930,7 +930,7 @@
     },
     {
       "name": "about_p_philosophy",
-      "value": "L'esthétique s'inspire de l'encre, du céladon et de l'or des poutres — le nom et l'icône évoquent « un écho tournant autour des poutres ».\n\nLes sources restent entièrement gratuites, sans compte ni clé API : recherche via des annuaires publics (Apple, fyyd, gpodder), puis retour au RSS d'origine de l'éditeur pour diffuser l'audio original — respect du droit d'auteur, coût nul.\n\nCôté vie privée, abonnements, historique et téléchargements restent sur votre appareil — jamais envoyés, jamais suivis."
+      "value": "L'esthétique s'inspire de l'encre, du céladon et de l'or des poutres — le nom et l'icône évoquent « un écho tournant autour des poutres ».\n\nLes sources restent entièrement gratuites, sans compte ni clé API : recherche via des annuaires publics , puis retour au RSS d'origine de l'éditeur pour diffuser l'audio original — respect du droit d'auteur, coût nul.\n\nCôté vie privée, abonnements, historique et téléchargements restent sur votre appareil — jamais envoyés, jamais suivis."
     },
     {
       "name": "queue_play_next",
@@ -962,7 +962,7 @@
     },
     {
       "name": "privacy_consent_body",
-      "value": "Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\nWe collect no personal information. There is no server, no account, no third-party SDKs, no analytics and no ads.\n\nYour data stays on this device. Subscriptions, history, favorites, downloads, listening time, stamps and settings are stored in the app's private directory and removed on uninstall.\n\nWhat the network is used for. To search and play podcasts, your device directly contacts public directories (Apple Podcasts, fyyd.de, gpodder.net) and the publishers' own RSS, audio and artwork URLs. No credentials and no user identifiers are attached.\n\nPermissions. Internet, network state (to detect Wi-Fi for \"download on Wi-Fi only\"), background audio playback, and notifications (only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
+      "value": "Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\nWe collect no personal information. There is no server, no account, no third-party SDKs, no analytics and no ads.\n\nYour data stays on this device. Subscriptions, history, favorites, downloads, listening time, stamps and settings are stored in the app's private directory and removed on uninstall.\n\nWhat the network is used for. To search and play podcasts, your device directly contacts the publishers' own RSS, audio and artwork URLs; when you tap \"Import recommended feeds\", it downloads a subscription list from this app's website. If your build offers show search, it also contacts public search APIs (Apple Podcasts, fyyd.de, gpodder.net). No credentials and no user identifiers are attached; see the full policy for the complete list.\n\nPermissions. Internet, network state (to detect Wi-Fi for \"download on Wi-Fi only\"), background audio playback, and notifications (only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
     },
     {
       "name": "privacy_read_full",

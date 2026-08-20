@@ -4,6 +4,7 @@ import { RssParser } from './RssParser';
 import { PopularCacheStore } from '../store/Stores';
 import { SeedCatalog } from '../store/SeedCatalog';
 import { FeedCacheStore } from '../store/FeedCacheStore';
+import { Features } from '../Features';
 import { Log } from '../util/Logger';
 
 /// 取源门面。四层降级搜索、热门榜三层降级(失败保留旧缓存)、随机单集。
@@ -34,6 +35,9 @@ export class PodcastRepository {
         return { podcasts: [feed.podcast], sourceLabel: 'RSS', failed: false };
       }
     }
+
+    // 无内容目录的渠道到此为止:关键词检索返回的是节目列表,同样构成动态目录。
+    if (!Features.CATALOG) return { podcasts: [], sourceLabel: '', failed: true };
 
     const apple = await ITunesSource.search(q, region);
     if (apple.length > 0) return { podcasts: apple, sourceLabel: 'Apple Podcasts', failed: false };
@@ -84,6 +88,8 @@ export class PodcastRepository {
   /// 刷新热门榜:分类榜/综合榜 → (综合榜且非 us 时)回落 us → fyyd hot。
   /// 只有拿到非空结果才写缓存,失败保留旧缓存。
   async refreshPopular(genreId: number, region: string): Promise<Podcast[]> {
+    // 同上:无内容目录的渠道压根不该发榜单请求(界面已不展示,这里再兜一道)
+    if (!Features.CATALOG) return [];
     let list: Podcast[] = genreId > 0
       ? await AppleChartsSource.topByGenre(region, genreId, 30)
       : await AppleChartsSource.top(region, 30);
