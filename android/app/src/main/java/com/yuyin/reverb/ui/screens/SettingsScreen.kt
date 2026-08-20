@@ -4,6 +4,8 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
+import android.Manifest
+import android.os.Build
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -99,6 +101,14 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     // 录音权限申请:仅在用户主动开启「真实频谱」时触发;授权成功才落地开关
     val recordAudioLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         settings.setSpectrumEnabled(granted)
+    }
+
+    // 通知权限同理:**只在用户主动开启「订阅更新提醒」时**申请,授权成功才落地开关并排任务。
+    // 原先是在 ReverbRoot 里启动即无条件弹,既与隐私政策的表述不符,也属于
+    // "启动即申请非必要权限"。拒绝授权则开关保持关闭 —— 拿不到通知权限,这个功能没有意义。
+    val notifyLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        settings.setUpdatesEnabled(granted)
+        if (granted) ReverbApp.scheduleFeedUpdates(context) else ReverbApp.cancelFeedUpdates(context)
     }
 
     // 语言显示名：跟随系统本地化，其余为各自母语写法
@@ -227,8 +237,16 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
 
             SectionLabel(stringResource(R.string.sec_reminder))
             SettingSwitch(stringResource(R.string.set_updates), stringResource(R.string.set_updates_sub), checked = updatesEnabled) { on ->
-                settings.setUpdatesEnabled(on)
-                if (on) ReverbApp.scheduleFeedUpdates(context) else ReverbApp.cancelFeedUpdates(context)
+                if (on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                    PackageManager.PERMISSION_GRANTED
+                ) {
+                    // 尚未授权:先征求通知权限,结果回调里再落地开关
+                    notifyLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                } else {
+                    settings.setUpdatesEnabled(on)
+                    if (on) ReverbApp.scheduleFeedUpdates(context) else ReverbApp.cancelFeedUpdates(context)
+                }
             }
 
             SectionLabel(stringResource(R.string.sec_storage))

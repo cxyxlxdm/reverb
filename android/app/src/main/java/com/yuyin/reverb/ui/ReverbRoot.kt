@@ -60,12 +60,9 @@ private data class TopDest(val route: String, val label: String, val icon: Image
 fun ReverbRoot(openPlayerSignal: Int = 0) {
     val rootNav = rememberNavController()
 
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        val launcher = rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission()
-        ) { }
-        LaunchedEffect(Unit) { launcher.launch(Manifest.permission.POST_NOTIFICATIONS) }
-    }
+    // 这里**不再**申请通知权限。原先是一进来就无条件弹,与隐私政策写明的
+    // 「仅在你主动开启『订阅更新提醒』时征求你的同意」不符,也属于"启动即申请非必要权限"。
+    // 改到设置页那个开关里申请(与「真实频谱」同一范式:授权成功才落地开关)。
 
     // 通知栏点击进来（openPlayerSignal 自增）时打开播放页
     LaunchedEffect(openPlayerSignal) {

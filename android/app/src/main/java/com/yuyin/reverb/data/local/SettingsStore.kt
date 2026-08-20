@@ -15,7 +15,9 @@ class SettingsStore(context: Context) {
     val fontScale = MutableStateFlow(prefs.getFloat("font_scale", 1.0f))
     val accentIndex = MutableStateFlow(prefs.getInt("accent_index", 0))
     val allowCellularDownload = MutableStateFlow(prefs.getBoolean("cellular_dl", false))
-    val updatesEnabled = MutableStateFlow(prefs.getBoolean("updates_enabled", true))
+    // 默认**关**:隐私政策写明「仅在你主动开启『订阅更新提醒』时征求你的同意」,
+    // 默认开就等于没经用户主动开启便去要通知权限,两者不能同时成立。
+    val updatesEnabled = MutableStateFlow(prefs.getBoolean("updates_enabled", false))
     val defaultSpeed = MutableStateFlow(prefs.getFloat("default_speed", 1.0f))
     val skipBackSec = MutableStateFlow(prefs.getInt("skip_back", 10))
     val skipForwardSec = MutableStateFlow(prefs.getInt("skip_fwd", 30))
