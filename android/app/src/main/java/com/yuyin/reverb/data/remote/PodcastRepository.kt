@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
  * 分集与播放：统一走发布方 RSS 的 enclosure 原始直链。
  */
 class PodcastRepository(
-    client: okhttp3.OkHttpClient,
+    private val client: okhttp3.OkHttpClient,
     private val cache: com.yuyin.reverb.data.local.PopularCacheStore,
     private val seed: com.yuyin.reverb.data.local.SeedCatalog,
     private val feedCache: com.yuyin.reverb.data.local.FeedCacheStore
@@ -129,6 +129,29 @@ class PodcastRepository(
 
     /** 该 feed 缓存的落盘时刻（毫秒）；无缓存返回 0。用于「上次更新于 X」提示。 */
     fun feedCachedAt(feedUrl: String): Long = feedCache.get(feedUrl)?.fetchedAt ?: 0L
+
+    /**
+     * 取一段纯文本（当前只用于「导入推荐订阅」拉官网那份 OPML）。
+     * 失败返回 null，由调用方给出可见提示——这是用户主动触发的动作，静默失败不可接受。
+     */
+    suspend fun httpText(url: String): String? = withContext(Dispatchers.IO) {
+        try {
+            val req = okhttp3.Request.Builder()
+                .url(url)
+                .header("User-Agent", "Reverb/1.0 (Android podcast client)")
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    log.w(TAG, "httpText ${resp.code} url=$url")
+                    return@withContext null
+                }
+                resp.body?.string()
+            }
+        } catch (e: Exception) {
+            log.e(TAG, "httpText failed url=$url", e)
+            null
+        }
+    }
 
     /**
      * 随机电台：从热门榜单节目池里随机挑一档 → 解析其 RSS → 随机取一集可播放单集。

@@ -92,6 +92,11 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 import com.yuyin.reverb.R
+import android.content.Context
+import androidx.compose.material3.Button
+import com.yuyin.reverb.AppContainer
+import com.yuyin.reverb.data.remote.OpmlSupport
+import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.HistoryEntry
 import com.yuyin.reverb.data.model.GuideEpisode
@@ -155,7 +160,8 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             title = stringResource(R.string.app_name),
             subtitle = stringResource(R.string.slogan),
             action = {
-                // 单个电台入口:模式在设置里切换(随机/情境)。短按开台/换下一首;长按显示名称,运行中长按则停止。
+                // 电台是**内容推荐**功能:商店渠道不含(CATALOG=false),理由见 build.gradle。
+                if (BuildConfig.CATALOG) {
                 val mode = if (contextualRadio) RadioStation.Mode.CONTEXTUAL else RadioStation.Mode.RANDOM
                 val label = stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
                 val stopped = stringResource(R.string.radio_stopped)
@@ -183,6 +189,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                         }
                     }
                 )
+                }
             }
         )
 
@@ -192,7 +199,9 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
-            placeholder = { Text(stringResource(R.string.search_hint)) },
+            placeholder = {
+                Text(stringResource(if (BuildConfig.CATALOG) R.string.search_hint else R.string.search_hint_url))
+            },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = {
                 if (vm.query.isNotEmpty()) {
@@ -209,7 +218,14 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = {
                 keyboard?.hide()
-                vm.search(region)
+                // 无内容目录的渠道**不做关键词检索** —— 关键词返回的是节目列表,同样构成动态目录。
+                // 只接受 http(s) 的 RSS 地址;输入别的就提示一句,不发请求。
+                val q = vm.query.trim()
+                if (!BuildConfig.CATALOG && !q.startsWith("http://", true) && !q.startsWith("https://", true)) {
+                    if (q.isNotEmpty()) Toast.makeText(context, R.string.search_url_only, Toast.LENGTH_SHORT).show()
+                } else {
+                    vm.search(region)
+                }
             }),
             colors = OutlinedTextFieldDefaults.colors(
                 focusedBorderColor = MaterialTheme.colorScheme.primary,
@@ -218,7 +234,14 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             )
         )
 
-        if (browsing) {
+        if (browsing && !BuildConfig.CATALOG) {
+            // 无内容目录的渠道:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
+            // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
+            SubscribeStarter(
+                continueEntries = inProgress,
+                showGuide = firstRun
+            )
+        } else if (browsing) {
             val selectedIndex = pagerState.currentPage.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
             // 分类 chips 紧贴搜索框(靠顶),不被继续收听横条挤到屏幕中部
             // 横滑切到屏幕外的分类时，自动把选中标签滚动进可视区
@@ -506,6 +529,113 @@ private fun ReorderCategoriesDialog(
         confirmButton = { TextButton(onClick = { onSave(items.toList()) }) { Text(stringResource(R.string.action_done)) } },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) } }
     )
+}
+
+/**
+ * 无内容目录渠道（应用市场）的首屏主体。
+ *
+ * 为什么长这样：合规口径把「内置内容目录 / 分类浏览 / 内容推荐」判定为提供视听节目服务，
+ * 需《相应内容分发许可资质》——个人主体拿不到；而「用户自行添加 RSS 源」的纯工具不需要。
+ * 所以本渠道**不在应用内渲染任何可浏览的节目目录**，包括导入过程本身：
+ * 推荐清单是一份挂在官网的 OPML，点一下**整份导入**，不做"列出来让你挑"的中间页
+ * —— 那等于把目录又搬回了应用里。
+ *
+ * 导入后这些频道就是用户自己的订阅，在「音阁 · 订阅」里管理与取消，与手动粘贴地址订阅的没有区别。
+ */
+@Composable
+private fun SubscribeStarter(
+    continueEntries: List<HistoryEntry>,
+    showGuide: Boolean
+) {
+    val context = LocalContext.current
+    val container = (context.applicationContext as ReverbApp).container
+    val scope = rememberCoroutineScope()
+    var importing by remember { mutableStateOf(false) }
+    val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
+
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 24.dp)
+    ) {
+        item {
+            Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
+                Text(
+                    stringResource(R.string.starter_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    stringResource(R.string.starter_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(14.dp))
+                Button(
+                    onClick = {
+                        if (importing) return@Button
+                        importing = true
+                        scope.launch {
+                            val n = importRecommended(context, container)
+                            importing = false
+                            val msg = when {
+                                n > 0 -> context.getString(R.string.import_done, n)
+                                n == 0 -> context.getString(R.string.import_none)
+                                else -> context.getString(R.string.import_failed)
+                            }
+                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                        }
+                    },
+                    enabled = !importing,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (importing) {
+                        CircularProgressIndicator(
+                            Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(stringResource(R.string.importing))
+                    } else {
+                        Text(stringResource(R.string.import_recommended))
+                    }
+                }
+                if (subs.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        stringResource(R.string.starter_have_subs, subs.size),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        if (showGuide) item { GuideCard() }
+        if (continueEntries.isNotEmpty()) item { ContinueListeningStrip(continueEntries) }
+    }
+}
+
+/**
+ * 拉官网那份推荐 OPML 并整份订阅。返回订阅成功的条数；网络/解析失败返回 -1。
+ *
+ * 逐个解析 RSS 是为了拿到完整的频道信息（封面 / 作者 / 简介）——OPML 里只有标题与地址，
+ * 少了封面订阅列表会是一排占位图。15 条量级顺序请求，配合按钮上的转圈可以接受。
+ * 与设置页的 importOpml 是同一套流程，只是来源从本地文件换成官网 URL。
+ */
+private suspend fun importRecommended(context: Context, container: AppContainer): Int {
+    val url = context.getString(R.string.recommended_opml_url)
+    val text = container.repository.httpText(url) ?: return -1
+    val urls = OpmlSupport.extractFeedUrls(text)
+    if (urls.isEmpty()) return -1
+    val podcasts = ArrayList<Podcast>()
+    for (u in urls) {
+        val fr = runCatching { container.repository.feed(u) }.getOrNull()
+        if (fr != null) podcasts.add(fr.podcast)
+    }
+    if (podcasts.isNotEmpty()) container.subscriptionStore.addAll(podcasts)
+    com.yuyin.reverb.util.Logger.i("Starter", "导入推荐订阅 ${podcasts.size}/${urls.size}")
+    return podcasts.size
 }
 
 /**

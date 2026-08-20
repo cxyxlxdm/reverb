@@ -76,6 +76,17 @@
     <string name="privacy_accept">同意並繼續</string>
     <string name="privacy_decline">不同意並退出</string>
     <string name="privacy_url">https://cxyxl.eu.org/privacy/reverb.html</string>
+    <string name="starter_title">從新增訂閱開始</string>
+    <string name="starter_desc">餘音是一個播客 RSS 工具：在上方貼上播客的 RSS 位址即可訂閱，或一鍵匯入一份推薦清單。你的訂閱只儲存在本機。</string>
+    <string name="import_recommended">匯入推薦訂閱</string>
+    <string name="importing">正在匯入…</string>
+    <string name="import_done">已新增 %1$d 個訂閱</string>
+    <string name="import_none">沒有可匯入的訂閱</string>
+    <string name="import_failed">匯入失敗，請檢查網路後重試</string>
+    <string name="starter_have_subs">目前已有 %1$d 個訂閱，可在「音閣 · 訂閱」管理</string>
+    <string name="search_hint_url">貼上播客 RSS 位址</string>
+    <string name="search_url_only">請輸入播客的 RSS 位址（以 http 開頭）</string>
+    <string name="recommended_opml_url">https://cxyxl.eu.org/reverb/recommended.opml</string>
     <string name="set_privacy">隱私政策</string>
     <string name="set_privacy_sub">我們如何處理你的資料</string>
     <string name="reorder_title">自訂分類排序</string>

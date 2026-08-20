@@ -282,9 +282,63 @@ def _probe(url):
     return "limited"
 
 
+# 推荐订阅 OPML 的产出位置与规模。
+# 为什么是 OPML 而不是打进安装包:应用市场的合规口径把「内置内容目录 / 分类浏览 / 内容推荐」
+# 判定为提供视听节目服务(需前置审批),而「用户自行添加 RSS 源」的纯工具不需要。
+# 因此清单**移出安装包、挂到官网**,App 内只保留一个「导入推荐订阅」的动作,
+# 不在应用内渲染任何可浏览的节目目录。
+OPML_OUT = os.path.join(HERE, "..", "..", "reverb", "recommended.opml")
+OPML_COUNT = 15          # 一次性导入的订阅数。太多会让用户的订阅页一上来就爆
+OPML_PER_GENRE = 2       # 每个分类最多取几条,保证口味有跨度
+
+
+def build_opml(path_out, catalog):
+    """从种子清单挑一批跨分类的节目,生成 OPML 2.0。"""
+    picked, seen = [], set()
+    # 先按分类各取 OPML_PER_GENRE 条,再用综合榜补足到 OPML_COUNT
+    order = [f"cn:{g}" for g, _ in LISTS if g != 0] + ["cn:0"]
+    for key in order:
+        entries = catalog.get(key, [])
+        quota = OPML_PER_GENRE if key != "cn:0" else OPML_COUNT
+        taken = 0
+        for e in entries:
+            if len(picked) >= OPML_COUNT or taken >= quota:
+                break
+            if e["feedUrl"] in seen or not e["title"]:
+                continue
+            seen.add(e["feedUrl"])
+            picked.append(e)
+            taken += 1
+        if len(picked) >= OPML_COUNT:
+            break
+
+    def esc(s):
+        return (s.replace("&", "&amp;").replace("<", "&lt;")
+                 .replace(">", "&gt;").replace('"', "&quot;"))
+
+    lines = ['<?xml version="1.0" encoding="UTF-8"?>', '<opml version="2.0">', "  <head>",
+             "    <title>余音 Reverb 推荐订阅</title>",
+             f"    <dateCreated>{time.strftime('%Y-%m-%d')}</dateCreated>", "  </head>", "  <body>"]
+    for e in picked:
+        t = esc(e["title"])
+        lines.append(f'    <outline type="rss" text="{t}" title="{t}" xmlUrl="{esc(e["feedUrl"])}"/>')
+    lines += ["  </body>", "</opml>", ""]
+
+    path_out = os.path.abspath(path_out)
+    os.makedirs(os.path.dirname(path_out), exist_ok=True)
+    with open(path_out, "w", encoding="utf-8") as f:
+        f.write("\n".join(lines))
+    print(f"\n✓ {path_out}")
+    print(f"  {len(picked)} 条订阅:{'、'.join(e['title'] for e in picked)}")
+    print("  这份文件要上传到官网,URL 与 App 内的 recommended_opml_url 必须一致")
+    return len(picked)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="只校验现有清单的 feedUrl,不重新抓取")
+    ap.add_argument("--opml", action="store_true",
+                    help="只从现有清单生成官网用的 recommended.opml,不重新抓取")
     ap.add_argument("--prune", action="store_true",
                     help="校验后剔除**确认失效**(404/410)的条目;受限/无法判定的一律保留")
     args = ap.parse_args()
@@ -292,6 +346,11 @@ def main():
     if args.check or args.prune:
         code = check(OUT, prune=args.prune)
         sys.exit(0 if args.prune else code)
+
+    if args.opml:
+        with open(OUT, encoding="utf-8") as f:
+            build_opml(OPML_OUT, json.load(f)["lists"])
+        sys.exit(0)
 
     print("▸ 抓取 Apple 榜单快照")
     previous = {}

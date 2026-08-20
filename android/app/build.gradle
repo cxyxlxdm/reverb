@@ -46,6 +46,8 @@ android {
             // 真实频谱(Visualizer 读播放输出做 FFT,需 RECORD_AUDIO)。
             // 权限声明放在 src/default/AndroidManifest.xml,商店渠道那份 manifest 里没有。
             buildConfigField "boolean", "SPECTRUM", "true"
+            // 内容目录(分类热门榜 / 电台推荐 / 内置精选清单)。默认渠道保留完整功能。
+            buildConfigField "boolean", "CATALOG", "true"
         }
         // 应用市场:com.yuyin.reverb.android
         // 只改 applicationId;namespace 仍是 com.yuyin.reverb(R 类与 manifest 包名无需变),
@@ -60,6 +62,17 @@ android {
             // 也不显示设置项(下面这个开关为 false,设置页与播放页都按它门控)。
             // 播放页统一走程序化水墨动效 —— 与鸿蒙端一致。
             buildConfigField "boolean", "SPECTRUM", "false"
+            // 国内应用商店渠道:**不含任何内容目录**。
+            // 当前只用于应用市场;各家应用市场 等大概率是同一套合规口径,
+            // 到时候新增 flavor 复用 CATALOG=false 即可,不必再改业务代码。
+            // (届时建议把本 flavor 改成中性名,并决定各国内商店是否共用同一 applicationId ——
+            //  现在的 .android 后缀只是为了避开鸿蒙包在厂商市场占用的 com.yuyin.reverb。)
+            // 合规口径把「内置内容目录 / 分类浏览 / 内容推荐」判定为提供视听节目服务
+            // (需《相应内容分发许可资质》,个人主体拿不到);而「用户自行添加 RSS 源」
+            // 的纯工具不需要。故该渠道去掉分类热门榜、随机/情境电台、内置精选清单,
+            // 搜索只接受 RSS 地址,首屏改为「导入推荐订阅」(联网拉官网的一份 OPML)。
+            // 种子清单也不在这个渠道的 assets 里(见 src/default/assets/)。
+            buildConfigField "boolean", "CATALOG", "false"
         }
     }
 

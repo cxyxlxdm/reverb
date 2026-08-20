@@ -78,6 +78,17 @@
     <string name="privacy_accept">同意并继续</string>
     <string name="privacy_decline">不同意并退出</string>
     <string name="privacy_url">https://cxyxl.eu.org/privacy/reverb.html</string>
+    <string name="starter_title">从添加订阅开始</string>
+    <string name="starter_desc">余音是一个播客 RSS 工具：在上方粘贴播客的 RSS 地址即可订阅，或一键导入一份推荐清单。你的订阅只保存在本机。</string>
+    <string name="import_recommended">导入推荐订阅</string>
+    <string name="importing">正在导入…</string>
+    <string name="import_done">已添加 %1$d 个订阅</string>
+    <string name="import_none">没有可导入的订阅</string>
+    <string name="import_failed">导入失败，请检查网络后重试</string>
+    <string name="starter_have_subs">当前已有 %1$d 个订阅，可在「音阁 · 订阅」管理</string>
+    <string name="search_hint_url">粘贴播客 RSS 地址</string>
+    <string name="search_url_only">请输入播客的 RSS 地址（以 http 开头）</string>
+    <string name="recommended_opml_url">https://cxyxl.eu.org/reverb/recommended.opml</string>
     <string name="set_privacy">隐私政策</string>
     <string name="set_privacy_sub">我们如何处理你的数据</string>
     <string name="reorder_title">自定义分类排序</string>

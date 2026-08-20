@@ -76,6 +76,17 @@
     <string name="privacy_accept">Agree and continue</string>
     <string name="privacy_decline">Decline and exit</string>
     <string name="privacy_url">https://cxyxl.eu.org/privacy/reverb.html</string>
+    <string name="starter_title">Start by adding a subscription</string>
+    <string name="starter_desc">Reverb is a podcast RSS tool: paste a feed address above to subscribe, or import a recommended list in one tap. Your subscriptions stay on this device.</string>
+    <string name="import_recommended">Import recommended feeds</string>
+    <string name="importing">Importing…</string>
+    <string name="import_done">Added %1$d subscriptions</string>
+    <string name="import_none">Nothing to import</string>
+    <string name="import_failed">Import failed — check your connection</string>
+    <string name="starter_have_subs">%1$d subscriptions — manage them in Library</string>
+    <string name="search_hint_url">Paste a podcast RSS address</string>
+    <string name="search_url_only">Enter a podcast RSS address (starting with http)</string>
+    <string name="recommended_opml_url">https://cxyxl.eu.org/reverb/recommended.opml</string>
     <string name="set_privacy">Privacy policy</string>
     <string name="set_privacy_sub">How your data is handled</string>
     <string name="reorder_title">Reorder categories</string>
