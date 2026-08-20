@@ -987,6 +987,50 @@
     {
       "name": "set_privacy_sub",
       "value": "Cómo se tratan tus datos"
+    },
+    {
+      "name": "starter_title",
+      "value": "Empieza añadiendo una suscripción"
+    },
+    {
+      "name": "starter_desc",
+      "value": "Reverb es una herramienta de RSS para pódcast: pega una dirección de feed arriba, o importa una lista recomendada con un toque. Tus suscripciones se quedan en este dispositivo."
+    },
+    {
+      "name": "import_recommended",
+      "value": "Importar feeds recomendados"
+    },
+    {
+      "name": "importing",
+      "value": "Importando…"
+    },
+    {
+      "name": "import_done",
+      "value": "%s suscripciones añadidas"
+    },
+    {
+      "name": "import_none",
+      "value": "Nada que importar"
+    },
+    {
+      "name": "import_failed",
+      "value": "Error al importar — revisa la conexión"
+    },
+    {
+      "name": "starter_have_subs",
+      "value": "%s suscripciones — gestiónalas en la biblioteca"
+    },
+    {
+      "name": "search_hint_url",
+      "value": "Pega una dirección RSS de pódcast"
+    },
+    {
+      "name": "search_url_only",
+      "value": "Introduce una dirección RSS (empieza por http)"
+    },
+    {
+      "name": "recommended_opml_url",
+      "value": "https://cxyxl.eu.org/reverb/recommended.opml"
     }
   ]
 }

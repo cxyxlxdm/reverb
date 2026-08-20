@@ -1,6 +1,8 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { GuideEpisode } from '../store/GuideEpisode';
+import { Features } from '../Features';
+import { Recommended } from '../net/Recommended';
 import { Podcast, Episode, SearchOutcome, HistoryEntry } from '../model/Models';
 import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
@@ -39,6 +41,10 @@ export struct DiscoverPage {
   /// 标成「每日热门」会误导,故标题改为「内置精选」。
   @State seedFlags: boolean[] = [];
   @State refreshing: boolean = false;
+  /// 「导入推荐订阅」进行中(无内容目录渠道的首屏动作)
+  @State importing: boolean = false;
+  /// 导入结果提示。沿用本项目既有形态(设置页的 hint)——内联一行文字,不用 toast。
+  @State importHint: string = '';
 
   // 搜索
   @State query: string = '';
@@ -64,7 +70,9 @@ export struct DiscoverPage {
     this.lists = l;
     this.loadingFlags = f;
     this.seedFlags = sd;
-    this.loadCategory(0, false);
+    // 无内容目录的渠道**不拉榜单** —— 那是内容目录请求,而且界面上压根不展示它。
+    // 漏了这一句的后果不是报错,是"看不见的目录请求"仍然在发,抓包一看就露。
+    if (Features.CATALOG) this.loadCategory(0, false);
   }
 
   /// 先取缓存秒显,再后台刷新。force=true 为下拉刷新(跳过缓存直接刷)。
@@ -112,6 +120,13 @@ export struct DiscoverPage {
 
   private async runSearch(): Promise<void> {
     const q = this.query.trim();
+    // 无内容目录的渠道**不做关键词检索** —— 关键词返回的是节目列表,同样构成动态目录。
+    // 只接受 http(s) 的 RSS 地址;输入别的就提示一句,不发请求。
+    if (!Features.CATALOG && q.length > 0
+      && !q.startsWith('http://') && !q.startsWith('https://')) {
+      this.importHint = L.s('search_url_only');
+      return;
+    }
     if (q.length === 0) {
       this.searched = false;
       this.searchPodcasts = [];
@@ -139,13 +154,18 @@ export struct DiscoverPage {
         // (「发现」只作底部 tab 的标签)。
         title: L.s('app_title'),
         subtitle: L.s('app_slogan'),
-        action: () => { this.radioButton() }
+        // 电台是**内容推荐**功能,无内容目录的渠道不出现(见 Features.CATALOG)
+        action: () => { this.headerAction() }
       })
 
       this.searchBar()
 
       if (this.searched) {
         this.searchResults()
+      } else if (!Features.CATALOG) {
+        // 无内容目录:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
+        // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
+        this.subscribeStarter()
       } else {
         ChipsRow({
           scheme: this.scheme,
@@ -237,13 +257,102 @@ export struct DiscoverPage {
     }))
   }
 
+  /// 顶部右侧动作。有内容目录时是电台按钮;没有则留空(不能整块删掉 —— ScreenHeader 要求这个插槽)。
+  @Builder
+  headerAction() {
+    if (Features.CATALOG) {
+      this.radioButton()
+    }
+  }
+
+  /**
+   * 无内容目录渠道的首屏主体。
+   *
+   * 导入是**整份导入 + 结果提示**,不做"列出来让你挑"的中间页 —— 那等于把目录搬回应用里。
+   * 导入后这些频道就是用户自己的订阅,在「音阁 · 订阅」里管理,与手动粘贴地址订阅的没有区别。
+   */
+  @Builder
+  subscribeStarter() {
+    List() {
+      ListItem() {
+        Column({ space: 6 }) {
+          Text(L.s('starter_title'))
+            .fontSize(TypeScale.titleSmall * this.fontScale)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.scheme.onBackground)
+            .width('100%')
+          Text(L.s('starter_desc'))
+            .fontSize(TypeScale.caption * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .lineHeight(TypeScale.caption * this.fontScale * 1.6)
+            .width('100%')
+          Button(this.importing ? L.s('importing') : L.s('import_recommended'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.onPrimary)
+            .backgroundColor(this.scheme.primary)
+            .width('100%')
+            .enabled(!this.importing)
+            .margin({ top: 8 })
+            .onClick(() => this.doImportRecommended())
+          if (this.importHint.length > 0) {
+            Text(this.importHint)
+              .fontSize(TypeScale.caption * this.fontScale)
+              .fontColor(this.scheme.primary)
+              .width('100%')
+              .margin({ top: 8 })
+          }
+          if (this.subscriptions.subscriptions.length > 0) {
+            Text(L.f('starter_have_subs', this.subscriptions.subscriptions.length))
+              .fontSize(TypeScale.caption * this.fontScale)
+              .fontColor(this.scheme.onSurfaceVariant)
+              .width('100%')
+              .margin({ top: 6 })
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 8, bottom: 8 })
+      }
+      if (this.showGuide()) {
+        ListItem() {
+          this.guideCard()
+        }
+      }
+      if (this.continueEntries().length > 0) {
+        ListItem() {
+          this.continueStrip()
+        }
+      }
+    }
+    .scrollBar(BarState.Off)
+    .width('100%')
+    .layoutWeight(1)
+  }
+
+  private async doImportRecommended(): Promise<void> {
+    if (this.importing) return;
+    this.importHint = '';
+    this.importing = true;
+    const n = await Recommended.importAll(this.app);
+    this.importing = false;
+    if (n > 0) {
+      this.importHint = L.f('import_done', n);
+    } else if (n === 0) {
+      this.importHint = L.s('import_none');
+    } else {
+      this.importHint = L.s('import_failed');
+    }
+  }
+
   @Builder
   searchBar() {
     Row({ space: 8 }) {
       Image($r('sys.media.ohos_ic_public_search_filled'))
         .width(18).height(18)
         .fillColor(this.scheme.onSurfaceVariant)
-      TextInput({ placeholder: L.s('search_placeholder'), text: this.query })
+      TextInput({
+        placeholder: Features.CATALOG ? L.s('search_placeholder') : L.s('search_hint_url'),
+        text: this.query
+      })
         .placeholderColor(this.scheme.onSurfaceVariant)
         .fontColor(this.scheme.onBackground)
         .fontSize(TypeScale.body * this.fontScale)

@@ -49,9 +49,12 @@ export class PodcastRepository {
   }
 
   /// 搜索单集(仅 Apple 提供单集检索)。
+  /// URL 输入**不参与单集检索**(与 Android 一致)——把一条 RSS 地址当关键词丢给 iTunes
+  /// 既拿不到结果,又平白多一次目录请求。
   async searchEpisodes(query: string, region: string): Promise<Episode[]> {
     const q = query.trim();
     if (q.length === 0) return [];
+    if (q.startsWith('http://') || q.startsWith('https://')) return [];
     return ITunesSource.searchEpisodes(q, region);
   }
 

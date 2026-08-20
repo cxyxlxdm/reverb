@@ -987,6 +987,50 @@
     {
       "name": "set_privacy_sub",
       "value": "我們如何處理你的資料"
+    },
+    {
+      "name": "starter_title",
+      "value": "從新增訂閱開始"
+    },
+    {
+      "name": "starter_desc",
+      "value": "餘音是一個播客 RSS 工具：在上方貼上播客的 RSS 位址即可訂閱，或一鍵匯入一份推薦清單。你的訂閱只儲存在本機。"
+    },
+    {
+      "name": "import_recommended",
+      "value": "匯入推薦訂閱"
+    },
+    {
+      "name": "importing",
+      "value": "正在匯入…"
+    },
+    {
+      "name": "import_done",
+      "value": "已新增 %s 個訂閱"
+    },
+    {
+      "name": "import_none",
+      "value": "沒有可匯入的訂閱"
+    },
+    {
+      "name": "import_failed",
+      "value": "匯入失敗，請檢查網路後重試"
+    },
+    {
+      "name": "starter_have_subs",
+      "value": "目前已有 %s 個訂閱，可在「音閣 · 訂閱」管理"
+    },
+    {
+      "name": "search_hint_url",
+      "value": "貼上播客 RSS 位址"
+    },
+    {
+      "name": "search_url_only",
+      "value": "請輸入播客的 RSS 位址（以 http 開頭）"
+    },
+    {
+      "name": "recommended_opml_url",
+      "value": "https://cxyxl.eu.org/reverb/recommended.opml"
     }
   ]
 }

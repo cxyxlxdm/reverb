@@ -987,6 +987,50 @@
     {
       "name": "set_privacy_sub",
       "value": "How your data is handled"
+    },
+    {
+      "name": "starter_title",
+      "value": "Start by adding a subscription"
+    },
+    {
+      "name": "starter_desc",
+      "value": "Reverb is a podcast RSS tool: paste a feed address above to subscribe, or import a recommended list in one tap. Your subscriptions stay on this device."
+    },
+    {
+      "name": "import_recommended",
+      "value": "Import recommended feeds"
+    },
+    {
+      "name": "importing",
+      "value": "Importing…"
+    },
+    {
+      "name": "import_done",
+      "value": "Added %s subscriptions"
+    },
+    {
+      "name": "import_none",
+      "value": "Nothing to import"
+    },
+    {
+      "name": "import_failed",
+      "value": "Import failed — check your connection"
+    },
+    {
+      "name": "starter_have_subs",
+      "value": "%s subscriptions — manage them in Library"
+    },
+    {
+      "name": "search_hint_url",
+      "value": "Paste a podcast RSS address"
+    },
+    {
+      "name": "search_url_only",
+      "value": "Enter a podcast RSS address (starting with http)"
+    },
+    {
+      "name": "recommended_opml_url",
+      "value": "https://cxyxl.eu.org/reverb/recommended.opml"
     }
   ]
 }

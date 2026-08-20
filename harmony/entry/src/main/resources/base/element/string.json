@@ -987,6 +987,50 @@
     {
       "name": "set_privacy_sub",
       "value": "我们如何处理你的数据"
+    },
+    {
+      "name": "starter_title",
+      "value": "从添加订阅开始"
+    },
+    {
+      "name": "starter_desc",
+      "value": "余音是一个播客 RSS 工具：在上方粘贴播客的 RSS 地址即可订阅，或一键导入一份推荐清单。你的订阅只保存在本机。"
+    },
+    {
+      "name": "import_recommended",
+      "value": "导入推荐订阅"
+    },
+    {
+      "name": "importing",
+      "value": "正在导入…"
+    },
+    {
+      "name": "import_done",
+      "value": "已添加 %s 个订阅"
+    },
+    {
+      "name": "import_none",
+      "value": "没有可导入的订阅"
+    },
+    {
+      "name": "import_failed",
+      "value": "导入失败，请检查网络后重试"
+    },
+    {
+      "name": "starter_have_subs",
+      "value": "当前已有 %s 个订阅，可在「音阁 · 订阅」管理"
+    },
+    {
+      "name": "search_hint_url",
+      "value": "粘贴播客 RSS 地址"
+    },
+    {
+      "name": "search_url_only",
+      "value": "请输入播客的 RSS 地址（以 http 开头）"
+    },
+    {
+      "name": "recommended_opml_url",
+      "value": "https://cxyxl.eu.org/reverb/recommended.opml"
     }
   ]
 }
