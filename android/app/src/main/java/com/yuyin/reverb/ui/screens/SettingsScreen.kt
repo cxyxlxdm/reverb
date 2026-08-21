@@ -194,15 +194,22 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 .verticalScroll(rememberScrollState())
         ) {
             SectionLabel(stringResource(R.string.sec_content))
-            SettingRow(
-                stringResource(R.string.set_region),
-                stringResource(REGION_OPTIONS.firstOrNull { it.code == regionOverride }?.labelRes ?: R.string.region_auto)
-            ) { dlg = Dlg.REGION }
+            // 「地区」只作用于分类榜单、关键词检索与电台的取材范围 —— 这三者在无内容目录的
+            // 渠道里都不存在,留着就是个改了也没反应的死设置。
+            if (BuildConfig.CATALOG) {
+                SettingRow(
+                    stringResource(R.string.set_region),
+                    stringResource(REGION_OPTIONS.firstOrNull { it.code == regionOverride }?.labelRes ?: R.string.region_auto)
+                ) { dlg = Dlg.REGION }
+            }
             SettingRow(stringResource(R.string.set_footprint), stringResource(R.string.set_footprint_sub)) { onOpenFootprint() }
-            SettingRow(
-                stringResource(R.string.set_radio_mode),
-                stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
-            ) { dlg = Dlg.RADIO }
+            // 电台本身就是「内容推荐」,无内容目录的渠道已整体去掉,设置项自然也不该留
+            if (BuildConfig.CATALOG) {
+                SettingRow(
+                    stringResource(R.string.set_radio_mode),
+                    stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
+                ) { dlg = Dlg.RADIO }
+            }
 
             SectionLabel(stringResource(R.string.sec_appearance))
             SettingRow(stringResource(R.string.set_theme), stringResource(THEME_LABEL_RES.getOrElse(themeMode) { THEME_LABEL_RES[0] })) { dlg = Dlg.THEME }

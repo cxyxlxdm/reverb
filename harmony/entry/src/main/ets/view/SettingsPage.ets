@@ -1,5 +1,6 @@
 import { Scheme, TypeScale, Metrics, withAlpha, ACCENTS, AccentPalette, Theme } from '../theme/Theme';
 import { L } from '../util/L';
+import { Features } from '../Features';
 import { REGIONS, RegionOption, regionLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
 import { SettingsStore } from '../store/SettingsStore';
@@ -122,14 +123,21 @@ export struct SettingsPage {
         // (原先是 外观 → 内容 → 播放 → 备份 → 其他,自成一套。)
         Column({ space: 0 }) {
           this.sectionLabel(L.s('sec_content'))
-          this.choiceRow(L.s('set_region'), () => '', REGIONS.map((r: RegionOption) => regionLabel(r)),
-            () => this.regionIndex(),
-            (i: number) => { this.settings.setRegionOverride(REGIONS[i].code); this.onChanged(); })
+          // 「地区」只作用于分类榜单、关键词检索与电台的取材范围 —— 这三者在本端都不存在
+          // (Features.CATALOG=false),留着就是个改了也没反应的死设置。
+          if (Features.CATALOG) {
+            this.choiceRow(L.s('set_region'), () => '', REGIONS.map((r: RegionOption) => regionLabel(r)),
+              () => this.regionIndex(),
+              (i: number) => { this.settings.setRegionOverride(REGIONS[i].code); this.onChanged(); })
+          }
           // 听觉足迹:Android 也是放在这一段的一条,不在音阁页头
           this.actionRow(L.s('set_footprint'), () => L.s('set_footprint_sub'), () => this.onOpenFootprint())
-          this.choiceRow(L.s('set_radio_mode'), () => '', [L.s('radio_random'), L.s('radio_contextual')],
-            () => this.settings.contextualRadio ? 1 : 0,
-            (i: number) => { this.settings.setContextualRadio(i === 1); this.onChanged(); })
+          // 电台本身就是「内容推荐」,本端已整体去掉,设置项自然也不该留
+          if (Features.CATALOG) {
+            this.choiceRow(L.s('set_radio_mode'), () => '', [L.s('radio_random'), L.s('radio_contextual')],
+              () => this.settings.contextualRadio ? 1 : 0,
+              (i: number) => { this.settings.setContextualRadio(i === 1); this.onChanged(); })
+          }
 
           this.sectionLabel(L.s('sec_appearance'))
           this.choiceRow(L.s('set_theme'), () => '', this.themeLabels(), () => this.settings.themeMode,
