@@ -153,6 +153,9 @@ struct Index {
       PrivacyConsentPage({
         scheme: this.scheme(),
         fontScale: this.fontScale(),
+        // 本页在 shell() 之外,吃不到那里的避让内边距,只能把 inset 传进去自己让
+        topInset: this.topInset,
+        bottomInset: this.bottomInset,
         onAccept: () => this.acceptPrivacy(),
         onDecline: () => this.exitApp()
       })

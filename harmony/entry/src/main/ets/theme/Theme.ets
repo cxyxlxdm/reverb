@@ -146,6 +146,10 @@ export class TypeScale {
   static readonly titleMedium = 17;
   static readonly titleSmall = 15;
   static readonly body = 15;
+  /// 比 body 大一号,用于**整页密排长文**(目前只有隐私同意页)。
+  /// 与 Android 那边 bodyMedium(14sp) → bodyLarge(16sp) 的同一处调整对应:
+  /// 长文用正文号读着费劲,放大一号明显好读。列表里的正文不要改用它 —— 那会把行高撑乱。
+  static readonly bodyLarge = 17;
   static readonly label = 13;
   static readonly caption = 12;
 }

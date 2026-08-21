@@ -1,4 +1,4 @@
-import { Scheme, TypeScale, Metrics } from '../theme/Theme';
+import { Scheme, TypeScale, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 
 /**
@@ -13,62 +13,140 @@ import { L } from '../util/L';
  *
  * 「不同意」直接退出:本应用没有可以脱离网络使用的核心功能可退让,
  * 与其给一个残缺状态,不如说清楚。
+ *
+ * 版式与 Android `PrivacyConsentScreen.kt` 逐项对齐(那边是在真机上逐轮调出来的):
+ * 标题居左 + 梁金细线、正文放大一号并可滚动、滚不到底时底部叠渐隐、两个按钮靠右间隔 12。
  */
 @Component
 export struct PrivacyConsentPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
+  /**
+   * 系统栏避让高度,由 Index 传入。
+   *
+   * **必须自己避让**:本页渲染在 shell() 之外(未同意时不进主界面树),吃不到那里的
+   * `padding({ top: topInset, bottom: bottomInset })`。原先这里写的是常量
+   * `Metrics.topPadding + 24`(36vp),在状态栏更高的机型上标题就会挤到时间/信号旁边。
+   * Android 侧同一处的表现与修法完全一样(那边是漏了 `systemBarsPadding()`)。
+   */
+  @Prop topInset: number;
+  @Prop bottomInset: number;
   onAccept: () => void = () => {};
   onDecline: () => void = () => {};
 
+  /// 正文滚动位置 + 可视高度 + 内容高度,三者合起来判断"还能不能往下滚"(见 canScrollForward)
+  private bodyScroller: Scroller = new Scroller();
+  @State private scrolled: number = 0;
+  @State private viewH: number = 0;
+  @State private contentH: number = 0;
+
   build() {
     Column() {
+      // 标题居左 + 下方一道 40×3 的「梁金」细线,与 app 里 ScreenHeader 同一形态。
+      //
+      // 试过居中,但底部两个按钮是靠右的 —— 那样一页里就有三种对齐
+      // (标题居中 / 正文居左 / 按钮居右),反而散。居左只剩内容左、操作右两种。
       Text(L.s('privacy_consent_title'))
         .fontSize(TypeScale.headlineMedium * this.fontScale)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.scheme.onBackground)
         .width('100%')
-      Scroll() {
-        Text(L.s('privacy_consent_body'))
-          .fontSize(TypeScale.body * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-          .lineHeight(TypeScale.body * this.fontScale * 1.7)
-          .width('100%')
-      }
-      .scrollBar(BarState.Off)
-      .align(Alignment.Top)
-      .layoutWeight(1)
-      .margin({ top: 18, bottom: 12 })
+      Row()
+        .width(40)
+        .height(3)
+        .backgroundColor(this.scheme.secondary)
+        .borderRadius(2)
+        .margin({ top: 12 })
 
-      // 完整政策挂在官网,用系统浏览器打开(不内置 WebView)
+      // 正文可滚动区。字号放大后正文通常超出一屏,底部叠一层向背景色的渐隐:
+      // 既提示"下面还有",也让截断处不至于把半行字生硬切开。
+      Stack({ alignContent: Alignment.Bottom }) {
+        Scroll(this.bodyScroller) {
+          Text(L.s('privacy_consent_body'))
+            .fontSize(TypeScale.bodyLarge * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .lineHeight(TypeScale.bodyLarge * this.fontScale * 1.7)
+            .width('100%')
+            .onAreaChange((_o: Area, n: Area) => { this.contentH = Number(n.height); })
+        }
+        .scrollBar(BarState.Off)
+        .align(Alignment.Top)
+        .width('100%')
+        .height('100%')
+        .onDidScroll(() => { this.scrolled = this.bodyScroller.currentOffset().yOffset; })
+
+        if (this.canScrollForward()) {
+          Row()
+            .width('100%')
+            .height(40)
+            // 起点用**背景色的零透明**而不是 Color.Transparent:后者是 #00000000,
+            // 往不透明背景插值时中段会泛出一道灰(浅色主题下尤其明显)。
+            .linearGradient({
+              angle: 180,
+              colors: [[withAlpha(this.scheme.background, 0), 0.0], [this.scheme.background, 1.0]]
+            })
+            // 渐隐只是装饰,不能把这 40vp 变成滑不动的死区
+            .hitTestBehavior(HitTestMode.None)
+        }
+      }
+      .width('100%')
+      .layoutWeight(1)
+      .margin({ top: 28 })
+      .onAreaChange((_o: Area, n: Area) => { this.viewH = Number(n.height); })
+
+      // 正文与这个链接之间要留够 —— 正文是一大段密排文字,贴太近会像是正文的最后一行
       Text(L.s('privacy_read_full'))
         .fontSize(TypeScale.label * this.fontScale)
         .fontColor(this.scheme.primary)
         .width('100%')
-        .padding({ top: 4, bottom: 10 })
+        .margin({ top: 22 })
+        .padding({ top: 4, bottom: 12 })
         .onClick(() => this.openPolicy())
 
+      // 两个按钮都靠右,之间 12。Android 那边试过三档:紧贴(6)太挤、撑满整行(131)太散,
+      // 12 落在中间。
       Row({ space: 12 }) {
         Button(L.s('privacy_decline'))
           .fontSize(TypeScale.label * this.fontScale)
           .fontColor(this.scheme.onSurfaceVariant)
           .backgroundColor(Color.Transparent)
-          .layoutWeight(1)
+          .height(36)
+          .padding({ left: 16, right: 16 })
           .onClick(() => this.onDecline())
         Button(L.s('privacy_accept'))
           .fontSize(TypeScale.label * this.fontScale)
           .fontColor(this.scheme.onPrimary)
           .backgroundColor(this.scheme.primary)
-          .layoutWeight(2)
+          .borderRadius(18)
+          .height(36)
+          .padding({ left: 22, right: 22 })
           .onClick(() => this.onAccept())
       }
       .width('100%')
+      .justifyContent(FlexAlign.End)
     }
     .width('100%')
     .height('100%')
     .backgroundColor(this.scheme.background)
-    .padding({ left: 28, right: 28, top: Metrics.topPadding + 24, bottom: 32 })
+    .padding({
+      left: 28,
+      right: 28,
+      top: this.topInset + 28,
+      bottom: this.bottomInset + 28
+    })
     .alignItems(HorizontalAlign.Start)
+  }
+
+  /**
+   * 正文下方还有没有内容(对应 Compose 的 `ScrollState.canScrollForward`)。
+   *
+   * 为什么不直接用 `Scroller.isAtEnd()`:首帧布局尚未完成时它的返回值不可信,而渐隐恰恰
+   * 需要在**用户还没滚动过**的第一帧就正确显示。改为拿实测的内容高/可视高/已滚距离算,
+   * 内容本就一屏放得下时结果为 false,不会多出一道灰边。留 2vp 容差避免浮点抖动。
+   */
+  private canScrollForward(): boolean {
+    if (this.viewH <= 0 || this.contentH <= 0) return false;
+    return this.contentH - this.viewH - this.scrolled > 2;
   }
 
   private openPolicy(): void {
