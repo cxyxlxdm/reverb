@@ -6,6 +6,20 @@ import { Log } from '../util/Logger';
 /// 用 @Observed 让界面直接观察;每个 setter 立即落盘。
 @Observed
 export class SettingsStore {
+  /**
+   * 隐私政策版本。**政策有实质性变更时把这个数 +1**,所有用户会再看一次同意页。
+   * 与 Android 的 SettingsStore.PRIVACY_VERSION **保持同步**。
+   *
+   * 什么算"实质性变更":新增/变更网络访问地址、新增权限、改变数据的收集或用途、
+   * 新增会外发数据的功能。纯措辞润色不必 +1。
+   *
+   * 变更历史:
+   *   1 = 首个版本(2026-08)。
+   *
+   * 改这个数之后**必须重新打包两端**,并同步更新 PRIVACY.md 与 reverb/privacy.html。
+   */
+  static readonly PRIVACY_VERSION: number = 1;
+
   /// 0 跟随系统 / 1 浅色(宣纸) / 2 深色(水墨) / 3 纯白
   themeMode: number = 0;
   /// ACCENTS 索引:0 青瓷 / 1 黛蓝 / 2 绯红 / 3 竹青
@@ -28,11 +42,17 @@ export class SettingsStore {
   /// 是否允许蜂窝网络下载(false = 仅 Wi-Fi)。与 Android allowCellular 同名同义。
   allowCellular: boolean = true;
   /**
-   * 是否已同意隐私政策。**同意之前不得装配任何会联网或读系统网络信息的东西** ——
-   * 平台合规指引 7.5 要求首次启动即显著提示阅读隐私政策,且同意前不申请个人信息/权限。
-   * Android 端已因此被不通过一次(见 MainActivity.startGatedComponents)。
-   * 鸿蒙这边的门控点:整棵界面树(发现页一进来就会拉榜单)、订阅更新的 workScheduler 周期任务、
-   * 系统媒体会话。详见 AppContainer.startGated 与 Index.build。
+   * 是否已同意**当前版本**的隐私政策。
+   *
+   * **同意之前不得装配任何会联网或读系统网络信息的东西** —— 平台合规指引 7.5 要求首次启动即
+   * 显著提示阅读隐私政策,且同意前不申请个人信息/权限。Android 端已因此被不通过一次
+   * (见 MainActivity.startGatedComponents)。鸿蒙这边的门控点:整棵界面树(发现页一进来
+   * 就会拉榜单)、订阅更新的 workScheduler 周期任务、系统媒体会话。
+   * 详见 AppContainer.startGated 与 Index.build。
+   *
+   * 落盘的是**已同意的政策版本号**而不是布尔:政策有实质性变更时(新增网络访问点、
+   * 新增权限、改变数据用途…),按合规惯例应重新征求同意。把 PRIVACY_VERSION +1
+   * 即可让所有用户再看一次同意页。
    */
   privacyAccepted: boolean = false;
 
@@ -49,7 +69,7 @@ export class SettingsStore {
     this.contextualRadio = Prefs.getBool('contextual_radio', false);
     this.updatesEnabled = Prefs.getBool('updates_enabled', false);
     this.allowCellular = Prefs.getBool('allow_cellular', true);
-    this.privacyAccepted = Prefs.getBool('privacy_accepted', false);
+    this.privacyAccepted = this.loadPrivacyAccepted();
     SettingsStore.applyLanguage(this.language);
     Log.i('Settings', `加载 theme=${this.themeMode} accent=${this.accentIndex} font=${this.fontIndex} region=${this.regionOverride === '' ? 'auto' : this.regionOverride}`);
   }
@@ -129,10 +149,21 @@ export class SettingsStore {
     this.allowCellular = v;
     Prefs.put('allow_cellular', v);
   }
-  /// 同意隐私政策。紧接着就要装配此前被门控的组件,故先落盘再置内存态。
+  /// 同意当前版本的隐私政策。紧接着就要装配此前被门控的组件,故先落盘再置内存态。
   acceptPrivacy(): void {
-    Prefs.put('privacy_accepted', true);
+    Prefs.put('privacy_version', SettingsStore.PRIVACY_VERSION);
     this.privacyAccepted = true;
+  }
+
+  private loadPrivacyAccepted(): boolean {
+    const v = Prefs.getNumber('privacy_version', 0);
+    if (v > 0) return v >= SettingsStore.PRIVACY_VERSION;
+    // 兼容早期版本:那时只存了布尔 privacy_accepted。视为已同意版本 1。
+    if (Prefs.getBool('privacy_accepted', false)) {
+      Prefs.put('privacy_version', 1);
+      return 1 >= SettingsStore.PRIVACY_VERSION;
+    }
+    return false;
   }
   setSubsGrid(v: boolean): void {
     this.subsGrid = v;

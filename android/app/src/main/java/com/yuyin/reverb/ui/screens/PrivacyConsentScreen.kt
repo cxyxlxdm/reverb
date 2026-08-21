@@ -81,8 +81,11 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
+                    // bodyLarge(16sp)而非 bodyMedium(14sp):这一整页都是密排长文,
+                    // 14sp 在长文上读着费劲。本页同样受设置里「字号」倍率影响
+                    // (整棵树在 ReverbTheme 内)。
                     stringResource(R.string.privacy_consent_body),
-                    style = MaterialTheme.typography.bodyMedium,
+                    style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
