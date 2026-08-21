@@ -53,6 +53,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -532,18 +533,39 @@ private fun ReorderCategoriesDialog(
 }
 
 /**
- * 无内容目录渠道（应用市场）的首屏主体。
+ * 无内容目录渠道（应用市场）的首屏主体，**按有没有订阅分成两种布局**。
  *
- * 为什么长这样：合规口径把「内置内容目录 / 分类浏览 / 内容推荐」判定为提供视听节目服务，
+ * 为什么本渠道长这样：合规口径把「内置内容目录 / 分类浏览 / 内容推荐」判定为提供视听节目服务，
  * 需《相应内容分发许可资质》——个人主体拿不到；而「用户自行添加 RSS 源」的纯工具不需要。
  * 所以本渠道**不在应用内渲染任何可浏览的节目目录**，包括导入过程本身：
  * 推荐清单是一份挂在官网的 OPML，点一下**整份导入**，不做"列出来让你挑"的中间页
  * —— 那等于把目录又搬回了应用里。
  *
- * 导入后这些频道就是用户自己的订阅，在「音阁 · 订阅」里管理与取消，与手动粘贴地址订阅的没有区别。
+ * 为什么还要按订阅数分叉：原先不论有 0 个还是几十个订阅，首屏都顶着一大块
+ * 「从添加订阅开始 + 导入推荐订阅」。那是给零订阅新用户看的引导，已有一堆订阅的人
+ * 每次打开先看它很怪，而且首屏没有任何"我的订阅有什么新的"——那恰恰是播客应用首屏最该有的。
+ *
+ * 分叉**没有放宽合规口径**：展示的全是用户自己订阅的内容，不是可浏览的第三方目录，
+ * 分类榜 / 电台 / 关键词检索仍然整体不存在（CATALOG=false，R8 连地址字符串一起剔除，见 H46）。
+ *
+ * 「最新更新」直接用已有的 InboxStore，与「音阁 · 最新」是同一份数据、两个入口
+ * —— 有意保留：首屏看新内容，音阁做管理。
  */
 @Composable
 private fun SubscribeStarter(
+    continueEntries: List<HistoryEntry>,
+    showGuide: Boolean
+) {
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
+    val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
+
+    if (subs.isEmpty()) StarterOnboarding(continueEntries, showGuide)
+    else HomeFeed(continueEntries)
+}
+
+/** 零订阅时的引导：说明 + 通栏导入按钮 + 内置引导音频卡。 */
+@Composable
+private fun StarterOnboarding(
     continueEntries: List<HistoryEntry>,
     showGuide: Boolean
 ) {
@@ -551,7 +573,6 @@ private fun SubscribeStarter(
     val container = (context.applicationContext as ReverbApp).container
     val scope = rememberCoroutineScope()
     var importing by remember { mutableStateOf(false) }
-    val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
 
     LazyColumn(
         Modifier.fillMaxSize(),
@@ -578,12 +599,7 @@ private fun SubscribeStarter(
                         scope.launch {
                             val n = importRecommended(context, container)
                             importing = false
-                            val msg = when {
-                                n > 0 -> context.getString(R.string.import_done, n)
-                                n == 0 -> context.getString(R.string.import_none)
-                                else -> context.getString(R.string.import_failed)
-                            }
-                            Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, importMessage(context, n), Toast.LENGTH_SHORT).show()
                         }
                     },
                     enabled = !importing,
@@ -601,8 +617,131 @@ private fun SubscribeStarter(
                         Text(stringResource(R.string.import_recommended))
                     }
                 }
-                if (subs.isNotEmpty()) {
-                    Spacer(Modifier.height(8.dp))
+            }
+        }
+        if (showGuide) item { GuideCard() }
+        if (continueEntries.isNotEmpty()) item { ContinueListeningStrip(continueEntries) }
+    }
+}
+
+/**
+ * 有订阅时的首屏：继续收听 + 最新更新 + 底部一行不显眼的导入入口。
+ *
+ * 整屏是**一个 LazyColumn**（继续收听横条与底部入口都是列表项），不做"固定头 + 可滚列表"
+ * —— 那会在小屏上把最新更新压成一条缝。
+ *
+ * 刷新与「音阁 · 最新」共用 InboxStore：进页 LaunchedEffect(subs) 触发一次，
+ * InboxStore 自带防重入，两处同时进入不会重复抓。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeFeed(continueEntries: List<HistoryEntry>) {
+    val context = LocalContext.current
+    val container = (context.applicationContext as ReverbApp).container
+    val scope = rememberCoroutineScope()
+    var importing by remember { mutableStateOf(false) }
+
+    val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
+    val episodes by container.inboxStore.episodes.collectAsStateWithLifecycle()
+    val history by container.historyStore.history.collectAsStateWithLifecycle()
+    val current by PlayerController.current.collectAsStateWithLifecycle()
+    val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
+    val pullState = rememberPullToRefreshState()
+
+    // 首刷标记：仅在「有订阅但缓存为空」时显示有界的转圈，刷新结束（成功/失败）即收起，
+    // 避免无内容时无限转圈。与 InboxBody 同一策略。
+    var firstLoading by remember { mutableStateOf(episodes.isEmpty()) }
+    LaunchedEffect(subs) {
+        if (subs.isNotEmpty() && episodes.isEmpty()) firstLoading = true
+        try {
+            container.inboxStore.refresh(subs, container.repository)
+        } finally {
+            firstLoading = false
+        }
+    }
+    // 下拉刷新：多源刷新可能耗时数秒，不 await 到完成（否则指示器挂很久），
+    // 丢到后台跑、指示器只短暂示意。理由同 InboxBody。
+    if (pullState.isRefreshing) {
+        LaunchedEffect(true) {
+            scope.launch { container.inboxStore.refresh(subs, container.repository) }
+            delay(600)
+            pullState.endRefresh()
+        }
+    }
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .clipToBounds() // 裁掉静止态越界露出的指示器（圆圈常驻的根因）
+            .nestedScroll(pullState.nestedScrollConnection)
+    ) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = 24.dp)
+        ) {
+            if (continueEntries.isNotEmpty()) item { ContinueListeningStrip(continueEntries) }
+            item {
+                Text(
+                    stringResource(R.string.home_latest),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier.padding(start = 16.dp, top = 4.dp, bottom = 6.dp)
+                )
+            }
+            if (episodes.isNotEmpty()) {
+                items(episodes, key = { it.id }) { ep ->
+                    val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
+                    EpisodeListItem(
+                        episode = ep,
+                        isCurrent = current?.id == ep.id,
+                        isPlaying = isPlaying,
+                        onPlay = { PlayerController.playOrToggle(ep, episodes) },
+                        showPodcastTitle = true,
+                        played = played,
+                        onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                        onPlayNext = { PlayerController.playNext(ep) },
+                        onEnqueue = { PlayerController.enqueue(ep) }
+                    )
+                }
+            } else item {
+                if (firstLoading) LoadingBox()
+                else EmptyHint(stringResource(R.string.inbox_empty_no_updates))
+            }
+            item {
+                // 底部导入入口：刻意是文字按钮而非通栏大按钮 —— 对已有订阅的人，
+                // 这是个偶尔才用一次的东西。
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    HorizontalDivider(
+                        Modifier.padding(bottom = 4.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                    )
+                    TextButton(
+                        onClick = {
+                            if (importing) return@TextButton
+                            importing = true
+                            scope.launch {
+                                val n = importRecommended(context, container)
+                                importing = false
+                                Toast.makeText(context, importMessage(context, n), Toast.LENGTH_SHORT).show()
+                                // 订阅集变了，「最新」要跟着重聚合 —— 否则刚导入完首屏还是旧的，
+                                // 得等用户去一趟音阁才刷。
+                                if (n > 0) {
+                                    container.inboxStore.refresh(
+                                        container.subscriptionStore.subscriptions.value,
+                                        container.repository
+                                    )
+                                }
+                            }
+                        },
+                        enabled = !importing
+                    ) {
+                        Text(stringResource(if (importing) R.string.importing else R.string.import_recommended))
+                    }
                     Text(
                         stringResource(R.string.starter_have_subs, subs.size),
                         style = MaterialTheme.typography.labelSmall,
@@ -611,9 +750,15 @@ private fun SubscribeStarter(
                 }
             }
         }
-        if (showGuide) item { GuideCard() }
-        if (continueEntries.isNotEmpty()) item { ContinueListeningStrip(continueEntries) }
+        PullToRefreshContainer(state = pullState, modifier = Modifier.align(Alignment.TopCenter))
     }
+}
+
+/** 导入结果的提示文案（成功条数 / 清单为空 / 失败）。两处入口共用。 */
+private fun importMessage(context: Context, n: Int): String = when {
+    n > 0 -> context.getString(R.string.import_done, n)
+    n == 0 -> context.getString(R.string.import_none)
+    else -> context.getString(R.string.import_failed)
 }
 
 /**

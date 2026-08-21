@@ -329,6 +329,7 @@
     <!-- 最新 / 继续收听 / 播放队列 -->
     <string name="nav_inbox">最新</string>
     <string name="continue_listening">继续收听</string>
+    <string name="home_latest">最新更新</string>
     <string name="mark_played">标记为已播完</string>
     <string name="mark_unplayed">标记为未播完</string>
     <string name="queue_play_next">下一个播放</string>

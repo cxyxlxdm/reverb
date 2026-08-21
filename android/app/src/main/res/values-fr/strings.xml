@@ -313,6 +313,7 @@
     <!-- Nouveautés / Continuer l’écoute / À suivre -->
     <string name="nav_inbox">Nouveautés</string>
     <string name="continue_listening">Continuer l’écoute</string>
+    <string name="home_latest">Derniers épisodes</string>
     <string name="mark_played">Marquer comme lu</string>
     <string name="mark_unplayed">Marquer comme non lu</string>
     <string name="queue_play_next">Lire ensuite</string>

@@ -313,6 +313,7 @@
     <!-- Latest / Continue listening / Up next -->
     <string name="nav_inbox">Latest</string>
     <string name="continue_listening">Continue listening</string>
+    <string name="home_latest">Latest episodes</string>
     <string name="mark_played">Mark as played</string>
     <string name="mark_unplayed">Mark as unplayed</string>
     <string name="queue_play_next">Play next</string>
