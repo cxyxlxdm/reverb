@@ -1006,7 +1006,7 @@
     },
     {
       "name": "import_done",
-      "value": "Added %s subscriptions"
+      "value": "Added %d subscriptions"
     },
     {
       "name": "import_none",
@@ -1018,7 +1018,7 @@
     },
     {
       "name": "starter_have_subs",
-      "value": "%s subscriptions — manage them in Library"
+      "value": "%d subscriptions — manage them in Library"
     },
     {
       "name": "search_hint_url",

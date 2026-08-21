@@ -1006,7 +1006,7 @@
     },
     {
       "name": "import_done",
-      "value": "已新增 %s 個訂閱"
+      "value": "已新增 %d 個訂閱"
     },
     {
       "name": "import_none",
@@ -1018,7 +1018,7 @@
     },
     {
       "name": "starter_have_subs",
-      "value": "目前已有 %s 個訂閱，可在「音閣 · 訂閱」管理"
+      "value": "目前已有 %d 個訂閱，可在「音閣 · 訂閱」管理"
     },
     {
       "name": "search_hint_url",

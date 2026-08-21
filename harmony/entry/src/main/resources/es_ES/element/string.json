@@ -1006,7 +1006,7 @@
     },
     {
       "name": "import_done",
-      "value": "%s suscripciones añadidas"
+      "value": "%d suscripciones añadidas"
     },
     {
       "name": "import_none",
@@ -1018,7 +1018,7 @@
     },
     {
       "name": "starter_have_subs",
-      "value": "%s suscripciones — gestiónalas en la biblioteca"
+      "value": "%d suscripciones — gestiónalas en la biblioteca"
     },
     {
       "name": "search_hint_url",

@@ -1006,7 +1006,7 @@
     },
     {
       "name": "import_done",
-      "value": "%s abonnements ajoutés"
+      "value": "%d abonnements ajoutés"
     },
     {
       "name": "import_none",
@@ -1018,7 +1018,7 @@
     },
     {
       "name": "starter_have_subs",
-      "value": "%s abonnements — à gérer dans la bibliothèque"
+      "value": "%d abonnements — à gérer dans la bibliothèque"
     },
     {
       "name": "search_hint_url",
