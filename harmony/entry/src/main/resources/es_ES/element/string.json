@@ -97,6 +97,10 @@
       "value": "Seguir escuchando"
     },
     {
+      "name": "home_latest",
+      "value": "Episodios recientes"
+    },
+    {
       "name": "tab_shows",
       "value": "Programas"
     },

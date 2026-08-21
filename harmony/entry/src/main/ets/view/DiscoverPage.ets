@@ -9,8 +9,10 @@ import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
 import { PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
+import { PlayerController } from '../playback/PlayerController';
 import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, HistoryStore } from '../store/Stores';
+import { InboxStore } from '../store/InboxStore';
 import { Log } from '../util/Logger';
 
 /// 发现页:分类热门榜(缓存秒开 + 后台刷新 + 下拉刷新)+ 搜索(节目/单集双分段)
@@ -27,6 +29,13 @@ export struct DiscoverPage {
   /// AppContainer 的裸对象 —— 否则订阅后返回本页,引导卡不会消失(同 H26 的坑)。
   @ObjectLink subscriptions: SubscriptionStore;
   @ObjectLink radio: RadioStation;
+  /**
+   * 「最新」聚合。无内容目录的渠道下,**有订阅的人的首屏主体就是它**(见 subscribeStarter)。
+   * 与「音阁 · 最新」是同一份数据、两个入口 —— 不是各存一份。
+   */
+  @ObjectLink inbox: InboxStore;
+  /// 单集行要显示"正在播放"高亮,故需观察播放态(只做渲染;playNext/enqueue 那种纯写走 app.player)
+  @ObjectLink player: PlayerController;
   onOpenPodcast: (p: Podcast) => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
 
@@ -73,6 +82,19 @@ export struct DiscoverPage {
     // 无内容目录的渠道**不拉榜单** —— 那是内容目录请求,而且界面上压根不展示它。
     // 漏了这一句的后果不是报错,是"看不见的目录请求"仍然在发,抓包一看就露。
     if (Features.CATALOG) this.loadCategory(0, false);
+    // 反过来,无内容目录渠道的首屏主体是「最新」,进页就得按需刷一次。
+    // refreshIfStale 自带订阅集签名判断与防重入,和音阁那边同时调用不会重复拉。
+    else this.refreshInbox(false);
+  }
+
+  /// 刷新「最新」。转圈状态一律读 store 的 inbox.refreshing —— 若在本页另置一个标志,
+  /// 被重入拒绝的那次调用会把转圈提前关掉(Android 与音阁页都踩过,见 LibraryPage 同名方法)。
+  private async refreshInbox(force: boolean): Promise<void> {
+    const subs = this.subscriptions.subscriptions;
+    if (subs.length === 0) return;
+    if (force) await this.inbox.refresh(subs, this.app.repository);
+    else await this.inbox.refreshIfStale(subs, this.app.repository);
+    Log.i('Discover', `最新:当前 ${this.inbox.episodes.length} 条`);
   }
 
   /// 先取缓存秒显,再后台刷新。force=true 为下拉刷新(跳过缓存直接刷)。
@@ -266,13 +288,39 @@ export struct DiscoverPage {
   }
 
   /**
-   * 无内容目录渠道的首屏主体。
+   * 无内容目录渠道的首屏主体,**按有没有订阅分成两种布局**。
+   *
+   * 为什么分叉:原先不论有没有订阅,首屏顶着一大块「从添加订阅开始 + 导入推荐订阅」——
+   * 那是给零订阅的新用户看的引导,一个已有几十个订阅的人每次打开都先看见它,很怪。
+   *
+   * 分叉后:
+   *  - **零订阅** → 保持引导(标题 + 说明 + 导入按钮 + 引导卡),这本来就是它的场景;
+   *  - **有订阅** → 首屏变成"你自己的内容流":继续收听 + 最新更新,
+   *    导入入口降级成列表底部一行,仍然可用。
+   *
+   * 这样做**没有放宽合规口径**:展示的全是用户自己订阅的内容,不是可浏览的第三方节目目录
+   * (分类榜 / 电台 / 关键词检索一律仍然不存在,见 Features.CATALOG)。
+   *
+   * 「最新」与「音阁 · 最新」是同一份 InboxStore,两个入口指向同一份数据 —— 有意保留,
+   * 首屏看新内容、音阁做管理,各有其用。
+   */
+  @Builder
+  subscribeStarter() {
+    if (this.subscriptions.subscriptions.length === 0) {
+      this.starterOnboarding()
+    } else {
+      this.homeFeed()
+    }
+  }
+
+  /**
+   * 零订阅时的引导。
    *
    * 导入是**整份导入 + 结果提示**,不做"列出来让你挑"的中间页 —— 那等于把目录搬回应用里。
    * 导入后这些频道就是用户自己的订阅,在「音阁 · 订阅」里管理,与手动粘贴地址订阅的没有区别。
    */
   @Builder
-  subscribeStarter() {
+  starterOnboarding() {
     List() {
       ListItem() {
         Column({ space: 6 }) {
@@ -301,13 +349,6 @@ export struct DiscoverPage {
               .width('100%')
               .margin({ top: 8 })
           }
-          if (this.subscriptions.subscriptions.length > 0) {
-            Text(L.f('starter_have_subs', this.subscriptions.subscriptions.length))
-              .fontSize(TypeScale.caption * this.fontScale)
-              .fontColor(this.scheme.onSurfaceVariant)
-              .width('100%')
-              .margin({ top: 6 })
-          }
         }
         .alignItems(HorizontalAlign.Start)
         .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 8, bottom: 8 })
@@ -328,6 +369,93 @@ export struct DiscoverPage {
     .layoutWeight(1)
   }
 
+  /**
+   * 有订阅时的首屏:继续收听 + 最新更新 + 底部导入入口。
+   *
+   * 整屏是**一个 List**,继续收听横条与底部入口都作为列表项一起滚 ——
+   * 分成"固定头 + 可滚列表"会在小屏上把最新更新压成一条缝。
+   */
+  @Builder
+  homeFeed() {
+    Refresh({ refreshing: this.inbox.refreshing }) {
+      List() {
+        if (this.continueEntries().length > 0) {
+          ListItem() {
+            this.continueStrip()
+          }
+        }
+        ListItem() {
+          Text(L.s('home_latest'))
+            .fontSize(TypeScale.titleSmall * this.fontScale)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.scheme.onBackground)
+            .width('100%')
+            .padding({ left: Metrics.pagePadding, top: 4, bottom: 6 })
+        }
+        if (this.inbox.episodes.length > 0) {
+          ForEach(this.inbox.episodes, (e: Episode) => {
+            ListItem() {
+              EpisodeListItem({
+                scheme: this.scheme, fontScale: this.fontScale, episode: e,
+                showPodcastTitle: true,
+                isCurrent: this.player.current !== null && this.player.current.id === e.id,
+                isPlaying: this.player.isPlaying,
+                played: this.history.isPlayed(e.id),
+                onPlay: () => this.onPlayEpisode(e, this.inbox.episodes),
+                onPlayNext: () => { this.app.player.playNext(e); },
+                onEnqueue: () => { this.app.player.enqueue(e); }
+              })
+            }
+          }, (e: Episode) => e.id)
+        } else {
+          ListItem() {
+            // 有订阅但还没聚合出内容:首刷进行中就转圈,刷完仍为空才给空态
+            if (this.inbox.refreshing) {
+              LoadingBox({ scheme: this.scheme, fontScale: this.fontScale })
+            } else {
+              EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox') })
+            }
+          }
+        }
+        ListItem() {
+          this.addMoreFooter()
+        }
+      }
+      .scrollBar(BarState.Off)
+      .width('100%').height('100%')
+    }
+    .onRefreshing(() => { this.refreshInbox(true); })
+    .width('100%')
+    .layoutWeight(1)
+  }
+
+  /// 列表底部那行不显眼的导入入口。刻意做成文字按钮而不是通栏大按钮 ——
+  /// 对已有订阅的人,这是个偶尔才用一次的东西。
+  @Builder
+  addMoreFooter() {
+    Column({ space: 6 }) {
+      Divider()
+        .strokeWidth(0.5)
+        .color(withAlpha(this.scheme.outline, 0.6))
+        .margin({ bottom: 10 })
+      Text(this.importing ? L.s('importing') : L.s('import_recommended'))
+        .fontSize(TypeScale.label * this.fontScale)
+        .fontColor(this.importing ? this.scheme.onSurfaceVariant : this.scheme.primary)
+        .onClick(() => this.doImportRecommended())
+      if (this.importHint.length > 0) {
+        Text(this.importHint)
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.primary)
+      }
+      Text(L.f('starter_have_subs', this.subscriptions.subscriptions.length))
+        .fontSize(TypeScale.caption * this.fontScale)
+        .fontColor(this.scheme.onSurfaceVariant)
+    }
+    .width('100%')
+    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 6, bottom: 20 })
+    .alignItems(HorizontalAlign.Center)
+  }
+
   private async doImportRecommended(): Promise<void> {
     if (this.importing) return;
     this.importHint = '';
@@ -336,6 +464,9 @@ export struct DiscoverPage {
     this.importing = false;
     if (n > 0) {
       this.importHint = L.f('import_done', n);
+      // 订阅集变了,「最新」要跟着重聚合 —— 否则刚导入完首屏还是空的,
+      // 得等用户去一趟音阁才刷。不 await:提示先上屏,聚合在后台跑。
+      this.refreshInbox(false);
     } else if (n === 0) {
       this.importHint = L.s('import_none');
     } else {

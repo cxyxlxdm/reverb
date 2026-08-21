@@ -97,6 +97,10 @@
       "value": "Reprendre l'écoute"
     },
     {
+      "name": "home_latest",
+      "value": "Derniers épisodes"
+    },
+    {
       "name": "tab_shows",
       "value": "Émissions"
     },

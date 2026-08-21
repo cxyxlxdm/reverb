@@ -97,6 +97,10 @@
       "value": "继续收听"
     },
     {
+      "name": "home_latest",
+      "value": "最新更新"
+    },
+    {
       "name": "tab_shows",
       "value": "节目"
     },

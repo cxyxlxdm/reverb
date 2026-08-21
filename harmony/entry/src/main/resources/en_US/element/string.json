@@ -97,6 +97,10 @@
       "value": "Continue listening"
     },
     {
+      "name": "home_latest",
+      "value": "Latest episodes"
+    },
+    {
       "name": "tab_shows",
       "value": "Shows"
     },
