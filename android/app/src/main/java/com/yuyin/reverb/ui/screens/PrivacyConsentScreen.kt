@@ -29,6 +29,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import com.yuyin.reverb.R
 
 /**
@@ -75,19 +77,38 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                     .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(2.dp))
             )
             Spacer(Modifier.height(28.dp))
-            Column(
-                Modifier
-                    .weight(1f)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                Text(
-                    // bodyLarge(16sp)而非 bodyMedium(14sp):这一整页都是密排长文,
-                    // 14sp 在长文上读着费劲。本页同样受设置里「字号」倍率影响
-                    // (整棵树在 ReverbTheme 内)。
-                    stringResource(R.string.privacy_consent_body),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            // 正文可滚动区。字号放大后正文通常超出一屏,底部叠一层渐隐,
+            // 既提示"下面还有",也让截断处不至于把半行字生硬切开。
+            // 渐隐**只在真的还能往下滚时出现**(canScrollForward),滚到底自动消失。
+            val bodyScroll = rememberScrollState()
+            Box(Modifier.weight(1f)) {
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(bodyScroll)
+                ) {
+                    Text(
+                        // bodyLarge(16sp)而非 bodyMedium(14sp):这一整页都是密排长文,
+                        // 14sp 在长文上读着费劲。本页同样受设置里「字号」倍率影响
+                        // (整棵树在 ReverbTheme 内)。
+                        stringResource(R.string.privacy_consent_body),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (bodyScroll.canScrollForward) {
+                    Box(
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .background(
+                                Brush.verticalGradient(
+                                    listOf(Color.Transparent, MaterialTheme.colorScheme.background)
+                                )
+                            )
+                    )
+                }
             }
             // 正文与下面这个链接之间要留够 —— 正文是一大段密排文字,贴太近会像是正文的一部分
             Spacer(Modifier.height(22.dp))
