@@ -74,7 +74,7 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                     .height(3.dp)
                     .background(MaterialTheme.colorScheme.secondary, RoundedCornerShape(2.dp))
             )
-            Spacer(Modifier.height(18.dp))
+            Spacer(Modifier.height(28.dp))
             Column(
                 Modifier
                     .weight(1f)
@@ -86,7 +86,8 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            Spacer(Modifier.height(12.dp))
+            // 正文与下面这个链接之间要留够 —— 正文是一大段密排文字,贴太近会像是正文的一部分
+            Spacer(Modifier.height(22.dp))
             TextButton(onClick = {
                 // 完整政策挂在官网。此处用系统浏览器打开，不内置 WebView。
                 runCatching {
