@@ -2,6 +2,7 @@ package com.yuyin.reverb.ui.theme
 
 import android.app.Activity
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
@@ -130,8 +131,23 @@ fun ReverbTheme(
     ) {
         MaterialTheme(
             colorScheme = scheme,
-            typography = Typography(),
-            content = content
-        )
+            typography = Typography()
+        ) {
+            // **必须显式提供 LocalContentColor**。
+            //
+            // MaterialTheme 本身不设它 —— 通常由 `Surface` 顺带提供,而本应用根节点用的是
+            // `Box + background(...)`(见 ReverbRoot),于是 LocalContentColor 一直是默认的
+            // 纯黑。后果:凡是没写 `tint = ...` 的 Icon 都画成黑色 —— 深色主题下等于看不见。
+            // 全项目 45 个 Icon 里 13 个没显式 tint,返回箭头就是其中之一
+            // (标题因为显式指定了 onBackground 所以正常,更显得箭头"莫名其妙地黑")。
+            //
+            // 放在这里而不是逐个补 tint:一次覆盖全部,且以后新增 Icon 不会再犯。
+            // 处在 Button / FilledIconButton 等自带 contentColor 的组件内的图标不受影响 ——
+            // 那些组件会在更内层覆盖这个值。
+            CompositionLocalProvider(
+                LocalContentColor provides scheme.onBackground,
+                content = content
+            )
+        }
     }
 }
