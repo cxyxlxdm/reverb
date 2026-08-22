@@ -1,14 +1,22 @@
 import { Episode, Podcast, FeedResult, SearchOutcome } from '../model/Models';
-import { ITunesSource, AppleChartsSource, FyydSource, GpodderSource } from './Sources';
 import { RssParser } from './RssParser';
 import { PopularCacheStore } from '../store/Stores';
 import { SeedCatalog } from '../store/SeedCatalog';
 import { FeedCacheStore } from '../store/FeedCacheStore';
-import { Features } from '../Features';
 import { Log } from '../util/Logger';
 
-/// 取源门面。四层降级搜索、热门榜三层降级(失败保留旧缓存)、随机单集。
-/// 全链路免费无鉴权;播放一律回落发布方 RSS 的 enclosure 原始直链。
+/**
+ * 取源门面。本端只有 **RSS 直连** 一条路。
+ *
+ * 原先还有「Apple iTunes / Apple 榜单 / fyyd.de / gpodder.net」四路目录源(降级链),
+ * 由 `Features.CATALOG` 在这一层拦住。但**光拦住不够** —— ArkTS 没有 R8 那样的
+ * dead code elimination,常量为 false 也照样把类和 URL 编进 `modules.abc`,解包 grep 一抓就有,
+ * 而合规申报写的是"仅作为 RSS 订阅解析工具"(见 TROUBLESHOOTING H46 / H54)。
+ * 所以那四个类**整个移出了编译树**,现在在 `harmony/shelved/net/Sources.ets`。
+ * 要放开内容目录的话,照 `harmony/shelved/README.md` 把三处 `TODO(catalog)` 接回来。
+ *
+ * 播放一律回落发布方 RSS 的 enclosure 原始直链。
+ */
 export class PodcastRepository {
   private cache: PopularCacheStore;
   /// 随包内置的精选清单:缓存为空(首装/清缓存/无网)时给发现页兜底,避免首屏空白
@@ -22,8 +30,9 @@ export class PodcastRepository {
     this.feedCache = feedCache;
   }
 
-  /// 搜索频道:URL 直连 → Apple → fyyd → gpodder。
-  /// 注意:URL 解析失败时**继续向下降级**(取 Android 行为,macOS 是直接返回空)。
+  /// 搜索频道:**只认 RSS 地址直连**。
+  /// TODO(catalog): 放开内容目录时,URL 解析失败要继续降级到 Apple → fyyd → gpodder
+  /// (Android 侧的行为;macOS 是直接返回空)。
   async search(query: string, region: string): Promise<SearchOutcome> {
     const q = query.trim();
     if (q.length === 0) return { podcasts: [], sourceLabel: '', failed: false };
@@ -36,30 +45,17 @@ export class PodcastRepository {
       }
     }
 
-    // 无内容目录的渠道到此为止:关键词检索返回的是节目列表,同样构成动态目录。
-    if (!Features.CATALOG) return { podcasts: [], sourceLabel: '', failed: true };
-
-    const apple = await ITunesSource.search(q, region);
-    if (apple.length > 0) return { podcasts: apple, sourceLabel: 'Apple Podcasts', failed: false };
-
-    const fyyd = await FyydSource.search(q);
-    if (fyyd.length > 0) return { podcasts: fyyd, sourceLabel: 'fyyd.de', failed: false };
-
-    const gp = await GpodderSource.search(q);
-    if (gp.length > 0) return { podcasts: gp, sourceLabel: 'gpodder.net', failed: false };
-
+    // 到此为止:关键词检索返回的是节目列表,同样构成动态目录(Features.CATALOG=false)。
     Log.w('Repo', `搜索无结果 q="${q}"`);
     return { podcasts: [], sourceLabel: '', failed: true };
   }
 
-  /// 搜索单集(仅 Apple 提供单集检索)。
-  /// URL 输入**不参与单集检索**(与 Android 一致)——把一条 RSS 地址当关键词丢给 iTunes
-  /// 既拿不到结果,又平白多一次目录请求。
+  /// 搜索单集:本端不提供(单集检索只有 Apple 有,属内容目录)。
+  /// TODO(catalog): 放开内容目录时接回 `ITunesSource.searchEpisodes`;注意 **URL 输入不参与**
+  /// (与 Android 一致)—— 把一条 RSS 地址当关键词丢给 iTunes,既拿不到结果,
+  /// 又平白多一次目录请求。
   async searchEpisodes(query: string, region: string): Promise<Episode[]> {
-    const q = query.trim();
-    if (q.length === 0) return [];
-    if (q.startsWith('http://') || q.startsWith('https://')) return [];
-    return ITunesSource.searchEpisodes(q, region);
+    return [];
   }
 
   cacheKey(genreId: number, region: string): string {
@@ -85,28 +81,11 @@ export class PodcastRepository {
     return this.seed.generatedAt();
   }
 
-  /// 刷新热门榜:分类榜/综合榜 → (综合榜且非 us 时)回落 us → fyyd hot。
-  /// 只有拿到非空结果才写缓存,失败保留旧缓存。
+  /// 刷新热门榜:本端不提供(榜单即内容目录),恒返回空。
+  /// TODO(catalog): 放开内容目录时接回三层降级 —— 分类榜/综合榜 →(综合榜且非 us 时)
+  /// 回落 us → fyyd hot;**只有拿到非空结果才写缓存**,失败保留旧缓存。
   async refreshPopular(genreId: number, region: string): Promise<Podcast[]> {
-    // 同上:无内容目录的渠道压根不该发榜单请求(界面已不展示,这里再兜一道)
-    if (!Features.CATALOG) return [];
-    let list: Podcast[] = genreId > 0
-      ? await AppleChartsSource.topByGenre(region, genreId, 30)
-      : await AppleChartsSource.top(region, 30);
-
-    if (list.length === 0 && genreId === 0 && region !== 'us') {
-      list = await AppleChartsSource.top('us', 30);
-    }
-    if (list.length === 0) {
-      list = await FyydSource.hot(30);
-    }
-    if (list.length > 0) {
-      this.cache.put(this.cacheKey(genreId, region), list);
-      Log.i('Repo', `热门榜刷新 ${list.length} 条 key=${this.cacheKey(genreId, region)}`);
-    } else {
-      Log.w('Repo', `热门榜刷新为空,保留旧缓存 key=${this.cacheKey(genreId, region)}`);
-    }
-    return list;
+    return [];
   }
 
   /// 解析某个 feed(频道详情 / 最新聚合都走这里)。成功回写磁盘缓存;

@@ -1,7 +1,6 @@
 import { Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 import { TopBar } from './Widgets';
-import { Features } from '../Features';
 
 /// 一项依赖及其许可。
 class Lib {
@@ -35,11 +34,15 @@ const LIBS: Lib[] = [
   new Lib('Material Design Icons(底部页签矢量)', 'Apache License 2.0')
 ];
 
-// 数据来源列**实际用到的那些**。无内容目录的渠道压根不连目录接口(见 Features.CATALOG),
+// 数据来源列**实际用到的那些**。本端压根不连目录接口(见 Features.CATALOG),
 // 照抄一份就是不实陈述。
-const SOURCES: string[] = Features.CATALOG
-  ? ['Apple iTunes Search / Marketing RSS', 'fyyd.de', 'gpodder.net']
-  : ['播客发布方自己的 RSS 地址', '本应用官网的推荐订阅清单(OPML)'];
+//
+// **不要写成 `Features.CATALOG ? [目录接口名...] : [...]`**:三元的两支都会被编进
+// modules.abc,于是"Apple iTunes / fyyd.de / gpodder.net"这三个名字仍然出现在产物里
+// (ArkTS 没有 dead code elimination,见 harmony/shelved/README.md)。
+// TODO(catalog): 放开内容目录时,这里加回
+// 'Apple iTunes Search / Marketing RSS' / 'fyyd.de' / 'gpodder.net' 三条。
+const SOURCES: string[] = ['播客发布方自己的 RSS 地址', '本应用官网的推荐订阅清单(OPML)'];
 
 @Component
 export struct LicensesPage {
@@ -76,10 +79,10 @@ export struct LicensesPage {
           }, (lib: Lib) => lib.name)
 
           this.header(L.s('licenses_h_sources'))
-          // 这段引言也必须按渠道分支 —— 无内容目录的渠道里写「以下为公开的播客目录/检索接口」
-          // 就是文不对题:下面列的是 RSS 地址与官网 OPML,压根没有目录接口。
-          // 发布截图里这一页是会被复核人员逐字看的。
-          Text(Features.CATALOG ? L.s('licenses_sources_note_catalog') : L.s('licenses_sources_note'))
+          // 这段引言写「以下为公开的播客目录/检索接口」就是文不对题:下面列的是 RSS 地址
+          // 与官网 OPML,压根没有目录接口。发布截图里这一页是会被复核人员逐字看的。
+          // TODO(catalog): 放开内容目录时改回 licenses_sources_note_catalog。
+          Text(L.s('licenses_sources_note'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
           ForEach(SOURCES, (s: string) => {

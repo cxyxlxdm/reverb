@@ -1055,3 +1055,27 @@
     不会把界面永久点不动。**故意不记录「菜单是否打开」**,那种写法一旦漏回调就是全应用点不动。
 - **教训**:平台的浮层如果不吃掉"点外部关闭"那一下,不要在业务侧逐个 `onClick` 挡
   (清单永远列不全);挡在**一层之上**,一处就够,并且让这层自己有兜底撤除的能力。
+
+### H54. 编译期常量在鸿蒙上**删不掉代码**:同一套合规门控,Android 达标、鸿蒙不达标
+
+- **背景**:H46 定下的验收标准是「包里没有」而不是「界面上点不到」,当时两端都在数据层
+  加了 `if (!CATALOG) return ...`,Android 解包复验四个目录接口地址各 0 次,就此收工。
+  **鸿蒙那一侧当时只验了 Android 的 dex,没解 hap**。
+- **这次解包一验**(`strings modules.abc | grep -i itunes`),鸿蒙 release 包里躺着:
+  `ITunesSource` / `AppleChartsSource` / `FyydSource` / `GpodderSource` 四个类,以及
+  `https://itunes.apple.com/search…`、`https://rss.marketingtools.apple.com/…`、
+  `https://api.fyyd.de/…`、`https://gpodder.net/search.json?q=` 四个地址。
+- **原因**:`Features.CATALOG = false` 只是**运行时不走**。R8 能把 `static final boolean`
+  折叠、把整段判死后删掉,**ArkTS / hvigor 没有等价的 dead code elimination** ——
+  常量为 false 也照样编进 `modules.abc`。混淆只改名字,不删分支。
+- **修法**:把那四个类**整个移出编译树**(`entry/src/main/ets` → `harmony/shelved/net/`,
+  见该目录 README),`PodcastRepository` 的三条降级链改成直接返回空并留 `TODO(catalog)`。
+- **同一个坑的第二处**:`const SOURCES = Features.CATALOG ? ['…iTunes…','fyyd.de','gpodder.net'] : [...]`
+  —— **三元的两支都会被编进产物**,于是许可页那三个名字还在。凡是"按渠道二选一"的字面量,
+  在没有 DCE 的平台上都等于两份都打进去了。
+- **教训 / 规律**:
+  1. **合规删减的验收要按平台各做一遍**,别把 Android 的解包结论套到鸿蒙上 ——
+     同一份写法在两个工具链下的结果可以完全相反;
+  2. 判断"这段代码会不会进包",标准不是"会不会执行",而是**这条工具链有没有 DCE**。
+     没有的话,唯一可靠的办法是**不让文件参与编译**;
+  3. 三元 / `?:` 里的另一支也是代码。要"某渠道里根本不存在"的字面量,不能靠分支表达。
