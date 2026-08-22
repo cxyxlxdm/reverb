@@ -707,6 +707,10 @@ export struct DiscoverPage {
                 EpisodeListItem({
                   scheme: this.scheme, fontScale: this.fontScale, episode: e,
                   showPodcastTitle: true,
+                  // 正在播的那一集要高亮(标题转强调色、封面上的图标变暂停)。
+                  // 这两个此前漏传,搜索结果里点播后看不出播的是哪一条 —— Android 一直是传的。
+                  isCurrent: this.player.current !== null && this.player.current.id === e.id,
+                  isPlaying: this.player.isPlaying,
                   played: this.history.isPlayed(e.id),
                   onPlay: () => this.onPlayEpisode(e, this.searchEpisodes),
                   showPlayedToggle: true,

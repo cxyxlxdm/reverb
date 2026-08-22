@@ -5,6 +5,7 @@ import { AppContainer } from '../AppContainer';
 import { SubscriptionStore, HistoryStore } from '../store/Stores';
 import { ListenStatsStore } from '../store/ListenStatsStore';
 import { DownloadManager } from '../playback/DownloadManager';
+import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, LoadingBox, Artwork } from './Widgets';
 import { EpisodeListItem, formatListenDuration } from './Components';
 import { formatCachedAt } from '../util/DateParse';
@@ -39,6 +40,8 @@ export struct PodcastDetailPage {
   @ObjectLink downloadManager: DownloadManager;
   @ObjectLink history: HistoryStore;
   @ObjectLink listenStats: ListenStatsStore;
+  /// 单集行的"正在播放"高亮要读播放态。只做渲染 —— playNext/enqueue 那种纯写仍走 app.player。
+  @ObjectLink player: PlayerController;
 
   private app: AppContainer = AppContainer.get();
 
@@ -151,6 +154,10 @@ export struct PodcastDetailPage {
                 scheme: this.scheme,
                 fontScale: this.fontScale,
                 episode: e,
+                // 正在播的那一集要高亮。此前漏传,于是在详情页点播后列表毫无反应,
+                // 只能靠底部迷你条判断播的是哪条 —— Android 一直是传的。
+                isCurrent: this.player.current !== null && this.player.current.id === e.id,
+                isPlaying: this.player.isPlaying,
                 played: this.history.isPlayed(e.id),
                 downloadState: this.dlState(e.id),
                 onPlay: () => this.onPlayEpisode(e, this.episodes),

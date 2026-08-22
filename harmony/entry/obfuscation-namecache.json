@@ -400,11 +400,17 @@
       "Index#tabBarItem#icon": "h10",
       "Index#tabBarItem#index": "i10",
       "Index#tabBarItem#parent": "j10",
+      "Index#tabBarItem#$4#elmtId": "a",
+      "Index#tabBarItem#$4#isInitialRender": "b",
+      "Index#tabBarItem#$3#$0#elmtId": "c",
+      "Index#tabBarItem#$3#$0#isInitialRender": "d",
+      "Index#tabBarItem#$3#$0#$0#componentCall": "e",
       "Index#tabBarItem#$2#elmtId": "k10",
       "Index#tabBarItem#$2#isInitialRender": "l10",
-      "Index#tabBarItem#$1#$0#elmtId": "m10",
-      "Index#tabBarItem#$1#$0#isInitialRender": "n10",
-      "Index#tabBarItem#$1#$0#$0#componentCall": "o10",
+      "Index#tabBarItem#$2#$0#$0#$0#elmtId": "g",
+      "Index#tabBarItem#$2#$0#$0#$0#isInitialRender": "h",
+      "Index#tabBarItem#$1#elmtId": "i",
+      "Index#tabBarItem#$1#isInitialRender": "j",
       "Index#tabBarItem#$0#elmtId": "q10",
       "Index#tabBarItem#$0#isInitialRender": "r10",
       "Index#bottomBar#parent": "s10",
@@ -572,7 +578,7 @@
       "Index#shell#$2#$0#$0#$0#$0#paramsLambda": "v11",
       "Index#shell#$3#$0#$0#$0#$0#paramsLambda": "j11",
       "Index#shell#$4#$0#$0#$0#$0#$0#paramsLambda": "d11",
-      "Index#tabBarItem#$1#$0#$0#paramsLambda": "p10"
+      "Index#tabBarItem#$3#$0#$0#paramsLambda": "f"
     },
     "MemberMethodCache": {
       "aboutToAppear:66:83": "aboutToAppear",
@@ -585,10 +591,10 @@
       "initialRender:149:173": "initialRender",
       "acceptPrivacy:176:181": "acceptPrivacy",
       "exitApp:184:191": "exitApp",
-      "destination:194:323": "destination",
-      "shell:326:396": "shell",
-      "bottomBar:400:408": "bottomBar",
-      "tabBarItem:414:428": "tabBarItem"
+      "destination:194:325": "destination",
+      "shell:328:398": "shell",
+      "bottomBar:402:410": "bottomBar",
+      "tabBarItem:416:442": "tabBarItem"
     },
     "obfName": "entry/src/main/ets/pages/Index.ets"
   },
@@ -1617,9 +1623,9 @@
       "#whiteScheme:120:136": "p42"
     },
     "MemberMethodCache": {
-      "scheme:160:166": "scheme",
-      "accent:168:171": "accent",
-      "fontScale:173:176": "fontScale"
+      "scheme:170:176": "scheme",
+      "accent:178:181": "accent",
+      "fontScale:183:186": "fontScale"
     },
     "obfName": "entry/src/main/ets/theme/Theme.ets"
   },
@@ -2617,8 +2623,8 @@
       "showGuide:578:582": "showGuide",
       "guideCard:587:610": "guideCard",
       "continueStrip:614:661": "continueStrip",
-      "searchResults:664:729": "searchResults",
-      "searchTabChip:732:740": "searchTabChip"
+      "searchResults:664:733": "searchResults",
+      "searchTabChip:736:744": "searchTabChip"
     },
     "obfName": "entry/src/main/ets/view/DiscoverPage.ets"
   },
@@ -2920,18 +2926,16 @@
       "LibraryPage#subscriptionsSection#$1#$2#$0#$1#$0#$0#$0#isInitialRender": "c88",
       "LibraryPage#subscriptionsSection#$1#$2#$0#$0#elmtId": "d88",
       "LibraryPage#subscriptionsSection#$1#$2#$0#$0#isInitialRender": "e88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#elmtId": "f88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#isInitialRender": "g88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$1#p": "i88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#_item": "j88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#p": "k88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#$0#$1#$0#$0#elmtId": "n88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#$0#$1#$0#$0#isInitialRender": "o88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#$0#$1#$0#$0#$0#componentCall": "p88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#$0#$0#elmtId": "r88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#$0#$0#isInitialRender": "s88",
       "LibraryPage#subscriptionsSection#$1#$1#$0#$1#elmtId": "t88",
       "LibraryPage#subscriptionsSection#$1#$1#$0#$1#isInitialRender": "u88",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$1#p": "l",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#_item": "m",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#p": "n",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#$0#$1#$0#$0#elmtId": "q",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#$0#$1#$0#$0#isInitialRender": "r",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#$0#$1#$0#$0#$0#componentCall": "s",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#$0#$0#elmtId": "u",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#$0#$0#isInitialRender": "v",
       "LibraryPage#subscriptionsSection#$1#$1#$0#$0#elmtId": "v88",
       "LibraryPage#subscriptionsSection#$1#$1#$0#$0#isInitialRender": "w88",
       "LibraryPage#subscriptionsSection#$1#$0#$0#$0#$0#elmtId": "x88",
@@ -3009,10 +3013,10 @@
       "LibraryPage#headerActions#$2#$0#$0#paramsLambda": "n89",
       "LibraryPage#headerActions#$4#$0#$0#paramsLambda": "h89",
       "LibraryPage#subscriptionsSection#$1#$0#$0#$0#$0#$0#paramsLambda": "a89",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#forEachItemGenFunction": "h88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#$0#itemCreation2": "l88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#$0#observedDeepRender": "m88",
-      "LibraryPage#subscriptionsSection#$1#$1#$0#$2#$0#$0#$1#$0#$0#$0#paramsLambda": "q88",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#forEachItemGenFunction": "k",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#$0#itemCreation2": "o",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#$0#observedDeepRender": "p",
+      "LibraryPage#subscriptionsSection#$1#$1#$0#$1#$0#$0#$1#$0#$0#$0#paramsLambda": "t",
       "LibraryPage#subscriptionsSection#$1#$2#$0#$1#forEachItemGenFunction": "m87",
       "LibraryPage#subscriptionsSection#$1#$2#$0#$1#$0#$0#itemCreation": "q87",
       "LibraryPage#subscriptionsSection#$1#$2#$0#$1#$0#$0#itemCreation2": "r87",
@@ -3052,13 +3056,13 @@
       "initialRender:73:136": "initialRender",
       "dragTarget:140:145": "dragTarget",
       "headerActions:151:158": "headerActions",
-      "subscriptionsSection:162:202": "subscriptionsSection",
-      "inboxSection:206:242": "inboxSection",
-      "favoritesSection:246:275": "favoritesSection",
-      "downloadsSection:279:307": "downloadsSection",
-      "downloadEpisodes:309:311": "downloadEpisodes",
-      "historySection:315:341": "historySection",
-      "historyEpisodes:343:345": "historyEpisodes"
+      "subscriptionsSection:162:207": "subscriptionsSection",
+      "inboxSection:211:247": "inboxSection",
+      "favoritesSection:251:280": "favoritesSection",
+      "downloadsSection:284:312": "downloadsSection",
+      "downloadEpisodes:314:316": "downloadEpisodes",
+      "historySection:320:346": "historySection",
+      "historyEpisodes:348:350": "historyEpisodes"
     },
     "obfName": "entry/src/main/ets/view/LibraryPage.ets"
   },
@@ -3762,15 +3766,15 @@
       "PodcastDetailPage#header#$2#$0#$0#paramsLambda": "r111"
     },
     "MemberMethodCache": {
-      "aboutToAppear:45:47": "aboutToAppear",
-      "isSubscribed:49:51": "isSubscribed",
-      "dlState:54:58": "dlState",
-      "listenedMs:61:65": "listenedMs",
-      "display:67:69": "display",
-      "load:71:95": "load",
-      "applyFeed:98:106": "applyFeed",
-      "initialRender:108:172": "initialRender",
-      "header:175:249": "header"
+      "aboutToAppear:48:50": "aboutToAppear",
+      "isSubscribed:52:54": "isSubscribed",
+      "dlState:57:61": "dlState",
+      "listenedMs:64:68": "listenedMs",
+      "display:70:72": "display",
+      "load:74:98": "load",
+      "applyFeed:101:109": "applyFeed",
+      "initialRender:111:179": "initialRender",
+      "header:182:256": "header"
     },
     "obfName": "entry/src/main/ets/view/PodcastDetailPage.ets"
   },
@@ -4351,6 +4355,7 @@
       "GlyphImage#$0#extraInfo": "y134",
       "Glyph#initialRender#$0#elmtId": "z134",
       "Glyph#initialRender#$0#isInitialRender": "a135",
+      "Glyph#bold#newValue": "w",
       "Glyph#color#newValue": "b135",
       "Glyph#dim#newValue": "c135",
       "Glyph#symbol#newValue": "d135",
@@ -4367,15 +4372,15 @@
       "SquareArtwork#initialRender#$2#$0#$0#$0#$0#$0#paramsLambda": "q129"
     },
     "MemberMethodCache": {
-      "initialRender:27:31": "initialRender",
-      "initialRender:41:45": "initialRender",
-      "emptyAction:92:92": "emptyAction",
-      "initialRender:94:128": "initialRender",
-      "initialRender:139:162": "initialRender",
-      "initialRender:172:183": "initialRender",
-      "initialRender:192:204": "initialRender",
-      "initialRender:215:235": "initialRender",
-      "initialRender:245:265": "initialRender"
+      "initialRender:36:41": "initialRender",
+      "initialRender:51:55": "initialRender",
+      "emptyAction:102:102": "emptyAction",
+      "initialRender:104:138": "initialRender",
+      "initialRender:149:172": "initialRender",
+      "initialRender:182:193": "initialRender",
+      "initialRender:202:214": "initialRender",
+      "initialRender:225:245": "initialRender",
+      "initialRender:255:275": "initialRender"
     },
     "obfName": "entry/src/main/ets/view/Widgets.ets"
   },

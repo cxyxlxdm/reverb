@@ -301,6 +301,8 @@ struct Index {
             downloadManager: this.downloadManager,
             history: this.history,
             listenStats: this.listenStats,
+            // 单集行的「正在播放」高亮要读播放态
+            player: this.player,
             onBack: () => { this.stack.pop(); },
             onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
           })
@@ -413,10 +415,22 @@ struct Index {
   @Builder
   tabBarItem(label: Resource, icon: Resource, index: number) {
     Column({ space: 3 }) {
-      Glyph({
-        symbol: icon, dim: 23,
-        color: this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant
-      })
+      // 选中项的图标衬一枚药丸底(对齐 Material 3 NavigationBar 的 activeIndicator)。
+      // 原先只靠图标与文字变色来表示选中 —— 并排看 Android 时,那边的药丸底让"当前在哪一栏"
+      // 一眼可见,鸿蒙这边就只有颜色差别,弱得多。
+      Stack() {
+        if (this.tab === index) {
+          Row()
+            .width(56).height(30)
+            .borderRadius(15)
+            .backgroundColor(withAlpha(this.scheme().primary, 0.18))
+        }
+        Glyph({
+          symbol: icon, dim: 23,
+          color: this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant
+        })
+      }
+      .width(56).height(30)
       Text(label)
         .fontSize(TypeScale.caption * this.fontScale())
         .fontColor(this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant)

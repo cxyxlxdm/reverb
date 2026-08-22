@@ -138,20 +138,30 @@ function whiteScheme(a: AccentPalette): Scheme {
 /// 字号档:与 Android 的 4 档倍率对齐(0.9 / 1.0 / 1.15 / 1.3)。
 export const FONT_SCALES: number[] = [0.9, 1.0, 1.15, 1.3];
 
-/// 排版尺度基准(fp)。实际使用时乘以当前字号倍率。
+/**
+ * 排版尺度基准(fp)。实际使用时乘以当前字号倍率。
+ *
+ * **数值与 Android 侧实际用的 Material 3 尺度逐项对齐**(fp 与 sp 都是 160dpi 归一,
+ * 同数值即同物理大小)。原先这张表逐项比 Android 大 1~2fp,叠上鸿蒙这台机器逻辑宽度
+ * 更窄(约 364vp,Android 那台 424dp),结果同一行能放的字数少一截 —— 处处换行、行行发胖。
+ * 实测过:改之前单集标题字高占屏宽 3.95%,Android 是 3.38%,**大 17%**,
+ * 一屏比 Android 少放三四行。改这张表是最省事也最彻底的一处。
+ *
+ * 右侧注释是对应的 Material 3 名称,以后两端调字号要一起动。
+ */
 export class TypeScale {
-  static readonly displaySmall = 34;
-  static readonly headlineMedium = 26;
-  static readonly titleLarge = 21;
-  static readonly titleMedium = 17;
-  static readonly titleSmall = 15;
-  static readonly body = 15;
+  static readonly displaySmall = 32;      // displaySmall
+  static readonly headlineMedium = 24;    // headlineSmall(两端页头都用这个)
+  static readonly titleLarge = 22;        // titleLarge
+  static readonly titleMedium = 16;       // titleMedium
+  static readonly titleSmall = 14;        // titleSmall
+  static readonly body = 14;              // bodyMedium
   /// 比 body 大一号,用于**整页密排长文**(目前只有隐私同意页)。
-  /// 与 Android 那边 bodyMedium(14sp) → bodyLarge(16sp) 的同一处调整对应:
-  /// 长文用正文号读着费劲,放大一号明显好读。列表里的正文不要改用它 —— 那会把行高撑乱。
-  static readonly bodyLarge = 17;
-  static readonly label = 13;
-  static readonly caption = 12;
+  /// 与 Android 那边 bodyMedium → bodyLarge 的同一处调整对应:长文用正文号读着费劲。
+  /// 列表里的正文不要改用它 —— 那会把行高撑乱。
+  static readonly bodyLarge = 16;         // bodyLarge
+  static readonly label = 12;             // labelMedium
+  static readonly caption = 11;           // labelSmall
 }
 
 export class Theme {

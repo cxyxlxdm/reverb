@@ -164,25 +164,30 @@ export struct LibraryPage {
       if (this.subscriptions.subscriptions.length === 0) {
         EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_subscriptions') })
       } else if (this.settings.subsGrid) {
-        Scroll() {
-          Grid() {
-            ForEach(this.subscriptions.subscriptions, (p: Podcast) => {
-              GridItem() {
-                PodcastGridItem({
-                  scheme: this.scheme, fontScale: this.fontScale, podcast: p,
-                  onTap: () => this.onOpenPodcast(p)
-                })
-              }
-            }, (p: Podcast) => p.feedUrl)
-          }
-          .columnsTemplate('1fr 1fr')
-          .columnsGap(Metrics.gridSpacing)
-          .rowsGap(Metrics.gridSpacing + 4)
-          .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 20 })
-          .height(Math.ceil(this.subscriptions.subscriptions.length / 2) * 230 + 20)
+        // **三列**,与 Android 一致。原先写死 `1fr 1fr` 两列 —— 不是密度所致,是硬编码:
+        // Android 用的是 `GridCells.Adaptive(minSize = 104.dp)`,在手机上自适应出三列。
+        // 两列的封面大得没有必要,一屏只放六个,反而不如列表好用。
+        //
+        // 另外原先是 `Scroll { Grid }` 外加一句
+        // `height(ceil(n / 2) * 230 + 20)` 手算总高 —— Grid 本身就可滚动,套 Scroll 才需要
+        // 给死高度,而那个 230 是按两列卡高估的常数:改列数、改字号、改字号倍率都会让它算错
+        // (算小了滚不到底,算大了底部拖出一片空白)。直接用 Grid 自己滚,这笔账就不用算。
+        Grid() {
+          ForEach(this.subscriptions.subscriptions, (p: Podcast) => {
+            GridItem() {
+              PodcastGridItem({
+                scheme: this.scheme, fontScale: this.fontScale, podcast: p,
+                onTap: () => this.onOpenPodcast(p)
+              })
+            }
+          }, (p: Podcast) => p.feedUrl)
         }
+        .columnsTemplate('1fr 1fr 1fr')
+        .columnsGap(Metrics.gridSpacing)
+        .rowsGap(Metrics.gridSpacing + 4)
+        .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 20 })
         .scrollBar(BarState.Off)
-        .width('100%').height('100%').align(Alignment.Top)
+        .width('100%').height('100%')
       } else {
         List() {
           ForEach(this.subscriptions.subscriptions, (p: Podcast) => {

@@ -23,11 +23,21 @@ export struct Glyph {
   /// 编译期报 "Property 'size' ... is not assignable to the same property in base type"。
   @Prop dim: number;
   @Prop color: ResourceColor;
+  /**
+   * 是否加粗描边。默认加粗。
+   *
+   * Symbol 字体默认是**发丝级描边**,并排看 Android 的 Material Rounded(实心/粗描边)时,
+   * 鸿蒙这边的图标显得又细又虚 —— 尤其底部 tab 那两个,像没画完。SymbolGlyph 的
+   * `fontWeight` 控制的就是笔画粗细,给到 Medium 后观感与 Android 基本齐平。
+   * 个别本就厚重的形状(如实心心形)可传 false 保持原样。
+   */
+  @Prop bold: boolean = true;
 
   build() {
     SymbolGlyph(this.symbol)
       .fontSize(this.dim)
       .fontColor([this.color])
+      .fontWeight(this.bold ? FontWeight.Medium : FontWeight.Normal)
   }
 }
 
