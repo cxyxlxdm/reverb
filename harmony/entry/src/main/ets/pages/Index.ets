@@ -406,17 +406,18 @@ struct Index {
     }
     .width('100%')
     /**
-     * 56 —— **鸿蒙自己的规范值**(ArkUI `Tabs` 默认 barHeight 即 56vp),不是 Android 的 80。
+     * 64 —— 落在鸿蒙规范值(56)与 Material NavigationBar(80)之间,两头都试过:
+     *  - **80 太笨重**:那是 Material 给 Android 的规范;而本机逻辑宽度约 376vp、
+     *    Android 那台 427dp,**同一个绝对值在鸿蒙上占屏比例大 14%**,照抄像素必然显大。
+     *  - **56 又挤不开**:药丸只能给到 48×26,图标四周、药丸与文字、药丸与栏上沿
+     *    三处留白都不够,而这三处留白正是 Android 那枚药丸好看的原因。
      *
-     * 曾按 Material 3 NavigationBar 的 80dp 抄过来,真机上明显笨重。两点原因:
-     *  1. 80 是 Material 给 Android 的规范,鸿蒙的底部页签规范本来就是 56;
-     *  2. 本机逻辑宽度约 376vp,Android 那台 427dp —— **同一个绝对值在鸿蒙上占屏比例大 14%**,
-     *     照抄必然显大。
+     * 64 的内部分配:约 7 上边距 + 30 药丸 + 4 间隙 + 15 文字 + 约 8 下边距。
      *
-     * 判据分两类,别混:**字号**按绝对物理尺寸对齐(16sp 的字两端就该一样大,那是可读性常量);
-     * **外壳尺寸**(栏高/图标/内边距)按各自平台规范,不照抄像素。
+     * 判据分两类,别混:**字号**按绝对物理尺寸对齐(16sp 的字两端就该一样大,是可读性常量);
+     * **外壳尺寸**(栏高/图标/内边距)不照抄像素,按平台规范 + 实机观感取值。
      */
-    .height(56)
+    .height(64)
     .backgroundColor(this.scheme().surface)
   }
 
@@ -425,15 +426,23 @@ struct Index {
   /// 换成 Symbol 字体后有正主(见 Sym)。
   @Builder
   tabBarItem(label: Resource, icon: Resource, index: number) {
-    Column({ space: 2 }) {
-      // 选中项衬一枚药丸底。**尺寸按 56 的栏高配比给**(48×26),不是 Material 的 64×32 ——
-      // 后者是给 80 高的栏设计的,塞进 56 里会顶满、上下都没有余量。
-      // 药丸本身值得保留:原先只靠图标与文字变色表示选中,"当前在哪一栏"太弱。
+    Column({ space: 4 }) {
+      /**
+       * 选中项衬一枚药丸底。**64×30,图标 22** —— 三处留白是这枚药丸好看的关键,
+       * 也正是先前 48×26 缺的:
+       *   图标到药丸左右edge  (64-22)/2 = 21   (Android 是 (64-24)/2 = 20)
+       *   图标到药丸上下       (30-22)/2 = 4
+       *   药丸到下方文字       4
+       *   药丸到栏上沿         约 7(由 64 栏高居中得出)
+       * 宽度取满 64:窄药丸裹着图标像个按钮,宽一些才像"这一栏被选中了"。
+       *
+       * 药丸本身值得有:原先只靠图标与文字变色表示选中,"当前在哪一栏"太弱。
+       */
       Stack() {
         if (this.tab === index) {
           Row()
-            .width(48).height(26)
-            .borderRadius(13)
+            .width(64).height(30)
+            .borderRadius(15)
             .backgroundColor(withAlpha(this.scheme().primary, 0.18))
         }
         Glyph({
@@ -441,7 +450,7 @@ struct Index {
           color: this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant
         })
       }
-      .width(48).height(26)
+      .width(64).height(30)
       Text(label)
         .fontSize(TypeScale.caption * this.fontScale())
         .letterSpacing(Tracking.caption)

@@ -593,8 +593,8 @@
       "exitApp:184:191": "exitApp",
       "destination:194:325": "destination",
       "shell:328:398": "shell",
-      "bottomBar:402:421": "bottomBar",
-      "tabBarItem:427:454": "tabBarItem"
+      "bottomBar:402:422": "bottomBar",
+      "tabBarItem:428:463": "tabBarItem"
     },
     "obfName": "entry/src/main/ets/pages/Index.ets"
   },
