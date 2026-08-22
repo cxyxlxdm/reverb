@@ -401,8 +401,9 @@ struct Index {
   @Builder
   bottomBar() {
     Row() {
-      this.tabBarItem($r('app.string.nav_discover'), Sym.discover, Sym.discoverFill, 0)
-      this.tabBarItem($r('app.string.nav_library'), Sym.library, Sym.libraryFill, 1)
+      // 图标用**与 Android 完全相同的两枚 Material Rounded 矢量**(见 tabBarItem 注释)
+      this.tabBarItem($r('app.string.nav_discover'), $r('app.media.ic_tab_discover'), 0)
+      this.tabBarItem($r('app.string.nav_library'), $r('app.media.ic_tab_library'), 1)
     }
     .width('100%')
     /**
@@ -425,7 +426,7 @@ struct Index {
   /// 原先误用了放大镜与相册 —— `sys.media.*` 里没有这两个形状,只能拿近似的凑;
   /// 换成 Symbol 字体后有正主(见 Sym)。
   @Builder
-  tabBarItem(label: Resource, icon: Resource, iconFill: Resource, index: number) {
+  tabBarItem(label: Resource, icon: Resource, index: number) {
     Column({ space: 4 }) {
       /**
        * 选中项衬一枚药丸底。**64×30,图标 20** —— 三处留白是这枚药丸好看的关键,
@@ -436,9 +437,21 @@ struct Index {
        *   药丸到栏上沿     约 7(由 64 栏高居中得出)
        * 宽度取满 64:窄药丸裹着图标像个按钮,宽一些才像"这一栏被选中了"。
        *
-       * **图标 20 而不是 Android 的 24**:同一个标称字号下,Symbol 字体的字形比
-       * Material 图标更满(占 em 框的比例更大),所以视觉上会大一圈 ——
-       * 标称值要往下调才等观感。这也是"外壳尺寸不照抄像素"的又一例。
+       * **图标是从 Android 搬过来的同两枚 Material Rounded 矢量**
+       * (`Icons.Rounded.Explore` / `Icons.Rounded.LibraryMusic`,Apache-2.0),
+       * 以 SVG 放在 `resources/base/media/ic_tab_*.svg`,用 `Image + fillColor` 染色。
+       *
+       * 为什么不继续用 Symbol 字体:两端底部 tab 是**并排截图最先被看到的地方**,
+       * 而 Symbol 里没有形状对得上的对等件 —— `discover` 是个细描边大圆环、
+       * `music_note_list` 是三横线加符号,与 Material 的罗盘/唱片盒差得远,
+       * 发布截图放在一起就是两个应用。图标形状属于品牌一致性,不属于"平台惯例"那一类,
+       * 所以这里取一致而不取各自平台形态。
+       *
+       * 也因此**不再做"选中实心 / 未选中描边"的切换** —— Android 侧两个状态用的是同一枚图标,
+       * 靠药丸底与颜色表示选中,鸿蒙照此对齐。
+       *
+       * 尺寸 22 而非 Android 的 24:22 是先前用 Symbol 时调好的观感值,换成同一批矢量后
+       * 22 与 Android 的 24 视觉相当(本机逻辑宽度更窄,见 bottomBar 注释)。
        *
        * 药丸本身值得有:原先只靠图标与文字变色表示选中,"当前在哪一栏"太弱。
        */
@@ -449,11 +462,11 @@ struct Index {
             .borderRadius(15)
             .backgroundColor(withAlpha(this.scheme().primary, 0.18))
         }
-        Glyph({
-          // 选中用实心、未选中用描边(Material 的标准做法,Android 侧同)
-          symbol: this.tab === index ? iconFill : icon, dim: 20,
-          color: this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant
-        })
+        // 用 Image 而非 SymbolGlyph:这两枚是从 Material 取来的 SVG(见下方注释)。
+        // SVG 走 fillColor 染色,与 Symbol 的 fontColor 等效。
+        Image(icon)
+          .width(22).height(22)
+          .fillColor(this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant)
       }
       .width(64).height(30)
       Text(label)

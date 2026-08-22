@@ -17,8 +17,12 @@ class Lib {
  * 开源许可页。对应 Android `LicensesScreen.kt`。
  *
  * 与 Android 的清单**内容不同、性质相同**:Android 列的是 Compose / Media3 / OkHttp /
- * Coil / Coroutines / WorkManager;鸿蒙端**零三方依赖**,用到的全是系统能力,
+ * Coil / Coroutines / WorkManager;鸿蒙端**不引三方库**,用到的全是系统能力,
  * 所以列的是 HarmonyOS SDK 自身与所用的系统 Kit。取源清单两端一致。
+ *
+ * 唯一的三方**素材**是底部页签那两枚图标:为了与 Android 端形状一致(并排截图时最显眼),
+ * 从 Material Design Icons 取了 Explore / LibraryMusic 两个矢量打进包里,故单列一条。
+ * **以后再往包里放任何三方素材,这张表都要同步补** —— 这一页是对外的合规陈述,不是摆设。
  */
 const LIBS: Lib[] = [
   new Lib('HarmonyOS SDK (ArkTS / ArkUI)', 'Apache License 2.0'),
@@ -26,7 +30,9 @@ const LIBS: Lib[] = [
   new Lib('@ohos.net.http (Network Kit)', 'Apache License 2.0'),
   new Lib('@ohos.xml (XmlPullParser)', 'Apache License 2.0'),
   new Lib('Share Kit / Core File Kit', 'Apache License 2.0'),
-  new Lib('workScheduler / notificationManager', 'Apache License 2.0')
+  new Lib('workScheduler / notificationManager', 'Apache License 2.0'),
+  // 打进包里的三方素材:底部页签的两枚矢量(与 Android 端同一批图标)
+  new Lib('Material Design Icons(底部页签矢量)', 'Apache License 2.0')
 ];
 
 // 数据来源列**实际用到的那些**。无内容目录的渠道压根不连目录接口(见 Features.CATALOG),

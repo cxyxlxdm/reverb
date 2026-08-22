@@ -398,14 +398,12 @@
       "#Index": "f10",
       "Index#tabBarItem#label": "g10",
       "Index#tabBarItem#icon": "h10",
-      "Index#tabBarItem#iconFill": "k",
       "Index#tabBarItem#index": "i10",
       "Index#tabBarItem#parent": "j10",
       "Index#tabBarItem#$4#elmtId": "a",
       "Index#tabBarItem#$4#isInitialRender": "b",
-      "Index#tabBarItem#$3#$0#elmtId": "c",
-      "Index#tabBarItem#$3#$0#isInitialRender": "d",
-      "Index#tabBarItem#$3#$0#$0#componentCall": "e",
+      "Index#tabBarItem#$3#elmtId": "l",
+      "Index#tabBarItem#$3#isInitialRender": "m",
       "Index#tabBarItem#$2#elmtId": "k10",
       "Index#tabBarItem#$2#isInitialRender": "l10",
       "Index#tabBarItem#$2#$0#$0#$0#elmtId": "g",
@@ -578,8 +576,7 @@
       "Index#destination#$0#$7#$0#$0#$0#$3#$0#$0#$0#$0#$0#paramsLambda": "t12",
       "Index#shell#$2#$0#$0#$0#$0#paramsLambda": "v11",
       "Index#shell#$3#$0#$0#$0#$0#paramsLambda": "j11",
-      "Index#shell#$4#$0#$0#$0#$0#$0#paramsLambda": "d11",
-      "Index#tabBarItem#$3#$0#$0#paramsLambda": "f"
+      "Index#shell#$4#$0#$0#$0#$0#$0#paramsLambda": "d11"
     },
     "MemberMethodCache": {
       "aboutToAppear:66:83": "aboutToAppear",
@@ -594,8 +591,8 @@
       "exitApp:184:191": "exitApp",
       "destination:194:325": "destination",
       "shell:328:398": "shell",
-      "bottomBar:402:422": "bottomBar",
-      "tabBarItem:428:468": "tabBarItem"
+      "bottomBar:402:423": "bottomBar",
+      "tabBarItem:429:481": "tabBarItem"
     },
     "obfName": "entry/src/main/ets/pages/Index.ets"
   },
@@ -3138,8 +3135,8 @@
     },
     "MemberMethodCache": {
       "Lib:10:13": "v91",
-      "initialRender:44:95": "initialRender",
-      "header:98:104": "header"
+      "initialRender:50:101": "initialRender",
+      "header:104:110": "header"
     },
     "obfName": "entry/src/main/ets/view/LicensesPage.ets"
   },
