@@ -151,14 +151,32 @@ export struct EpisodeListItem {
     }
   }
 
+  /**
+   * 日期 · 时长。**不含节目名** —— 节目名单独一栏靠左、用强调色(见 build)。
+   *
+   * 原先是「节目名 · 日期 · 时长」串成一条全灰文字,并排看 Android 与鸿蒙的截图时
+   * 这条是观感差距最大的一处:三段同色同号挤在左边,读起来是一坨灰糊,还常被截断成
+   * 「1 小时 …」。Android 是左右分栏(节目名强调色居左 / 日期时长灰色右对齐),
+   * 右缘因时长宽度固定而天然整齐。
+   */
   private meta(): string {
     const parts: string[] = [];
-    if (this.showPodcastTitle && this.episode.podcastTitle.length > 0) parts.push(this.episode.podcastTitle);
     const d = formatPubDate(this.episode.pubDate);
     if (d.length > 0) parts.push(d);
     const dur = formatDurationSec(this.episode.durationSec);
     if (dur.length > 0) parts.push(dur);
     return parts.join('  ·  ');
+  }
+
+  /// 靠左那栏的节目名。与 Android 同一口径:超过 10 字取前 9 字加省略号 ——
+  /// 长度不设限会把右侧的日期时长挤出去。
+  private shortPodcastTitle(): string {
+    const name = this.episode.podcastTitle;
+    return name.length > 10 ? `${name.substring(0, 9)}…` : name;
+  }
+
+  private showsPodcastTitle(): boolean {
+    return this.showPodcastTitle && this.episode.podcastTitle.length > 0;
   }
 
   private titleColor(): string {
@@ -168,13 +186,32 @@ export struct EpisodeListItem {
 
   build() {
     Row({ space: 12 }) {
-      Artwork({ scheme: this.scheme, url: this.episode.artworkUrl, dim: 52, corner: 10 })
-      Column({ space: 5 }) {
+      // 封面 + 半透明黑蒙层 + 白色播放/暂停图标。
+      //
+      // **播放入口就叠在封面上**,行右侧不再另放一个圆钮(与 Android 一致)。
+      // 原先右侧那个 34 见方的灰圆圈让每行多一个抢眼的重元素,与封面争视线,
+      // 而整行本来就可点播放 —— 它并不提供额外能力,只是把行撑宽、把标题挤成两行。
+      Stack() {
+        Artwork({ scheme: this.scheme, url: this.episode.artworkUrl, dim: 52, corner: 10 })
+        Row()
+          .width(52).height(52)
+          .borderRadius(10)
+          .backgroundColor(withAlpha('#000000', this.isCurrent ? 0.42 : 0.28))
+        Image(this.isCurrent && this.isPlaying
+          ? $r('sys.media.ohos_ic_public_pause')
+          : $r('sys.media.ohos_ic_public_play'))
+          .width(24).height(24)
+          .fillColor(Color.White)
+      }
+      .width(52).height(52)
+
+      Column({ space: 3 }) {
         // 标题 + 已播对勾(与 Android 一致:对勾紧跟标题,16 号,onSurfaceVariant 色)
         Row({ space: 6 }) {
           Text(this.episode.title)
-            .fontSize(TypeScale.titleSmall * this.fontScale)
-            .fontWeight(FontWeight.Medium)
+            // 常规字重、正文号(对齐 Android 的 bodyLarge 常规体)。原先是 Medium,
+            // 与灰糊的副信息叠在一起显得又粗又胖,一屏比 Android 少放三四行。
+            .fontSize(TypeScale.body * this.fontScale)
             .fontColor(this.titleColor())
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -187,7 +224,25 @@ export struct EpisodeListItem {
         }
         .width('100%')
         .alignItems(VerticalAlign.Center)
-        if (this.meta().length > 0) {
+        // 副信息:节目名(强调色)靠左 + 日期·时长(灰)右对齐。
+        // 不显示节目名的场景(频道详情页)退化成日期·时长单独居左,与 Android 同。
+        if (this.showsPodcastTitle()) {
+          Row() {
+            Text(this.shortPodcastTitle())
+              .fontSize(TypeScale.caption * this.fontScale)
+              .fontColor(this.scheme.primary)
+              .maxLines(1)
+            Blank()
+            if (this.meta().length > 0) {
+              Text(this.meta())
+                .fontSize(TypeScale.caption * this.fontScale)
+                .fontColor(this.scheme.onSurfaceVariant)
+                .maxLines(1)
+            }
+          }
+          .width('100%')
+          .alignItems(VerticalAlign.Center)
+        } else if (this.meta().length > 0) {
           Text(this.meta())
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
@@ -223,24 +278,10 @@ export struct EpisodeListItem {
         Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
           .onClick(() => this.onDownload())
       }
-
-      // 圆形播放/暂停键
-      Stack() {
-        Circle()
-          .width(34).height(34)
-          .fill(this.isCurrent ? withAlpha(this.scheme.primary, 0.18) : withAlpha(this.scheme.onSurfaceVariant, 0.12))
-        Image(this.isCurrent && this.isPlaying
-          ? $r('sys.media.ohos_ic_public_pause')
-          : $r('sys.media.ohos_ic_public_play'))
-          .width(18).height(18)
-          .fillColor(this.isCurrent ? this.scheme.primary : this.scheme.onSurfaceVariant)
-      }
-      .width(34).height(34)
-      .onClick(() => this.onPlay())
     }
     .width('100%')
     .alignItems(VerticalAlign.Center)
-    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 10, bottom: 10 })
+    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 12, bottom: 12 })
     .onClick(() => this.onPlay())
     .bindContextMenu(this.contextMenu(), ResponseType.LongPress, { enableArrow: true })
   }

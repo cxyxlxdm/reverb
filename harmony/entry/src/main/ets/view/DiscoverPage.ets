@@ -613,10 +613,11 @@ export struct DiscoverPage {
   @Builder
   continueStrip() {
     Column({ space: 6 }) {
+      // 小标题用灰色常规体(对齐 Android 的 labelMedium / onSurfaceVariant)——
+      // 它是"这一条横滑是什么"的注脚,不该跟「最新更新」那种分节标题一样重。
       Text(L.s('continue_listening'))
-        .fontSize(TypeScale.titleSmall * this.fontScale)
-        .fontWeight(FontWeight.Medium)
-        .fontColor(this.scheme.onBackground)
+        .fontSize(TypeScale.label * this.fontScale)
+        .fontColor(this.scheme.onSurfaceVariant)
         .padding({ left: Metrics.pagePadding })
       Scroll() {
         Row({ space: 12 }) {
@@ -629,16 +630,21 @@ export struct DiscoverPage {
                 .maxLines(2)
                 .textOverflow({ overflow: TextOverflow.Ellipsis })
                 .width('100%')
-              // 细进度条
+              // 细进度条。轨道用 surfaceVariant(与 Android 的 trackColor 同),
+              // **不要用 onSurfaceVariant 加透明度** —— 那样轨道在深色底上几乎看不见,
+              // 于是刚开始听(进度 1%~15%)时整条进度条只剩左端一个绿点,像屏幕上落了灰,
+              // 读不出"这集听到哪了"。有底槽才有进度可读。
               Stack({ alignContent: Alignment.Start }) {
                 Row().width('100%').height(3)
-                  .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.2)).borderRadius(2)
+                  .backgroundColor(this.scheme.surfaceVariant).borderRadius(2)
                 Row().width(`${Math.min(100, h.positionMs / h.durationMs * 100)}%`).height(3)
                   .backgroundColor(this.scheme.primary).borderRadius(2)
               }
               .width('100%').height(3)
             }
-            .width(112)
+            // 132 而非 112:与 Android 卡宽一致。112 太窄,两行标题基本只够放七八个字,
+            // 每张卡都以省略号收尾。
+            .width(132)
             .onClick(() => this.onPlayEpisode(h.episode, this.continueEntries().map((x: HistoryEntry) => x.episode)))
           }, (h: HistoryEntry) => h.episode.id)
         }
