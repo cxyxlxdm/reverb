@@ -51,8 +51,6 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -109,6 +107,7 @@ import com.yuyin.reverb.ui.REGION_OPTIONS
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.playback.RadioStation
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.PillChip
 import com.yuyin.reverb.ui.components.PodcastListItem
 import com.yuyin.reverb.ui.discoverViewModel
 import java.util.Locale
@@ -427,15 +426,11 @@ private fun CategoryChipsRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         itemsIndexed(categories) { i, cat ->
-            FilterChip(
+            PillChip(
                 selected = i == selectedIndex,
+                text = stringResource(cat.labelRes),
                 onClick = { onSelect(i) },
-                label = { Text(stringResource(cat.labelRes)) },
-                modifier = Modifier.padding(end = 8.dp),
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                )
+                modifier = Modifier.padding(end = 8.dp)
             )
         }
         item {
@@ -944,15 +939,7 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
 
 @Composable
 private fun SearchTabChip(selected: Boolean, text: String, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(text) },
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primary,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-        )
-    )
+    PillChip(selected = selected, text = text, onClick = onClick)
 }
 
 @Composable

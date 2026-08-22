@@ -28,6 +28,9 @@ import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -60,6 +63,41 @@ import com.yuyin.reverb.ui.theme.CeladonDim
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+
+/**
+ * 分段/分类用的**药丸 chip**。
+ *
+ * 与 Material 的 `FilterChip` 默认样式相比,去掉了两样:圆角由 8dp 改为全圆,
+ * 以及去掉 1dp 描边。这是**跟鸿蒙端对齐**的结果 —— 鸿蒙那边一直是全圆实底药丸,
+ * 两端并排看时 Material 那种「圆角矩形 + 细描边」显得更硬。
+ *
+ * 未选中是 onSurfaceVariant 的 10% 实底(与鸿蒙 `ChipsRow` 同一配方),选中是强调色实底。
+ *
+ * 全项目三处 chip 都走这里:音阁分段、发现页分类(仅完整版渠道)、搜索结果的节目/单集分段。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PillChip(
+    selected: Boolean,
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    FilterChip(
+        selected = selected,
+        onClick = onClick,
+        label = { Text(text) },
+        modifier = modifier,
+        shape = RoundedCornerShape(percent = 50),
+        border = null,
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            selectedContainerColor = MaterialTheme.colorScheme.primary,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+        )
+    )
+}
 
 fun formatTime(ms: Long): String {
     if (ms <= 0) return "00:00"

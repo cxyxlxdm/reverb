@@ -25,8 +25,6 @@ import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.GridView
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +45,7 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
+import com.yuyin.reverb.ui.components.PillChip
 import com.yuyin.reverb.data.model.DownloadStatus
 import com.yuyin.reverb.data.model.DownloadedEpisode
 import com.yuyin.reverb.data.model.Podcast
@@ -96,15 +95,11 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
         Box(Modifier.fillMaxWidth()) {
             LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
                 itemsIndexed(sections) { i, s ->
-                    FilterChip(
+                    PillChip(
                         selected = section == i,
+                        text = s,
                         onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
-                        label = { Text(s) },
-                        modifier = Modifier.padding(end = 8.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                        )
+                        modifier = Modifier.padding(end = 8.dp)
                     )
                 }
             }

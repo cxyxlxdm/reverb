@@ -476,6 +476,19 @@ export struct DiscoverPage {
 
   @Builder
   searchBar() {
+    /**
+     * 横向留白由**外层容器的 padding** 给,不要在搜索框自己身上写 margin。
+     *
+     * 原先是 `width('100%')` + `margin({ left: 16, right: 16 })` —— 真机上**右侧留白整个丢了**,
+     * 圆角直接顶在屏幕边缘。ArkUI 里百分比宽度按父容器**内容宽**算出 100%,margin 再加在外面:
+     * 左 margin 把它往右推,右 margin 没有东西可顶,于是整块溢出右缘。
+     * 换成外层 Column 给 padding、内层 `width('100%')`,百分比就按"父内容宽 − padding"算,
+     * 两侧才对称。
+     *
+     * 同样的写法在下面的 guideCard 也有一处,一并改了。**凡是 `width('100%')` 配横向 margin
+     * 都是这个坑**,以后要么给外层加 padding,要么别写 100%。
+     */
+    Column() {
     // 图标 20、间距 12:原先 18 / 8 确实太挤(图标几乎贴着文字),但按 Material 给到
     // 24 / 16 又太胀 —— 那是 Android 的规范值,本机逻辑宽度更窄,照抄就显大(见 bottomBar 注释)。
     // 20 / 12 是两端观感之间的取值。**文字**是另一码事:仍按绝对物理尺寸对齐 Android 的
@@ -511,10 +524,13 @@ export struct DiscoverPage {
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 10, bottom: 10 })
-    .margin({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 8 })
     .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.10))
     .borderRadius(12)
     .alignItems(VerticalAlign.Center)
+    }
+    .width('100%')
+    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding })
+    .margin({ bottom: 8 })
   }
 
   /// 分类页:下拉刷新 + **单列列表**(与 Android 一致,非宫格),
@@ -589,6 +605,9 @@ export struct DiscoverPage {
   /// 意义是让「全新安装 + 没网」也能走通完整播放链路,而不是对着空白猜是 App 坏了还是网不通。
   @Builder
   guideCard() {
+    // 横向留白同样由外层 padding 给 —— `width('100%')` 配横向 margin 会丢右侧留白,
+    // 详见 searchBar 注释。
+    Column() {
     Row({ space: 12 }) {
       // 用 sys.media 的标准播放件而非 Symbol 字体:Symbol 名要到真机字体里才解析,
       // 写错不报错、直接空白渲染。这个件播放页已在用,确认可渲。
@@ -606,11 +625,14 @@ export struct DiscoverPage {
     }
     .width('100%')
     .padding({ left: 14, right: 14, top: 12, bottom: 12 })
-    .margin({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 4 })
     .backgroundColor(withAlpha(this.scheme.primary, 0.08))
     .borderRadius(12)
     .alignItems(VerticalAlign.Center)
     .onClick(() => this.onPlayEpisode(GuideEpisode.make(), [GuideEpisode.make()]))
+    }
+    .width('100%')
+    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding })
+    .margin({ bottom: 4 })
   }
 
   /// 继续收听:横滑卡片,点按续播。
