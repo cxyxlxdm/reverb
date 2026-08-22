@@ -301,8 +301,8 @@
     <string name="licenses_intro">Reverb is built with the following open-source software, with thanks.</string>
     <string name="licenses_h_libs">Libraries</string>
     <string name="licenses_h_sources">Data sources</string>
-    <string name="licenses_sources_note">These are public podcast directory/search APIs, used only for search and charts; audio always comes from the publisher\'s original RSS. This app never re-hosts or proxies it.</string>
-
+    <string name="licenses_sources_note">This app provides no catalog and neither stores nor proxies any audio — audio always comes straight from the publisher\'s own RSS feed.</string>
+    <string name="licenses_sources_note_catalog">These are public podcast directory/search APIs, used only for search and charts; audio always comes from the publisher\'s original RSS. This app never re-hosts or proxies it.</string>
     <string name="notif_channel_name">New episodes</string>
     <string name="notif_channel_desc">Notify when a subscribed show has a new episode</string>
     <string name="notif_title">Reverb · New episodes</string>

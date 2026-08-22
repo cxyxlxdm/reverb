@@ -4,7 +4,11 @@
 【网站】上传到 cxyxl.cn/reverb/  ← 域名已定为 cxyxl.cn(登记主体域名)
   index.html          官网首页(图标已内联,只依赖 shots/web/)
   privacy.html        隐私政策(分发平台填的 URL 指向它)
-  shots/web/*.jpg     官网用截图(已压缩,17–91 KB)
+  shots/web/*.jpg     官网用截图(已压缩,32–68 KB),4 张:
+                        01-discover 取自 **Android 完整版**(分类榜只在完整版里有,
+                          鸿蒙包与 Android 商店渠道都没有内容目录 —— 官网若放那张就是不实宣传);
+                        03-player / 09-settings / 10-licenses 取自鸿蒙那套原图压缩而来。
+                        收听时长与听觉足迹两张**不上官网**(含个人收听数据)。
 
   站点地址示例:
     https://cxyxl.cn/reverb/
@@ -13,9 +17,13 @@
   若你把隐私页放在别处,记得同步改那一处。
 
 【应用市场素材】不要上传到官网
-  shots/*.png         原始截图 1216×2688(留档)
+  shots/*.png         原始截图 1216×2688(留档),10 张 + _spare-privacy-consent
   shots/store/*.png   ★ 发布用:1512×2688,比例正好 9:16,PNG 均 <5MB
                         (左右各补 148px #141E20 底色,与页面底色一体、无接缝)
+  命名与 Android 那套(reverb-android/shots/)**同名同序**,改一端时便于对照另一端:
+    01-start 02-detail 03-player 04-library 05-inbox 06-history
+    07-listen-stats 08-footprint 09-settings 10-licenses
+    _spare-privacy-consent(备用,首启同意页)
 
 【其他发布物料】
   应用图标   harmony/store/appicon-216.png(备用 512 / 1024)

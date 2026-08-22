@@ -858,7 +858,11 @@
     },
     {
       "name": "licenses_sources_note",
-      "value": "These are public podcast directory/search APIs, used only for search and charts; audio always comes from the publisher's original RSS. This app never re-hosts or proxies it."
+      "value": "This app provides no catalog and neither stores nor proxies any audio — audio always comes straight from the publisher's own RSS feed."
+    },
+    {
+      "name": "licenses_sources_note_catalog",
+      "value": "The following are public podcast directories / search APIs, used only for search and charts. Audio always comes from the publisher's own RSS; this app never stores or proxies it."
     },
     {
       "name": "log_size",

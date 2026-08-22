@@ -301,8 +301,8 @@
     <string name="licenses_intro">餘音使用了以下開源軟體，謹致謝意。</string>
     <string name="licenses_h_libs">開源庫</string>
     <string name="licenses_h_sources">資料來源</string>
-    <string name="licenses_sources_note">以下為公開的播客目錄/檢索介面，僅用於檢索與榜單；音訊始終來自發布方原始 RSS，本應用不轉存、不代理。</string>
-
+    <string name="licenses_sources_note">本應用不提供節目目錄、不轉存也不代理任何音訊；音訊始終來自發布方的原始 RSS。</string>
+    <string name="licenses_sources_note_catalog">以下為公開的播客目錄/檢索介面，僅用於檢索與榜單；音訊始終來自發布方原始 RSS，本應用不轉存、不代理。</string>
     <string name="notif_channel_name">訂閱更新</string>
     <string name="notif_channel_desc">訂閱的播客有新一集時提醒</string>
     <string name="notif_title">餘音 · 訂閱更新</string>

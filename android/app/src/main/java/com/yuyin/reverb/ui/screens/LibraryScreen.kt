@@ -237,6 +237,8 @@ private fun DownloadsSection() {
                 isCurrent = current?.id == d.episode.id,
                 isPlaying = isPlaying,
                 onPlay = { PlayerController.playOrToggle(d.episode, downloads.map { it.episode }) },
+                // 下载同样是跨节目混排,节目名要显示(见历史段注释)
+                showPodcastTitle = true,
                 downloadStatus = DownloadStatus.Completed,
                 onDeleteDownload = { pendingDelete = d },
                 played = played,
@@ -285,6 +287,9 @@ private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntr
                 isCurrent = current?.id == h.episode.id,
                 isPlaying = isPlaying,
                 onPlay = { PlayerController.playOrToggle(h.episode, history.map { it.episode }) },
+                // 历史是跨节目混排,节目名要显示 —— 与「最新」「收藏」「下载」一致
+                // (鸿蒙侧四段都传,Android 这里和下载段此前漏了)
+                showPodcastTitle = true,
                 played = h.played,
                 onTogglePlayed = { container.historyStore.markPlayed(h.episode.id, !h.played) },
                 onPlayNext = { PlayerController.playNext(h.episode) },

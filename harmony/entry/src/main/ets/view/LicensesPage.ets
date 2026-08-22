@@ -76,7 +76,10 @@ export struct LicensesPage {
           }, (lib: Lib) => lib.name)
 
           this.header(L.s('licenses_h_sources'))
-          Text(L.s('licenses_sources_note'))
+          // 这段引言也必须按渠道分支 —— 无内容目录的渠道里写「以下为公开的播客目录/检索接口」
+          // 就是文不对题:下面列的是 RSS 地址与官网 OPML,压根没有目录接口。
+          // 发布截图里这一页是会被复核人员逐字看的。
+          Text(Features.CATALOG ? L.s('licenses_sources_note_catalog') : L.s('licenses_sources_note'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
           ForEach(SOURCES, (s: string) => {

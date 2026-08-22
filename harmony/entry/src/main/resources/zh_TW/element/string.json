@@ -858,6 +858,10 @@
     },
     {
       "name": "licenses_sources_note",
+      "value": "本應用不提供節目目錄、不轉存也不代理任何音訊；音訊始終來自發布方的原始 RSS。"
+    },
+    {
+      "name": "licenses_sources_note_catalog",
       "value": "以下為公開的播客目錄/檢索介面，僅用於檢索與榜單；音訊始終來自發布方原始 RSS，本應用不轉存、不代理。"
     },
     {

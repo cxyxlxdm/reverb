@@ -58,7 +58,13 @@ fun LicensesScreen(onBack: () -> Unit) {
             LIBS.forEach { LibRow(it.name, it.license) }
             Header(stringResource(R.string.licenses_h_sources))
             Text(
-                stringResource(R.string.licenses_sources_note),
+                // 这段引言也要按渠道分支 —— 商店渠道里写「以下为公开的播客目录/检索接口」
+                // 就是文不对题:下面列的是 RSS 地址与官网 OPML,压根没有目录接口。
+                // 发布截图里这一页会被复核人员逐字看。鸿蒙侧同一处同一改法。
+                stringResource(
+                    if (com.yuyin.reverb.BuildConfig.CATALOG) R.string.licenses_sources_note_catalog
+                    else R.string.licenses_sources_note
+                ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
