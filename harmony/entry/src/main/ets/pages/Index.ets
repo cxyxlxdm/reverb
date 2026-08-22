@@ -405,11 +405,18 @@ struct Index {
       this.tabBarItem($r('app.string.nav_library'), Sym.library, 1)
     }
     .width('100%')
-    // 80 而非 56:Material 3 NavigationBar 的规范高度就是 80,Android 侧实测也正是 80dp。
-    // 56 是 Material **2** 的 BottomNavigation 高度 —— 少 24 之后图标与文字挤在一起,
-    // 药丸也没地方放(原先药丸距栏上边缘只有 5vp,Android 是 12dp)。
-    // 80 的内部分配:12 上边距 + 32 药丸 + 4 间隙 + 16 文字 + 16 下边距。
-    .height(80)
+    /**
+     * 56 —— **鸿蒙自己的规范值**(ArkUI `Tabs` 默认 barHeight 即 56vp),不是 Android 的 80。
+     *
+     * 曾按 Material 3 NavigationBar 的 80dp 抄过来,真机上明显笨重。两点原因:
+     *  1. 80 是 Material 给 Android 的规范,鸿蒙的底部页签规范本来就是 56;
+     *  2. 本机逻辑宽度约 376vp,Android 那台 427dp —— **同一个绝对值在鸿蒙上占屏比例大 14%**,
+     *     照抄必然显大。
+     *
+     * 判据分两类,别混:**字号**按绝对物理尺寸对齐(16sp 的字两端就该一样大,那是可读性常量);
+     * **外壳尺寸**(栏高/图标/内边距)按各自平台规范,不照抄像素。
+     */
+    .height(56)
     .backgroundColor(this.scheme().surface)
   }
 
@@ -418,35 +425,31 @@ struct Index {
   /// 换成 Symbol 字体后有正主(见 Sym)。
   @Builder
   tabBarItem(label: Resource, icon: Resource, index: number) {
-    Column({ space: 4 }) {
-      // 选中项的图标衬一枚药丸底,尺寸取 Material 3 NavigationBar 的 activeIndicator
-      // 规范值 **64×32**(Android 侧实测正是 32dp 高)。原先 56×30 且距栏上边缘只有 5vp,
-      // 并排看就是"药丸贴着上沿、比 Android 小一圈"。
+    Column({ space: 2 }) {
+      // 选中项衬一枚药丸底。**尺寸按 56 的栏高配比给**(48×26),不是 Material 的 64×32 ——
+      // 后者是给 80 高的栏设计的,塞进 56 里会顶满、上下都没有余量。
+      // 药丸本身值得保留:原先只靠图标与文字变色表示选中,"当前在哪一栏"太弱。
       Stack() {
         if (this.tab === index) {
           Row()
-            .width(64).height(32)
-            .borderRadius(16)
+            .width(48).height(26)
+            .borderRadius(13)
             .backgroundColor(withAlpha(this.scheme().primary, 0.18))
         }
         Glyph({
-          symbol: icon, dim: 24,
+          symbol: icon, dim: 22,
           color: this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant
         })
       }
-      .width(64).height(32)
+      .width(48).height(26)
       Text(label)
-        // labelMedium(12) 而非 labelSmall(11):Material 的 NavigationBarItem 用的是前者
-        .fontSize(TypeScale.label * this.fontScale())
-        .letterSpacing(Tracking.label)
+        .fontSize(TypeScale.caption * this.fontScale())
+        .letterSpacing(Tracking.caption)
         .fontColor(this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant)
     }
     .layoutWeight(1)
     .height('100%')
-    // 顶部留 12(Material 规范),不再整体居中 —— 居中会把药丸推到栏的正中,
-    // 文字与下沿之间反而空一大块
-    .justifyContent(FlexAlign.Start)
-    .padding({ top: 12 })
+    .justifyContent(FlexAlign.Center)
     .onClick(() => { this.tab = index; })
   }
 

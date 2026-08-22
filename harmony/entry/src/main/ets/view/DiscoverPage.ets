@@ -476,13 +476,13 @@ export struct DiscoverPage {
 
   @Builder
   searchBar() {
-    // 图标 24、图标到文字 16、文字用 bodyLarge —— 三个数都取 Material 的
-    // OutlinedTextField(含 leadingIcon)规范,Android 侧就是它。
-    // 原先是 18 / 8 / body(14):图标小一圈、和文字几乎贴着、文字还小两号,
-    // 并排看整个搜索框都显得局促。
-    Row({ space: 16 }) {
+    // 图标 20、间距 12:原先 18 / 8 确实太挤(图标几乎贴着文字),但按 Material 给到
+    // 24 / 16 又太胀 —— 那是 Android 的规范值,本机逻辑宽度更窄,照抄就显大(见 bottomBar 注释)。
+    // 20 / 12 是两端观感之间的取值。**文字**是另一码事:仍按绝对物理尺寸对齐 Android 的
+    // bodyLarge(16),字号是可读性常量,不随平台缩。
+    Row({ space: 12 }) {
       Image($r('sys.media.ohos_ic_public_search_filled'))
-        .width(24).height(24)
+        .width(20).height(20)
         .fillColor(this.scheme.onSurfaceVariant)
       TextInput({
         placeholder: Features.CATALOG ? L.s('search_placeholder') : L.s('search_hint_url'),
@@ -510,8 +510,7 @@ export struct DiscoverPage {
       }
     }
     .width('100%')
-    // 左内边距 12:图标左缘与 Material 的 contentPadding 对齐(12 + 24 图标 + 16 间隙 = 文字起点 52)
-    .padding({ left: 12, right: 14, top: 10, bottom: 10 })
+    .padding({ left: 14, right: 14, top: 10, bottom: 10 })
     .margin({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 8 })
     .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.10))
     .borderRadius(12)
