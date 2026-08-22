@@ -65,6 +65,11 @@ export class Sym {
   static readonly grid: Resource = $r('sys.symbol.square_grid_2x2');            // Rounded.GridView
   static readonly list: Resource = $r('sys.symbol.list_bullet');                // AutoMirrored.ViewList
   static readonly discover: Resource = $r('sys.symbol.discover');               // Rounded.Explore
+  // 底部 tab 的**选中态**用实心变体,未选中用描边 —— 这是 Material 的标准做法,
+  // Android 侧就是这样(发现选中时是实心罗盘、音阁未选中是描边)。
+  // 描边大圆环在视觉上会被读成"比实心的更大",选中态尤其显笨。
+  static readonly discoverFill: Resource = $r('sys.symbol.discover_fill');
+  static readonly libraryFill: Resource = $r('sys.symbol.music_note_list_fill');
   static readonly library: Resource = $r('sys.symbol.music_note_list');         // Rounded.LibraryMusic
   static readonly shuffle: Resource = $r('sys.symbol.shuffle');                 // Rounded.Shuffle
   static readonly sun: Resource = $r('sys.symbol.sun_max');                     // Rounded.WbSunny

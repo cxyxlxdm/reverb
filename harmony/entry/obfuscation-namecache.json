@@ -398,6 +398,7 @@
       "#Index": "f10",
       "Index#tabBarItem#label": "g10",
       "Index#tabBarItem#icon": "h10",
+      "Index#tabBarItem#iconFill": "k",
       "Index#tabBarItem#index": "i10",
       "Index#tabBarItem#parent": "j10",
       "Index#tabBarItem#$4#elmtId": "a",
@@ -594,7 +595,7 @@
       "destination:194:325": "destination",
       "shell:328:398": "shell",
       "bottomBar:402:422": "bottomBar",
-      "tabBarItem:428:463": "tabBarItem"
+      "tabBarItem:428:468": "tabBarItem"
     },
     "obfName": "entry/src/main/ets/pages/Index.ets"
   },
@@ -4379,13 +4380,13 @@
     "MemberMethodCache": {
       "initialRender:36:41": "initialRender",
       "initialRender:51:55": "initialRender",
-      "emptyAction:106:106": "emptyAction",
-      "initialRender:108:142": "initialRender",
-      "initialRender:153:176": "initialRender",
-      "initialRender:186:197": "initialRender",
-      "initialRender:206:218": "initialRender",
-      "initialRender:229:249": "initialRender",
-      "initialRender:259:279": "initialRender"
+      "emptyAction:111:111": "emptyAction",
+      "initialRender:113:147": "initialRender",
+      "initialRender:158:181": "initialRender",
+      "initialRender:191:202": "initialRender",
+      "initialRender:211:223": "initialRender",
+      "initialRender:234:254": "initialRender",
+      "initialRender:264:284": "initialRender"
     },
     "obfName": "entry/src/main/ets/view/Widgets.ets"
   },

@@ -401,8 +401,8 @@ struct Index {
   @Builder
   bottomBar() {
     Row() {
-      this.tabBarItem($r('app.string.nav_discover'), Sym.discover, 0)
-      this.tabBarItem($r('app.string.nav_library'), Sym.library, 1)
+      this.tabBarItem($r('app.string.nav_discover'), Sym.discover, Sym.discoverFill, 0)
+      this.tabBarItem($r('app.string.nav_library'), Sym.library, Sym.libraryFill, 1)
     }
     .width('100%')
     /**
@@ -425,16 +425,20 @@ struct Index {
   /// 原先误用了放大镜与相册 —— `sys.media.*` 里没有这两个形状,只能拿近似的凑;
   /// 换成 Symbol 字体后有正主(见 Sym)。
   @Builder
-  tabBarItem(label: Resource, icon: Resource, index: number) {
+  tabBarItem(label: Resource, icon: Resource, iconFill: Resource, index: number) {
     Column({ space: 4 }) {
       /**
-       * 选中项衬一枚药丸底。**64×30,图标 22** —— 三处留白是这枚药丸好看的关键,
+       * 选中项衬一枚药丸底。**64×30,图标 20** —— 三处留白是这枚药丸好看的关键,
        * 也正是先前 48×26 缺的:
-       *   图标到药丸左右edge  (64-22)/2 = 21   (Android 是 (64-24)/2 = 20)
-       *   图标到药丸上下       (30-22)/2 = 4
-       *   药丸到下方文字       4
-       *   药丸到栏上沿         约 7(由 64 栏高居中得出)
+       *   图标到药丸左右   (64-20)/2 = 22
+       *   图标到药丸上下   (30-20)/2 = 5
+       *   药丸到下方文字   4
+       *   药丸到栏上沿     约 7(由 64 栏高居中得出)
        * 宽度取满 64:窄药丸裹着图标像个按钮,宽一些才像"这一栏被选中了"。
+       *
+       * **图标 20 而不是 Android 的 24**:同一个标称字号下,Symbol 字体的字形比
+       * Material 图标更满(占 em 框的比例更大),所以视觉上会大一圈 ——
+       * 标称值要往下调才等观感。这也是"外壳尺寸不照抄像素"的又一例。
        *
        * 药丸本身值得有:原先只靠图标与文字变色表示选中,"当前在哪一栏"太弱。
        */
@@ -446,7 +450,8 @@ struct Index {
             .backgroundColor(withAlpha(this.scheme().primary, 0.18))
         }
         Glyph({
-          symbol: icon, dim: 22,
+          // 选中用实心、未选中用描边(Material 的标准做法,Android 侧同)
+          symbol: this.tab === index ? iconFill : icon, dim: 20,
           color: this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant
         })
       }
