@@ -199,7 +199,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             if (BuildConfig.CATALOG) {
                 SettingRow(
                     stringResource(R.string.set_region),
-                    stringResource(REGION_OPTIONS.firstOrNull { it.code == regionOverride }?.labelRes ?: R.string.region_auto)
+                    value = stringResource(REGION_OPTIONS.firstOrNull { it.code == regionOverride }?.labelRes ?: R.string.region_auto)
                 ) { dlg = Dlg.REGION }
             }
             SettingRow(stringResource(R.string.set_footprint), stringResource(R.string.set_footprint_sub)) { onOpenFootprint() }
@@ -207,19 +207,19 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             if (BuildConfig.CATALOG) {
                 SettingRow(
                     stringResource(R.string.set_radio_mode),
-                    stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
+                    value = stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
                 ) { dlg = Dlg.RADIO }
             }
 
             SectionLabel(stringResource(R.string.sec_appearance))
-            SettingRow(stringResource(R.string.set_theme), stringResource(THEME_LABEL_RES.getOrElse(themeMode) { THEME_LABEL_RES[0] })) { dlg = Dlg.THEME }
-            SettingRow(stringResource(R.string.set_font), stringResource(FONT_LABEL_RES[fontIndex(fontScale)])) { dlg = Dlg.FONT }
+            SettingRow(stringResource(R.string.set_theme), value = stringResource(THEME_LABEL_RES.getOrElse(themeMode) { THEME_LABEL_RES[0] })) { dlg = Dlg.THEME }
+            SettingRow(stringResource(R.string.set_font), value = stringResource(FONT_LABEL_RES[fontIndex(fontScale)])) { dlg = Dlg.FONT }
             SettingRow(
                 stringResource(R.string.set_accent),
-                stringResource(ACCENT_LABEL_RES.getOrElse(accentIndex) { ACCENT_LABEL_RES[0] }),
+                value = stringResource(ACCENT_LABEL_RES.getOrElse(accentIndex) { ACCENT_LABEL_RES[0] }),
                 trailing = { ColorSwatch(accentColor(accentIndex)) }
             ) { dlg = Dlg.ACCENT }
-            SettingRow(stringResource(R.string.set_language), langLabels[LANG_TAGS.indexOf(language).coerceAtLeast(0)]) { dlg = Dlg.LANGUAGE }
+            SettingRow(stringResource(R.string.set_language), value = langLabels[LANG_TAGS.indexOf(language).coerceAtLeast(0)]) { dlg = Dlg.LANGUAGE }
             // 真实频谱仅默认渠道提供。商店渠道 BuildConfig.SPECTRUM=false:
             // 该市场把录音列为敏感隐私权限、需逐次举证,而这只是一个视觉效果,
             // 故那个渠道既不声明权限也不显示本开关(见 app/build.gradle 的 flavor 注释)。
@@ -235,9 +235,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             }
 
             SectionLabel(stringResource(R.string.sec_playback))
-            SettingRow(stringResource(R.string.set_default_speed), speedLabel(defaultSpeed)) { dlg = Dlg.SPEED }
-            SettingRow(stringResource(R.string.set_skip_back), stringResource(R.string.unit_seconds, skipBack)) { dlg = Dlg.SKIP_BACK }
-            SettingRow(stringResource(R.string.set_skip_fwd), stringResource(R.string.unit_seconds, skipFwd)) { dlg = Dlg.SKIP_FWD }
+            SettingRow(stringResource(R.string.set_default_speed), value = speedLabel(defaultSpeed)) { dlg = Dlg.SPEED }
+            SettingRow(stringResource(R.string.set_skip_back), value = stringResource(R.string.unit_seconds, skipBack)) { dlg = Dlg.SKIP_BACK }
+            SettingRow(stringResource(R.string.set_skip_fwd), value = stringResource(R.string.unit_seconds, skipFwd)) { dlg = Dlg.SKIP_FWD }
             SettingSwitch(stringResource(R.string.set_wifi_only), stringResource(R.string.set_wifi_only_sub), checked = !allowCellular) {
                 settings.setAllowCellularDownload(!it)
             }
@@ -300,7 +300,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 }
             }
             SettingRow(stringResource(R.string.set_licenses), onClick = onOpenLicenses)
-            SettingRow(stringResource(R.string.set_version), stringResource(R.string.version_name))
+            SettingRow(stringResource(R.string.set_version), value = stringResource(R.string.version_name))
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -558,10 +558,23 @@ private fun SectionLabel(text: String) {
     )
 }
 
+/**
+ * 设置项的一行。
+ *
+ * **`value` 与 `subtitle` 是两回事,别混用**:
+ *  - `value` = 这一项**当前的取值**(深色 · 水墨 / 标准 / 1× / 10 秒…),**靠右对齐**,
+ *    与标题同一行 —— 一列取值右缘对齐,扫一眼就能看完当前配置;
+ *  - `subtitle` = 对这一项的**说明**(「关闭后蜂窝网络也允许下载」「当前日志 8 KB」),
+ *    留在标题下方换行。
+ *
+ * 原先取值也是当 `subtitle` 传的,于是每一行都占两行高、取值散在左侧参差不齐。
+ * 鸿蒙侧一直是右对齐(见 SettingsPage.choiceRow),这次两端统一到右对齐。
+ */
 @Composable
 private fun SettingRow(
     title: String,
     subtitle: String? = null,
+    value: String? = null,
     trailing: (@Composable () -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
@@ -576,6 +589,14 @@ private fun SettingRow(
             if (!subtitle.isNullOrBlank()) {
                 Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+        }
+        if (!value.isNullOrBlank()) {
+            Text(
+                value,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 12.dp)
+            )
         }
         if (trailing != null) trailing()
     }
