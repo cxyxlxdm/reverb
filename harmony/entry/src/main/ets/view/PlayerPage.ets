@@ -375,11 +375,18 @@ export struct PlayerPage {
     Menu() {
       ForEach(this.sleepMinutes, (m: number) => {
         MenuItem({ content: L.f('dur_m', m) })
+          .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
           .onClick(() => this.player.setSleepTimer(m))
       }, (m: number) => `${m}`)
-      MenuItem({ content: L.s('sleep_end_of_episode') }).onClick(() => this.player.setSleepEndOfEpisode())
-      MenuItem({ content: L.s('sleep_off') }).onClick(() => this.player.cancelSleep())
+      MenuItem({ content: L.s('sleep_end_of_episode') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
+        .onClick(() => this.player.setSleepEndOfEpisode())
+      MenuItem({ content: L.s('sleep_off') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
+        .onClick(() => this.player.cancelSleep())
     }
+    .backgroundColor(this.scheme.surface)
+    .radius(12)
   }
 
   /**
@@ -428,7 +435,10 @@ export struct PlayerPage {
    */
   @Builder
   moreMenuChip() {
-    GlyphImage({ icon: $r('sys.media.ohos_ic_public_more'), dim: 21, color: this.scheme.onSurfaceVariant })
+    // 竖排三点,用与 Android 同一枚 Material 矢量(`Icons.Rounded.MoreVert`)。
+    // 原先用 `sys.media.ohos_ic_public_more` —— 那是**横排**三点(鸿蒙平台惯例),
+    // 两端摆在一起就是两种形状。同 tab 图标那次的判断:图标形状属于品牌一致性,取一致。
+    GlyphImage({ icon: $r('app.media.ic_more_vert'), dim: 21, color: this.scheme.onSurfaceVariant })
       .margin({ left: -2.5 })
       .responseRegion({ x: -11, y: -11, width: 43, height: 43 })
       .bindMenu(this.moreMenu())
@@ -439,12 +449,31 @@ export struct PlayerPage {
   moreMenu() {
     Menu() {
       MenuItem({ content: L.s('clip_save') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
         .onClick(() => { this.saveMoment(); })
       MenuItem({ content: L.s('clip_moment') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
         .onClick(() => { this.shareMoment(); })
       MenuItem({ content: this.currentSeal().length > 0 ? L.s('stamp_edit') : L.s('stamp_add') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
         .onClick(() => { this.showSeals = true; })
     }
+    // **面板底色必须显式给**:ArkUI 的菜单默认是浅色面板、不跟随 App 主题,
+    // 而我们把文字设成了 onSurface(深色主题下近白)—— 白字压在白panel上直接看不见。
+    // Android 的 DropdownMenu 是跟随主题的,所以这里也给成深色面板 + 亮字。
+    .backgroundColor(this.scheme.surface)
+    .radius(12)
+  }
+
+  /**
+   * 溢出菜单项的字体。
+   *
+   * ArkUI 的 `MenuItem` 默认字号偏大、字重偏粗,三项摆在一起明显比 Android 那个菜单笨重。
+   * Material 的 `DropdownMenuItem` 取 **labelLarge(14) 常规体**,这里对齐它。
+   * (字体**家族**仍是各自系统字体 —— 不打包字体的话改不了,那是平台差异。)
+   */
+  private menuFont(): Font {
+    return { size: TypeScale.labelLarge * this.fontScale, weight: FontWeight.Normal };
   }
 
   private currentSeal(): string {
@@ -529,12 +558,22 @@ export struct PlayerPage {
 
   @Builder
   favoriteChip() {
-    this.iconAction(() => this.isFav() ? Sym.favorite : Sym.favoriteOff,
-      () => this.isFav() ? this.scheme.primary : this.scheme.onSurfaceVariant,
-      -1, 0, () => {
-        const e = this.player.current;
-        if (e !== null) this.favorites.toggle(e);
+    // 心形衬一枚 surfaceVariant 圆底(36 见方、心 20),与 Android `FavoriteButton` 同一形态。
+    // 原先是**裸心**:顶栏里倍速与睡眠都是有底色的药丸,收藏却光秃秃一个图标,轻重不一。
+    Stack() {
+      Circle()
+        .width(36).height(36)
+        .fill(this.scheme.surfaceVariant)
+      Glyph({
+        symbol: this.isFav() ? Sym.favorite : Sym.favoriteOff, dim: 20,
+        color: this.isFav() ? this.scheme.primary : this.scheme.onSurfaceVariant
       })
+    }
+    .width(36).height(36)
+    .onClick(() => {
+      const e = this.player.current;
+      if (e !== null) this.favorites.toggle(e);
+    })
   }
 
   private isFav(): boolean {

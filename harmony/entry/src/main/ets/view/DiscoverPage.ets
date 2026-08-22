@@ -761,7 +761,7 @@ export struct DiscoverPage {
   @Builder
   searchTabChip(label: string, count: number, idx: number) {
     Text(count > 0 ? `${label} ${count}` : label)
-      .fontSize(TypeScale.label * this.fontScale)
+      .fontSize(TypeScale.labelLarge * this.fontScale)
       .fontColor(this.searchTab === idx ? this.scheme.onPrimary : this.scheme.onSurfaceVariant)
       .backgroundColor(this.searchTab === idx ? this.scheme.primary : withAlpha(this.scheme.onSurfaceVariant, 0.10))
       .padding({ left: 12, right: 12, top: 5, bottom: 5 })
