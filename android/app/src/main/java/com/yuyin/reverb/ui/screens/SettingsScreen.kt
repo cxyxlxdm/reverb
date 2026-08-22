@@ -595,7 +595,8 @@ private fun SettingRow(
                 value,
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 12.dp)
+                // 右侧还有 trailing(目前只有配色那颗色点)时补一段间距,否则字会贴着它
+                modifier = Modifier.padding(start = 12.dp, end = if (trailing != null) 10.dp else 0.dp)
             )
         }
         if (trailing != null) trailing()
