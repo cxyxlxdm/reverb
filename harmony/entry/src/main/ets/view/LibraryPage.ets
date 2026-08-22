@@ -185,7 +185,10 @@ export struct LibraryPage {
         .columnsTemplate('1fr 1fr 1fr')
         .columnsGap(Metrics.gridSpacing)
         .rowsGap(Metrics.gridSpacing + 4)
-        .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 20 })
+        // **top 必须给** —— 原先只写了 left/right/bottom,于是第一行封面紧贴上方的分段 chips。
+        // 列表分支之所以没暴露这个问题,是因为它靠每个 PodcastListItem 自带的 `top: 10` 撑开;
+        // 宫格里没有那层内边距,不给就是零。10 + chips 行自身下方约 7 的余量 ≈ Android 实测的 16.5dp。
+        .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 10, bottom: 20 })
         .scrollBar(BarState.Off)
         .width('100%').height('100%')
       } else {

@@ -3062,13 +3062,13 @@
       "initialRender:73:136": "initialRender",
       "dragTarget:140:145": "dragTarget",
       "headerActions:151:158": "headerActions",
-      "subscriptionsSection:162:207": "subscriptionsSection",
-      "inboxSection:211:247": "inboxSection",
-      "favoritesSection:251:280": "favoritesSection",
-      "downloadsSection:284:312": "downloadsSection",
-      "downloadEpisodes:314:316": "downloadEpisodes",
-      "historySection:320:346": "historySection",
-      "historyEpisodes:348:350": "historyEpisodes"
+      "subscriptionsSection:162:210": "subscriptionsSection",
+      "inboxSection:214:250": "inboxSection",
+      "favoritesSection:254:283": "favoritesSection",
+      "downloadsSection:287:315": "downloadsSection",
+      "downloadEpisodes:317:319": "downloadEpisodes",
+      "historySection:323:349": "historySection",
+      "historyEpisodes:351:353": "historyEpisodes"
     },
     "obfName": "entry/src/main/ets/view/LibraryPage.ets"
   },
