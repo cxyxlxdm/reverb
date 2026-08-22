@@ -593,8 +593,8 @@
       "exitApp:184:191": "exitApp",
       "destination:194:325": "destination",
       "shell:328:398": "shell",
-      "bottomBar:402:410": "bottomBar",
-      "tabBarItem:416:442": "tabBarItem"
+      "bottomBar:402:414": "bottomBar",
+      "tabBarItem:420:451": "tabBarItem"
     },
     "obfName": "entry/src/main/ets/pages/Index.ets"
   },
@@ -1738,9 +1738,9 @@
       "#parseRfc822:30:53": "j45",
       "#parseIso8601:56:69": "k45",
       "#parseOffset:72:87": "l45",
-      "#formatCachedAt:97:102": "formatCachedAt",
-      "formatCachedAt#p:100:100": "t45",
-      "#formatPubDate:122:129": "formatPubDate"
+      "#formatCachedAt:96:101": "formatCachedAt",
+      "formatCachedAt#p:99:99": "t45",
+      "#formatPubDate:121:128": "formatPubDate"
     },
     "MemberMethodCache": {},
     "obfName": "entry/src/main/ets/util/DateParse.ets"
@@ -2622,14 +2622,14 @@
       "homeFeed:379:430": "homeFeed",
       "addMoreFooter:435:457": "addMoreFooter",
       "doImportRecommended:459:475": "doImportRecommended",
-      "searchBar:478:514": "searchBar",
-      "categoryPage:519:565": "categoryPage",
-      "continueEntries:568:574": "continueEntries",
-      "showGuide:578:582": "showGuide",
-      "guideCard:587:610": "guideCard",
-      "continueStrip:614:661": "continueStrip",
-      "searchResults:664:733": "searchResults",
-      "searchTabChip:736:744": "searchTabChip"
+      "searchBar:478:519": "searchBar",
+      "categoryPage:524:570": "categoryPage",
+      "continueEntries:573:579": "continueEntries",
+      "showGuide:583:587": "showGuide",
+      "guideCard:592:615": "guideCard",
+      "continueStrip:619:666": "continueStrip",
+      "searchResults:669:738": "searchResults",
+      "searchTabChip:741:749": "searchTabChip"
     },
     "obfName": "entry/src/main/ets/view/DiscoverPage.ets"
   },

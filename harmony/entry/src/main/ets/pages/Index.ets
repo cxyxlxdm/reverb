@@ -1,4 +1,4 @@
-import { Theme, Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
+import { Theme, Scheme, TypeScale, Tracking, Metrics, withAlpha } from '../theme/Theme';
 import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
 import { InboxStore } from '../store/InboxStore';
@@ -405,7 +405,11 @@ struct Index {
       this.tabBarItem($r('app.string.nav_library'), Sym.library, 1)
     }
     .width('100%')
-    .height(56)
+    // 80 而非 56:Material 3 NavigationBar 的规范高度就是 80,Android 侧实测也正是 80dp。
+    // 56 是 Material **2** 的 BottomNavigation 高度 —— 少 24 之后图标与文字挤在一起,
+    // 药丸也没地方放(原先药丸距栏上边缘只有 5vp,Android 是 12dp)。
+    // 80 的内部分配:12 上边距 + 32 药丸 + 4 间隙 + 16 文字 + 16 下边距。
+    .height(80)
     .backgroundColor(this.scheme().surface)
   }
 
@@ -414,30 +418,35 @@ struct Index {
   /// 换成 Symbol 字体后有正主(见 Sym)。
   @Builder
   tabBarItem(label: Resource, icon: Resource, index: number) {
-    Column({ space: 3 }) {
-      // 选中项的图标衬一枚药丸底(对齐 Material 3 NavigationBar 的 activeIndicator)。
-      // 原先只靠图标与文字变色来表示选中 —— 并排看 Android 时,那边的药丸底让"当前在哪一栏"
-      // 一眼可见,鸿蒙这边就只有颜色差别,弱得多。
+    Column({ space: 4 }) {
+      // 选中项的图标衬一枚药丸底,尺寸取 Material 3 NavigationBar 的 activeIndicator
+      // 规范值 **64×32**(Android 侧实测正是 32dp 高)。原先 56×30 且距栏上边缘只有 5vp,
+      // 并排看就是"药丸贴着上沿、比 Android 小一圈"。
       Stack() {
         if (this.tab === index) {
           Row()
-            .width(56).height(30)
-            .borderRadius(15)
+            .width(64).height(32)
+            .borderRadius(16)
             .backgroundColor(withAlpha(this.scheme().primary, 0.18))
         }
         Glyph({
-          symbol: icon, dim: 23,
+          symbol: icon, dim: 24,
           color: this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant
         })
       }
-      .width(56).height(30)
+      .width(64).height(32)
       Text(label)
-        .fontSize(TypeScale.caption * this.fontScale())
+        // labelMedium(12) 而非 labelSmall(11):Material 的 NavigationBarItem 用的是前者
+        .fontSize(TypeScale.label * this.fontScale())
+        .letterSpacing(Tracking.label)
         .fontColor(this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant)
     }
     .layoutWeight(1)
     .height('100%')
-    .justifyContent(FlexAlign.Center)
+    // 顶部留 12(Material 规范),不再整体居中 —— 居中会把药丸推到栏的正中,
+    // 文字与下沿之间反而空一大块
+    .justifyContent(FlexAlign.Start)
+    .padding({ top: 12 })
     .onClick(() => { this.tab = index; })
   }
 

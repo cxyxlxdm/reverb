@@ -476,9 +476,13 @@ export struct DiscoverPage {
 
   @Builder
   searchBar() {
-    Row({ space: 8 }) {
+    // 图标 24、图标到文字 16、文字用 bodyLarge —— 三个数都取 Material 的
+    // OutlinedTextField(含 leadingIcon)规范,Android 侧就是它。
+    // 原先是 18 / 8 / body(14):图标小一圈、和文字几乎贴着、文字还小两号,
+    // 并排看整个搜索框都显得局促。
+    Row({ space: 16 }) {
       Image($r('sys.media.ohos_ic_public_search_filled'))
-        .width(18).height(18)
+        .width(24).height(24)
         .fillColor(this.scheme.onSurfaceVariant)
       TextInput({
         placeholder: Features.CATALOG ? L.s('search_placeholder') : L.s('search_hint_url'),
@@ -486,7 +490,7 @@ export struct DiscoverPage {
       })
         .placeholderColor(this.scheme.onSurfaceVariant)
         .fontColor(this.scheme.onBackground)
-        .fontSize(TypeScale.body * this.fontScale)
+        .fontSize(TypeScale.bodyLarge * this.fontScale)
         .backgroundColor(Color.Transparent)
         .borderRadius(0)
         .padding(0)
@@ -506,7 +510,8 @@ export struct DiscoverPage {
       }
     }
     .width('100%')
-    .padding({ left: 14, right: 14, top: 10, bottom: 10 })
+    // 左内边距 12:图标左缘与 Material 的 contentPadding 对齐(12 + 24 图标 + 16 间隙 = 文字起点 52)
+    .padding({ left: 12, right: 14, top: 10, bottom: 10 })
     .margin({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 8 })
     .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.10))
     .borderRadius(12)
