@@ -83,6 +83,10 @@ export class Sym {
   // ellipsis_bubble / ellipsis_circle 这类带容器的变体。三点用系统 media 里的标准件
   // `ohos_ic_public_more`(见 Widgets.GlyphImage) —— Android 是竖排三点 MoreVert,
   // 鸿蒙的平台惯例是横排三点,按「缺资源按平台特性补齐」取鸿蒙形态。
+  // 列表封面上叠的播放/暂停:**裸三角与双竖条**,对齐 Android 的 Rounded.PlayArrow / Pause。
+  // 不用 `sys.media.ohos_ic_public_play` —— 那枚带白色圆底,叠在封面上显得笨重。
+  static readonly playFill: Resource = $r('sys.symbol.play_fill');              // Rounded.PlayArrow
+  static readonly pauseFill: Resource = $r('sys.symbol.pause_fill');            // Rounded.Pause
   static readonly close: Resource = $r('sys.symbol.xmark');                     // Rounded.Close
   static readonly up: Resource = $r('sys.symbol.chevron_up');                   // Rounded.KeyboardArrowUp
   static readonly down: Resource = $r('sys.symbol.chevron_down');               // Rounded.KeyboardArrowDown

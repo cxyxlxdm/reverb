@@ -126,7 +126,9 @@ class InboxStore(context: Context) {
         }
     }
 
-    private companion object {
+    // 非 private:`parsePubDate` 的展示格式化(ui/components/Components.kt)要用这里的
+    // parsePubMillis —— 解析 RSS 日期的模板表只该有一份,不要在 UI 层再抄一遍。
+    internal companion object {
         const val TAG = "InboxStore"
 
         // RSS 发布时间常见 RFC-822,iTunes 走 ISO/日期;逐个尝试解析,失败按 0(排最后)。

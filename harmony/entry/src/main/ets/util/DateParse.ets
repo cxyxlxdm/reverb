@@ -86,7 +86,6 @@ function parseOffset(raw: string): number {
   return named === undefined ? 0 : named;
 }
 
-/// 展示用短日期(与 Android/macOS 的「yyyy年M月d日」一致);解析失败原样截断。
 /**
  * 缓存时刻的短格式:`MM-DD HH:mm`(本机时区)。
  *
@@ -101,9 +100,29 @@ export function formatCachedAt(ms: number): string {
   return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
+/// 与 Android 的展示格式**逐字一致**用的固定英文缩写(见 formatPubDate 注释)。
+/// 注:上面那个 `MONTHS` 是「缩写 → 月份序号」的解析用查表,方向相反,故另起一份。
+const WEEKDAY_NAMES: string[] = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_NAMES: string[] = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * 单集发布日期的展示形态:`Fri, 21 Aug 2026`。
+ *
+ * **两端定死英文缩写 + 零填充,不跟随界面语言。** 理由:
+ *  - 这是与 Android 侧对齐后的统一格式(那边原先直接把 RSS 的 pubDate 截前 16 字符,
+ *    对 RFC-822 的源恰好就得到这个样子,格式沿用、取法改成先解析);
+ *  - 定死才能保证两端逐字一致 —— 跟随语言的话,同一集在两台机器上显示不同,
+ *    对不了版也不好排查;
+ *  - 时区按本机(用 `new Date(ms)` 的本地取值,不用 `toISOString`,那个固定 UTC,见 H24)。
+ *
+ * 解析不出来时退回原始串截前 16 字符 —— 至少还能看出个大概,比空白好。
+ */
 export function formatPubDate(raw: string): string {
   const ms = parsePubMillis(raw);
   if (ms === 0) return raw.trim().substring(0, 16);
   const d = new Date(ms);
-  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`;
+  const day = d.getDate();
+  const dd = day < 10 ? `0${day}` : `${day}`;
+  return `${WEEKDAY_NAMES[d.getDay()]}, ${dd} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}`;
 }

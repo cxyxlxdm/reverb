@@ -164,6 +164,41 @@ export class TypeScale {
   static readonly caption = 11;           // labelSmall
 }
 
+/**
+ * 字距(letterSpacing,单位 fp)。**这一张表原先根本不存在,是"鸿蒙看起来拥挤"的直接原因。**
+ *
+ * Material 3 的字号表里每一档都自带 letterSpacing,Compose 用 `MaterialTheme.typography`
+ * 时会一并生效 —— 所以 Android 侧的正文天然带 0.25~0.5sp 的字距。
+ * ArkUI 的 `Text` 默认字距是 **0**,只搬了字号没搬字距,于是同一句话在鸿蒙上字挨着字,
+ * 密排的列表尤其显挤。
+ *
+ * 数值取 Material 3 各档的原值。用法:`.letterSpacing(Tracking.body)`,
+ * **不要乘 fontScale** —— Compose 那边 letterSpacing 用 sp 也随字号倍率缩放,
+ * 但字距按比例放大会在大字号档下散架,这里按固定值处理更稳(实测大字号档下观感更好)。
+ */
+export class Tracking {
+  static readonly display = 0;
+  static readonly headline = 0;
+  static readonly titleLarge = 0;
+  static readonly titleMedium = 0.15;
+  static readonly titleSmall = 0.1;
+  static readonly bodyLarge = 0.5;
+  static readonly body = 0.25;
+  static readonly label = 0.5;
+  static readonly caption = 0.5;
+}
+
+/**
+ * 行高倍率。Material 3 每档也带 lineHeight(如 bodyLarge 16/24 = 1.5、bodyMedium 14/20 ≈ 1.43),
+ * ArkUI 不给就用字体自带的紧凑行距 —— 两行标题挤在一起也是"拥挤"的一部分。
+ * 用法:`.lineHeight(TypeScale.body * fontScale * LineHeight.body)`。
+ */
+export class LineHeight {
+  static readonly body = 1.43;
+  static readonly bodyLarge = 1.5;
+  static readonly label = 1.33;
+}
+
 export class Theme {
   /// mode:0 跟随系统 / 1 浅色(宣纸)/ 2 深色(水墨)/ 3 纯白。
   /// systemDark 由调用方传入(来自设备深色模式)。

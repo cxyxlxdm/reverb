@@ -52,10 +52,14 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yuyin.reverb.R
 import coil.compose.AsyncImage
+import com.yuyin.reverb.data.local.InboxStore
 import com.yuyin.reverb.data.model.DownloadStatus
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.ui.theme.CeladonDim
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 fun formatTime(ms: Long): String {
     if (ms <= 0) return "00:00"
@@ -67,6 +71,23 @@ fun formatTime(ms: Long): String {
 }
 
 fun formatDurationSec(sec: Long): String = if (sec <= 0) "" else formatTime(sec * 1000)
+
+/**
+ * 单集发布日期的展示形态:`Fri, 21 Aug 2026`。
+ *
+ * 原先这里是 `episode.pubDate.take(16)` —— 直接把 RSS 里的 pubDate 原始串**截前 16 字符**。
+ * 对 RFC-822 的源(`Fri, 21 Aug 2026 10:00:00 +0800`)恰好得到想要的样子,所以一直没露馅,
+ * 但换成 ISO-8601 的源就会截出 `2026-08-21T10:00` 这种半截货 —— 而 RSS 里两种都常见。
+ * 格式保留(与鸿蒙侧 formatPubDate 逐字一致),取法改成**先解析再格式化**。
+ *
+ * 定死 `Locale.ENGLISH`,不跟随界面语言:两端定死才能保证同一集在两台机器上显示相同,
+ * 对不了版就不好排查。解析失败时仍退回截前 16 字符 —— 至少还能看出个大概。
+ */
+fun formatPubDate(raw: String): String {
+    val ms = InboxStore.parsePubMillis(raw)
+    if (ms <= 0L) return raw.trim().take(16)
+    return SimpleDateFormat("EEE, dd MMM yyyy", Locale.ENGLISH).format(Date(ms))
+}
 
 /** 人类可读的累计时长:"X 小时 Y 分" / "Y 分钟" / "小于 1 分钟"(用于收听时长展示)。 */
 @Composable
@@ -273,7 +294,7 @@ fun EpisodeListItem(
                     )
                 }
             }
-            val meta = listOf(episode.pubDate.take(16), formatDurationSec(episode.durationSec))
+            val meta = listOf(formatPubDate(episode.pubDate), formatDurationSec(episode.durationSec))
                 .filter { it.isNotBlank() }
                 .joinToString("  ·  ")
             val showTitle = showPodcastTitle && episode.podcastTitle.isNotBlank()

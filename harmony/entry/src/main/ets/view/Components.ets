@@ -1,4 +1,4 @@
-import { Scheme, TypeScale, withAlpha, Metrics } from '../theme/Theme';
+import { Scheme, TypeScale, Tracking, LineHeight, withAlpha, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
 import { Artwork, SquareArtwork, Glyph, Sym } from './Widgets';
@@ -18,12 +18,19 @@ export function formatTime(ms: number): string {
   return h > 0 ? `${h}:${p2(m)}:${p2(s)}` : `${p2(m)}:${p2(s)}`;
 }
 
-/// 单集时长的安静展示("42 分钟" / "1 小时 5 分");0 返回空串。
+/**
+ * 单集时长的展示:**时间码**(`39:16` / `1:18:49`),0 返回空串。
+ *
+ * 原先返回的是「15 分钟」「1 小时 18 分」—— 与下面的 formatListenDuration 几乎同一份实现,
+ * 是移植时的偷懒。两端就此分歧:Android 的 formatDurationSec 一直是 `formatTime(sec*1000)`。
+ *
+ * 按 Android 的分工来:**单集长度用时间码,累计收听用文字**(见 formatListenDuration)。
+ * 这个区分是有道理的 —— 单集长度是"这条音频多长",时间码是媒体界的通用读法且更窄
+ * (列表副信息那一行本来就挤);累计时长是"你听了多久",用文字更好读。
+ */
 export function formatDurationSec(sec: number): string {
   if (sec <= 0) return '';
-  const m = Math.floor(sec / 60);
-  if (m >= 60) return L.f('dur_hm', Math.floor(m / 60), m % 60);
-  return L.f('dur_m', m);
+  return formatTime(sec * 1000);
 }
 
 /// 人类可读的累计时长("X 小时 Y 分" / "Y 分钟" / "小于 1 分钟")。
@@ -48,6 +55,7 @@ export struct PodcastListItem {
       Column({ space: 4 }) {
         Text(this.podcast.title)
           .fontSize(TypeScale.titleMedium * this.fontScale)
+          .letterSpacing(Tracking.titleMedium)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.scheme.onBackground)
           .maxLines(2)
@@ -55,6 +63,7 @@ export struct PodcastListItem {
         if (this.podcast.author.length > 0) {
           Text(this.podcast.author)
             .fontSize(TypeScale.label * this.fontScale)
+            .letterSpacing(Tracking.label)
             .fontColor(this.scheme.onSurfaceVariant)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -87,6 +96,7 @@ export struct PodcastGridItem {
       SquareArtwork({ scheme: this.scheme, url: this.podcast.artworkUrl, corner: Metrics.cardCorner })
       Text(this.podcast.title)
         .fontSize(TypeScale.titleSmall * this.fontScale)
+        .letterSpacing(Tracking.titleSmall)
         .fontWeight(FontWeight.Medium)
         .fontColor(this.scheme.onBackground)
         .maxLines(1)
@@ -95,6 +105,7 @@ export struct PodcastGridItem {
       if (this.podcast.author.length > 0) {
         Text(this.podcast.author)
           .fontSize(TypeScale.caption * this.fontScale)
+          .letterSpacing(Tracking.caption)
           .fontColor(this.scheme.onSurfaceVariant)
           .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -197,11 +208,15 @@ export struct EpisodeListItem {
           .width(52).height(52)
           .borderRadius(10)
           .backgroundColor(withAlpha('#000000', this.isCurrent ? 0.42 : 0.28))
-        Image(this.isCurrent && this.isPlaying
-          ? $r('sys.media.ohos_ic_public_pause')
-          : $r('sys.media.ohos_ic_public_play'))
-          .width(24).height(24)
-          .fillColor(Color.White)
+        // 裸三角 / 双竖条,不是 `sys.media.ohos_ic_public_play` 那枚**带白色圆底**的:
+        // 圆底那枚叠在封面上显得笨重,与 Android 的裸 PlayArrow 观感差一截。
+        // 用 Symbol 字体的实心变体(名字已在真机上验过能渲染 —— Symbol 名写错不报错、
+        // 直接空白,所以换这类资源必须真机看一眼,见 Widgets 注释)。
+        Glyph({
+          symbol: this.isCurrent && this.isPlaying ? Sym.pauseFill : Sym.playFill,
+          dim: 24,
+          color: Color.White
+        })
       }
       .width(52).height(52)
 
@@ -212,6 +227,10 @@ export struct EpisodeListItem {
             // 常规字重、正文号(对齐 Android 的 bodyLarge 常规体)。原先是 Medium,
             // 与灰糊的副信息叠在一起显得又粗又胖,一屏比 Android 少放三四行。
             .fontSize(TypeScale.body * this.fontScale)
+            // 字距与行高:ArkUI 默认字距 0、行距紧凑,而 Compose 用 Material 字号表时
+            // 两者都自带 —— 不补就是"字挨着字、行贴着行",密排列表尤其显挤(见 Tracking 注释)
+            .letterSpacing(Tracking.body)
+            .lineHeight(TypeScale.body * this.fontScale * LineHeight.body)
             .fontColor(this.titleColor())
             .maxLines(2)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
@@ -230,12 +249,14 @@ export struct EpisodeListItem {
           Row() {
             Text(this.shortPodcastTitle())
               .fontSize(TypeScale.caption * this.fontScale)
+              .letterSpacing(Tracking.caption)
               .fontColor(this.scheme.primary)
               .maxLines(1)
             Blank()
             if (this.meta().length > 0) {
               Text(this.meta())
                 .fontSize(TypeScale.caption * this.fontScale)
+                .letterSpacing(Tracking.caption)
                 .fontColor(this.scheme.onSurfaceVariant)
                 .maxLines(1)
             }
@@ -245,6 +266,7 @@ export struct EpisodeListItem {
         } else if (this.meta().length > 0) {
           Text(this.meta())
             .fontSize(TypeScale.caption * this.fontScale)
+            .letterSpacing(Tracking.caption)
             .fontColor(this.scheme.onSurfaceVariant)
             .maxLines(1)
             .textOverflow({ overflow: TextOverflow.Ellipsis })
