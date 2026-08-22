@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -48,10 +51,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.yuyin.reverb.R
 import coil.compose.AsyncImage
@@ -63,6 +70,7 @@ import com.yuyin.reverb.ui.theme.CeladonDim
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 /**
  * 分段/分类用的**药丸 chip**。
@@ -278,11 +286,29 @@ fun EpisodeListItem(
     onEnqueue: (() -> Unit)? = null       // 长按菜单:加入队列
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    /**
+     * 按下点(相对整行左上角),长按菜单以它为锚点弹出。
+     *
+     * 原先菜单直接挂在包住整行的 `Box` 上,而那个 Box 是整行宽的 —— Material 的
+     * `DropdownMenuPositionProvider` 会把菜单左边缘对齐锚点左边缘,于是无论按在哪儿,
+     * 菜单一律贴屏幕最左弹出,跟手指没关系。改成在按下点放一个**零尺寸锚点**,
+     * 由 Compose 自己决定往下还是往上、往右还是往左展开(贴边时自动翻转),不用手算。
+     */
+    var pressPoint by remember { mutableStateOf(Offset.Zero) }
     val hasMenu = onTogglePlayed != null || onPlayNext != null || onEnqueue != null
     val rowModifier = Modifier
         .fillMaxWidth()
         .then(
-            if (hasMenu) Modifier.combinedClickable(onClick = onPlay, onLongClick = { menuOpen = true })
+            if (hasMenu) Modifier
+                // Initial 阶段只「偷看」按下位置,不消费事件 —— 否则会和 combinedClickable
+                // 抢同一个指针,点击/长按都会失效。
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        pressPoint = down.position
+                    }
+                }
+                .combinedClickable(onClick = onPlay, onLongClick = { menuOpen = true })
             else Modifier.clickable(onClick = onPlay)
         )
         .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -380,6 +406,8 @@ fun EpisodeListItem(
         }
     }
         if (hasMenu) {
+            // 零尺寸锚点:自身不占布局(Popup 也不占),只把菜单的原点挪到手指按下处
+            Box(Modifier.offset { IntOffset(pressPoint.x.roundToInt(), pressPoint.y.roundToInt()) }) {
             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                 if (onPlayNext != null) {
                     DropdownMenuItem(
@@ -399,6 +427,7 @@ fun EpisodeListItem(
                         onClick = { menuOpen = false; onTogglePlayed() }
                     )
                 }
+            }
             }
         }
     }

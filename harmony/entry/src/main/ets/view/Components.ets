@@ -3,6 +3,7 @@ import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
 import { Artwork, SquareArtwork, Glyph, Sym } from './Widgets';
 import { formatPubDate } from '../util/DateParse';
+import { TapGuard } from '../util/TapGuard';
 import { DownloadState } from '../playback/DownloadManager';
 
 /// 列表/网格通用条目。对应 Android `ui/components/Components.kt`。
@@ -152,14 +153,26 @@ export struct EpisodeListItem {
   contextMenu() {
     Menu() {
       MenuItem({ content: L.s('queue_play_next') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
         .onClick(() => this.onPlayNext())
       MenuItem({ content: L.s('queue_add') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
         .onClick(() => this.onEnqueue())
       if (this.showPlayedToggle) {
         MenuItem({ content: this.played ? L.s('mark_unplayed') : L.s('mark_played') })
+          .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
           .onClick(() => this.onTogglePlayed())
       }
     }
+    // 面板底色与字号都显式给,理由同 PlayerPage.menuFont —— ArkUI 菜单默认浅色面板、
+    // 字号偏大,不跟随 App 主题;全应用的菜单要长一个样。
+    .backgroundColor(this.scheme.surface)
+    .radius(12)
+  }
+
+  /// 菜单项字体:labelLarge(14) 常规体,对齐 Material 的 DropdownMenuItem。
+  private menuFont(): Font {
+    return { size: TypeScale.labelLarge * this.fontScale, weight: FontWeight.Normal };
   }
 
   /**
@@ -305,7 +318,22 @@ export struct EpisodeListItem {
     .alignItems(VerticalAlign.Center)
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 12, bottom: 12 })
     .onClick(() => this.onPlay())
-    .bindContextMenu(this.contextMenu(), ResponseType.LongPress, { enableArrow: true })
+    /**
+     * 长按菜单。两个参数都是踩出来的:
+     *
+     * - `enableArrow` 必须是 **false**。带箭头时 ArkUI 会把菜单**锚到组件**上
+     *   (placement 未指定就退化成组件正上方),而这一行是整屏宽的 —— 结果无论按在哪儿,
+     *   菜单都从屏幕横向正中弹出,跟手指没关系。关掉箭头才走 `ResponseType.LongPress`
+     *   的默认定位:**在按下点弹出**,贴边时自行翻转。Android 那边是同一套手感
+     *   (零尺寸锚点放在按下点,见 `Components.kt` 的 pressPoint)。
+     * - `aboutToAppear` / `aboutToDisappear` 升降「误触盾」,吃掉「点外部关菜单」
+     *   那一下的穿透点击(ArkUI 会把它同时派发给下面的组件,见 TapGuard)。
+     */
+    .bindContextMenu(this.contextMenu(), ResponseType.LongPress, {
+      enableArrow: false,
+      aboutToAppear: () => { TapGuard.raise(); },
+      aboutToDisappear: () => { TapGuard.lowerSoon(); }
+    })
   }
 }
 
@@ -344,7 +372,8 @@ export struct ChipsRow {
       Row({ space: 8 }) {
         ForEach(this.labels, (label: string, idx: number) => {
           Text(label)
-            .fontSize(TypeScale.label * this.fontScale)
+            // chip 文字取 labelLarge(14),与 Android 的 Material FilterChip 同档
+            .fontSize(TypeScale.labelLarge * this.fontScale)
             .fontColor(this.selected === idx ? this.scheme.onPrimary : this.scheme.onSurfaceVariant)
             .backgroundColor(this.selected === idx ? this.scheme.primary : withAlpha(this.scheme.onSurfaceVariant, 0.10))
             .padding({ left: 14, right: 14, top: 7, bottom: 7 })

@@ -26,6 +26,7 @@ import { Podcast, Episode, emptyPodcast } from '../model/Models';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
 import window from '@ohos.window';
+import { TapGuard } from '../util/TapGuard';
 
 /// 顶层外壳:Navigation 承载全屏页(频道详情等),内页是「发现 / 音阁」两 tab。
 /// 与 Android 一致的取舍:全屏页整体转场,底部栏不产生占位跳动。
@@ -62,6 +63,8 @@ struct Index {
   @State player: PlayerController = PlayerController.get();
   /// 播放状态变化触发重渲的计数(PlayerController 非 @Observed 字段级追踪,用它兜底刷新)
   @State tick: number = 0;
+  /// 长按菜单开着(以及刚关掉那一瞬)—— 整屏盖一层「误触盾」,见 TapGuard。
+  @StorageLink('tapShield') tapShield: boolean = false;
 
   aboutToAppear(): void {
     // getContext() 已废弃,API 12+ 用 UIContext 取宿主 context
@@ -160,15 +163,30 @@ struct Index {
         onDecline: () => this.exitApp()
       })
     } else {
-      Navigation(this.stack) {
-        this.shell()
+      // Stack 的作用只有一个:让「误触盾」盖在 Navigation **之上** ——
+      // 这样连 NavDestination(频道详情、播放页、队列)一起罩住,盾只需这一处。
+      Stack() {
+        Navigation(this.stack) {
+          this.shell()
+        }
+        .navDestination(this.destination)
+        .mode(NavigationMode.Stack)
+        .hideTitleBar(true)
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.scheme().background)
+
+        if (this.tapShield) {
+          // 全透明、只吃事件。`HitTestMode.Block` = 自己响应,兄弟节点(Navigation)不响应。
+          // 接到那一下就立刻自我撤除,免得某条路径漏了 lowerSoon 把界面点死(见 TapGuard)。
+          Row()
+            .width('100%').height('100%')
+            .hitTestBehavior(HitTestMode.Block)
+            .onClick(() => { TapGuard.lower(); })
+        }
       }
-      .navDestination(this.destination)
-      .mode(NavigationMode.Stack)
-      .hideTitleBar(true)
       .width('100%')
       .height('100%')
-      .backgroundColor(this.scheme().background)
     }
   }
 
