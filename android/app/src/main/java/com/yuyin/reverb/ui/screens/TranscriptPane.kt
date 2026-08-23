@@ -29,6 +29,10 @@ import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -39,6 +43,7 @@ import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.TranscribedSegment
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.playback.asr.AsrFactory
+import com.yuyin.reverb.util.TranscriptLines
 
 /**
  * 播放页第三页:逐字稿。对应 macOS `UI/TranscriptPage.swift`。
@@ -78,7 +83,7 @@ fun TranscriptPane(
     Column(Modifier.fillMaxSize()) {
         when (val s = state) {
             is TranscriptStore.State.Done, is TranscriptStore.State.Running ->
-                TranscriptList(segments, tail, currentIndex, active)
+                TranscriptList(segments, tail, currentIndex, nowMs, active)
 
             // 有官方稿与没有官方稿,**要说不同的话**:前者只是下载一个文件(一两秒),
             // 后者是本机满载算几分钟。都写成「离线转成文字」是不诚实的。
@@ -161,6 +166,7 @@ private fun TranscriptList(
     segments: List<TranscribedSegment>,
     tail: String,
     currentIndex: Int,
+    nowMs: Long,
     autoScroll: Boolean
 ) {
     val listState = rememberLazyListState()
@@ -185,12 +191,22 @@ private fun TranscriptList(
             val isCurrent = i == currentIndex
             // 点一句跳到那儿 —— 逐字稿最实用的一点。不要涟漪:密排文字上那一片水波很吵
             val interaction = remember { MutableInteractionSource() }
+            val accent = MaterialTheme.colorScheme.primary
+            val dim = MaterialTheme.colorScheme.onSurfaceVariant
+            /**
+             * 当前句**逐词高亮**,其余句整句一个颜色。
+             *
+             * 词级时间只有一种来源:发布方的 Podcast Index JSON 稿(那种稿本来就是一词一条,
+             * 合并成行时把原始条目留在了 `words` 里,见 `TranscriptFetcher`)。
+             * 本机识别与 SRT/VTT 稿都没有词级时间 ⇒ `words` 为 null ⇒ 自动退化成整句高亮,
+             * 调用方不用分辨(macOS 侧同样的回退设计)。
+             */
+            val rendered = remember(seg, isCurrent, if (isCurrent) nowMs / 80 else 0L) {
+                karaokeLine(seg, isCurrent, nowMs, accent, dim)
+            }
             Text(
-                seg.text,
+                rendered,
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (isCurrent) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable(interactionSource = interaction, indication = null) {
@@ -211,6 +227,46 @@ private fun TranscriptList(
                         .padding(vertical = 6.dp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * 把一句渲染成带样式的文本。
+ *
+ * - 不是当前句:整句暗色常规体;
+ * - 是当前句但没有词级时间:整句强调色 + 半粗(与之前的行为一致);
+ * - 是当前句且有词级时间:**已读到的那个词**用强调色 + 半粗,同句其余部分用强调色的 55% ——
+ *   这样"这一句在读"和"读到这儿了"两层信息同时看得见,而不是只有其中一层。
+ *
+ * 文本**由 words 重新拼**而不是拿 seg.text 去找子串:拼接规则(西文词前补空格、中文不补)
+ * 与 `TranscriptFetcher` 合并成行时用的是同一条,所以拼出来与 seg.text 一致,
+ * 而按子串定位会在重复词上错位。
+ */
+private fun karaokeLine(
+    seg: TranscribedSegment,
+    isCurrent: Boolean,
+    nowMs: Long,
+    accent: androidx.compose.ui.graphics.Color,
+    dim: androidx.compose.ui.graphics.Color
+): AnnotatedString {
+    val words = seg.words
+    if (!isCurrent || words.isNullOrEmpty()) {
+        return AnnotatedString(
+            seg.text,
+            SpanStyle(
+                color = if (isCurrent) accent else dim,
+                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal
+            )
+        )
+    }
+    val spoken = words.indexOfLast { it.startMs <= nowMs }
+    val read = SpanStyle(color = accent.copy(alpha = 0.55f))
+    val at = SpanStyle(color = accent, fontWeight = FontWeight.SemiBold)
+    return buildAnnotatedString {
+        for ((idx, w) in words.withIndex()) {
+            if (length > 0 && TranscriptLines.isAsciiHead(w.text)) append(' ')
+            withStyle(if (idx == spoken) at else read) { append(w.text) }
         }
     }
 }
