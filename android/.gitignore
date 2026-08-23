@@ -14,3 +14,12 @@ keystore.properties
 /captures
 .externalNativeBuild
 .cxx
+
+# 离线语音识别的构建产物与依赖源码:由 tools/build-asr.sh 备好,不入库。
+# 理由:一个 57 MB 的模型 + 一个 1.6 MB 的 .so + whisper.cpp 整个仓库,
+# 放进 git 会让仓库和每次归档都难看,而它们能由一条命令重建。
+# build-release.sh 打默认渠道时会检查前两样在不在。
+/app/src/default/assets/whisper-model.bin
+/app/src/default/jniLibs/
+/asr-native/whisper.cpp/
+/asr-native/build-arm64/

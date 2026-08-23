@@ -16,16 +16,23 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.yuyin.reverb.R
+import com.yuyin.reverb.playback.asr.AsrFactory
 
 private data class Lib(val name: String, val license: String)
 
-private val LIBS = listOf(
+private val LIBS = listOfNotNull(
     Lib("Jetpack Compose / AndroidX", "Apache License 2.0"),
     Lib("AndroidX Media3 (ExoPlayer)", "Apache License 2.0"),
     Lib("OkHttp", "Apache License 2.0"),
     Lib("Coil", "Apache License 2.0"),
     Lib("Kotlin Coroutines", "Apache License 2.0"),
-    Lib("AndroidX WorkManager", "Apache License 2.0")
+    Lib("AndroidX WorkManager", "Apache License 2.0"),
+    // 离线语音识别**只随默认渠道分发**,所以只在那个渠道登记。
+    // 大陆商店渠道的包里连 .so 和模型都没有(见 playback/asr/AsrEngine),
+    // 列上去就是不实陈述。`HAS_ENGINE` 是编译期常量,R8 会把另一支连字符串一起删掉
+    // —— 这一点与鸿蒙相反,那边没有 DCE,同样写法两支都会进包(H54)。
+    if (AsrFactory.HAS_ENGINE) Lib("whisper.cpp(离线语音识别)", "MIT License") else null,
+    if (AsrFactory.HAS_ENGINE) Lib("Whisper 模型 ggml-base-q5_1(OpenAI)", "MIT License") else null
 )
 
 // 数据来源按渠道列**实际用到的那些**。无内容目录的渠道压根不连目录接口

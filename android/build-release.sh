@@ -48,6 +48,24 @@ else
   GRADLE_FLAVOR=Default; APP_ID="com.yuyin.reverb";        OUT_APK=reverb.apk
 fi
 
+# 默认渠道带离线语音识别,那两样东西**不入版本管理**(一个 57 MB 的模型 + 一个 .so),
+# 由 tools/build-asr.sh 备好。缺了照样能构建成功,只是装上之后转写入口点了没反应 ——
+# 那种"打出来才发现"的包最难查,所以在这里挡住。商店渠道压根不含引擎,不检查。
+# 只有引擎真的启用时才检查 —— HAS_ENGINE 还没跑通时置了 false,
+# 那种情况下默认渠道在任何机器上都该能直接构建,不该被这两个本地产物挡住。
+ASR_ON=$(grep -c 'HAS_ENGINE = true' app/src/default/java/com/yuyin/reverb/playback/asr/AsrFactory.kt || true)
+if [ "$CHANNEL" = "default" ] && [ "$ASR_ON" != "0" ]; then
+  MISSING=0
+  [ -f app/src/default/jniLibs/arm64-v8a/libreverb_asr.so ] || MISSING=1
+  [ -f app/src/default/assets/whisper-model.bin ] || MISSING=1
+  if [ "$MISSING" = "1" ]; then
+    echo "✗ 默认渠道缺少离线识别的产物,先跑一次:"
+    echo "    ./tools/build-asr.sh"
+    echo "  (会编译 libreverb_asr.so 并下载 57 MB 的模型;只需跑一次)"
+    exit 1
+  fi
+fi
+
 VER_NAME=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' app/build.gradle | head -1)
 VER_CODE=$(sed -n 's/.*versionCode \([0-9]*\).*/\1/p' app/build.gradle | head -1)
 echo "▸ 余音 Reverb (Android)  versionName=$VER_NAME  versionCode=$VER_CODE"

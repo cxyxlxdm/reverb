@@ -53,6 +53,10 @@ android {
         // 默认渠道:com.yuyin.reverb —— 不加后缀,与既有版本一致
         'default' {
             dimension "channel"
+            // 离线语音识别只随这个渠道分发,只出 arm64 —— armeabi-v7a 的机器跑不动这个模型,
+            // 给了也是让人干等。**abiFilters 必须写在 flavor 里**:写在 defaultConfig 会
+            // 让商店渠道也带上 native 目录结构。
+            ndk { abiFilters 'arm64-v8a' }
             // 真实频谱(Visualizer 读播放输出做 FFT,需 RECORD_AUDIO)。
             // 权限声明放在 src/default/AndroidManifest.xml,商店渠道那份 manifest 里没有。
             buildConfigField "boolean", "SPECTRUM", "true"
@@ -126,6 +130,14 @@ android {
         resources {
             excludes += ['/META-INF/{AL2.0,LGPL2.1}', 'META-INF/*.kotlin_module']
         }
+        // 识别模型必须**不压缩**:压了就没法用 openFd 拿到长度、也没法直接读,
+        // 而且 ggml 模型本身几乎压不动,压缩只换来每次读取的解压开销(见 WhisperEngine)。
+        jniLibs {
+            useLegacyPackaging false
+        }
+    }
+    androidResources {
+        noCompress 'bin'
     }
 }
 
