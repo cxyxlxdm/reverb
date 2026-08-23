@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  隐私同意页里**按渠道不同**的两段。长文本体在 src/main/res/,两个渠道共用;
+  只有这两段各渠道一份 —— 这样国内包里不会出现任何它用不上的话,
+  也不必把一整篇长文维护两份 × 五个语种。
+
+  与之配对的是 src/store/res/values/strings.xml,那边两段都是空串(不渲染)。
+-->
+<resources>
+    <string name="privacy_consent_catalog">节目检索。本版本提供按关键词检索节目,会访问 Apple 播客目录、fyyd.de、gpodder.net 等公开检索接口;这些请求同样不携带任何鉴权凭据与用户标识。</string>
+    <string name="privacy_consent_asr">离线语音转文字。本版本内置离线语音识别(开源组件 whisper.cpp 与随包的识别模型),把单集音频转成文字**全程在本机完成,音频不上传、不出设备,也不经过任何服务器**。该功能可在设置里关闭。</string>
+</resources>

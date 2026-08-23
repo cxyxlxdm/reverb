@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  大陆商店渠道:这两段**都是空串**,同意页不渲染它们。
+  因为这个渠道**两样都没有** —— 既不含内容目录(不连 Apple/fyyd/gpodder,见 BEIAN.md),
+  也不含离线语音识别(包里连 .so 与模型都没有,见 playback/asr/AsrEngine)。
+  空串不需要按语种翻译,一份就够。
+
+  这也顺带把 fyyd.de / gpodder.net 这两个名字从这个渠道的 resources.arsc 里去掉了 ——
+  在此之前它们靠正文里那句「若本版本提供节目检索功能…」被带进包,
+  解包 grep 得到的印象与「本渠道不提供检索」不符。
+-->
+<resources>
+    <string name="privacy_consent_catalog"></string>
+    <string name="privacy_consent_asr"></string>
+</resources>
