@@ -23,7 +23,9 @@ private struct SettingsForm: View {
         self.downloadStore = env.downloads
     }
 
-    private let themeNames = ["跟随系统", "浅色", "深色", "纯白"]
+    /// 主题名。**这四条同时是本地化 key**(`Text(LocalizedStringKey(...))`),
+    /// 改动要连 Localization/*.lproj 一起改。「· 宣纸 / · 水墨」的后缀与 Android、鸿蒙一致。
+    private let themeNames = ["跟随系统", "浅色 · 宣纸", "深色 · 水墨", "纯白"]
     private let regions: [(code: String, name: String)] = [
         ("", "自动"), ("cn", "中国大陆"), ("hk", "中国香港"), ("tw", "中国台湾"),
         ("us", "美国"), ("jp", "日本"), ("kr", "韩国"), ("gb", "英国")
@@ -47,7 +49,7 @@ private struct SettingsForm: View {
                 Picker("主题", selection: $settings.themeMode) {
                     ForEach(0..<themeNames.count, id: \.self) { Text(LocalizedStringKey(themeNames[$0])).tag($0) }
                 }
-                Picker("配色", selection: $settings.accentIndex) {
+                Picker("主题配色", selection: $settings.accentIndex) {
                     ForEach(0..<Theme.accents.count, id: \.self) { i in
                         Text(LocalizedStringKey(Theme.accents[i].name)).tag(i)
                     }
@@ -85,7 +87,7 @@ private struct SettingsForm: View {
             }
 
             Section("播放") {
-                Picker("默认倍速", selection: Binding(
+                Picker("默认速度", selection: Binding(
                     get: { settings.defaultSpeed },
                     set: { settings.defaultSpeed = $0; player.setSpeed($0) }
                 )) {

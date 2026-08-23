@@ -322,7 +322,7 @@
     },
     {
       "name": "sec_playback",
-      "value": "Lecture"
+      "value": "Lecture & téléchargements"
     },
     {
       "name": "set_theme",
@@ -639,18 +639,6 @@
     {
       "name": "update_new_episode",
       "value": "Nouvel épisode de %s"
-    },
-    {
-      "name": "update_check_now",
-      "value": "Vérifier maintenant"
-    },
-    {
-      "name": "update_found",
-      "value": "%d nouveaux épisodes"
-    },
-    {
-      "name": "update_none",
-      "value": "Aucun nouvel épisode"
     },
     {
       "name": "log_export",

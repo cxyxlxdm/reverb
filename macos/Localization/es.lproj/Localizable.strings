@@ -99,7 +99,7 @@
 /* Settings */
 "外观" = "Apariencia";
 "主题" = "Tema";
-"配色" = "Color de acento";
+"主题配色" = "Color de acento";
 "字号" = "Tamaño de fuente";
 "内容" = "Contenido";
 "地区" = "Región";
@@ -107,7 +107,7 @@
 "随机" = "Aleatorio";
 "情境" = "Contextual";
 "播放" = "Reproducir";
-"默认倍速" = "Velocidad predet.";
+"默认速度" = "Velocidad predeterminada";
 "足迹" = "Huellas";
 "听觉足迹" = "Huellas sonoras";
 "%lld 枚" = "%lld sellos";
@@ -124,8 +124,8 @@
 "恢复" = "Restaurar";
 "选择要合并的内容" = "Elige qué combinar";
 "跟随系统" = "Sistema";
-"浅色" = "Claro";
-"深色" = "Oscuro";
+"浅色 · 宣纸" = "Claro · Papel";
+"深色 · 水墨" = "Oscuro · Tinta";
 "纯白" = "Blanco puro";
 "自动" = "Auto";
 "中国大陆" = "China continental";

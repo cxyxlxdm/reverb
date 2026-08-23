@@ -177,7 +177,12 @@ export struct SettingsPage {
           this.switchRow(L.s('set_updates'), () => L.s('set_updates_sub'),
             this.settings.updatesEnabled,
             (on: boolean) => { this.toggleUpdates(on); })
-          this.actionRow(L.s('update_check_now'), () => '', () => this.checkUpdates())
+          // 这里原先还有一行「立即检查更新」。删掉的理由:它做的事(遍历订阅拉 feed、
+          // 有新集就发系统通知)在前台**完全被「音阁 · 最新」的下拉刷新覆盖** ——
+          // 下拉刷新本来就会把所有订阅拉一遍并把新集直接列出来,比"弹个通知"直观;
+          // 而后台那份检查由 workScheduler 的 FeedUpdateExtension 自己在跑(仍走
+          // UpdateNotifier.checkNow,方法保留)。留着这行只是多一个没有进度指示、
+          // 会在前台弹通知的慢操作,Android 侧也一直没有它。
 
           this.sectionLabel(L.s('sec_storage'))
           this.actionRow(L.s('set_clear_cache'), () => L.f('set_clear_cache_sub', this.cacheStr()),
@@ -607,11 +612,6 @@ export struct SettingsPage {
     }
     this.settings.setUpdatesEnabled(on);
     this.onChanged();
-  }
-
-  private async checkUpdates(): Promise<void> {
-    const n = await UpdateNotifier.checkNow(this.app.subscriptions.subscriptions, this.app.repository);
-    this.hint = n > 0 ? L.f('update_found', n) : L.s('update_none');
   }
 
   private async exportLog(): Promise<void> {

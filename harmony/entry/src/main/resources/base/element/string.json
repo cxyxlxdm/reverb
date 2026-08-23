@@ -322,7 +322,7 @@
     },
     {
       "name": "sec_playback",
-      "value": "播放"
+      "value": "播放与下载"
     },
     {
       "name": "set_theme",
@@ -639,18 +639,6 @@
     {
       "name": "update_new_episode",
       "value": "%s 有新一集"
-    },
-    {
-      "name": "update_check_now",
-      "value": "立即检查更新"
-    },
-    {
-      "name": "update_found",
-      "value": "发现 %d 集新内容"
-    },
-    {
-      "name": "update_none",
-      "value": "暂时没有新内容"
     },
     {
       "name": "log_export",

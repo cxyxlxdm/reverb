@@ -99,7 +99,7 @@
 /* Settings */
 "外观" = "Appearance";
 "主题" = "Theme";
-"配色" = "Accent";
+"主题配色" = "Accent color";
 "字号" = "Font size";
 "内容" = "Content";
 "地区" = "Region";
@@ -107,7 +107,7 @@
 "随机" = "Shuffle";
 "情境" = "Contextual";
 "播放" = "Play";
-"默认倍速" = "Default speed";
+"默认速度" = "Default speed";
 "足迹" = "Footprints";
 "听觉足迹" = "Sound Footprints";
 "%lld 枚" = "%lld seals";
@@ -124,8 +124,8 @@
 "恢复" = "Restore";
 "选择要合并的内容" = "Choose what to merge";
 "跟随系统" = "Follow System";
-"浅色" = "Light";
-"深色" = "Dark";
+"浅色 · 宣纸" = "Light · Paper";
+"深色 · 水墨" = "Dark · Ink";
 "纯白" = "Pure White";
 "自动" = "Auto";
 "中国大陆" = "Mainland China";
