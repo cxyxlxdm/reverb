@@ -50,7 +50,8 @@ Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeFree(JNIEnv*, jobject, jl
 /// 对一块 PCM 跑识别。返回句子数,负数表示失败。
 JNIEXPORT jint JNICALL
 Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTranscribe(
-        JNIEnv* env, jobject, jlong handle, jfloatArray pcm, jstring language, jint threads) {
+        JNIEnv* env, jobject, jlong handle, jfloatArray pcm, jstring language,
+        jstring initialPrompt, jint threads) {
     Session* s = asSession(handle);
     if (s == nullptr || s->ctx == nullptr) return -1;
 
@@ -76,9 +77,31 @@ Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTranscribe(
         lang = l;
         env->ReleaseStringUTFChars(language, l);
     }
-    // 空串 = 让模型自己判断语言(Kotlin 侧「跟随系统」且拿不到明确语言时会这样传)
-    wp.language = lang.empty() ? nullptr : lang.c_str();
-    wp.detect_language = lang.empty();
+    /**
+     * 语言。**两个坑,都踩过**:
+     *
+     * 1. `language` 不能传 nullptr —— 要"让模型自己判断"就传字符串 `"auto"`;
+     * 2. **`detect_language` 千万别打开**。它的语义不是"顺便自动判断语言",而是
+     *    **「只检测语言就返回」** —— 打开后 whisper_full 一句都不转、立刻返回 0 句。
+     *    实测症状:120 秒音频 1.6 秒就"跑完"了(75 倍实时),0 句,且不报错。
+     *    界面语言是「跟随系统」时 Kotlin 侧传的是空串,正好踩上。
+     */
+    wp.language = lang.empty() ? "auto" : lang.c_str();
+    wp.detect_language = false;
+
+    /**
+     * 提示词。**中文必须给** —— whisper 对中文默认偏向**繁体**输出,
+     * 简体界面下出来一屏繁体字,看着就是坏的。业界通行的办法就是用一句简体提示词把它带过去
+     * (「以下是普通话的句子。」),由 Kotlin 侧按目标语言决定内容,C++ 这层不做判断。
+     * 与 `no_context = true` 不冲突:那个清的是**跨块上下文**,提示词是每块都重新给的。
+     */
+    std::string prompt;
+    if (initialPrompt != nullptr) {
+        const char* p = env->GetStringUTFChars(initialPrompt, nullptr);
+        prompt = p;
+        env->ReleaseStringUTFChars(initialPrompt, p);
+    }
+    wp.initial_prompt = prompt.empty() ? nullptr : prompt.c_str();
 
     const int rc = whisper_full(s->ctx, wp, samples, static_cast<int>(n));
     env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);

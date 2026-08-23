@@ -2,6 +2,7 @@ package com.yuyin.reverb.data.remote
 
 import com.yuyin.reverb.data.model.TranscribedSegment
 import com.yuyin.reverb.data.model.TranscribedWord
+import com.yuyin.reverb.util.TranscriptLines
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -105,52 +106,11 @@ class TranscriptFetcher(private val client: OkHttpClient) {
             // 时间行之前那行是序号(SRT)或 cue 标识(VTT),都不是正文;之后各行才是
             val body = lines.drop(tIdx + 1).joinToString(" ") { cleanCueText(it) }.trim()
             if (body.isBlank()) continue
-            out.addAll(splitLongCue(body, start, maxOf(end, start)))
+            out.addAll(TranscriptLines.split(body, start, maxOf(end, start)))
         }
         // 也要并碎片:切长 cue 会剩下尾巴("…joins me and" / "he's"),而最后一条 cue
         // 本身就可能只有一个词("Review")。实测这份 VTT 两种都出现了。
-        return glueOrphans(out)
-    }
-
-    /**
-     * 一条 cue 太长就切开,时间按**字符占比**线性插值。
-     *
-     * 为什么必须切:实测同一集的 VTT 稿平均 88 字/条、**最长 679 字**(SRT 那份反倒是
-     * 按屏幕宽度硬折过的,平均 45 字)。679 字一条意味着这一整段会高亮三十多秒 ——
-     * 跟读效果等于没有,还得在屏幕上滚半天才看到当前句。
-     *
-     * 插值当然不如真的词级时间准,但一条 cue 内部语速大体均匀,按字符比例分摊的误差
-     * 远小于"整段一起亮"。真有词级时间的稿走的是 JSON 那条路(见 parseJson),不经过这里。
-     */
-    private fun splitLongCue(text: String, startMs: Int, endMs: Int): List<TranscribedSegment> {
-        if (text.length <= SPLIT_OVER_CHARS) {
-            return listOf(TranscribedSegment(text, startMs, endMs))
-        }
-        val chunks = ArrayList<String>()
-        var rest = text
-        while (rest.length > MAX_LINE_CHARS) {
-            // 优先在目标长度附近的句末标点断;找不到就退到最后一个空格;都没有(中文长句)就硬切
-            val window = rest.take(MAX_LINE_CHARS + 12)
-            val cut = window.indexOfLast { it in SENTENCE_END }.let { if (it >= MAX_LINE_CHARS / 2) it else -1 }
-                .takeIf { it > 0 }
-                ?: window.lastIndexOf(' ').takeIf { it >= MAX_LINE_CHARS / 2 }
-                ?: (MAX_LINE_CHARS - 1)
-            chunks.add(rest.take(cut + 1).trim())
-            rest = rest.drop(cut + 1).trimStart()
-        }
-        if (rest.isNotBlank()) chunks.add(rest)
-
-        val total = chunks.sumOf { it.length }.coerceAtLeast(1)
-        val span = (endMs - startMs).coerceAtLeast(0)
-        val out = ArrayList<TranscribedSegment>(chunks.size)
-        var acc = 0
-        for (c in chunks) {
-            val s = startMs + span * acc / total
-            acc += c.length
-            val e = startMs + span * acc / total
-            out.add(TranscribedSegment(c, s, maxOf(e, s)))
-        }
-        return out
+        return TranscriptLines.glueOrphans(out)
     }
 
     /**
@@ -221,7 +181,7 @@ class TranscriptFetcher(private val client: OkHttpClient) {
      *    实测 10245 词的真实稿里最长行到过 65 字,补上空格后回到 50 上下);
      * 3. 与下一条之间**静音超过 900ms** —— 通常是换气或换人说话,断在这里最自然。
      *
-     * 合完还要走一遍 `glueOrphans` —— 见那里的注释。
+     * 合完还要走一遍 `TranscriptLines.glueOrphans` —— 见那里的注释。
      */
     private fun mergeIntoLines(words: List<TranscribedWord>): List<TranscribedSegment> {
         val out = ArrayList<TranscribedSegment>()
@@ -233,7 +193,7 @@ class TranscriptFetcher(private val client: OkHttpClient) {
             // 中文之间不加空格,英文词之间要加 —— 以是否 ASCII 起头粗判,够用
             val sb = StringBuilder()
             for (w in buf) {
-                if (sb.isNotEmpty() && w.text.firstOrNull()?.code?.let { it < 128 } == true) sb.append(' ')
+                if (sb.isNotEmpty() && TranscriptLines.isAsciiHead(w.text)) sb.append(' ')
                 sb.append(w.text)
             }
             out.add(
@@ -250,61 +210,21 @@ class TranscriptFetcher(private val client: OkHttpClient) {
         }
 
         for ((i, w) in words.withIndex()) {
-            val needsSpace = len > 0 && isAsciiHead(w.text)
+            val needsSpace = len > 0 && TranscriptLines.isAsciiHead(w.text)
             buf.add(w)
             len += w.text.length + if (needsSpace) 1 else 0
-            val endsSentence = w.text.trimEnd().lastOrNull()?.let { it in SENTENCE_END } == true
+            val endsSentence = w.text.trimEnd().lastOrNull()?.let { it in TranscriptLines.SENTENCE_END } == true
             val gapNext = words.getOrNull(i + 1)?.let { it.startMs - w.endMs } ?: 0
-            if (endsSentence || len >= MAX_LINE_CHARS || gapNext > MAX_GAP_MS) flush()
+            if (endsSentence || len >= TranscriptLines.WEST_CHARS || gapNext > MAX_GAP_MS) flush()
         }
         flush()
-        return glueOrphans(out)
+        return TranscriptLines.glueOrphans(out)
     }
-
-    /**
-     * 把孤零零的碎片行并回上一行。
-     *
-     * 为什么需要:长度规则会在句末词之前就把行切掉,于是句子的最后一两个词单独成行 ——
-     * 真实数据里 1480 行有 57 行不足 8 字,屏幕上就是"one." 独占一行,很难看。
-     * 只在**与上一行几乎连着说**(间隔 < 400ms)时才并,否则那本来就是一句短的应答
-     * (「Yes.」「we do.」),独立成行是对的。
-     *
-     * 并完可能略超一行的目标字数 —— 这是有意的:多两个词比多一行碎片好看。
-     */
-    private fun glueOrphans(lines: List<TranscribedSegment>): List<TranscribedSegment> {
-        val out = ArrayList<TranscribedSegment>(lines.size)
-        for (seg in lines) {
-            val prev = out.lastOrNull()
-            if (prev != null && seg.text.length < ORPHAN_CHARS && seg.startMs - prev.endMs < GLUE_GAP_MS) {
-                val sep = if (isAsciiHead(seg.text)) " " else ""
-                out[out.size - 1] = prev.copy(
-                    text = prev.text + sep + seg.text,
-                    endMs = seg.endMs,
-                    words = when {
-                        prev.words == null && seg.words == null -> null
-                        else -> (prev.words ?: listOf(TranscribedWord(prev.text, prev.startMs, prev.endMs))) +
-                                (seg.words ?: listOf(TranscribedWord(seg.text, seg.startMs, seg.endMs)))
-                    }
-                )
-            } else {
-                out.add(seg)
-            }
-        }
-        return out
-    }
-
-    /// 以 ASCII 字母/数字起头 ⇒ 拼接时前面要加空格(中文之间不加)。
-    private fun isAsciiHead(s: String): Boolean = s.firstOrNull()?.code?.let { it < 128 } == true
 
     private companion object {
         /// 8 MB:再离谱的逐字稿也到不了这个量级,超过就是链接指错了东西
         const val MAX_BYTES = 8L * 1024 * 1024
-        const val MAX_LINE_CHARS = 42
+        /// 词级条目之间静音超过这个值就断句 —— 通常是换气或换人说话
         const val MAX_GAP_MS = 900
-        const val ORPHAN_CHARS = 12
-        const val GLUE_GAP_MS = 400
-        /// 超过这个长度的 cue 才切。留出余量:45 字左右的 cue(SRT 常见)不该被动
-        const val SPLIT_OVER_CHARS = 60
-        val SENTENCE_END = charArrayOf('。', '！', '？', '；', '.', '!', '?', ';', '…')
     }
 }

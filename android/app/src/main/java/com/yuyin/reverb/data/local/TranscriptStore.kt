@@ -281,12 +281,26 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
          * `""`(跟随系统)交给识别引擎自己判断,不在这里猜。
          */
         fun localeFor(uiLanguage: String): String = when (uiLanguage) {
-            "zh-Hans" -> "zh-CN"
-            "zh-Hant" -> "zh-TW"
+            "zh-Hans", "zh-CN" -> "zh-CN"
+            "zh-Hant", "zh-TW" -> "zh-TW"
             "en" -> "en-US"
             "fr" -> "fr-FR"
             "es" -> "es-ES"
-            else -> ""
+            // 「跟随系统」:**要解析成真实语言,不能传空串**。
+            // 传空串等于让识别引擎自己猜,而中文猜出来的往往是繁体(见 WhisperEngine.promptFor);
+            // 而且缓存 key 会退化成 "auto",换了系统语言也命中同一份旧稿。
+            else -> systemLocaleId()
+        }
+
+        /// 设备语言 → 与上面同一套写法。中文按地区分简繁(CN/SG 为简,TW/HK/MO 为繁)。
+        private fun systemLocaleId(): String {
+            val l = java.util.Locale.getDefault()
+            val lang = l.language.lowercase()
+            if (lang != "zh") return if (l.country.isBlank()) lang else "$lang-${l.country.uppercase()}"
+            return when (l.country.uppercase()) {
+                "TW", "HK", "MO" -> "zh-TW"
+                else -> "zh-CN"
+            }
         }
 
         /// 文件名安全化。与 macOS 同口径:非字母数字换 `_`,截断 120。

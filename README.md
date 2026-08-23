@@ -52,8 +52,12 @@ ui/             ReverbRoot(导航) · theme/ · components/ · screens/(Discover
 ## 仓库结构
 
 - `android/` — Android 版(Kotlin / Jetpack Compose)
+- `harmony/` — HarmonyOS 版(ArkTS / ArkUI)
 - `macos/` — macOS 版(Swift / SwiftUI)
 - `FEATURES.md` — 全平台功能清单
+- `TRANSCRIPT.md` — 逐字稿 / 语音转文字的三端实现与取舍(含鸿蒙将来换三方引擎的路子)
+- `TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律
+- `BEIAN.md` / `PRIVACY.md` — 合规口径与隐私政策
 
 ## 构建 · Android
 

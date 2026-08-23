@@ -26,7 +26,7 @@ object AsrFactory {
      * 在跑通之前必须是 false —— 否则默认渠道会显示一个点了就「转写失败」的按钮。
      * 官方逐字稿那条路不受影响(它不经过引擎),两个渠道都照常可用。
      */
-    const val HAS_ENGINE = false
+    const val HAS_ENGINE = true
 
     fun create(context: Context): AsrEngine? = try {
         WhisperEngine(context)

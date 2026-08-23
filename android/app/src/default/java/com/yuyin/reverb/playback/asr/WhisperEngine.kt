@@ -4,6 +4,7 @@ import android.content.Context
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.TranscribedSegment
+import com.yuyin.reverb.util.TranscriptLines
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.isActive
@@ -21,10 +22,13 @@ import java.io.File
  * 于是用户能**边转边看**,而不是等十几分钟一次性出现。内存也因此封在 10 MB 量级
  * (整集一次性解码是 230 MB,见 `PcmDecoder`)。
  *
- * 真机实测(SM8845 / 4 线程 / base-q5_1,真实中文播客):5 分钟切片 **4.6 倍实时**,
- * 整集 33.5 分钟 **4.0 倍实时**(8 分 17 秒)—— 差的那 12% 是降频。按 4 倍算,
- * **1 小时的单集约 15 分钟**。换模型或升级 whisper.cpp 之后**要重新量**,
- * 别照抄这个数(见 tools/build-asr.sh)。
+ * 真机实测(SM8845 / 4 线程 / base-q5_1,真实中文播客):
+ * - **应用内约 8 倍实时**(120.7 秒的块 14.2 秒、59.3 秒的块 8.1 秒)⇒ 1 小时约 7~8 分钟;
+ * - 同机同模型的命令行(whisper-cli)只有 4.0~4.6 倍。**差别来自 `no_context = true`** ——
+ *   分块识别必须关掉跨块上下文(否则复读),代价是少了上文提示、质量略降,
+ *   收益是快了近一倍。这个取舍是刻意的,详见 TRANSCRIPT.md。
+ *
+ * 换模型或升级 whisper.cpp 之后**要重新量**,别照抄这个数(见 tools/build-asr.sh)。
  */
 class WhisperEngine(context: Context) : AsrEngine {
 
@@ -69,7 +73,7 @@ class WhisperEngine(context: Context) : AsrEngine {
             val ok = PcmDecoder.decodeInChunks(audio) { samples, startMs ->
                 if (!currentCoroutineContext().isActive) return@decodeInChunks
                 val t0 = System.currentTimeMillis()
-                val n = nativeTranscribe(handle, samples, lang, THREADS)
+                val n = nativeTranscribe(handle, samples, lang, promptFor(localeId), THREADS)
                 com.yuyin.reverb.util.Logger.i(TAG, "块 startMs=$startMs 样本=${samples.size} → $n 句,耗时 ${System.currentTimeMillis() - t0}ms")
                 if (n < 0) {
                     com.yuyin.reverb.util.Logger.w(TAG, "识别返回失败 startMs=$startMs")
@@ -79,14 +83,20 @@ class WhisperEngine(context: Context) : AsrEngine {
                     val text = nativeSegmentText(handle, i).trim()
                     if (!keep(text, lastText)) continue
                     lastText = text
-                    emitted++
-                    onSegment(
-                        TranscribedSegment(
-                            text = text,
-                            startMs = startMs + nativeSegmentStartMs(handle, i),
-                            endMs = startMs + nativeSegmentEndMs(handle, i)
-                        )
-                    )
+                    /**
+                     * **一句还要再切**。给了带标点的提示词之后,whisper 会把一整段话当成一句吐出来
+                     * (实测 3 分钟音频只有 21 句,一句能有两三百字)—— 那样跟读高亮的粒度就没了,
+                     * 一段要亮二十多秒。切分与官方稿共用同一套规则(中文一行 24 字、西文 42),
+                     * 时间按字符占比插值。
+                     */
+                    for (line in TranscriptLines.split(
+                        text,
+                        startMs + nativeSegmentStartMs(handle, i),
+                        startMs + nativeSegmentEndMs(handle, i)
+                    )) {
+                        emitted++
+                        onSegment(line)
+                    }
                 }
             }
             com.yuyin.reverb.util.Logger.i(TAG, "转写结束 ok=$ok 已出 $emitted 句")
@@ -120,9 +130,22 @@ class WhisperEngine(context: Context) : AsrEngine {
         return true
     }
 
-    /// `zh-CN` → `zh`。whisper 认的是两字母语言码;空串表示让它自己判断。
+    /// `zh-CN` → `zh`。whisper 认的是两字母语言码;空串表示让它自己判断("auto")。
     private fun whisperLang(localeId: String): String =
         localeId.substringBefore('-').lowercase()
+
+    /**
+     * 提示词。**只为一件事:让中文出简体。**
+     *
+     * whisper 转中文时默认偏向繁体 —— 实测简体界面下整屏「原來是怎樣」「我們假設」,
+     * 对简体用户就是坏的。给一句同字体的提示词即可把输出带过去;繁体界面反过来给繁体提示。
+     * 其他语言不需要,给空串。
+     */
+    private fun promptFor(localeId: String): String = when {
+        localeId.startsWith("zh-TW") || localeId.startsWith("zh-Hant") -> "以下是繁體中文的句子。"
+        localeId.startsWith("zh") -> "以下是普通话的句子。"
+        else -> ""
+    }
 
     /**
      * 把内置模型拷到私有目录(只做一次)。
@@ -167,7 +190,9 @@ class WhisperEngine(context: Context) : AsrEngine {
 
     private external fun nativeInit(modelPath: String): Long
     private external fun nativeFree(handle: Long)
-    private external fun nativeTranscribe(handle: Long, pcm: FloatArray, language: String, threads: Int): Int
+    private external fun nativeTranscribe(
+        handle: Long, pcm: FloatArray, language: String, initialPrompt: String, threads: Int
+    ): Int
     private external fun nativeSegmentText(handle: Long, index: Int): String
     private external fun nativeSegmentStartMs(handle: Long, index: Int): Int
     private external fun nativeSegmentEndMs(handle: Long, index: Int): Int

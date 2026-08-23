@@ -67,7 +67,12 @@ object PcmDecoder {
             val searchSpan = SEEK_SILENCE_SEC * TARGET_RATE
             var buf = FloatArray(chunkTarget + searchSpan * 2)
             var used = 0
-            var emittedSamples = 0        // 已交出的总样本数 → 用来算 startMs
+            /**
+             * 已交出的总样本数 → 用来算 startMs。**必须是 Long**:
+             * `样本数 × 1000` 在 Int 里放不下 —— 1 小时是 3.6M 样本,乘 1000 就 36 亿,
+             * 早过了 Int 上限,结果是第三块起 startMs 变负数,整份稿的时间轴全废。
+             */
+            var emittedSamples = 0L
             var resampleCarry = 0.0       // 重采样的小数相位,跨 buffer 保留
 
             val info = MediaCodec.BufferInfo()
@@ -130,7 +135,7 @@ object PcmDecoder {
                         // 攒够一块就切:边界挪到静音处
                         while (used >= chunkTarget + searchSpan) {
                             val cut = quietestNear(buf, chunkTarget, searchSpan)
-                            onChunk(buf.copyOfRange(0, cut), emittedSamples * 1000 / TARGET_RATE)
+                            onChunk(buf.copyOfRange(0, cut), (emittedSamples * 1000 / TARGET_RATE).toInt())
                             emittedSamples += cut
                             System.arraycopy(buf, cut, buf, 0, used - cut)
                             used -= cut
@@ -139,7 +144,7 @@ object PcmDecoder {
                 }
             }
 
-            if (used > 0) onChunk(buf.copyOfRange(0, used), emittedSamples * 1000 / TARGET_RATE)
+            if (used > 0) onChunk(buf.copyOfRange(0, used), (emittedSamples * 1000 / TARGET_RATE).toInt())
             return true
         } catch (e: Exception) {
             com.yuyin.reverb.util.Logger.e(TAG, "解码失败 path=$path", e)
