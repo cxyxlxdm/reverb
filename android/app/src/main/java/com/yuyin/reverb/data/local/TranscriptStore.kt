@@ -1,0 +1,296 @@
+package com.yuyin.reverb.data.local
+
+import android.content.Context
+import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.data.model.TranscribedSegment
+import com.yuyin.reverb.data.model.TranscribedWord
+import com.yuyin.reverb.data.remote.TranscriptFetcher
+import com.yuyin.reverb.playback.asr.AsrEngine
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+
+/**
+ * 「转写」的状态机与缓存。对应 macOS `Data/TranscriptStore.swift`,状态与缓存格式一一对齐。
+ *
+ * 两条取稿路径,**先官方稿、后本机识别**:
+ * 1. 发布方自己给的逐字稿(RSS `podcast:transcript`)—— 准、快、不耗电,两个渠道都有;
+ * 2. 本机离线识别 —— **只有默认渠道有引擎**(见 `playback/asr/AsrFactory`),
+ *    大陆商店渠道那份工厂返回 null,于是状态直接落在 `NoEngine`。
+ *
+ * 缓存:每单集 × 每语言一份 JSON,放 `filesDir/transcripts/`。命中即秒显,不重转。
+ * **格式与 macOS 完全一致**(`{localeId, complete, segments:[{text,startMs,endMs,words?}]}`),
+ * 鸿蒙那端可以直接复用。
+ *
+ * 不进备份(`BackupManager.Section` 没有它):可重生成、体积大,与 macOS 一致。
+ */
+class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) {
+
+    /**
+     * 界面要显示的状态。比 macOS 多一个 `NoEngine` —— 那端不存在"这个版本没有识别能力"
+     * 这种情况(系统框架总在),Android 的大陆商店渠道则要如实告诉用户。
+     */
+    sealed interface State {
+        /** 没有稿,可以开始转写(默认渠道)*/
+        data object Idle : State
+        /** 正在取发布方的官方稿 */
+        data object FetchingOfficial : State
+        /** 流式单集:先把音频下载到临时文件 */
+        data object DownloadingAudio : State
+        /** 首次加载识别模型 */
+        data object LoadingModel : State
+        data object Running : State
+        data object Done : State
+        data class Failed(val message: String) : State
+        /** 本渠道不含离线识别引擎,且这一集没有官方稿 */
+        data object NoEngine : State
+    }
+
+    private val dir = File(context.filesDir, "transcripts").apply { mkdirs() }
+    private val scope = CoroutineScope(SupervisorJob())
+    private val TAG = "Transcript"
+
+    private val _segments = MutableStateFlow<List<TranscribedSegment>>(emptyList())
+    val segments: StateFlow<List<TranscribedSegment>> = _segments
+
+    private val _state = MutableStateFlow<State>(State.Idle)
+    val state: StateFlow<State> = _state
+
+    /// 生成期未定稿的实时尾巴(打字机效果)。缓存命中时为空。
+    private val _volatileTail = MutableStateFlow("")
+    val volatileTail: StateFlow<String> = _volatileTail
+
+    private var episodeId: String = ""
+    private var localeId: String = ""
+
+    /**
+     * 代次。切集/切语言/重新开始都自增,旧任务发现代次变了就悄悄退出 ——
+     * 光靠 `job.cancel()` 不够:协程取消是协作式的,回调可能已经在路上,
+     * 不带代次判断就会把上一集的句子写进这一集(macOS 侧同样的 `generation` 机制)。
+     */
+    private var generation = 0
+    private var job: Job? = null
+
+    // ── 对外 ──
+
+    /**
+     * 切到某单集/语言时调用。命中缓存直接显示;否则置初始态**等用户手动开始** ——
+     * 不自动转写:那是几分钟的满载计算,得由用户点了才做。
+     */
+    fun prepare(episode: Episode, uiLanguage: String, hasEngine: Boolean) {
+        val loc = localeFor(uiLanguage)
+        if (episode.id == episodeId && loc == localeId && _state.value != State.Idle) return
+        cancel()
+        generation += 1
+        episodeId = episode.id
+        localeId = loc
+        _volatileTail.value = ""
+
+        val cached = loadCache(episode.id, loc)
+        if (cached != null && cached.isNotEmpty()) {
+            _segments.value = cached
+            _state.value = State.Done
+            return
+        }
+        _segments.value = emptyList()
+        _state.value = when {
+            episode.transcriptUrl.isNotBlank() -> State.Idle   // 有官方稿,点一下就能取
+            hasEngine -> State.Idle
+            else -> State.NoEngine
+        }
+    }
+
+    /**
+     * 开始取稿/转写。`localPath` 非空表示这一集已下载(纯离线),否则识别前要先下音频。
+     * `engine` 为 null 表示本渠道没有引擎。
+     */
+    fun start(
+        episode: Episode,
+        uiLanguage: String,
+        localPath: String?,
+        engine: AsrEngine?
+    ) {
+        val loc = localeFor(uiLanguage)
+        cancel()
+        generation += 1
+        val gen = generation
+        episodeId = episode.id
+        localeId = loc
+        _segments.value = emptyList()
+        _volatileTail.value = ""
+
+        job = scope.launch {
+            runJob(gen, episode, loc, localPath, engine)
+        }
+    }
+
+    fun cancel() {
+        job?.cancel()
+        job = null
+    }
+
+    // ── 执行 ──
+
+    private suspend fun runJob(
+        gen: Int,
+        episode: Episode,
+        loc: String,
+        localPath: String?,
+        engine: AsrEngine?
+    ) {
+        fun stale() = gen != generation
+
+        // 1) 官方稿优先
+        if (episode.transcriptUrl.isNotBlank()) {
+            _state.value = State.FetchingOfficial
+            val segs = fetcher.fetch(episode.transcriptUrl, episode.transcriptType)
+            if (stale()) return
+            if (!segs.isNullOrEmpty()) {
+                _segments.value = segs
+                _state.value = State.Done
+                saveCache(episode.id, loc, segs)
+                com.yuyin.reverb.util.Logger.i(TAG, "用官方稿 ${segs.size} 句 id=${episode.id}")
+                return
+            }
+            // 取不到就往下走本机识别(有引擎的话)——「稿链接坏了」不该让功能整个不可用
+            com.yuyin.reverb.util.Logger.w(TAG, "官方稿取不到,回退本机识别 id=${episode.id}")
+        }
+
+        // 2) 本机识别
+        if (engine == null) {
+            if (!stale()) _state.value = State.NoEngine
+            return
+        }
+        engine.transcribe(
+            episode = episode,
+            localPath = localPath,
+            localeId = loc,
+            // 引擎只报"阶段",界面状态由这里映射 —— 引擎不该知道 UI 有哪些状态
+            onStage = { stage ->
+                if (!stale()) {
+                    _state.value = when (stage) {
+                        AsrEngine.Stage.DownloadingAudio -> State.DownloadingAudio
+                        AsrEngine.Stage.LoadingModel -> State.LoadingModel
+                        AsrEngine.Stage.Running -> State.Running
+                    }
+                }
+            },
+            onVolatile = { t -> if (!stale()) _volatileTail.value = t },
+            onSegment = { seg ->
+                if (!stale()) {
+                    _segments.value = _segments.value + seg
+                    _volatileTail.value = ""
+                    if (_state.value != State.Running) _state.value = State.Running
+                }
+            }
+        )
+        if (stale()) return
+        _volatileTail.value = ""
+        if (_segments.value.isEmpty()) {
+            _state.value = State.Failed("")
+        } else {
+            _state.value = State.Done
+            saveCache(episode.id, loc, _segments.value)
+        }
+    }
+
+    // ── 缓存 ──
+
+    private fun cacheFile(episodeId: String, loc: String) =
+        File(dir, "${sanitize(episodeId)}.${loc.ifEmpty { "auto" }}.json")
+
+    /// 只认 `complete = true` 的缓存 —— 半截的转写下次要重来,不该当成完整稿显示。
+    private fun loadCache(episodeId: String, loc: String): List<TranscribedSegment>? {
+        val f = cacheFile(episodeId, loc)
+        if (!f.exists()) return null
+        return try {
+            val root = JSONObject(f.readText())
+            if (!root.optBoolean("complete")) return null
+            val arr = root.optJSONArray("segments") ?: return null
+            val out = ArrayList<TranscribedSegment>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                out.add(
+                    TranscribedSegment(
+                        text = o.optString("text"),
+                        startMs = o.optInt("startMs"),
+                        endMs = o.optInt("endMs"),
+                        words = o.optJSONArray("words")?.let { wa ->
+                            val ws = ArrayList<TranscribedWord>(wa.length())
+                            for (j in 0 until wa.length()) {
+                                val w = wa.optJSONObject(j) ?: continue
+                                ws.add(TranscribedWord(w.optString("text"), w.optInt("startMs"), w.optInt("endMs")))
+                            }
+                            ws.ifEmpty { null }
+                        }
+                    )
+                )
+            }
+            out.ifEmpty { null }
+        } catch (e: Exception) {
+            com.yuyin.reverb.util.Logger.w(TAG, "缓存读坏了,当作没有:${e.message}")
+            null
+        }
+    }
+
+    private fun saveCache(episodeId: String, loc: String, segs: List<TranscribedSegment>) {
+        try {
+            val arr = JSONArray()
+            for (s in segs) {
+                val o = JSONObject()
+                    .put("text", s.text)
+                    .put("startMs", s.startMs)
+                    .put("endMs", s.endMs)
+                s.words?.let { ws ->
+                    val wa = JSONArray()
+                    for (w in ws) {
+                        wa.put(JSONObject().put("text", w.text).put("startMs", w.startMs).put("endMs", w.endMs))
+                    }
+                    o.put("words", wa)
+                }
+                arr.put(o)
+            }
+            cacheFile(episodeId, loc).writeText(
+                JSONObject().put("localeId", loc).put("complete", true).put("segments", arr).toString()
+            )
+        } catch (e: Exception) {
+            com.yuyin.reverb.util.Logger.w(TAG, "缓存写失败:${e.message}")
+        }
+    }
+
+    /// 清缓存时一并删(设置页「清除缓存」会调)。
+    fun clearAll() {
+        runCatching { dir.listFiles()?.forEach { it.delete() } }
+        _segments.value = emptyList()
+        _state.value = State.Idle
+        episodeId = ""
+    }
+
+    fun usageBytes(): Long =
+        runCatching { dir.listFiles()?.sumOf { it.length() } ?: 0L }.getOrDefault(0L)
+
+    companion object {
+        /**
+         * 界面语言 → 识别/取稿语言。与 macOS `TranscriptStore.locale(for:)` 同一张表。
+         * `""`(跟随系统)交给识别引擎自己判断,不在这里猜。
+         */
+        fun localeFor(uiLanguage: String): String = when (uiLanguage) {
+            "zh-Hans" -> "zh-CN"
+            "zh-Hant" -> "zh-TW"
+            "en" -> "en-US"
+            "fr" -> "fr-FR"
+            "es" -> "es-ES"
+            else -> ""
+        }
+
+        /// 文件名安全化。与 macOS 同口径:非字母数字换 `_`,截断 120。
+        private fun sanitize(s: String): String =
+            s.map { if (it.isLetterOrDigit()) it else '_' }.joinToString("").take(120)
+    }
+}

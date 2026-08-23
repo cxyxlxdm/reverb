@@ -60,6 +60,7 @@ import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.data.remote.OpmlSupport
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.playback.asr.AsrFactory
 import com.yuyin.reverb.ui.REGION_OPTIONS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -95,6 +96,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     val skipFwd by settings.skipForwardSec.collectAsStateWithLifecycle()
     val language by settings.language.collectAsStateWithLifecycle()
     val spectrumEnabled by settings.spectrumEnabled.collectAsStateWithLifecycle()
+    val transcriptionEnabled by settings.transcriptionEnabled.collectAsStateWithLifecycle()
     val contextualRadio by settings.contextualRadio.collectAsStateWithLifecycle()
     val regionOverride by regionStore.override.collectAsStateWithLifecycle()
 
@@ -130,6 +132,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
         cacheBytes = withContext(Dispatchers.IO) {
             container.popularCache.sizeBytes() +
                 container.feedCache.sizeBytes() +
+                container.transcriptStore.usageBytes() +
                 runCatching { context.imageLoader.diskCache?.size ?: 0L }.getOrDefault(0L)
         }
         dlBytes = withContext(Dispatchers.IO) { DownloadManager.usageBytes() }
@@ -235,6 +238,16 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             }
 
             SectionLabel(stringResource(R.string.sec_playback))
+            // 逐字稿开关只在**有离线识别引擎的渠道**显示。大陆商店渠道没有引擎
+            // (`AsrFactory.HAS_ENGINE=false`,包里连模型都没有),那边这个开关无意义 ——
+            // 而"发布方给了稿的集照样出第三页"不受它管,所以不显示也不会少功能。
+            if (AsrFactory.HAS_ENGINE) {
+                SettingSwitch(
+                    stringResource(R.string.set_transcription),
+                    stringResource(R.string.set_transcription_sub),
+                    checked = transcriptionEnabled
+                ) { on -> settings.setTranscriptionEnabled(on) }
+            }
             SettingRow(stringResource(R.string.set_default_speed), value = speedLabel(defaultSpeed)) { dlg = Dlg.SPEED }
             SettingRow(stringResource(R.string.set_skip_back), value = stringResource(R.string.unit_seconds, skipBack)) { dlg = Dlg.SKIP_BACK }
             SettingRow(stringResource(R.string.set_skip_fwd), value = stringResource(R.string.unit_seconds, skipFwd)) { dlg = Dlg.SKIP_FWD }
@@ -361,6 +374,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
         onConfirm = {
             container.popularCache.clear()
             container.feedCache.clear()
+            // 逐字稿也算缓存:都能重新取回来,不该占着地方
+            container.transcriptStore.clearAll()
             runCatching {
                 val loader = context.imageLoader
                 loader.memoryCache?.clear(); loader.diskCache?.clear()

@@ -19,8 +19,11 @@ import com.yuyin.reverb.data.local.SeedCatalog
 import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.local.StampStore
 import com.yuyin.reverb.data.local.SubscriptionStore
+import com.yuyin.reverb.data.local.TranscriptStore
 import com.yuyin.reverb.data.local.UpdateStore
 import com.yuyin.reverb.data.remote.PodcastRepository
+import com.yuyin.reverb.data.remote.TranscriptFetcher
+import com.yuyin.reverb.playback.asr.AsrFactory
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.update.FeedUpdateWorker
@@ -57,6 +60,16 @@ class AppContainer(app: Application) {
     val updateStore = UpdateStore(app)
     val regionStore = RegionStore(app)
     val settingsStore = SettingsStore(app)
+
+    // 转写:先取发布方自己的逐字稿,取不到才(在有引擎的渠道)本机识别
+    val transcriptFetcher = TranscriptFetcher(httpClient)
+    val transcriptStore = TranscriptStore(app, transcriptFetcher)
+    /**
+     * 离线识别引擎。**大陆商店渠道恒为 null** —— 那个 flavor 的 `AsrFactory` 是空实现,
+     * 包里连 `.so` 与模型都没有(见 `playback/asr/AsrEngine` 的注释)。
+     * 用 lazy:模型是几十 MB,不能在应用启动时就读进内存,得等用户真的要转写。
+     */
+    val asrEngine: com.yuyin.reverb.playback.asr.AsrEngine? by lazy { AsrFactory.create(app) }
 }
 
 class ReverbApp : Application() {

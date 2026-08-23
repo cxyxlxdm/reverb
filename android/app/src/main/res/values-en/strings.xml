@@ -327,4 +327,16 @@
     <string name="a11y_queue_up">Move up</string>
     <string name="a11y_queue_down">Move down</string>
     <string name="a11y_queue_remove">Remove from queue</string>
+    <string name="set_transcription">Transcript</string>
+    <string name="set_transcription_sub">Swipe to the third page on the player. Falls back to on-device transcription when the publisher provides none</string>
+    <string name="transcript_prompt">Turn this episode into text, on your device</string>
+    <string name="transcript_start">Generate transcript</string>
+    <string name="transcript_fetching">Fetching the publisher\'s transcript…</string>
+    <string name="transcript_preparing_audio">Preparing audio…</string>
+    <string name="transcript_loading_model">Loading the speech model…</string>
+    <string name="transcript_failed">Transcription failed. Tap to retry</string>
+    <string name="transcript_none">The publisher provides no transcript for this episode, and this build has no on-device recognition</string>
+    <string name="action_retry">Retry</string>
+    <string name="transcript_prompt_official">The publisher provides a transcript for this episode</string>
+    <string name="transcript_show">Show transcript</string>
 </resources>

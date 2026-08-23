@@ -327,4 +327,16 @@
     <string name="a11y_queue_up">上移</string>
     <string name="a11y_queue_down">下移</string>
     <string name="a11y_queue_remove">移出佇列</string>
+    <string name="set_transcription">逐字稿</string>
+    <string name="set_transcription_sub">播放頁橫滑到第三頁看文字;沒有發布方提供的稿時,在本機離線轉寫</string>
+    <string name="transcript_prompt">把這集音訊離線轉成文字</string>
+    <string name="transcript_start">產生逐字稿</string>
+    <string name="transcript_fetching">正在取得發布方提供的逐字稿…</string>
+    <string name="transcript_preparing_audio">正在準備音訊…</string>
+    <string name="transcript_loading_model">正在載入辨識模型…</string>
+    <string name="transcript_failed">轉寫失敗,點按重試</string>
+    <string name="transcript_none">這一集發布方未提供逐字稿,本版本也不含離線辨識</string>
+    <string name="action_retry">重試</string>
+    <string name="transcript_prompt_official">這一集發布方提供了逐字稿</string>
+    <string name="transcript_show">檢視逐字稿</string>
 </resources>

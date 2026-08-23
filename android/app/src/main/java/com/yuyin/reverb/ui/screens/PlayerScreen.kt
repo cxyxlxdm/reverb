@@ -65,6 +65,7 @@ import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.playback.asr.AsrFactory
 import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.InkWave
 import com.yuyin.reverb.ui.components.formatTime
@@ -125,7 +126,17 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
     val sliderValue = if (dragging) dragValue else position.toFloat()
     val maxValue = if (duration > 0) duration.toFloat() else 1f
 
-    val pagerState = rememberPagerState(pageCount = { 2 })
+    /**
+     * 是否有第三页(逐字稿)。两个渠道的规则**用同一个表达式**表达:
+     * - 默认渠道有离线识别引擎(`AsrFactory.HAS_ENGINE`),跟设置开关走 ⇒ 任何一集都能转;
+     * - 大陆商店渠道没有引擎 ⇒ **只有发布方给了逐字稿的那些集才出现第三页**
+     *   (用户定的:没稿就别出空页)。
+     */
+    val transcriptEnabled by container.settingsStore.transcriptionEnabled.collectAsStateWithLifecycle()
+    val showTranscript = (AsrFactory.HAS_ENGINE && transcriptEnabled) || episode.transcriptUrl.isNotBlank()
+    val pageCount = if (showTranscript) 3 else 2
+    val uiLanguage by container.settingsStore.language.collectAsStateWithLifecycle()
+    val pagerState = rememberPagerState(pageCount = { pageCount })
 
     Column(
         Modifier
@@ -196,12 +207,21 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                     )
                     Artwork(episode.artworkUrl, size = 260, corner = 24)
                 }
-                else -> ShownotesPage(episode)
+                1 -> ShownotesPage(episode)
+                else -> TranscriptPane(
+                    episode = episode,
+                    store = container.transcriptStore,
+                    uiLanguage = uiLanguage,
+                    // 已下载的单集直接用本地文件转写:不必再下一遍,飞行模式下也能转
+                    localPath = container.downloadStore.get(episode.id)?.localPath,
+                    engine = container.asrEngine,
+                    active = pagerState.currentPage == 2
+                )
             }
         }
 
         // 页码指示点
-        PagerDots(current = pagerState.currentPage, count = 2)
+        PagerDots(current = pagerState.currentPage, count = pageCount)
 
         Spacer(Modifier.height(12.dp))
         Text(

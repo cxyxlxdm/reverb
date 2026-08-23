@@ -23,6 +23,14 @@ class SettingsStore(context: Context) {
     val skipForwardSec = MutableStateFlow(prefs.getInt("skip_fwd", 30))
     val language = MutableStateFlow(prefs.getString("language", "") ?: "") // "" = 跟随系统
     val spectrumEnabled = MutableStateFlow(prefs.getBoolean("spectrum_enabled", false)) // 真实频谱(需录音权限),默认关
+    /**
+     * 逐字稿功能开关(默认**开**,与 macOS 一致)。
+     *
+     * 它只管**要不要显示播放页第三页**;真正能不能本机识别取决于渠道有没有引擎
+     * (`AsrFactory.HAS_ENGINE`)。大陆商店渠道没有引擎,那边设置页里连这一项都不显示 ——
+     * 于是这个值在那个渠道形同虚设,不影响"有官方稿的集照样出第三页"。
+     */
+    val transcriptionEnabled = MutableStateFlow(prefs.getBoolean("transcription_enabled", true))
     val contextualRadio = MutableStateFlow(prefs.getBoolean("contextual_radio", false)) // 电台模式:false 随机 / true 情境,默认随机
     val subsGrid = MutableStateFlow(prefs.getBoolean("subs_grid", false)) // 订阅排列:false 列表(一行一个)/ true 宫格,默认列表
 
@@ -61,6 +69,7 @@ class SettingsStore(context: Context) {
     fun setSkipForwardSec(v: Int) { prefs.edit().putInt("skip_fwd", v).apply(); skipForwardSec.value = v }
     fun setLanguage(tag: String) { prefs.edit().putString("language", tag).apply(); language.value = tag }
     fun setSpectrumEnabled(v: Boolean) { prefs.edit().putBoolean("spectrum_enabled", v).apply(); spectrumEnabled.value = v }
+    fun setTranscriptionEnabled(v: Boolean) { prefs.edit().putBoolean("transcription_enabled", v).apply(); transcriptionEnabled.value = v }
     fun setContextualRadio(v: Boolean) { prefs.edit().putBoolean("contextual_radio", v).apply(); contextualRadio.value = v }
     fun setSubsGrid(v: Boolean) { prefs.edit().putBoolean("subs_grid", v).apply(); subsGrid.value = v }
 

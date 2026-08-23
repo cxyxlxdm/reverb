@@ -327,4 +327,16 @@
     <string name="a11y_queue_up">Monter</string>
     <string name="a11y_queue_down">Descendre</string>
     <string name="a11y_queue_remove">Retirer de la file</string>
+    <string name="set_transcription">Transcription</string>
+    <string name="set_transcription_sub">Faites glisser jusqu\'à la troisième page du lecteur. À défaut de transcription de l\'éditeur, elle est faite sur l\'appareil</string>
+    <string name="transcript_prompt">Transformez cet épisode en texte, sur votre appareil</string>
+    <string name="transcript_start">Générer la transcription</string>
+    <string name="transcript_fetching">Récupération de la transcription de l\'éditeur…</string>
+    <string name="transcript_preparing_audio">Préparation de l\'audio…</string>
+    <string name="transcript_loading_model">Chargement du modèle vocal…</string>
+    <string name="transcript_failed">Échec de la transcription. Touchez pour réessayer</string>
+    <string name="transcript_none">L\'éditeur ne fournit pas de transcription pour cet épisode et cette version n\'intègre pas la reconnaissance sur l\'appareil</string>
+    <string name="action_retry">Réessayer</string>
+    <string name="transcript_prompt_official">L\'éditeur fournit une transcription pour cet épisode</string>
+    <string name="transcript_show">Afficher la transcription</string>
 </resources>

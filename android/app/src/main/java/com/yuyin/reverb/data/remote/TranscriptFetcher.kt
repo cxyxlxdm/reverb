@@ -107,7 +107,9 @@ class TranscriptFetcher(private val client: OkHttpClient) {
             if (body.isBlank()) continue
             out.addAll(splitLongCue(body, start, maxOf(end, start)))
         }
-        return out
+        // 也要并碎片:切长 cue 会剩下尾巴("…joins me and" / "he's"),而最后一条 cue
+        // 本身就可能只有一个词("Review")。实测这份 VTT 两种都出现了。
+        return glueOrphans(out)
     }
 
     /**
