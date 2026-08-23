@@ -17,12 +17,20 @@ class PickerSpec {
   options: string[] = [];
   selected: number = 0;
   onPick: (i: number) => void = () => {};
+  /**
+   * 每个选项左侧的色点(#RRGGBB),与 options 同长;空数组表示不画。
+   * 目前只有「主题配色」用它 —— 光有「青瓷 / 黛蓝 / 绯红 / 竹青」四个名字,
+   * 选之前看不出是什么颜色。Android 的 AccentDialog 一直是「单选圈 + 色点 + 名字」。
+   */
+  swatches: string[] = [];
 
-  constructor(title: string, options: string[], selected: number, onPick: (i: number) => void) {
+  constructor(title: string, options: string[], selected: number, onPick: (i: number) => void,
+              swatches: string[] = []) {
     this.title = title;
     this.options = options;
     this.selected = selected;
     this.onPick = onPick;
+    this.swatches = swatches;
   }
 }
 
@@ -259,6 +267,11 @@ export struct SettingsPage {
             ForEach(spec.options, (label: string, idx: number) => {
               Row({ space: 14 }) {
                 this.radio(idx === spec.selected)
+                // 色点(仅「主题配色」有;见 PickerSpec.swatches)。与 Android 同尺寸同位置:
+                // 单选圈之后、名字之前,20 见方的实心圆。
+                if (idx < spec.swatches.length) {
+                  Circle().width(20).height(20).fill(spec.swatches[idx])
+                }
                 Text(label)
                   .fontSize(TypeScale.body * this.fontScale)
                   .fontColor(this.scheme.onBackground)
@@ -628,7 +641,9 @@ export struct SettingsPage {
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
       this.picker = new PickerSpec(L.s('dlg_accent_title'), this.accentLabels(), this.accentIndex(),
-        (i: number) => { this.settings.setAccentIndex(i); this.onChanged(); });
+        (i: number) => { this.settings.setAccentIndex(i); this.onChanged(); },
+        // 四个选项各自的色点,取当前明暗下真正会用到的那一支(深色用 primaryDark)
+        ACCENTS.map((_a: AccentPalette, i: number) => this.accentColor(i)));
     })
   }
 

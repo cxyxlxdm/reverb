@@ -226,8 +226,8 @@
 
     <string name="set_theme">主题</string>
     <string name="theme_system">跟随系统</string>
-    <string name="theme_light">浅色</string>
-    <string name="theme_dark">深色</string>
+    <string name="theme_light">浅色 · 宣纸</string>
+    <string name="theme_dark">深色 · 水墨</string>
     <string name="theme_white">纯白</string>
     <string name="set_font">字号</string>
     <string name="font_small">小</string>
@@ -244,9 +244,9 @@
     <string name="set_spectrum_sub">播放页封面随真实声音起伏，需录音权限；关闭则用水墨动效</string>
     <string name="lang_system">跟随系统</string>
 
-    <string name="set_default_speed">默认播放速度</string>
-    <string name="set_skip_back">快退秒数</string>
-    <string name="set_skip_fwd">快进秒数</string>
+    <string name="set_default_speed">默认速度</string>
+    <string name="set_skip_back">快退</string>
+    <string name="set_skip_fwd">快进</string>
     <string name="unit_seconds">%d 秒</string>
     <string name="set_wifi_only">仅在 Wi-Fi 下载</string>
     <string name="set_wifi_only_sub">关闭后蜂窝网络也允许下载</string>

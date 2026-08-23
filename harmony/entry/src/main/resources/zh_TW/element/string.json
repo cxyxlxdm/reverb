@@ -330,7 +330,7 @@
     },
     {
       "name": "set_accent",
-      "value": "配色"
+      "value": "主題配色"
     },
     {
       "name": "set_font",
@@ -350,7 +350,7 @@
     },
     {
       "name": "set_default_speed",
-      "value": "預設倍速"
+      "value": "預設速度"
     },
     {
       "name": "set_skip_back",

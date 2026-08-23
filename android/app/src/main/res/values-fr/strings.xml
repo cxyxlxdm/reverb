@@ -217,8 +217,8 @@
 
     <string name="set_theme">Thème</string>
     <string name="theme_system">Système</string>
-    <string name="theme_light">Clair</string>
-    <string name="theme_dark">Sombre</string>
+    <string name="theme_light">Clair · Papier</string>
+    <string name="theme_dark">Sombre · Encre</string>
     <string name="theme_white">Blanc pur</string>
     <string name="set_font">Taille du texte</string>
     <string name="font_small">Petit</string>
@@ -236,8 +236,8 @@
     <string name="lang_system">Système</string>
 
     <string name="set_default_speed">Vitesse par défaut</string>
-    <string name="set_skip_back">Reculer de</string>
-    <string name="set_skip_fwd">Avancer de</string>
+    <string name="set_skip_back">Reculer</string>
+    <string name="set_skip_fwd">Avancer</string>
     <string name="unit_seconds">%d s</string>
     <string name="set_wifi_only">Télécharger en Wi-Fi seulement</string>
     <string name="set_wifi_only_sub">Désactivez pour autoriser les données mobiles</string>

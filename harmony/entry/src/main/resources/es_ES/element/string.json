@@ -330,7 +330,7 @@
     },
     {
       "name": "set_accent",
-      "value": "Color"
+      "value": "Color de acento"
     },
     {
       "name": "set_font",

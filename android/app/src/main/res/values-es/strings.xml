@@ -217,8 +217,8 @@
 
     <string name="set_theme">Tema</string>
     <string name="theme_system">Sistema</string>
-    <string name="theme_light">Claro</string>
-    <string name="theme_dark">Oscuro</string>
+    <string name="theme_light">Claro · Papel</string>
+    <string name="theme_dark">Oscuro · Tinta</string>
     <string name="theme_white">Blanco puro</string>
     <string name="set_font">Tamaño del texto</string>
     <string name="font_small">Pequeño</string>
