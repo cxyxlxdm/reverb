@@ -60,6 +60,8 @@ class RssParser(private val client: OkHttpClient) {
             var inImage = false // RSS 频道 <image><url> 块
             var iTitle = ""; var iDesc = ""; var iAudio = ""
             var iImage = ""; var iGuid = ""; var iDate = ""; var iDur = ""
+            // 逐字稿:同一集可能给多条(不同格式),iTrRank 记住当前已选那条的优先级
+            var iTrUrl = ""; var iTrType = ""; var iTrRank = -1
             val textBuf = StringBuilder() // 累积当前元素文本，START 时清空，避免空元素继承兄弟节点文本
 
             var event = parser.eventType
@@ -73,6 +75,7 @@ class RssParser(private val client: OkHttpClient) {
                                 inItem = true
                                 iTitle = ""; iDesc = ""; iAudio = ""
                                 iImage = ""; iGuid = ""; iDate = ""; iDur = ""
+                                iTrUrl = ""; iTrType = ""; iTrRank = -1
                             }
                             "image" -> inImage = true
                             // <enclosure> 优先，无条件覆盖
@@ -112,6 +115,23 @@ class RssParser(private val client: OkHttpClient) {
                                 val u = parser.getAttributeValue(null, "url")
                                 if (!u.isNullOrBlank()) channelFundingUrl = u.trim()
                             }
+                            /**
+                             * 发布方自己的逐字稿(Podcasting 2.0)。**空元素、信息全在属性里**,
+                             * 所以只能在 START_TAG 取,和上面 itunes:image / podcast:funding 一样。
+                             *
+                             * 一集常有多条(同一稿的不同格式,外加 `rel="captions"` 的字幕版),
+                             * 故不是"取第一条",而是按 transcriptRank 打分取最优:
+                             * JSON(带词级时间)> VTT > SRT,HTML/纯文本直接不要(没有时间轴,
+                             * 拿来也做不了跟读高亮)。
+                             */
+                            "podcast:transcript" -> if (inItem) {
+                                val u = parser.getAttributeValue(null, "url")
+                                val t = parser.getAttributeValue(null, "type").orEmpty()
+                                val rank = transcriptRank(t)
+                                if (!u.isNullOrBlank() && rank > iTrRank) {
+                                    iTrUrl = u.trim(); iTrType = t.trim(); iTrRank = rank
+                                }
+                            }
                         }
                     }
 
@@ -139,7 +159,9 @@ class RssParser(private val client: OkHttpClient) {
                                                 podcastTitle = channelTitle,
                                                 durationSec = parseDuration(iDur),
                                                 pubDate = iDate,
-                                                feedUrl = feedUrl
+                                                feedUrl = feedUrl,
+                                                transcriptUrl = iTrUrl,
+                                                transcriptType = iTrType
                                             )
                                         )
                                     }
@@ -180,6 +202,23 @@ class RssParser(private val client: OkHttpClient) {
         } catch (e: Exception) {
             com.yuyin.reverb.util.Logger.e(TAG, "parse error url=$feedUrl", e)
             null
+        }
+    }
+
+    /**
+     * 逐字稿格式的优先级。**负数表示不要**。
+     *
+     * 只收带时间轴的格式:JSON(Podcast Index 那套,可能带词级时间)> VTT > SRT。
+     * HTML / 纯文本稿虽然也常见,但没有时间轴 —— 拿来只能当一整篇文章,做不了跟播放高亮,
+     * 反而会让"有稿"的判断变成"有一篇读不动的长文",故直接排除。
+     */
+    private fun transcriptRank(type: String): Int {
+        val t = type.lowercase()
+        return when {
+            t.contains("json") -> 3
+            t.contains("vtt") -> 2
+            t.contains("srt") || t.contains("subrip") -> 1
+            else -> -1          // text/html、text/plain 等
         }
     }
 

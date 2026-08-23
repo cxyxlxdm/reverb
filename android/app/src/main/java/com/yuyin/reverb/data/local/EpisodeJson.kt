@@ -15,7 +15,11 @@ object EpisodeJson {
         .put("durationSec", e.durationSec)
         .put("pubDate", e.pubDate)
         .put("feedUrl", e.feedUrl)
+        .put("transcriptUrl", e.transcriptUrl)
+        .put("transcriptType", e.transcriptType)
 
+    /// `optString` 缺键返回空串,所以老缓存(没有这两个键)读出来就是"这集没有逐字稿",
+    /// 不会炸也不会误判 —— 下次刷新 feed 时自然补上。
     fun fromJson(o: JSONObject): Episode = Episode(
         id = o.optString("id"),
         title = o.optString("title"),
@@ -25,6 +29,8 @@ object EpisodeJson {
         podcastTitle = o.optString("podcastTitle"),
         durationSec = o.optLong("durationSec"),
         pubDate = o.optString("pubDate"),
-        feedUrl = o.optString("feedUrl")
+        feedUrl = o.optString("feedUrl"),
+        transcriptUrl = o.optString("transcriptUrl"),
+        transcriptType = o.optString("transcriptType")
     )
 }

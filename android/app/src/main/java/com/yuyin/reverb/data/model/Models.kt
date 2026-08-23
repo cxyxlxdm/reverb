@@ -24,7 +24,37 @@ data class Episode(
     val podcastTitle: String,
     val durationSec: Long = 0,
     val pubDate: String = "",
-    val feedUrl: String = ""   // 所属频道的 RSS 地址,用于从播放页跳转频道主页
+    val feedUrl: String = "",  // 所属频道的 RSS 地址,用于从播放页跳转频道主页
+    /**
+     * 发布方**自己提供的逐字稿**地址(RSS 的 `podcast:transcript`,Podcasting 2.0)。
+     *
+     * 有它就不必本机识别:时间轴是发布方给的,又准又免费。空串表示这一集没有。
+     * 大陆商店渠道**只有这一条路**(不含离线识别引擎),故这个字段在那个渠道里
+     * 直接决定播放页有没有第三页。
+     */
+    val transcriptUrl: String = "",
+    /// 逐字稿的 MIME(`application/json` / `text/vtt` / `application/srt` …),用于选解析器
+    val transcriptType: String = ""
+)
+
+/// 逐字稿里的一个词及其时间(卡拉OK逐词高亮用)。与 macOS `TranscribedWord` 字段一致。
+data class TranscribedWord(
+    val text: String,
+    val startMs: Int,
+    val endMs: Int
+)
+
+/**
+ * 逐字稿的一句:文本 + 起止毫秒。
+ *
+ * `words` 为 null 时回退整句高亮 —— 官方 SRT/VTT 稿通常只有句级时间,
+ * 鸿蒙的系统 ASR 更是连句级都要自己推算(见该端注释)。三端同一形状,缓存 JSON 可互通。
+ */
+data class TranscribedSegment(
+    val text: String,
+    val startMs: Int,
+    val endMs: Int,
+    val words: List<TranscribedWord>? = null
 )
 
 /** 解析 RSS 后的结果：频道元信息 + 分集列表。 */
