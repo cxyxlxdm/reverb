@@ -239,6 +239,18 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             }
 
             SectionLabel(stringResource(R.string.sec_playback))
+            /**
+             * 段内顺序:**先播放本身的几项,逐字稿相关放最后**,与鸿蒙端一致。
+             *
+             * 原先把逐字高亮放在段首 —— 一进「播放与下载」先看到一个两三行副标题的
+             * 附属开关,倍速/快退这些核心项被挤到下面,而且两端顺序还不一样。
+             */
+            SettingRow(stringResource(R.string.set_default_speed), value = speedLabel(defaultSpeed)) { dlg = Dlg.SPEED }
+            SettingRow(stringResource(R.string.set_skip_back), value = stringResource(R.string.unit_seconds, skipBack)) { dlg = Dlg.SKIP_BACK }
+            SettingRow(stringResource(R.string.set_skip_fwd), value = stringResource(R.string.unit_seconds, skipFwd)) { dlg = Dlg.SKIP_FWD }
+            SettingSwitch(stringResource(R.string.set_wifi_only), stringResource(R.string.set_wifi_only_sub), checked = !allowCellular) {
+                settings.setAllowCellularDownload(!it)
+            }
             // 逐字稿开关只在**有离线识别引擎的渠道**显示。大陆商店渠道没有引擎
             // (`AsrFactory.HAS_ENGINE=false`,包里连模型都没有),那边这个开关无意义 ——
             // 而"发布方给了稿的集照样出第三页"不受它管,所以不显示也不会少功能。
@@ -250,19 +262,13 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 ) { on -> settings.setTranscriptionEnabled(on) }
             }
             // 逐字高亮**两个渠道都给**,但副标题按渠道分别写:
-            // 完整版要说明"多花时间",国内版要说明"依赖发布方的逐字稿"
+            // 完整版说明"不额外增加转写耗时",国内版说明"依赖发布方的逐字稿且要带逐字时间"
             // (见 src/default|store/res/values-* 下的 set_word_highlight_sub)。
             SettingSwitch(
                 stringResource(R.string.set_word_highlight),
                 stringResource(R.string.set_word_highlight_sub),
                 checked = wordHighlight
             ) { on -> settings.setWordHighlight(on) }
-            SettingRow(stringResource(R.string.set_default_speed), value = speedLabel(defaultSpeed)) { dlg = Dlg.SPEED }
-            SettingRow(stringResource(R.string.set_skip_back), value = stringResource(R.string.unit_seconds, skipBack)) { dlg = Dlg.SKIP_BACK }
-            SettingRow(stringResource(R.string.set_skip_fwd), value = stringResource(R.string.unit_seconds, skipFwd)) { dlg = Dlg.SKIP_FWD }
-            SettingSwitch(stringResource(R.string.set_wifi_only), stringResource(R.string.set_wifi_only_sub), checked = !allowCellular) {
-                settings.setAllowCellularDownload(!it)
-            }
 
             SectionLabel(stringResource(R.string.sec_reminder))
             SettingSwitch(stringResource(R.string.set_updates), stringResource(R.string.set_updates_sub), checked = updatesEnabled) { on ->
