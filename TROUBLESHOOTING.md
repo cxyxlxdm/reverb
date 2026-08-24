@@ -1270,3 +1270,42 @@
 
 **教训**:鸿蒙的 native 接线错误信息普遍指向"下游症状"而不是根因(缺 install → 报 any;
 缺头文件 → 报 unknown type)。**遇到类型解析成 any 先想依赖装没装**,再怀疑 d.ts 写法。
+
+### H62. 鸿蒙系统语音识别(Core Speech Kit)真机实测:**不足以做播客转写**
+
+装到真机上逐个修完接线问题之后,结论是这条路本身不够用。按顺序记下四个坑与最终结论:
+
+1. **同步编解码模式必须显式打开**。以为"不注册回调即同步"是错的 ——
+   每次 `OH_AudioCodec_QueryInputBuffer` 都返回 `{QueryInputBuffer} not in sync mode`。
+   正解:配置阶段 `OH_AVFormat_SetIntValue(fmt, OH_MD_KEY_ENABLE_SYNC_MODE, 1)`(默认 0)。
+   **顺带暴露了一个自己的错**:外层"攒够就返回"的循环没有失败闸,取不到数据就空转,
+   几千行错误日志刷屏、调用线程再也回不来。**任何 pump 循环都要有"连续 N 轮无进展就放弃"**。
+2. **别自己拼解码器配置,把轨道格式原样交给它**。自己只填采样率/声道数,缺了
+   `aac_is_adts` 与 `OH_MD_KEY_CODEC_CONFIG`(MP4 里的 AudioSpecificConfig),
+   于是 `CheckAdts: aac_is_adts parameter is missing` + 每帧 `Invalid data found when
+   processing input`,一个采样都出不来。用 `OH_AVSource_GetTrackFormat` 的结果去 Configure,
+   只补一个同步模式开关即可。
+3. **监听器只能绑一次,而且 `startListening` 之后必须等 `onStart` 才能喂。**
+   每窗重新 `setListener`,会在上一窗 `onComplete` 还在派发时换掉监听器 ——
+   **进程直接崩**在系统的 `libspeechrecognizer.z.so`(`AsrEngine::WritePcm`)。
+   不等 `onStart` 就喂,则每帧报 `1002200010 Write audio failed because the start
+   listening is failed`,整窗 0 句。改成"绑一次 + 当前窗指针 + 等 onStart"之后不再崩。
+4. **然而识别质量不够用**。默认(短语音)档一次会话只认**第一句**,检测到句末静音就收工:
+   10 分钟的中文单集 → **14 行**,内容多是「。」「能力。」「有八。」这类碎片。
+   试着走"长语音"档(库里有 `SpeechRecognitionLong` / `ParseAsrLongEngineOptions`,
+   `strings` 能抓到 `recognizerMode` / `maxAudioDuration` / `vadBegin` / `vadEnd` 这些**参数名**,
+   但抓不到**取值字符串**),传 `recognizerMode: 'long'` 之后变成 **0 行**。
+   拿不到官方取值口径就不该继续瞎猜,已回退默认档。
+
+**结论**:Core Speech Kit 的离线档是给"短语音输入/命令词"设计的,不是给长音频转写的。
+鸿蒙端要真正可用的本机转写,得走 Android 那条路(把 whisper.cpp 链进已经建好的
+native 模块,见 TRANSCRIPT.md 的迁移路径);官方逐字稿那条路不受影响,已经可用。
+
+**教训 / 规律**:
+1. **"系统有这个 API"不等于"这个 API 能干这件事"。** 接口形状对得上(喂 PCM、出文本)
+   不代表适用场景对得上 —— 短语音引擎的 VAD 会在第一句结束就收工。
+   **这种判断只能靠真机上跑真实素材**,读文档和读头文件都看不出来。
+2. **不要靠 `strings` 猜出来的参数名去传值。** 名字能抓到、取值抓不到时,传了往往比不传更糟
+   (这里从 14 行变成 0 行)。
+3. 前三个坑的错误信息都指向下游症状(not in sync mode / Invalid data / write failed),
+   根因分别在"没开开关""配置不全""时序不对"。**逐个二分,不要指望一次改对。**

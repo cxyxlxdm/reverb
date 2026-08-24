@@ -486,7 +486,10 @@ export struct SettingsPage {
 
   /// 重算三处占用。进页面时算一次,清理后再算一次(与 Android 的 refreshTick 同思路)。
   private recomputeSizes(): void {
-    this.cacheBytes = this.app.popularCache.sizeBytes() + this.app.feedCache.sizeBytes();
+    // 逐字稿也算进"缓存":它可重生成、体积不小(一集几十 KB),而且用户需要一个
+    // 能把它清掉的入口 —— 时间轴口径变了时,重转是唯一的自救办法
+    this.cacheBytes = this.app.popularCache.sizeBytes() + this.app.feedCache.sizeBytes()
+      + this.app.transcripts.usageBytes();
     this.dlBytes = this.app.downloadManager.usageBytes();
     this.logBytes = Log.sizeBytes();
   }
@@ -523,8 +526,9 @@ export struct SettingsPage {
   doClearCache(): void {
     this.app.popularCache.clear();
     this.app.feedCache.clear();
+    this.app.transcripts.clearAll();
     this.recomputeSizes();
-    Log.i('Settings', '已清除热门榜与频道缓存');
+    Log.i('Settings', '已清除热门榜、频道缓存与逐字稿');
   }
 
   doClearDownloads(): void {

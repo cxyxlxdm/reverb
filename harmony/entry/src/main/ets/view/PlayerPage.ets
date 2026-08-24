@@ -160,7 +160,8 @@ export struct PlayerPage {
     }
     .width('100%')
     .height('100%')
-    .padding({ left: 20, right: 20, bottom: 16 })
+    // 左右 24 与 Android 的 `padding(horizontal = 24.dp)` 对齐 —— 原先 20,标题看着贴边
+    .padding({ left: 24, right: 24, bottom: 16 })
   }
 
   @Builder
@@ -229,24 +230,43 @@ export struct PlayerPage {
   }
 
   @Builder
+  /**
+   * 单集标题 + 频道名。**字体与间距对齐 Android 播放页**(`PlayerScreen.kt` 的同一块)。
+   *
+   * 逐项对齐过的差异,以及为什么:
+   * - **字重用 Normal,不是 Medium。** Android 那边写的是 SemiBold,但 Android 的中文字体
+   *   (Noto Sans CJK)在 600 这一档往往没有真字面、要合成或回落,**实际观感偏轻**;
+   *   而 HarmonyOS Sans 有真的 Medium 字面,同样写 Medium 就明显比 Android 粗。
+   *   要"看起来一样",这里就得比规格书上低一档 —— 照抄 SemiBold 只会更粗。
+   * - **行高 28**:Material 3 的 titleLarge 是 22/28,鸿蒙这边原先没设行高,
+   *   两行标题挤在一起,这是"更丑"的另一半原因。
+   * - **频道名 14 而不是 12**:Android 用的是 bodyMedium(14sp),原先这里用 label(12)偏小。
+   * - 间距:标题→频道名 6、频道名→进度条 20,都取 Android 的值。
+   *
+   * 页面左右内边距在 build() 里从 20 改成了 **24**(Android 是 `padding(horizontal = 24.dp)`)
+   * —— 那是"贴边"的直接原因。
+   */
   titleBlock() {
-    Column({ space: 5 }) {
+    Column({ space: 6 }) {
       Text(this.player.current === null ? '' : this.player.current.title)
         .fontSize(TypeScale.titleLarge * this.fontScale)
-        .fontWeight(FontWeight.Medium)
+        .fontWeight(FontWeight.Normal)
+        .lineHeight(28 * this.fontScale)
         .fontColor(this.scheme.onBackground)
         .maxLines(2)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Center)
         .width('100%')
       Text(this.player.current === null ? '' : this.player.current.podcastTitle)
-        .fontSize(TypeScale.label * this.fontScale)
+        .fontSize(TypeScale.body * this.fontScale)
         .fontColor(this.scheme.onSurfaceVariant)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+        .width('100%')
     }
     .width('100%')
-    .margin({ bottom: 8 })
+    .margin({ bottom: 20 })
   }
 
   @Builder

@@ -52,12 +52,20 @@ export class SpeechTranscriber implements SpeechTranscriberLike {
    */
   private static readonly FRAME_BYTES: number = 1280;
   private static readonly SAMPLE_RATE: number = 16000;
+  /// 每喂多少帧让出一次主线程。25 帧 = 1 秒音频(见 recognizeWindow 里的说明)
+  private static readonly FRAMES_PER_YIELD: number = 25;
+  /// 等 `onStart` 的上限。等不到就跳过这一窗 —— 硬喂会崩在系统库里
+  private static readonly START_TIMEOUT_MS: number = 5000;
+  /// `finish` 之后等收尾的上限
+  private static readonly FINISH_TIMEOUT_MS: number = 15000;
   private static readonly TAG: string = 'Speech';
 
   private ctx: common.UIAbilityContext;
   /// 这台设备到底能不能用系统识别。null = 还没试过(第一次问的时候试一次并记住)
   private ok: boolean | null = null;
   private cancelled: boolean = false;
+  /// 当前那一窗。监听器只绑一次,回调统一转给它(见 bindListener)
+  private cur: WindowSession | null = null;
 
   constructor(ctx: common.UIAbilityContext) {
     this.ctx = ctx;
@@ -114,10 +122,9 @@ export class SpeechTranscriber implements SpeechTranscriberLike {
       }
 
       // 3) 建识别引擎。`online: 1` = 离线(设备端),音频不出设备
-      engine = await speechRecognizer.createEngine({
-        language: SpeechTranscriber.engineLang(localeId),
-        online: 1
-      });
+      engine = await this.createEngine(SpeechTranscriber.engineLang(localeId));
+      if (engine === null) return false;
+      this.bindListener(engine);
       onState(TranscriptState.Running);
 
       let windowIndex = 0;
@@ -160,94 +167,139 @@ export class SpeechTranscriber implements SpeechTranscriberLike {
   }
 
   /**
-   * 一个窗 = 一个识别会话。把 PCM 按 1280 字节一帧喂进去,`finish` 之后等最后一句。
+   * 建引擎。
    *
-   * 返回这一窗里**定稿的句子**(按到达顺序)。`isFinal` 之前的中间结果只用来喂"实时尾巴",
-   * 让界面看着在动,不进最终稿。
+   * **试过给 `extraParams` 传"长语音"档,结果更差,已放弃。** 记录一下免得后人重试:
+   * 系统库(`libspeechrecognizer.z.so`)里确实有 `SpeechRecognitionLong`、
+   * `ParseAsrLongEngineOptions`,以及 `recognizerMode` / `maxAudioDuration` /
+   * `vadBegin` / `vadEnd` 这些参数名(strings 抓出来的),但**取值字符串抓不到**;
+   * 试传 `recognizerMode: 'long'` + `maxAudioDuration: 60000` 之后,
+   * 真机上从"10 分钟出 14 行"变成"出 0 行"。既然拿不到官方的取值口径,
+   * 就不要在这里瞎猜 —— 保持默认档,并如实向用户说明本机识别的局限。
    */
-  private recognizeWindow(
+  private async createEngine(lang: string): Promise<speechRecognizer.SpeechRecognitionEngine | null> {
+    try {
+      return await speechRecognizer.createEngine({ language: lang, online: 1 });
+    } catch (e) {
+      Log.e(SpeechTranscriber.TAG, `建引擎失败:${e}`);
+      return null;
+    }
+  }
+
+  /**
+   * **监听器只绑一次**(建引擎之后),回调统一转给"当前那一窗"。
+   *
+   * 为什么不是每窗 `setListener` 一次:真机上那样会**把进程搞崩** ——
+   * 上一窗的 `onComplete` 还在派发的时候就换掉监听器、紧接着又 `writeAudio`,
+   * 崩在系统的 `libspeechrecognizer.z.so` 里(`AsrEngine::WritePcm`)。
+   * 绑一次 + 一个可变的"当前窗"指针,既没有这个竞态,也少了每窗的注册开销。
+   */
+  private bindListener(engine: speechRecognizer.SpeechRecognitionEngine): void {
+    engine.setListener({
+      onStart: (_sid: string, _msg: string) => {
+        if (this.cur !== null) this.cur.onStarted();
+      },
+      onEvent: (_sid: string, _code: number, _msg: string) => {},
+      onResult: (_sid: string, result: speechRecognizer.SpeechRecognitionResult) => {
+        if (this.cur !== null) this.cur.onResult(result);
+      },
+      onComplete: (_sid: string, _msg: string) => {
+        if (this.cur !== null) this.cur.onDone();
+      },
+      onError: (_sid: string, code: number, msg: string) => {
+        if (this.cur !== null) this.cur.onError(code, msg);
+      }
+    });
+  }
+
+  /**
+   * 一个窗 = 一个识别会话。顺序**必须是**:startListening → **等 onStart** → 喂帧 → finish → 等收尾。
+   *
+   * 「等 onStart」这一步是真机教出来的:`startListening` 是异步生效的,不等就喂,
+   * 每一帧都报 `1002200010 Write audio failed because the start listening is failed`,
+   * 整窗 0 句。
+   *
+   * 返回这一窗里**定稿的句子**。`isFinal` 之前的中间结果只喂"实时尾巴",让界面看着在动,不进稿。
+   */
+  private async recognizeWindow(
     engine: speechRecognizer.SpeechRecognitionEngine,
     pcm: Uint8Array,
     sessionId: string,
     sink: TranscriptSink
   ): Promise<string[]> {
-    return new Promise<string[]>((resolve) => {
-      const finals: string[] = [];
-      let settled = false;
-      const done = (): void => {
-        if (settled) return;
-        settled = true;
-        resolve(finals);
-      };
-
-      engine.setListener({
-        onStart: (_sid: string, _msg: string) => {},
-        onEvent: (_sid: string, _code: number, _msg: string) => {},
-        onResult: (_sid: string, result: speechRecognizer.SpeechRecognitionResult) => {
-          const text = result.result.trim();
-          if (result.isFinal) {
-            if (text.length > 0) finals.push(text);
-            sink.onVolatile('');
-          } else if (text.length > 0) {
-            sink.onVolatile(text);
-          }
-          if (result.isLast) done();
-        },
-        onComplete: (_sid: string, _msg: string) => { done(); },
-        onError: (_sid: string, code: number, msg: string) => {
-          // 1002200003 = 这一窗超了引擎的单次上限。已经拿到的句子照用,不当失败
-          if (code !== 1002200003) {
-            Log.w(SpeechTranscriber.TAG, `识别出错 ${code} ${msg}`);
-          }
-          done();
+    const win = new WindowSession(sink);
+    this.cur = win;
+    try {
+      engine.startListening({
+        sessionId: sessionId,
+        audioInfo: {
+          audioType: 'pcm',
+          sampleRate: SpeechTranscriber.SAMPLE_RATE,
+          soundChannel: 1,
+          sampleBit: 16
         }
       });
+    } catch (e) {
+      Log.w(SpeechTranscriber.TAG, `startListening 失败:${e}`);
+      this.cur = null;
+      return [];
+    }
 
-      try {
-        engine.startListening({
-          sessionId: sessionId,
-          audioInfo: {
-            audioType: 'pcm',
-            sampleRate: SpeechTranscriber.SAMPLE_RATE,
-            soundChannel: 1,
-            sampleBit: 16
-          }
-        });
-      } catch (e) {
-        Log.w(SpeechTranscriber.TAG, `startListening 失败:${e}`);
-        done();
-        return;
-      }
+    // 等引擎真的就绪。等不到就放弃这一窗,**绝不硬喂**(硬喂会崩在系统库里)
+    const ready = await win.waitStarted(SpeechTranscriber.START_TIMEOUT_MS);
+    if (!ready) {
+      Log.w(SpeechTranscriber.TAG, `会话 ${sessionId} 迟迟没有 onStart,跳过这一窗`);
+      try { engine.cancel(sessionId); } catch (e) { /* 忽略 */ }
+      this.cur = null;
+      return [];
+    }
 
-      // 喂音频。**帧长必须是 640 或 1280**,所以末尾不足一帧的要补零凑满
-      const frame = SpeechTranscriber.FRAME_BYTES;
-      let at = 0;
-      try {
-        while (at < pcm.byteLength) {
-          if (this.cancelled) break;
-          const end = Math.min(at + frame, pcm.byteLength);
-          let chunk: Uint8Array;
-          if (end - at === frame) {
-            chunk = pcm.subarray(at, end);
-          } else {
-            chunk = new Uint8Array(frame);
-            chunk.set(pcm.subarray(at, end));
-          }
-          engine.writeAudio(sessionId, chunk);
-          at = end;
+    // 喂音频。**帧长必须是 640 或 1280**,末尾不足一帧的补零凑满
+    const frame = SpeechTranscriber.FRAME_BYTES;
+    let at = 0;
+    let sinceYield = 0;
+    try {
+      while (at < pcm.byteLength) {
+        if (this.cancelled || win.failed) break;
+        const end = Math.min(at + frame, pcm.byteLength);
+        let chunk: Uint8Array;
+        if (end - at === frame) {
+          chunk = pcm.subarray(at, end);
+        } else {
+          chunk = new Uint8Array(frame);
+          chunk.set(pcm.subarray(at, end));
         }
-      } catch (e) {
-        // 撞上长度上限等:把已喂进去的收尾,拿到手的句子照用
-        Log.w(SpeechTranscriber.TAG, `writeAudio 中断于 ${at}/${pcm.byteLength}:${e}`);
+        engine.writeAudio(sessionId, chunk);
+        at = end;
+        /**
+         * **每喂 1 秒音频让出一次**。一口气把 20 秒(500 帧)推进去会把引擎的 IPC 队列压满,
+         * 而且这条链跑在 UI 线程上 —— 不让出的话界面会卡住十几秒。
+         * 让出也给了识别结果回调派发的机会,实时尾巴才动得起来。
+         */
+        sinceYield += 1;
+        if (sinceYield >= SpeechTranscriber.FRAMES_PER_YIELD) {
+          sinceYield = 0;
+          await SpeechTranscriber.yieldOnce();
+        }
       }
-      try {
-        engine.finish(sessionId);
-      } catch (e) {
-        done();
-      }
-      // 兜底:引擎没回 onComplete/isLast 也不能把整条流程吊死
-      setTimeout(() => { done(); }, 20000);
-    });
+    } catch (e) {
+      // 撞上单次长度上限等:把已喂进去的收尾,拿到手的句子照用
+      Log.w(SpeechTranscriber.TAG, `writeAudio 中断于 ${at}/${pcm.byteLength}:${e}`);
+    }
+
+    try {
+      engine.finish(sessionId);
+    } catch (e) {
+      Log.w(SpeechTranscriber.TAG, `finish 失败:${e}`);
+    }
+    // 等收尾。兜底超时,引擎不回话也不能把整条流程吊死
+    await win.waitDone(SpeechTranscriber.FINISH_TIMEOUT_MS);
+    this.cur = null;
+    return win.finals;
+  }
+
+  private static yieldOnce(): Promise<void> {
+    return new Promise<void>((resolve) => { setTimeout(() => { resolve(); }, 0); });
   }
 
   /**
@@ -335,5 +387,102 @@ export class SpeechTranscriber implements SpeechTranscriberLike {
       h = (h * 31 + s.charCodeAt(i)) | 0;
     }
     return Math.abs(h);
+  }
+}
+
+/**
+ * 一个识别窗的状态收集器。
+ *
+ * 存在的理由:监听器**只能绑一次**(每窗重绑会崩,见 `bindListener`),
+ * 所以回调必须转给一个"当前窗"对象。这个类就是那个对象 ——
+ * 它把回调翻译成两个可以 `await` 的时刻(引擎就绪 / 本窗收尾)与一串定稿句子。
+ */
+class WindowSession {
+  /// 本窗定稿的句子,按到达顺序
+  finals: string[] = [];
+  /// 引擎报错过(撞上单次长度上限之类)。喂帧的循环看这个提前收手
+  failed: boolean = false;
+
+  private sink: TranscriptSink;
+  private started: boolean = false;
+  private done: boolean = false;
+  private startWaiters: (() => void)[] = [];
+  private doneWaiters: (() => void)[] = [];
+
+  constructor(sink: TranscriptSink) {
+    this.sink = sink;
+  }
+
+  onStarted(): void {
+    if (this.started) return;
+    this.started = true;
+    const ws = this.startWaiters;
+    this.startWaiters = [];
+    for (let i = 0; i < ws.length; i++) ws[i]();
+  }
+
+  onResult(result: speechRecognizer.SpeechRecognitionResult): void {
+    const text = result.result.trim();
+    if (result.isFinal) {
+      if (text.length > 0) this.finals.push(text);
+      this.sink.onVolatile('');
+    } else if (text.length > 0) {
+      this.sink.onVolatile(text);
+    }
+    if (result.isLast) this.onDone();
+  }
+
+  onError(code: number, msg: string): void {
+    // 1002200003 = 这一窗超了引擎的单次上限。已经拿到的句子照用,不当失败
+    if (code !== 1002200003) {
+      Log.w('Speech', `识别出错 ${code} ${msg}`);
+    }
+    this.failed = true;
+    // 报错也算"就绪过了",否则 waitStarted 会一直等到超时
+    this.onStarted();
+    this.onDone();
+  }
+
+  onDone(): void {
+    if (this.done) return;
+    this.done = true;
+    const ws = this.doneWaiters;
+    this.doneWaiters = [];
+    for (let i = 0; i < ws.length; i++) ws[i]();
+  }
+
+  /// @returns true = 引擎已就绪;false = 超时(调用方应跳过这一窗,**不要硬喂**)
+  waitStarted(timeoutMs: number): Promise<boolean> {
+    if (this.started) return Promise.resolve(true);
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      this.startWaiters.push(() => {
+        if (settled) return;
+        settled = true;
+        resolve(true);
+      });
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        resolve(this.started);
+      }, timeoutMs);
+    });
+  }
+
+  waitDone(timeoutMs: number): Promise<void> {
+    if (this.done) return Promise.resolve();
+    return new Promise<void>((resolve) => {
+      let settled = false;
+      this.doneWaiters.push(() => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      });
+      setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      }, timeoutMs);
+    });
   }
 }

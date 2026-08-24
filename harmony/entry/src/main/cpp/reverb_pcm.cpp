@@ -39,6 +39,8 @@ namespace {
 
 /// 等一个可用 buffer 的上限。解码一帧远快于这个数,取大只是为了在系统忙时不误判成结束。
 constexpr int64_t kTimeoutUs = 2'000'000;
+/// 连续多少轮"喂了也没出东西"就认定解码走不下去。见 Read 里的死循环闸。
+constexpr int kMaxIdleRounds = 40;
 
 /**
  * 一次解码会话。
@@ -231,6 +233,16 @@ napi_value Open(napi_env env, napi_callback_info info) {
     }
     bool found = false;
     std::string mime;
+    /**
+     * **音频轨的格式要原样留着交给解码器**,不能自己拼一个只有采样率/声道数的最小格式。
+     *
+     * 真机上撞过:自己拼的格式缺 `aac_is_adts` 与 `OH_MD_KEY_CODEC_CONFIG`
+     * (MP4 里的 AudioSpecificConfig / esds),解码器于是报
+     * `CheckAdts: aac_is_adts parameter is missing` + 每一帧
+     * `Invalid data found when processing input`,一个采样都出不来。
+     * 轨道格式里这些键都是齐的,直接用它最省事也最不容易漏。
+     */
+    OH_AVFormat* trackFmt = nullptr;
     for (int32_t i = 0; i < trackCount; i++) {
         OH_AVFormat* tf = OH_AVSource_GetTrackFormat(s->source, static_cast<uint32_t>(i));
         if (tf == nullptr) continue;
@@ -243,11 +255,13 @@ napi_value Open(napi_env env, napi_callback_info info) {
             OH_AVFormat_GetIntValue(tf, OH_MD_KEY_AUD_CHANNEL_COUNT, &s->srcChannels);
             s->track = static_cast<uint32_t>(i);
             found = true;
+            trackFmt = tf;         // 交给 Configure 用,别在这里销毁
+            break;
         }
         OH_AVFormat_Destroy(tf);
-        if (found) break;
     }
     if (!found || mime.empty()) {
+        if (trackFmt != nullptr) OH_AVFormat_Destroy(trackFmt);
         LOGW("文件里没有音频轨");
         destroySession(s);
         napi_create_int64(env, 0, &out);
@@ -259,13 +273,23 @@ napi_value Open(napi_env env, napi_callback_info info) {
     s->codec = OH_AudioCodec_CreateByMime(mime.c_str(), false);
     if (s->codec == nullptr) {
         LOGW("建解码器失败 mime=%{public}s", mime.c_str());
+        OH_AVFormat_Destroy(trackFmt);
         destroySession(s);
         napi_create_int64(env, 0, &out);
         return out;
     }
-    OH_AVFormat* cfg = OH_AVFormat_Create();
-    OH_AVFormat_SetIntValue(cfg, OH_MD_KEY_AUD_SAMPLE_RATE, s->srcRate);
-    OH_AVFormat_SetIntValue(cfg, OH_MD_KEY_AUD_CHANNEL_COUNT, s->srcChannels);
+    // 轨道格式原样拿来当配置(含 codec config / aac_is_adts 等必需键),只补一个同步模式开关
+    OH_AVFormat* cfg = trackFmt;
+    /**
+     * **同步模式必须显式打开。**
+     *
+     * 我一开始以为"不注册回调"就等于同步模式(头文件里 Query* 那几个函数只说了
+     * "not permitted in asynchronous mode"),真机上的结果是每次 Query 都返回
+     * `{QueryInputBuffer} not in sync mode`,而且外层循环因为一直取不到数据就空转,
+     * 把日志刷了几千行。正解是配置阶段给这个键置 1(默认 0),
+     * 且**置了之后就不能再注册回调** —— 两者互斥。
+     */
+    OH_AVFormat_SetIntValue(cfg, OH_MD_KEY_ENABLE_SYNC_MODE, 1);
     const bool okCfg = OH_AudioCodec_Configure(s->codec, cfg) == AV_ERR_OK;
     OH_AVFormat_Destroy(cfg);
     if (!okCfg || OH_AudioCodec_Prepare(s->codec) != AV_ERR_OK
@@ -318,10 +342,29 @@ napi_value Read(napi_env env, napi_callback_info info) {
         return out;
     }
 
+    /**
+     * 攒到够或者流结束。**必须有个"一直没有进展就放弃"的闸** ——
+     * 否则解码器一旦进了不出数据的状态(配置错、编解码器被回收、文件坏),
+     * 这个循环就是死循环:每轮都失败、每轮都打一行错误日志,几千行刷屏,
+     * 而调用它的线程再也回不去。真机上就这么撞过一次(同步模式没打开)。
+     */
     const size_t target = static_cast<size_t>(want);
+    int idle = 0;
     while (s->pending.size() < target && !s->outputDone) {
+        const size_t before = s->pending.size();
         pumpInput(s);
         pumpOutput(s);
+        if (s->pending.size() != before) {
+            idle = 0;
+            continue;
+        }
+        // 这一轮既没进新数据也没收到 EOS。偶尔一轮是正常的(解码器还在攒),
+        // 连续多轮就说明走不下去了(配置错、编解码器被回收、文件坏)
+        if (++idle > kMaxIdleRounds) {
+            LOGW("解码连续 %{public}d 轮没有进展,放弃(已攒 %{public}zu 采样)",
+                 kMaxIdleRounds, s->pending.size());
+            break;
+        }
     }
     const size_t give = s->pending.size() < target ? s->pending.size() : target;
     napi_create_arraybuffer(env, give * sizeof(int16_t), &data, &out);

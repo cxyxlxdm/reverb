@@ -702,7 +702,7 @@
     },
     {
       "name": "set_clear_cache_sub",
-      "value": "Listas e imágenes · %s"
+      "value": "Listas, imágenes y transcripciones · %s"
     },
     {
       "name": "set_clear_downloads",
@@ -718,7 +718,7 @@
     },
     {
       "name": "confirm_clear_cache",
-      "value": "Borra listas y caché de imágenes. Las suscripciones y descargas no se ven afectadas."
+      "value": "Se borrarán las listas, las imágenes y las transcripciones generadas. No afecta a las suscripciones ni a las descargas."
     },
     {
       "name": "confirm_clear_downloads",
