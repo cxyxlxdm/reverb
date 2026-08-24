@@ -1249,3 +1249,24 @@
      `android/tools/asr-probe/`(与 JNI 同一套参数,把每个 token 的时刻打出来),
      真相则用**切片法**定:把音频截到 0→1.0 / 0→1.3 秒分别识别,看第几个字还在里面。
      这类"时间轴对不对"的问题在真机上完全看不见中间值,**必须先造出能看见的工具**。
+
+### H61. 鸿蒙接 native 模块(NAPI)的四个卡点
+
+做逐字稿时鸿蒙端必须写 native(ArkTS 层没有解封装/解码 API),接线上连撞四处,逐条记下:
+
+- **`napi_module` 找不到**。`#include <js_native_api.h>` 里没有它,报
+  `unknown type name 'napi_module'`。它在 **`napi/native_api.h`** 里。
+- **`LOG_TAG` 重定义警告**。hilog 的 `log.h` 自己先 `#define LOG_TAG NULL`,
+  所以自定义之前要 `#undef LOG_TAG`。不致命,但会淹掉真正的警告。
+- **ArkTS 不能 `requireNapi`**,报 `Cannot find name 'requireNapi'`。
+  正路是把 .so 声明成一个**类型包**:`cpp/types/<libname>/` 下放 `index.d.ts` +
+  `oh-package.json5`(包名就叫 `libxxx.so`),在模块的 `oh-package.json5` 里
+  `"libxxx.so": "file:./src/main/cpp/types/libxxx"`,然后 `import x from 'libxxx.so'`。
+- **声明完还是报 `arkts-no-any-unknown`**。因为 `file:` 依赖**要跑一次 `ohpm install`**
+  才会在 `oh_modules/` 里建好软链;没跑之前类型解析成 `any`。
+  症状很误导 —— 看着像 `index.d.ts` 写错了,其实是没装。
+- 另外 ArkTS **不允许无类型对象字面量**(`arkts-no-untyped-obj-literals`):
+  想把几个 native 函数包成一个对象存起来是不行的,直接调 `import` 进来的函数即可。
+
+**教训**:鸿蒙的 native 接线错误信息普遍指向"下游症状"而不是根因(缺 install → 报 any;
+缺头文件 → 报 unknown type)。**遇到类型解析成 any 先想依赖装没装**,再怀疑 d.ts 写法。

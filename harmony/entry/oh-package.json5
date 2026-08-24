@@ -5,5 +5,8 @@
   "main": "",
   "author": "",
   "license": "",
-  "dependencies": {}
+  "dependencies": {
+    // native 音频解码模块(给系统语音识别喂 PCM)。类型声明在 src/main/cpp/types/
+    "libreverb_pcm.so": "file:./src/main/cpp/types/libreverb_pcm"
+  }
 }

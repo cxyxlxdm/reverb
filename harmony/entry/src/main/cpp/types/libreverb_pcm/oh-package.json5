@@ -1,0 +1,6 @@
+{
+  "name": "libreverb_pcm.so",
+  "types": "./index.d.ts",
+  "version": "1.0.0",
+  "description": "音频解码(给系统语音识别喂 16k 单声道 PCM)"
+}

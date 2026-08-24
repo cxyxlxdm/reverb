@@ -10,6 +10,8 @@ import { GuideEpisode } from './store/GuideEpisode';
 import { ListenStatsStore } from './store/ListenStatsStore';
 import { DownloadStore } from './store/DownloadStore';
 import { StampStore } from './store/StampStore';
+import { TranscriptStore } from './store/TranscriptStore';
+import { SpeechTranscriber } from './playback/SpeechTranscriber';
 import { DownloadManager } from './playback/DownloadManager';
 import { PodcastRepository } from './net/PodcastRepository';
 import { Episode } from './model/Models';
@@ -34,6 +36,8 @@ export class AppContainer {
   readonly feedCache: FeedCacheStore = new FeedCacheStore();
   readonly listenStats: ListenStatsStore = new ListenStatsStore();
   readonly stamps: StampStore = new StampStore();
+  /// 逐字稿:状态机 + 缓存。识别实现由 boot 注入(见下)
+  readonly transcripts: TranscriptStore = new TranscriptStore();
   readonly downloads: DownloadStore = new DownloadStore();
   readonly downloadManager: DownloadManager = DownloadManager.get();
   readonly repository: PodcastRepository;
@@ -75,6 +79,13 @@ export class AppContainer {
     // 异步进行,不阻塞首帧;未就绪时引导卡不显示(见 GuideEpisode.available)。
     GuideEpisode.prepare(ctx);
     this.stamps.load();
+    /**
+     * 逐字稿是**纯本地**的:缓存读写在私有目录,系统语音识别在设备上跑、音频不出设备。
+     * 所以放在同意隐私政策之前装配没有问题(与上面几个 store 同一性质)。
+     * 真正联网的只有"取发布方的官方稿"和"下载音频",那两步都由用户点了才发生。
+     */
+    this.transcripts.init(ctx.filesDir);
+    this.transcripts.transcriber = new SpeechTranscriber(ctx);
     this.downloads.load();
     this.downloadManager.init(ctx.filesDir, this.downloads);
     this.listenStats.load();

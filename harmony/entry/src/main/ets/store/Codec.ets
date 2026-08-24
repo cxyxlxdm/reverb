@@ -35,7 +35,8 @@ export class Codec {
     return {
       'id': e.id, 'title': e.title, 'description': e.description, 'audioUrl': e.audioUrl,
       'artworkUrl': e.artworkUrl, 'podcastTitle': e.podcastTitle,
-      'durationSec': e.durationSec, 'pubDate': e.pubDate, 'feedUrl': e.feedUrl
+      'durationSec': e.durationSec, 'pubDate': e.pubDate, 'feedUrl': e.feedUrl,
+      'transcriptUrl': e.transcriptUrl, 'transcriptType': e.transcriptType
     };
   }
 
@@ -49,7 +50,11 @@ export class Codec {
       podcastTitle: J.str(o, 'podcastTitle'),
       durationSec: J.num(o, 'durationSec'),
       pubDate: J.str(o, 'pubDate'),
-      feedUrl: J.str(o, 'feedUrl')
+      feedUrl: J.str(o, 'feedUrl'),
+      // 老缓存里没有这两个键,`J.str` 给空串 —— 等于"这一集没有官方稿",与事实一致:
+      // 下次刷新订阅时会从 RSS 重新解析出来
+      transcriptUrl: J.str(o, 'transcriptUrl'),
+      transcriptType: J.str(o, 'transcriptType')
     };
   }
 

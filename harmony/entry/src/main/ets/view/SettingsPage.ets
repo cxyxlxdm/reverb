@@ -172,6 +172,14 @@ export struct SettingsPage {
           this.switchRow(L.s('set_wifi_only'), () => L.s('set_wifi_only_sub'),
             !this.settings.allowCellular,
             (on: boolean) => { this.settings.setAllowCellular(!on); })
+          this.switchRow(L.s('set_transcription'), () => L.s('set_transcription_sub'),
+            this.settings.transcriptionEnabled,
+            (on: boolean) => { this.settings.setTranscriptionEnabled(on); })
+          // 逐字高亮**在本端只对发布方给的逐字稿有效**:系统语音识别不给逐字时间。
+          // 副标题已如实说明,不因此把开关藏起来 —— 藏了用户就不知道"为什么 Android 有这个"。
+          this.switchRow(L.s('set_word_highlight'), () => L.s('set_word_highlight_sub'),
+            this.settings.wordHighlight,
+            (on: boolean) => { this.settings.setWordHighlight(on); })
 
           this.sectionLabel(L.s('sec_reminder'))
           this.switchRow(L.s('set_updates'), () => L.s('set_updates_sub'),

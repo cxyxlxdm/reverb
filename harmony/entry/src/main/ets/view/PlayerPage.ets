@@ -12,6 +12,7 @@ import { formatTime } from './Components';
 import { htmlToText } from '../util/HtmlText';
 import { sealOptions, SealOption } from '../store/StampStore';
 import { MomentCard, snapshotToPng, saveToGallery } from './MomentCard';
+import { TranscriptPane } from './TranscriptPane';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
 
@@ -45,6 +46,30 @@ export struct PlayerPage {
     return this.dragging ? this.dragValue : this.player.positionMs;
   }
 
+  /**
+   * 有没有第三页(逐字稿)。与 Android 用**同一个表达式**:
+   * - 设置里开着「逐字稿」⇒ 任何一集都能出(本端有系统语音识别);
+   * - 关掉之后**只有发布方给了逐字稿的那些集**还出 —— 那种稿是现成的文件,
+   *   显示它既不耗电也不占算力,没理由连它一起藏掉。
+   */
+  private showTranscript(): boolean {
+    const e = this.player.current;
+    if (e === null) return false;
+    return this.settings.transcriptionEnabled || e.transcriptUrl.length > 0;
+  }
+
+  private pageDots(): number[] {
+    return this.showTranscript() ? [0, 1, 2] : [0, 1];
+  }
+
+  /// 点「生成逐字稿」:已下载的单集直接用本地文件(纯离线),否则让识别侧自己去下
+  private startTranscript(): void {
+    const e = this.player.current;
+    if (e === null) return;
+    const local = this.app.downloads.pathOf(e.id);
+    this.app.transcripts.start(e, this.settings.language, local === null ? '' : local);
+  }
+
   build() {
     Column() {
       // 顶栏:收起 | 队列 · 倍速 · 睡眠 · 收藏 · 更多(三项在「更多」里,同 Android)
@@ -75,10 +100,24 @@ export struct PlayerPage {
       .padding({ left: 16, right: 16, top: 10, bottom: 6 })
       .alignItems(VerticalAlign.Center)
 
-      // 轮播:封面(带水墨)/ shownotes
+      // 轮播:封面(带水墨)/ shownotes /(逐字稿)
       Swiper() {
         this.coverPage()
         this.shownotePage()
+        if (this.showTranscript()) {
+          TranscriptPane({
+            scheme: this.scheme,
+            fontScale: this.fontScale,
+            store: this.app.transcripts,
+            player: this.player,
+            active: this.page === 2,
+            playing: this.player.isPlaying,
+            wordHighlight: this.settings.wordHighlight,
+            episodeId: this.player.current === null ? '' : this.player.current.id,
+            uiLanguage: this.settings.language,
+            onStart: () => { this.startTranscript(); }
+          })
+        }
       }
       .index(this.page)
       .loop(false)
@@ -88,7 +127,7 @@ export struct PlayerPage {
 
       // 页码点
       Row({ space: 7 }) {
-        ForEach([0, 1], (i: number) => {
+        ForEach(this.pageDots(), (i: number) => {
           Circle()
             .width(this.page === i ? 8 : 6)
             .height(this.page === i ? 8 : 6)

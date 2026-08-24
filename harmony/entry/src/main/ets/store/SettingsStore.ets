@@ -42,6 +42,21 @@ export class SettingsStore {
   /// 是否允许蜂窝网络下载(false = 仅 Wi-Fi)。与 Android allowCellular 同名同义。
   allowCellular: boolean = true;
   /**
+   * 逐字稿总开关(播放页第三页)。与 Android `transcriptionEnabled` 同名同义、同默认值。
+   *
+   * 关掉之后第三页只在**发布方给了逐字稿**的那些集才出现 —— 那种稿是现成的文件,
+   * 拿来显示既不耗电也不占算力,没有理由连它一起藏掉。
+   */
+  transcriptionEnabled: boolean = true;
+  /**
+   * 逐字高亮:跟读时**逐字点亮**,而不是整句一起亮。与 Android `wordHighlight` 对齐。
+   *
+   * 本端的词级时间只有一个来源:**发布方的 JSON 逐字稿**(那种稿一词一条)。
+   * 系统语音识别(Core Speech Kit)**不给任何时间戳**,连句级都要自己推算,
+   * 所以本机识别出来的稿只能整句高亮 —— 关掉这个开关对那种稿没有区别。
+   */
+  wordHighlight: boolean = true;
+  /**
    * 是否已同意**当前版本**的隐私政策。
    *
    * **同意之前不得装配任何会联网或读系统网络信息的东西** —— 平台合规指引 7.5 要求首次启动即
@@ -69,6 +84,8 @@ export class SettingsStore {
     this.contextualRadio = Prefs.getBool('contextual_radio', false);
     this.updatesEnabled = Prefs.getBool('updates_enabled', false);
     this.allowCellular = Prefs.getBool('allow_cellular', true);
+    this.transcriptionEnabled = Prefs.getBool('transcription_enabled', true);
+    this.wordHighlight = Prefs.getBool('word_highlight', true);
     this.privacyAccepted = this.loadPrivacyAccepted();
     SettingsStore.applyLanguage(this.language);
     Log.i('Settings', `加载 theme=${this.themeMode} accent=${this.accentIndex} font=${this.fontIndex} region=${this.regionOverride === '' ? 'auto' : this.regionOverride}`);
@@ -148,6 +165,14 @@ export class SettingsStore {
   setAllowCellular(v: boolean): void {
     this.allowCellular = v;
     Prefs.put('allow_cellular', v);
+  }
+  setTranscriptionEnabled(v: boolean): void {
+    this.transcriptionEnabled = v;
+    Prefs.put('transcription_enabled', v);
+  }
+  setWordHighlight(v: boolean): void {
+    this.wordHighlight = v;
+    Prefs.put('word_highlight', v);
   }
   /// 同意当前版本的隐私政策。紧接着就要装配此前被门控的组件,故先落盘再置内存态。
   acceptPrivacy(): void {

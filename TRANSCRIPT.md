@@ -151,38 +151,62 @@ R8 折叠效果一样,而且只有一处真相。
   传空串等于让引擎自己猜,而中文猜出来往往是繁体;而且缓存 key 会退化成 `auto`,
   换了系统语言还命中同一份旧稿。
 
-### HarmonyOS —— 系统 ASR + 自己推时间轴(本轮未实施,方案已定)
+### HarmonyOS —— 官方稿 + 系统 ASR(**已实施**)
 
-用 Core Speech Kit(`@hms.ai.speechRecognizer`),它与 macOS 的 Speech 框架同一性质
-(系统能力,不是三方 SDK),因此**不影响"不接三方 SDK"的对外表述**,也不涨包体积。
+两条路都做了,与 Android 同一形状:发布方给了稿就用稿,没有就用**系统的离线语音识别**
+(Core Speech Kit,`@hms.ai.speechRecognizer`)。它与 macOS 的 Speech 框架同一性质
+(系统能力,不是三方 SDK),因此**不影响"不接三方 SDK"的对外表述**,也几乎不涨包体积
+(整包 952 KB,其中 native 解码模块 56 KB)。
 
-已在本地 SDK 里核实过的接口形状:
+落点:
 
-```ts
-createEngine({ language, online: 1 /* 1=离线 */ })
-  → startListening({ sessionId, audioInfo: { audioType, sampleRate, soundChannel, sampleBit } })
-  → writeAudio(sessionId, Uint8Array)   // 自己按顺序喂 PCM
-  → finish(sessionId)
-onResult(sessionId, { isFinal, isLast, result: string })
-```
+| 文件 | 作用 |
+| --- | --- |
+| `store/TranscriptStore.ets` | 状态机 + 缓存(格式与另两端完全一致,含 `version` 字段) |
+| `net/TranscriptFetcher.ets` | 官方稿:SRT / WebVTT / Podcast Index JSON |
+| `util/TranscriptLines.ets` | 断行与时间插值(Android `TranscriptLines.kt` 的逐条移植) |
+| `playback/SpeechTranscriber.ets` | 系统 ASR:分窗、喂帧、推时间轴 |
+| `playback/PcmReader.ets` + `cpp/reverb_pcm.cpp` | 解码成 16k 单声道 PCM(**必须 native**) |
+| `view/TranscriptPane.ets` | 第三页:跟读高亮 + 自动滚动 + 点句跳转 |
 
-**两个限制,和对应的做法**:
+**三个限制,和对应的做法**:
 
-1. **结果里没有任何时间戳**。做法:因为 PCM 是我们自己按顺序喂进去的,
-   "某句 `isFinal` 时已喂入多少字节"就是它的结束时刻(`已喂字节 ÷ 采样率`),
-   起点取上一句的终点 ⇒ **句级时间轴**。逐词高亮做不了,退化成整句高亮 ——
-   数据结构里 `words` 允许为 null 正是为此,三端共用同一份缓存格式;
-2. **ArkTS 层没有解封装/解码 API**。整个 `@ohos.multimedia.*` 里没有 demuxer,
-   grep 零命中;m4a/mp3 → 16k PCM 只能走 Native:`native_avsource.h` +
-   `native_avdemuxer.h` + `native_avcodec_audiocodec.h`。**也就是说鸿蒙不管走哪条路,
-   都得写一个 Native C++ 模块** —— 这一点直接影响下面那节的成本判断。
+1. **结果里没有任何时间戳**。`SpeechRecognitionResult` 只有 `{isFinal, isLast, result}`。
+   做法:把音频切成 **20 秒的窗**,一窗一个识别会话 —— 窗的起止时刻是我们自己算的
+   (喂了多少 PCM ⇒ 多少毫秒,精确),窗内的几句话再按**字数占比**插值。
+   于是误差被压在窗内的语速波动上,一两秒量级。
+
+   **为什么不用"某句 isFinal 时已喂入多少字节"来定位**(那是本文档早先设想的做法):
+   识别是流式的,结果比音频滞后且滞后量不固定;而我们是尽可能快地喂、不是按实时速度喂,
+   那样所有结果都会挤在末尾到达,位置信息等于零。窗 + 字数插值不依赖回调时机,是唯一稳的做法。
+
+2. **没有词级时间 ⇒ 本机识别的稿只能整句高亮**。设置里的「逐字高亮」在本端只对
+   **发布方的 JSON 逐字稿**有效(那种稿一词一条),副标题已如实说明。
+   数据结构里 `words` 允许为空正是为此,三端共用同一份缓存格式。
+
+3. **ArkTS 层没有解封装/解码 API**。`@ohos.multimedia.*` 里没有 demuxer(grep 零命中),
+   AVPlayer 拿不到 PCM,AVTranscoder 只能输出 AAC。所以 m4a/mp3 → 16k PCM **只能走 Native**:
+   `native_avsource.h` + `native_avdemuxer.h` + `native_avcodec_audiocodec.h`。
+
+   好消息是不必写回调式代码:**API 20 起有同步接口**(`OH_AudioCodec_QueryInputBuffer` /
+   `QueryOutputBuffer` / `GetInputBuffer` / `GetOutputBuffer`),**不注册回调即为同步模式**,
+   于是整条链是一个普通循环 —— 没有回调线程、没有条件变量。音频解码这种地方每多一个线程
+   就多一处没有栈可看的崩溃。
+
+   两个接线上的坑,都撞过:`napi_module` 在 `napi/native_api.h` 里(不在 `js_native_api.h`);
+   hilog 自己先 `#define LOG_TAG NULL`,要 `#undef` 再定义。另外 .so 不能 `requireNapi`,
+   必须在 `cpp/types/libreverb_pcm/` 建一个类型包、在 `entry/oh-package.json5` 里
+   `file:` 依赖它,然后 `import pcm from 'libreverb_pcm.so'`,并且**要跑一次 `ohpm install`**
+   才会在 `oh_modules` 里建好软链 —— 没跑之前类型解析成 `any`,报 `arkts-no-any-unknown`。
 
 另外 `@hms.ai.AICaption` 名字最像但**不能用**:它是黑盒 UI 组件,`writeAudio` 进去、
-系统自己把字幕画在面板上,**拿不到文本** —— 没法缓存、没法做我们自己的卡拉OK页、没法导出。
+系统自己把字幕画在面板上,**拿不到文本** —— 没法缓存、没法做我们自己的跟读页、没法导出。
 只能当"播放时叠一层实时字幕"的另一种玩法。
 
-待真机确认(插上设备 20 行探针即可):`listLanguages` 的实际语言清单(API 5.1.0(18) 起才有,
-早期版本只有 zh-CN)、离线模式单次音频的时长上限、目标机型上 HMS AI 服务是否在位。
+**仍待真机确认**(本轮只做到编译与解包验收,手上没有鸿蒙设备可测):
+`listLanguages` 的实际语言清单(API 5.1.0(18) 起才有,早期版本只有 zh-CN)、
+离线模式单次会话的音频时长上限(代码里按 20 秒取安全值,并对 `1002200003` 做了提前收尾)、
+目标机型上 HMS AI 服务是否在位(不在位时 `available()` 返回 false,界面如实显示"用不了")。
 
 ---
 
@@ -191,7 +215,9 @@ onResult(sessionId, { isFinal, isLast, result: string })
 会想切的理由通常是这三条里的一条:系统 ASR 只支持中文、拿不到词级时间戳、或者要和 Android
 **逐字一致**(同一集在两端转出同样的文本)。
 
-好消息:**大部分工作是共用的**。因为鸿蒙无论如何都要写 Native 解码模块,把引擎链进同一个
+好消息:**大部分工作已经在了**。鸿蒙的 Native 解码模块(`cpp/reverb_pcm.cpp`)已经落地并跑通
+构建,换引擎只是在同一个模块里多链一个库、把 `SpeechTranscriber` 换成满足
+`SpeechTranscriberLike` 的另一份实现 —— `TranscriptStore` 一行都不用改。把引擎链进同一个
 模块的边际成本不高;而 Android 侧的 JNI 胶水(`android/asr-native/reverb_asr.cpp`,约 100 行)
 是**纯 whisper.cpp 调用,不含任何 Android 专有 API**,换到鸿蒙的 NAPI 只需换胶水层。
 

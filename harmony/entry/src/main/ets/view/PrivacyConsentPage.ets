@@ -62,7 +62,9 @@ export struct PrivacyConsentPage {
       // 既提示"下面还有",也让截断处不至于把半行字生硬切开。
       Stack({ alignContent: Alignment.Bottom }) {
         Scroll(this.bodyScroller) {
-          Text(L.s('privacy_consent_body'))
+          // 逐字稿那段单独一条串再拼上来,与 Android 侧同一结构(那端因为分渠道必须拆开,
+          // 本端拆开是为了两端文案能逐段对照,改动时不容易只改一边)
+          Text(`${L.s('privacy_consent_body')}\n\n${L.s('privacy_consent_asr')}`)
             .fontSize(TypeScale.bodyLarge * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
             .lineHeight(TypeScale.bodyLarge * this.fontScale * 1.7)

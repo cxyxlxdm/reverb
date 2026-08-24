@@ -1,6 +1,15 @@
 {
   "apiType": "stageMode",
-  "buildOption": {},
+  "buildOption": {
+    // native 模块:给系统语音识别喂 PCM 的音频解码器。
+    // 只出 arm64-v8a —— 鸿蒙手机与平板都是 arm64,给 32 位是白增包体。
+    "externalNativeOptions": {
+      "path": "./src/main/cpp/CMakeLists.txt",
+      "arguments": "",
+      "cppFlags": "",
+      "abiFilters": ["arm64-v8a"]
+    }
+  },
   "buildOptionSet": [
     {
       // release 构建开启混淆。规则见 ./obfuscation-rules.txt —— 那里逐条写明了

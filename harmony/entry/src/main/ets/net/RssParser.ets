@@ -57,6 +57,19 @@ function localName(raw: string): string {
   return i >= 0 ? n.substring(i + 1) : n;
 }
 
+/**
+ * `podcast:transcript` 的取舍等级:**JSON > VTT > SRT**,认不出的格式给 -1(不用)。
+ * JSON 排第一是因为那种稿一词一条、**带词级时间**,逐字高亮最准;VTT/SRT 只有句级时间。
+ * 与 Android `RssParser.transcriptRank` 同一张表。
+ */
+function transcriptRank(type: string): number {
+  const t = type.toLowerCase();
+  if (t.indexOf('json') >= 0) return 3;
+  if (t.indexOf('vtt') >= 0) return 2;
+  if (t.indexOf('srt') >= 0 || t.indexOf('subrip') >= 0) return 1;
+  return -1;
+}
+
 /// 解析状态机。channel 级与 item 级字段分层,均「首个非空胜出」。
 class ParseState {
   private feedUrl: string;
@@ -78,6 +91,14 @@ class ParseState {
   private iGuid = '';
   private iDate = '';
   private iDur = '';
+  /**
+   * `podcast:transcript` —— 发布方给的逐字稿。一集可以给**多条**(不同格式/语言),
+   * 所以要挑:JSON > VTT > SRT。JSON 排第一是因为那种稿**一词一条,带词级时间**,
+   * 逐字高亮最准;VTT/SRT 只有句级时间。
+   */
+  private iTrUrl = '';
+  private iTrType = '';
+  private iTrRank = -1;
 
   private textBuf = '';
   private episodes: Episode[] = [];
@@ -96,6 +117,7 @@ class ParseState {
         this.inItem = true;
         this.iTitle = ''; this.iDesc = ''; this.iAudio = '';
         this.iImage = ''; this.iGuid = ''; this.iDate = ''; this.iDur = '';
+        this.iTrUrl = ''; this.iTrType = ''; this.iTrRank = -1;
       } else if (name === 'image') {
         this.inImage = true;
       }
@@ -186,14 +208,31 @@ class ParseState {
     }
     if (tag === 'funding' && key === 'url') {
       if (!this.inItem && this.channelFundingUrl.length === 0) this.channelFundingUrl = v;
+      return;
+    }
+    if (tag === 'transcript' && this.inItem) {
+      // 只有属性的空元素,属性**分多次回调到齐**,所以边攒边评比(同 media:content 的写法)
+      if (key === 'url') this.pendingTrUrl = v;
+      if (key === 'type') this.pendingTrType = v;
+      if (this.pendingTrUrl.length > 0) {
+        const rank = transcriptRank(this.pendingTrType);
+        // `>=` 而不是 `>`:同一个元素的 url 先到、type 后到时,要允许用同一 url 把等级补上来
+        if (rank > this.iTrRank || (rank === this.iTrRank && this.pendingTrUrl === this.iTrUrl)) {
+          this.iTrUrl = this.pendingTrUrl;
+          this.iTrType = this.pendingTrType;
+          this.iTrRank = rank;
+        }
+      }
     }
   }
 
-  // media:content / atom link 的属性跨回调到齐,故需暂存
+  // media:content / atom link / podcast:transcript 的属性跨回调到齐,故需暂存
   private pendingMediaUrl = '';
   private mediaIsAudio = false;
   private pendingLinkHref = '';
   private linkIsEnclosure = false;
+  private pendingTrUrl = '';
+  private pendingTrType = '';
 
   private flushItem(): void {
     // 仅当拿到音频直链才产出一集(没音频的条目对播放毫无意义)
@@ -210,7 +249,9 @@ class ParseState {
       podcastTitle: this.channelTitle,
       durationSec: parseDurationSec(this.iDur),
       pubDate: this.iDate,
-      feedUrl: this.feedUrl
+      feedUrl: this.feedUrl,
+      transcriptUrl: this.iTrUrl,
+      transcriptType: this.iTrType
     };
     this.episodes.push(ep);
     this.resetPending();
@@ -221,6 +262,8 @@ class ParseState {
     this.mediaIsAudio = false;
     this.pendingLinkHref = '';
     this.linkIsEnclosure = false;
+    this.pendingTrUrl = '';
+    this.pendingTrType = '';
   }
 
   finish(): FeedResult {

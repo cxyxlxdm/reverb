@@ -961,6 +961,10 @@
       "value": "Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\nWe collect no personal information. There is no server, no account, no third-party SDKs, no analytics and no ads.\n\nYour data stays on this device. Subscriptions, history, favorites, downloads, listening time, stamps and settings are stored in the app's private directory and removed on uninstall.\n\nWhat the network is used for. To search and play podcasts, your device directly contacts the publishers' own RSS, audio and artwork URLs; when you tap \"Import recommended feeds\", it downloads a subscription list from this app's website. No credentials and no user identifiers are attached; see the full policy for the complete list.\n\nPermissions. Internet, network state (to detect Wi-Fi for \"download on Wi-Fi only\"), background audio playback, and notifications (only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
     },
     {
+      "name": "privacy_consent_asr",
+      "value": "Transcripts. The player can turn an episode into text. If the publisher provides a transcript in its RSS feed, it is downloaded from that address; otherwise the system’s built-in offline speech recogniser transcribes it on this device — neither the audio nor the result is uploaded. Everything stays on this device, stored in the app’s private directory and removed when you uninstall."
+    },
+    {
       "name": "privacy_read_full",
       "value": "Read the full privacy policy"
     },
@@ -1031,6 +1035,58 @@
     {
       "name": "beian_number",
       "value": ""
+    },
+    {
+      "name": "set_transcription",
+      "value": "Transcript"
+    },
+    {
+      "name": "set_transcription_sub",
+      "value": "Swipe to the third page of the player to read along. When the publisher provides no transcript, the system speech recogniser transcribes it on this device."
+    },
+    {
+      "name": "set_word_highlight",
+      "value": "Word-by-word highlight"
+    },
+    {
+      "name": "set_word_highlight_sub",
+      "value": "Light up each word as it is spoken. This needs a publisher-provided transcript; the system recogniser gives no per-word timings, so locally transcribed episodes highlight a line at a time."
+    },
+    {
+      "name": "transcript_prompt",
+      "value": "Transcribe this episode on this device"
+    },
+    {
+      "name": "transcript_prompt_official",
+      "value": "The publisher provides a transcript for this episode"
+    },
+    {
+      "name": "transcript_start",
+      "value": "Generate transcript"
+    },
+    {
+      "name": "transcript_show",
+      "value": "Show transcript"
+    },
+    {
+      "name": "transcript_fetching",
+      "value": "Fetching the publisher’s transcript…"
+    },
+    {
+      "name": "transcript_preparing_audio",
+      "value": "Preparing audio…"
+    },
+    {
+      "name": "transcript_running",
+      "value": "Transcribing — the first line will appear shortly…"
+    },
+    {
+      "name": "transcript_failed",
+      "value": "Transcription failed. Tap to retry."
+    },
+    {
+      "name": "transcript_none",
+      "value": "The publisher provides no transcript for this episode, and the system speech recogniser is unavailable here."
     }
   ]
 }

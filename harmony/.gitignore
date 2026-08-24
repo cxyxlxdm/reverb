@@ -10,6 +10,9 @@
 /entry/build
 /oh_modules
 /entry/oh_modules
+# native(cpp)的 cmake/ninja 构建缓存 —— 每次构建都变,几十 MB,不入库。
+# 源码在 entry/src/main/cpp/,由 hvigor 按 build-profile 的 externalNativeOptions 编译。
+/entry/.cxx
 # ohpm 依赖锁(工程零三方依赖,锁文件由 ohpm 自行生成)
 oh-package-lock.json5
 # 本地路径/签名材料,不同机器不同,且含私钥口令

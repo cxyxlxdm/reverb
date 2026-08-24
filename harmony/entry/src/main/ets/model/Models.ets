@@ -25,6 +25,46 @@ export interface Episode {
   durationSec: number;
   pubDate: string;
   feedUrl: string;         // 所属频道的 RSS 地址
+  /**
+   * 发布方**自己提供的逐字稿**地址(RSS 的 `podcast:transcript`,Podcasting 2.0)。
+   *
+   * 有它就不必本机识别:时间轴是发布方给的,又准又免费,而且**可能带词级时间**
+   * (JSON 格式的稿一词一条),那才是逐字高亮最准的来源。空串表示这一集没有。
+   */
+  transcriptUrl: string;
+  /// 逐字稿的 MIME(`application/json` / `text/vtt` / `application/srt` …),用于选解析器
+  transcriptType: string;
+}
+
+/**
+ * 逐字稿里的一个词/字及其时刻(逐词高亮用)。与 Android / macOS `TranscribedWord` 字段一致。
+ *
+ * **不变式:同一句里各条 `text` 原样拼接 == `TranscribedSegment.text`。**
+ * 该带的空格就带在 text 里(英文 " deal"),不该带就不带(中文、以及 "prog"+"rammatic"
+ * 这种子词)。渲染方因此可以直接顺序拼接、只给当前那条上色,不必猜哪里该补空格。
+ *
+ * **另一条不变式:同一句里 startMs 单调不减。** 渲染判断"读到哪个词"是从后往前找第一个
+ * `startMs <= now`,只要队尾混进一个异常小的值,高亮就会**钉死在那一条再也不动**
+ * (Android 端的真实事故,见 TROUBLESHOOTING H60)。由 `TranscriptLines.mergeWords` 保证。
+ */
+export interface TranscribedWord {
+  text: string;
+  startMs: number;
+  endMs: number;
+}
+
+/**
+ * 逐字稿的一句:文本 + 起止毫秒 + 可选的词级时间。
+ *
+ * `words` 为空数组时回退整句高亮 —— 官方 SRT/VTT 稿通常只有句级时间,
+ * 本端的系统语音识别更是连句级都要自己推算(见 `playback/SpeechTranscriber`)。
+ * 三端同一形状,缓存 JSON 可互通。
+ */
+export interface TranscribedSegment {
+  text: string;
+  startMs: number;
+  endMs: number;
+  words: TranscribedWord[];
 }
 
 /// 解析 RSS 后的结果:频道元信息 + 分集列表。

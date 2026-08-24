@@ -961,6 +961,10 @@
       "value": "Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\nWe collect no personal information. There is no server, no account, no third-party SDKs, no analytics and no ads.\n\nYour data stays on this device. Subscriptions, history, favorites, downloads, listening time, stamps and settings are stored in the app's private directory and removed on uninstall.\n\nWhat the network is used for. To search and play podcasts, your device directly contacts the publishers' own RSS, audio and artwork URLs; when you tap \"Import recommended feeds\", it downloads a subscription list from this app's website. No credentials and no user identifiers are attached; see the full policy for the complete list.\n\nPermissions. Internet, network state (to detect Wi-Fi for \"download on Wi-Fi only\"), background audio playback, and notifications (only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
     },
     {
+      "name": "privacy_consent_asr",
+      "value": "Transcriptions. Le lecteur peut convertir un épisode en texte. Si l’éditeur fournit une transcription dans son flux RSS, elle est téléchargée depuis cette adresse ; sinon, la reconnaissance vocale hors ligne du système la génère sur cet appareil — ni l’audio ni le résultat ne sont envoyés. Tout reste sur cet appareil, dans le répertoire privé de l’application, et est supprimé à la désinstallation."
+    },
+    {
       "name": "privacy_read_full",
       "value": "Lire la politique complète"
     },
@@ -1031,6 +1035,58 @@
     {
       "name": "beian_number",
       "value": ""
+    },
+    {
+      "name": "set_transcription",
+      "value": "Transcription"
+    },
+    {
+      "name": "set_transcription_sub",
+      "value": "Glissez jusqu’à la troisième page du lecteur pour lire. Si l’éditeur ne fournit pas de transcription, la reconnaissance vocale du système la génère sur cet appareil."
+    },
+    {
+      "name": "set_word_highlight",
+      "value": "Surlignage mot à mot"
+    },
+    {
+      "name": "set_word_highlight_sub",
+      "value": "Surligne chaque mot au fur et à mesure. Nécessite une transcription fournie par l’éditeur ; la reconnaissance du système ne donne pas de temps par mot, les transcriptions locales sont donc surlignées ligne par ligne."
+    },
+    {
+      "name": "transcript_prompt",
+      "value": "Transcrire cet épisode sur l’appareil"
+    },
+    {
+      "name": "transcript_prompt_official",
+      "value": "L’éditeur fournit une transcription pour cet épisode"
+    },
+    {
+      "name": "transcript_start",
+      "value": "Générer la transcription"
+    },
+    {
+      "name": "transcript_show",
+      "value": "Voir la transcription"
+    },
+    {
+      "name": "transcript_fetching",
+      "value": "Récupération de la transcription de l’éditeur…"
+    },
+    {
+      "name": "transcript_preparing_audio",
+      "value": "Préparation de l’audio…"
+    },
+    {
+      "name": "transcript_running",
+      "value": "Transcription en cours — la première ligne va bientôt apparaître…"
+    },
+    {
+      "name": "transcript_failed",
+      "value": "La transcription a échoué. Touchez pour réessayer."
+    },
+    {
+      "name": "transcript_none",
+      "value": "L’éditeur ne fournit pas de transcription pour cet épisode et la reconnaissance vocale du système est indisponible ici."
     }
   ]
 }

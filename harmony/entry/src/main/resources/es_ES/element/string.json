@@ -961,6 +961,10 @@
       "value": "Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\nWe collect no personal information. There is no server, no account, no third-party SDKs, no analytics and no ads.\n\nYour data stays on this device. Subscriptions, history, favorites, downloads, listening time, stamps and settings are stored in the app's private directory and removed on uninstall.\n\nWhat the network is used for. To search and play podcasts, your device directly contacts the publishers' own RSS, audio and artwork URLs; when you tap \"Import recommended feeds\", it downloads a subscription list from this app's website. No credentials and no user identifiers are attached; see the full policy for the complete list.\n\nPermissions. Internet, network state (to detect Wi-Fi for \"download on Wi-Fi only\"), background audio playback, and notifications (only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
     },
     {
+      "name": "privacy_consent_asr",
+      "value": "Transcripciones. El reproductor puede convertir un episodio en texto. Si el editor ofrece una transcripción en su RSS, se descarga de esa dirección; si no, el reconocimiento de voz sin conexión del sistema la genera en este dispositivo: ni el audio ni el resultado se suben. Todo permanece en este dispositivo, en el directorio privado de la app, y se elimina al desinstalar."
+    },
+    {
       "name": "privacy_read_full",
       "value": "Leer la política completa"
     },
@@ -1031,6 +1035,58 @@
     {
       "name": "beian_number",
       "value": ""
+    },
+    {
+      "name": "set_transcription",
+      "value": "Transcripción"
+    },
+    {
+      "name": "set_transcription_sub",
+      "value": "Desliza a la tercera página del reproductor para leer. Si el editor no ofrece transcripción, el reconocimiento de voz del sistema la genera en este dispositivo."
+    },
+    {
+      "name": "set_word_highlight",
+      "value": "Resaltado palabra por palabra"
+    },
+    {
+      "name": "set_word_highlight_sub",
+      "value": "Ilumina cada palabra mientras se pronuncia. Requiere una transcripción del editor; el reconocimiento del sistema no da tiempos por palabra, así que las transcripciones locales se resaltan por línea."
+    },
+    {
+      "name": "transcript_prompt",
+      "value": "Transcribir este episodio en el dispositivo"
+    },
+    {
+      "name": "transcript_prompt_official",
+      "value": "El editor ofrece una transcripción de este episodio"
+    },
+    {
+      "name": "transcript_start",
+      "value": "Generar transcripción"
+    },
+    {
+      "name": "transcript_show",
+      "value": "Ver transcripción"
+    },
+    {
+      "name": "transcript_fetching",
+      "value": "Obteniendo la transcripción del editor…"
+    },
+    {
+      "name": "transcript_preparing_audio",
+      "value": "Preparando el audio…"
+    },
+    {
+      "name": "transcript_running",
+      "value": "Transcribiendo: la primera línea aparecerá en breve…"
+    },
+    {
+      "name": "transcript_failed",
+      "value": "La transcripción falló. Toca para reintentar."
+    },
+    {
+      "name": "transcript_none",
+      "value": "El editor no ofrece transcripción para este episodio y el reconocimiento de voz del sistema no está disponible aquí."
     }
   ]
 }
