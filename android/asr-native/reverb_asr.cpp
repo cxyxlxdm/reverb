@@ -88,7 +88,8 @@ void logToAndroid(ggml_log_level level, const char* text, void*) {
 extern "C" {
 
 JNIEXPORT jlong JNICALL
-Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeInit(JNIEnv* env, jobject, jstring modelPath) {
+Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeInit(
+        JNIEnv* env, jobject, jstring modelPath, jboolean wordTimestamps) {
     whisper_log_set(logToAndroid, nullptr);
     const char* path = env->GetStringUTFChars(modelPath, nullptr);
     whisper_context_params cp = whisper_context_default_params();
@@ -106,7 +107,7 @@ Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeInit(JNIEnv* env, jobject
      * - `dtw_mem_size` 是一块预留的 scratch 内存。库里默认 128 MB,在手机上太奢侈;
      *   我们一次只喂 2 分钟的块,32 MB 够用(真机验过)。
      */
-    cp.dtw_token_timestamps = true;
+    cp.dtw_token_timestamps = wordTimestamps == JNI_TRUE;
     cp.dtw_aheads_preset = WHISPER_AHEADS_BASE;
     cp.dtw_mem_size = 32u * 1024 * 1024;
     /**
@@ -114,8 +115,11 @@ Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeInit(JNIEnv* env, jobject
      * 「dtw_token_timestamps is not supported with flash_attn - disabling」
      * 就把 DTW 静默关了,而 `whisper_context_default_params()` 里 flash_attn **默认是 true**。
      * 症状是词级时间戳全是 -1(t_dtw 与 t0 都没人填),界面上就是逐字高亮不动。
+     *
+     * 反过来:用户在设置里关掉逐字高亮时,**flash attn 就该开回来** —— 那是白拿的速度
+     * (实测 1 小时音频 6.5 分钟 vs 11 分钟)。所以这两个开关是绑在一起的。
      */
-    cp.flash_attn = false;
+    cp.flash_attn = (wordTimestamps != JNI_TRUE);
     whisper_context* ctx = whisper_init_from_file_with_params(path, cp);
     env->ReleaseStringUTFChars(modelPath, path);
     if (ctx == nullptr) return 0;

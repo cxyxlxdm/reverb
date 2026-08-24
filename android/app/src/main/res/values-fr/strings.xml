@@ -339,4 +339,5 @@
     <string name="action_retry">Réessayer</string>
     <string name="transcript_prompt_official">L\'éditeur fournit une transcription pour cet épisode</string>
     <string name="transcript_show">Afficher la transcription</string>
+    <string name="set_word_highlight">Surlignage mot à mot</string>
 </resources>

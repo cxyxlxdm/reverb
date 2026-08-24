@@ -339,4 +339,5 @@
     <string name="action_retry">Reintentar</string>
     <string name="transcript_prompt_official">El editor ofrece una transcripción de este episodio</string>
     <string name="transcript_show">Ver transcripción</string>
+    <string name="set_word_highlight">Resaltado palabra por palabra</string>
 </resources>

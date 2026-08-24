@@ -28,6 +28,8 @@ interface AsrEngine {
      *
      * @param localPath 已下载单集的本地路径;为空则实现方自己下载到临时文件
      * @param localeId  `zh-CN` / `en-US` …;空串表示让引擎自动判断语言
+     * @param wordTimestamps 是否额外算**词级时间**(逐字高亮要用)。开着更慢 ——
+     *   whisper 上实测多约 70%,所以这是用户可关的设置项,不是常开
      * @param onSegment 逐句吐出,**按时间顺序**
      * @return true = 正常做完
      */
@@ -35,6 +37,7 @@ interface AsrEngine {
         episode: Episode,
         localPath: String?,
         localeId: String,
+        wordTimestamps: Boolean,
         onStage: (Stage) -> Unit,
         onVolatile: (String) -> Unit,
         onSegment: (TranscribedSegment) -> Unit

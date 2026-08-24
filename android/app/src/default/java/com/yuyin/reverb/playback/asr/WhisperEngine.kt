@@ -37,12 +37,16 @@ class WhisperEngine(context: Context) : AsrEngine {
 
     private val appCtx = context.applicationContext
     private var handle: Long = 0
+    /// 当前上下文是按"要不要词级时间"哪一档建的。开关一变就得重建 —— 这个参数在
+    /// `whisper_init` 时就定死了(DTW 与 flash attention 都在 context params 里)。
+    private var handleWordTs: Boolean = false
     private val TAG = "Whisper"
 
     override suspend fun transcribe(
         episode: Episode,
         localPath: String?,
         localeId: String,
+        wordTimestamps: Boolean,
         onStage: (AsrEngine.Stage) -> Unit,
         onVolatile: (String) -> Unit,
         onSegment: (TranscribedSegment) -> Unit
@@ -61,7 +65,16 @@ class WhisperEngine(context: Context) : AsrEngine {
             // 2) 模型
             onStage(AsrEngine.Stage.LoadingModel)
             val model = ensureModel() ?: return@withContext false
-            if (handle == 0L) handle = nativeInit(model.absolutePath)
+            if (handle != 0L && handleWordTs != wordTimestamps) {
+                // 用户刚改了「逐字高亮」开关:上下文要按新档位重建
+                com.yuyin.reverb.util.Logger.i(TAG, "逐字高亮开关变了($handleWordTs → $wordTimestamps),重建上下文")
+                nativeFree(handle)
+                handle = 0
+            }
+            if (handle == 0L) {
+                handle = nativeInit(model.absolutePath, wordTimestamps)
+                handleWordTs = wordTimestamps
+            }
             if (handle == 0L) {
                 com.yuyin.reverb.util.Logger.e(TAG, "模型加载失败 path=${model.absolutePath}")
                 return@withContext false
@@ -98,7 +111,8 @@ class WhisperEngine(context: Context) : AsrEngine {
                      * token 文本**自带该有的空格**,所以 spaced = false —— 上层不能再补,
                      * 否则 "prog" + "rammatic" 会被拼成两个词。
                      */
-                    val tokens = wordsOf(handle, i, startMs)
+                    // 关了逐字高亮就不必取词级条目(那时 t_dtw 本来也没算)
+                    val tokens = if (wordTimestamps) wordsOf(handle, i, startMs) else emptyList()
                     val lines = if (tokens.size > 1) {
                         TranscriptLines.mergeWords(tokens, spaced = false)
                     } else {
@@ -229,7 +243,7 @@ class WhisperEngine(context: Context) : AsrEngine {
         null
     }
 
-    private external fun nativeInit(modelPath: String): Long
+    private external fun nativeInit(modelPath: String, wordTimestamps: Boolean): Long
     private external fun nativeFree(handle: Long)
     private external fun nativeTranscribe(
         handle: Long, pcm: FloatArray, language: String, initialPrompt: String, threads: Int

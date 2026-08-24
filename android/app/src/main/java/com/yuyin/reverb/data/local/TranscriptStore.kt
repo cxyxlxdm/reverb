@@ -114,7 +114,8 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         episode: Episode,
         uiLanguage: String,
         localPath: String?,
-        engine: AsrEngine?
+        engine: AsrEngine?,
+        wordTimestamps: Boolean
     ) {
         val loc = localeFor(uiLanguage)
         /**
@@ -139,7 +140,7 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         _volatileTail.value = ""
 
         job = scope.launch {
-            runJob(gen, episode, loc, localPath, engine)
+            runJob(gen, episode, loc, localPath, engine, wordTimestamps)
         }
     }
 
@@ -155,7 +156,8 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         episode: Episode,
         loc: String,
         localPath: String?,
-        engine: AsrEngine?
+        engine: AsrEngine?,
+        wordTimestamps: Boolean
     ) {
         fun stale() = gen != generation
 
@@ -184,6 +186,7 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
             episode = episode,
             localPath = localPath,
             localeId = loc,
+            wordTimestamps = wordTimestamps,
             // 引擎只报"阶段",界面状态由这里映射 —— 引擎不该知道 UI 有哪些状态
             onStage = { stage ->
                 if (!stale()) {

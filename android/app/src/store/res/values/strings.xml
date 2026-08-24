@@ -12,4 +12,5 @@
 <resources>
     <string name="privacy_consent_catalog"></string>
     <string name="privacy_consent_asr"></string>
+    <string name="set_word_highlight_sub">跟读时逐字点亮。需要发布方提供的逐字稿才能做到;本版本不含离线语音识别,没有逐字稿的单集用不了这个效果</string>
 </resources>

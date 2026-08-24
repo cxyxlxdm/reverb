@@ -97,6 +97,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     val language by settings.language.collectAsStateWithLifecycle()
     val spectrumEnabled by settings.spectrumEnabled.collectAsStateWithLifecycle()
     val transcriptionEnabled by settings.transcriptionEnabled.collectAsStateWithLifecycle()
+    val wordHighlight by settings.wordHighlight.collectAsStateWithLifecycle()
     val contextualRadio by settings.contextualRadio.collectAsStateWithLifecycle()
     val regionOverride by regionStore.override.collectAsStateWithLifecycle()
 
@@ -248,6 +249,14 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                     checked = transcriptionEnabled
                 ) { on -> settings.setTranscriptionEnabled(on) }
             }
+            // 逐字高亮**两个渠道都给**,但副标题按渠道分别写:
+            // 完整版要说明"多花时间",国内版要说明"依赖发布方的逐字稿"
+            // (见 src/default|store/res/values-* 下的 set_word_highlight_sub)。
+            SettingSwitch(
+                stringResource(R.string.set_word_highlight),
+                stringResource(R.string.set_word_highlight_sub),
+                checked = wordHighlight
+            ) { on -> settings.setWordHighlight(on) }
             SettingRow(stringResource(R.string.set_default_speed), value = speedLabel(defaultSpeed)) { dlg = Dlg.SPEED }
             SettingRow(stringResource(R.string.set_skip_back), value = stringResource(R.string.unit_seconds, skipBack)) { dlg = Dlg.SKIP_BACK }
             SettingRow(stringResource(R.string.set_skip_fwd), value = stringResource(R.string.unit_seconds, skipFwd)) { dlg = Dlg.SKIP_FWD }
@@ -599,7 +608,13 @@ private fun SettingRow(
             .padding(horizontal = 20.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(1f)) {
+        // 同 SettingSwitch:右侧有取值或 trailing 时,文字栏要留出间距,
+        // 否则长副标题折行后会贴住右边的取值/控件
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(end = if (!value.isNullOrBlank() || trailing != null) 12.dp else 0.dp)
+        ) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
             if (!subtitle.isNullOrBlank()) {
                 Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -626,7 +641,13 @@ private fun SettingSwitch(title: String, subtitle: String?, checked: Boolean, on
             .padding(horizontal = 20.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.weight(1f)) {
+        // **end 内边距不能省**:文字栏是 weight(1f),会一路吃到开关的左边缘,
+        // 长副标题折行后第二行正好顶在开关上。给 16dp 让它们之间有口气。
+        Column(
+            Modifier
+                .weight(1f)
+                .padding(end = 16.dp)
+        ) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onBackground)
             if (!subtitle.isNullOrBlank()) {
                 Text(subtitle, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

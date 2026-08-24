@@ -28,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -66,6 +67,9 @@ fun TranscriptPane(
     val segments by store.segments.collectAsStateWithLifecycle()
     val tail by store.volatileTail.collectAsStateWithLifecycle()
     val position by PlayerController.position.collectAsStateWithLifecycle()
+    // 逐字高亮开关。关掉时即使稿里带词级时间也只做整句高亮 —— 用户要的就是"别闪"
+    val wordHighlight by (LocalContext.current.applicationContext as com.yuyin.reverb.ReverbApp)
+        .container.settingsStore.wordHighlight.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     // 切集/切语言:交给 store 决定是命中缓存秒显,还是等用户点「生成」
     LaunchedEffect(episode.id, uiLanguage) {
@@ -77,12 +81,12 @@ fun TranscriptPane(
         segments.indexOfLast { it.startMs <= nowMs }
     }
 
-    val start: () -> Unit = { store.start(episode, uiLanguage, localPath, engine) }
+    val start: () -> Unit = { store.start(episode, uiLanguage, localPath, engine, wordHighlight) }
 
     Column(Modifier.fillMaxSize()) {
         when (val s = state) {
             is TranscriptStore.State.Done, is TranscriptStore.State.Running ->
-                TranscriptList(segments, tail, currentIndex, nowMs, active)
+                TranscriptList(segments, tail, currentIndex, nowMs, active, wordHighlight)
 
             // 有官方稿与没有官方稿,**要说不同的话**:前者只是下载一个文件(一两秒),
             // 后者是本机满载算几分钟。都写成「离线转成文字」是不诚实的。
@@ -166,7 +170,8 @@ private fun TranscriptList(
     tail: String,
     currentIndex: Int,
     nowMs: Long,
-    autoScroll: Boolean
+    autoScroll: Boolean,
+    wordHighlight: Boolean
 ) {
     val listState = rememberLazyListState()
 
@@ -200,8 +205,8 @@ private fun TranscriptList(
              * 本机识别与 SRT/VTT 稿都没有词级时间 ⇒ `words` 为 null ⇒ 自动退化成整句高亮,
              * 调用方不用分辨(macOS 侧同样的回退设计)。
              */
-            val rendered = remember(seg, isCurrent, if (isCurrent) nowMs / 80 else 0L) {
-                karaokeLine(seg, isCurrent, nowMs, accent, dim)
+            val rendered = remember(seg, isCurrent, wordHighlight, if (isCurrent && wordHighlight) nowMs / 80 else 0L) {
+                karaokeLine(seg, isCurrent, nowMs, accent, dim, wordHighlight)
             }
             Text(
                 rendered,
@@ -248,9 +253,10 @@ private fun karaokeLine(
     isCurrent: Boolean,
     nowMs: Long,
     accent: androidx.compose.ui.graphics.Color,
-    dim: androidx.compose.ui.graphics.Color
+    dim: androidx.compose.ui.graphics.Color,
+    wordHighlight: Boolean
 ): AnnotatedString {
-    val words = seg.words
+    val words = if (wordHighlight) seg.words else null
     if (!isCurrent || words.isNullOrEmpty()) {
         return AnnotatedString(
             seg.text,

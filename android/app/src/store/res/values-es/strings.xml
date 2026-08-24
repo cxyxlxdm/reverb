@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  本渠道专属文案。见 src/default/res/values/strings.xml 的说明。
+-->
+<resources>
+    <string name="set_word_highlight_sub">Ilumina cada palabra mientras se pronuncia. Requiere una transcripción proporcionada por el editor; esta versión no incluye reconocimiento en el dispositivo, así que los episodios sin transcripción no pueden usarlo.</string>
+</resources>

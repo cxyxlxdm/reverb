@@ -355,4 +355,5 @@
     <string name="action_retry">重试</string>
     <string name="transcript_prompt_official">这一集发布方提供了逐字稿</string>
     <string name="transcript_show">查看逐字稿</string>
+    <string name="set_word_highlight">逐字高亮</string>
 </resources>

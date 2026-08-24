@@ -9,4 +9,5 @@
 <resources>
     <string name="privacy_consent_catalog">Show search. This build lets you search shows by keyword, which contacts public search APIs (Apple Podcasts, fyyd.de, gpodder.net). Those requests carry no credentials and no user identifiers either.</string>
     <string name="privacy_consent_asr">Offline speech-to-text. This build bundles offline speech recognition (the open-source whisper.cpp plus a bundled model). Turning an episode\'s audio into text happens <b>entirely on your device — the audio is never uploaded, never leaves the device, and never passes through any server</b>. You can turn this off in Settings.</string>
+    <string name="set_word_highlight_sub">Surligne chaque mot au fur et à mesure. La reconnaissance sur l\'appareil doit calculer les temps par mot, ce qui allonge la transcription d\'environ 70 % (environ 11 minutes pour un épisode d\'une heure).</string>
 </resources>

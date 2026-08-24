@@ -376,6 +376,9 @@ export struct SettingsPage {
     }
     .alignItems(HorizontalAlign.Start)
     .layoutWeight(1)
+    // **右边留出间距**:这一栏是 layoutWeight(1),会一路吃到右侧控件的左边缘,
+    // 长副标题折行后第二行正好顶在开关/取值上(Android 侧同一处也补了 16)。
+    .padding({ right: 16 })
   }
 
   /// 开关行(Android SettingSwitch)。原先把开关做成「关/开」两项的单选对话框 ——

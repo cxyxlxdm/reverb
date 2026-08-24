@@ -31,6 +31,17 @@ class SettingsStore(context: Context) {
      * 于是这个值在那个渠道形同虚设,不影响"有官方稿的集照样出第三页"。
      */
     val transcriptionEnabled = MutableStateFlow(prefs.getBoolean("transcription_enabled", true))
+    /**
+     * 逐字高亮(默认开)。它管两件事:
+     * - 界面:当前句是**逐字**上色,还是整句一个颜色;
+     * - 本机识别:whisper 要不要额外算 DTW 词级时间戳 —— 那会**多花约 70% 时间**
+     *   (冷机实测 1 小时音频 11 分钟 vs 6.5 分钟)。
+     *
+     * 两个渠道都有这个开关,但**含义不同**:大陆商店渠道没有识别引擎,它只影响
+     * 「发布方提供的逐字稿」怎么渲染(那种稿本来就带词级时间,开着不花任何代价);
+     * 完整版则要为此多算一遍。副标题因此按渠道分别写(见 src/default|store/res/values-* 各一份)。
+     */
+    val wordHighlight = MutableStateFlow(prefs.getBoolean("word_highlight", true))
     val contextualRadio = MutableStateFlow(prefs.getBoolean("contextual_radio", false)) // 电台模式:false 随机 / true 情境,默认随机
     val subsGrid = MutableStateFlow(prefs.getBoolean("subs_grid", false)) // 订阅排列:false 列表(一行一个)/ true 宫格,默认列表
 
@@ -70,6 +81,7 @@ class SettingsStore(context: Context) {
     fun setLanguage(tag: String) { prefs.edit().putString("language", tag).apply(); language.value = tag }
     fun setSpectrumEnabled(v: Boolean) { prefs.edit().putBoolean("spectrum_enabled", v).apply(); spectrumEnabled.value = v }
     fun setTranscriptionEnabled(v: Boolean) { prefs.edit().putBoolean("transcription_enabled", v).apply(); transcriptionEnabled.value = v }
+    fun setWordHighlight(v: Boolean) { prefs.edit().putBoolean("word_highlight", v).apply(); wordHighlight.value = v }
     fun setContextualRadio(v: Boolean) { prefs.edit().putBoolean("contextual_radio", v).apply(); contextualRadio.value = v }
     fun setSubsGrid(v: Boolean) { prefs.edit().putBoolean("subs_grid", v).apply(); subsGrid.value = v }
 

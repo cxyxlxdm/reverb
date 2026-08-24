@@ -339,4 +339,5 @@
     <string name="action_retry">Retry</string>
     <string name="transcript_prompt_official">The publisher provides a transcript for this episode</string>
     <string name="transcript_show">Show transcript</string>
+    <string name="set_word_highlight">Word-by-word highlight</string>
 </resources>

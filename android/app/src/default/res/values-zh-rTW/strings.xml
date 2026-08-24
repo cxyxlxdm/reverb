@@ -9,4 +9,5 @@
 <resources>
     <string name="privacy_consent_catalog">節目檢索。本版本提供依關鍵字檢索節目,會存取 Apple 播客目錄、fyyd.de、gpodder.net 等公開檢索介面;這些請求同樣不攜帶任何鑑權憑證與使用者識別碼。</string>
     <string name="privacy_consent_asr">離線語音轉文字。本版本內建離線語音辨識(開源元件 whisper.cpp 與隨附的辨識模型),將單集音訊轉成文字**全程在本機完成,音訊不上傳、不離開裝置,也不經過任何伺服器**。此功能可在設定中關閉。</string>
+    <string name="set_word_highlight_sub">跟讀時逐字點亮。本機辨識需要額外計算逐字時間,轉寫耗時約增加 70%(1 小時的單集約 11 分鐘)</string>
 </resources>

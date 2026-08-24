@@ -92,7 +92,7 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                         // 14sp 在长文上读着费劲。本页同样受设置里「字号」倍率影响
                         // (整棵树在 ReverbTheme 内)。
                         //
-                        // 正文之后追加**按渠道不同的两段**(见 src/default|store/res/values*/):
+                        // 正文之后追加**按渠道不同的两段**(见 src/default|store/res/values-* 各一份):
                         // 「节目检索」与「离线语音转文字」。大陆商店渠道两样都没有,那边这两个
                         // 字符串是空串,于是一个字都不渲染 —— 长文本体两个渠道共用,不必维护两份。
                         listOf(

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  本渠道专属文案。见 src/default/res/values/strings.xml 的说明。
+-->
+<resources>
+    <string name="set_word_highlight_sub">Light up each word as it is spoken. This needs a publisher-provided transcript; this build has no on-device recognition, so episodes without one cannot use it.</string>
+</resources>
