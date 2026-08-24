@@ -918,7 +918,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: by name or paste an RSS URL\n· Library: manage Subscriptions, Downloads and History\n· Offline downloads: cache while listening, Wi-Fi-only optional\n· Playback: speed, skip, sleep timer, resume, background & lock-screen controls\n· Show notes: swipe on the player\n· New-episode notifications\n· Appearance: dark/light/system, text size, accent color, multiple languages"
+      "value": "· Subscribe: paste an RSS URL, or import a recommended list in one tap\n· Library: subscriptions, latest, favorites, downloads and history\n· Offline: download episodes, optionally Wi-Fi only\n· Playback: speed, skip, sleep timer, resume, background and lock screen controls\n· Transcript: for episodes whose publisher provides one, read along in the player\n· Show notes: swipe on the player page\n· Update reminders: get notified when a new episode lands\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
     },
     {
       "name": "about_h_philosophy",
@@ -926,7 +926,7 @@
     },
     {
       "name": "about_p_philosophy",
-      "value": "Visually it draws on ink, celadon and beam-gold — the name and icon echo “an echo circling the rafters.”\n\nFor sources it stays entirely free, no login, no API key: discovery relies on public sources only, and it always returns to the publisher's own RSS and streams the original audio — copyright-clean, zero cost.\n\nFor privacy, subscriptions, history and downloads live only on your device — never uploaded, never tracked."
+      "value": "The look draws on ink wash, celadon and beam gold; the name and icon echo \"lingering sound\" — a wave wrapping a roof beam.\n\nSourcing stays free end to end, with no login and no API key: everything comes back to the publisher's own public RSS, streaming the original audio directly — clean rights, zero cost.\n\nPrivacy: subscriptions, history and downloads live only on your device. Nothing is uploaded or tracked."
     },
     {
       "name": "queue_play_next",

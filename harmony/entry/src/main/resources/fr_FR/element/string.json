@@ -918,7 +918,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Découvrir : classements du jour par région et catégorie ; réorganiser et glisser\n· Rechercher : par nom ou URL RSS\n· Bibliothèque : Abonnements, Téléchargements et Historique\n· Hors ligne : mise en cache pendant l'écoute, Wi-Fi seul en option\n· Lecture : vitesse, saut, minuteur, reprise, contrôles en arrière-plan\n· Notes de l'épisode : glisser sur le lecteur\n· Notifications de nouveaux épisodes\n· Apparence : sombre/clair/système, taille, couleur, langues"
+      "value": "· Abonnement : collez une URL RSS ou importez une liste recommandée en un geste\n· Bibliothèque : abonnements, nouveautés, favoris, téléchargements et historique\n· Hors ligne : téléchargez des épisodes, au besoin uniquement en Wi-Fi\n· Lecture : vitesse, saut, minuteur, reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
     },
     {
       "name": "about_h_philosophy",
@@ -926,7 +926,7 @@
     },
     {
       "name": "about_p_philosophy",
-      "value": "L'esthétique s'inspire de l'encre, du céladon et de l'or des poutres — le nom et l'icône évoquent « un écho tournant autour des poutres ».\n\nLes sources restent entièrement gratuites, sans compte ni clé API : recherche via des annuaires publics , puis retour au RSS d'origine de l'éditeur pour diffuser l'audio original — respect du droit d'auteur, coût nul.\n\nCôté vie privée, abonnements, historique et téléchargements restent sur votre appareil — jamais envoyés, jamais suivis."
+      "value": "L'esthétique puise dans le lavis d'encre, le céladon et l'or des poutres ; le nom et l'icône évoquent le « son qui persiste ».\n\nL'approvisionnement reste gratuit de bout en bout, sans compte ni clé d'API : tout revient au flux RSS public de l'éditeur, et l'audio original est lu en streaming — droits propres, coût nul.\n\nConfidentialité : abonnements, historique et téléchargements ne vivent que sur votre appareil. Rien n'est envoyé ni pisté."
     },
     {
       "name": "queue_play_next",
