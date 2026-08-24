@@ -6,6 +6,7 @@
 //
 // 与 whisper.cpp 的版本绑定关系写在 tools/build-asr.sh 里(固定 commit)。
 
+#include <android/log.h>
 #include <jni.h>
 #include <string>
 #include <vector>
@@ -13,12 +14,74 @@
 
 namespace {
 
-// 一次识别会话:模型上下文 + 上一次的结果。结果留着让 Kotlin 侧逐句取。
-struct Session {
-    whisper_context* ctx = nullptr;
+/// 一个词单元:**保证是合法 UTF-8**的文本 + 它开始被说出的毫秒。
+struct Word {
+    std::string text;
+    int startMs = 0;
 };
 
+// 一次识别会话:模型上下文 + 上一句拼好的词单元(供 Kotlin 侧逐个取)。
+struct Session {
+    whisper_context* ctx = nullptr;
+    std::vector<Word> words;
+};
+
+/**
+ * `s` 是否以**完整的** UTF-8 字符结尾。
+ *
+ * 为什么需要:whisper 用的是字节级 BPE,**一个汉字(3 字节)可能被劈到两个 token 里**。
+ * 把半个字符交给 `NewStringUTF`,JVM 会判定为非法 Modified UTF-8 并**直接 abort 整个进程**
+ * (debug 包开着 CheckJNI 时必崩;release 下则是悄悄给出一段坏字符串)。
+ * 所以这里逐字符走一遍,末尾不完整就先攒着,等下一个 token 补齐。
+ *
+ * 返回 false 有两种情况:末尾截断(继续攒),或遇到非法起始字节(调用方丢弃)。
+ */
+bool endsWithCompleteUtf8(const std::string& s, bool* illegal) {
+    *illegal = false;
+    size_t i = 0;
+    while (i < s.size()) {
+        const unsigned char c = static_cast<unsigned char>(s[i]);
+        size_t need;
+        if (c < 0x80) need = 1;
+        else if ((c & 0xE0) == 0xC0) need = 2;
+        else if ((c & 0xF0) == 0xE0) need = 3;
+        else if ((c & 0xF8) == 0xF0) need = 4;
+        else { *illegal = true; return false; }   // continuation byte 或 0xF8+ 起头:非法
+        if (i + need > s.size()) return false;    // 末尾被截断,等后续 token
+        for (size_t k = 1; k < need; k++) {
+            if ((static_cast<unsigned char>(s[i + k]) & 0xC0) != 0x80) { *illegal = true; return false; }
+        }
+        i += need;
+    }
+    return true;
+}
+
+/// 只把**验过的** UTF-8 交给 JVM;万一还是不合法就给空串,绝不让它 abort 进程。
+jstring safeString(JNIEnv* env, const std::string& s) {
+    bool illegal = false;
+    if (!endsWithCompleteUtf8(s, &illegal)) return env->NewStringUTF("");
+    return env->NewStringUTF(s.c_str());
+}
+
 inline Session* asSession(jlong h) { return reinterpret_cast<Session*>(h); }
+
+/**
+ * 把 whisper/ggml 自己的日志接到 logcat。
+ *
+ * **这一步不是锦上添花。** 上面那个 flash_attn 关掉 DTW 的坑,库里是打了 WARN 的
+ * (`dtw_token_timestamps is not supported with flash_attn - disabling`),但库默认写 stderr,
+ * 在 Android 上等于扔掉 —— 于是表面现象只是"时间戳全是 -1",查了很久。
+ * 有了这个回调,以后库里任何一句抱怨都能直接看见。
+ */
+void logToAndroid(ggml_log_level level, const char* text, void*) {
+    int prio;
+    switch (level) {
+        case GGML_LOG_LEVEL_ERROR: prio = ANDROID_LOG_ERROR; break;
+        case GGML_LOG_LEVEL_WARN:  prio = ANDROID_LOG_WARN;  break;
+        default:                   prio = ANDROID_LOG_INFO;  break;
+    }
+    __android_log_write(prio, "whisper.cpp", text == nullptr ? "" : text);
+}
 
 }  // namespace
 
@@ -26,6 +89,7 @@ extern "C" {
 
 JNIEXPORT jlong JNICALL
 Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeInit(JNIEnv* env, jobject, jstring modelPath) {
+    whisper_log_set(logToAndroid, nullptr);
     const char* path = env->GetStringUTFChars(modelPath, nullptr);
     whisper_context_params cp = whisper_context_default_params();
     // 手机上不用 GPU:Adreno 的后端在 whisper.cpp 里还不稳,而 CPU 已经够快
@@ -45,6 +109,13 @@ Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeInit(JNIEnv* env, jobject
     cp.dtw_token_timestamps = true;
     cp.dtw_aheads_preset = WHISPER_AHEADS_BASE;
     cp.dtw_mem_size = 32u * 1024 * 1024;
+    /**
+     * **必须关掉 flash attention** —— 库里一句
+     * 「dtw_token_timestamps is not supported with flash_attn - disabling」
+     * 就把 DTW 静默关了,而 `whisper_context_default_params()` 里 flash_attn **默认是 true**。
+     * 症状是词级时间戳全是 -1(t_dtw 与 t0 都没人填),界面上就是逐字高亮不动。
+     */
+    cp.flash_attn = false;
     whisper_context* ctx = whisper_init_from_file_with_params(path, cp);
     env->ReleaseStringUTFChars(modelPath, path);
     if (ctx == nullptr) return 0;
@@ -129,7 +200,8 @@ Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeSegmentText(
     Session* s = asSession(handle);
     if (s == nullptr || s->ctx == nullptr) return env->NewStringUTF("");
     const char* t = whisper_full_get_segment_text(s->ctx, index);
-    return env->NewStringUTF(t == nullptr ? "" : t);
+    // 整句一般是完整的,但没理由在 JNI 边界上留一个不验的出口
+    return safeString(env, t == nullptr ? std::string() : std::string(t));
 }
 
 /// 句子起点。whisper 的时间单位是 **10 毫秒**,这里直接换成毫秒交出去。
@@ -149,55 +221,69 @@ Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeSegmentEndMs(
     return static_cast<jint>(whisper_full_get_segment_t1(s->ctx, index) * 10);
 }
 
-/// 某句里的 token 数(词级高亮用)。
+/**
+ * 把一句的 token 拼成**词单元**,返回个数;之后用 `nativeWordText/StartMs` 逐个取。
+ *
+ * 做成两段式(先 prepare 再逐个读)而不是"每次调用都现算",有两个原因:
+ * - 拼接必须是有状态的 —— **一个汉字可能被劈在两个 token 里**,得攒够字节才算一个字;
+ * - 这样 JNI 边界上传出去的每个字符串都已验过是合法 UTF-8,不会把进程 abort 掉。
+ *
+ * 顺带跳过特殊 token(`<|zh|>`、时间戳这些)与空文本。
+ * 时刻取 **`t_dtw`**(DTW 对齐结果)—— `t0/t1` 是解码器的粗略区间,做逐字高亮会明显抖;
+ * DTW 不可用时回退到 t0。攒字节期间**用第一个 token 的时刻**,那才是这个字开始发音的位置。
+ */
 JNIEXPORT jint JNICALL
-Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTokenCount(
+Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativePrepareWords(
         JNIEnv*, jobject, jlong handle, jint segment) {
     Session* s = asSession(handle);
     if (s == nullptr || s->ctx == nullptr) return 0;
-    return whisper_full_n_tokens(s->ctx, segment);
+    s->words.clear();
+
+    const int n = whisper_full_n_tokens(s->ctx, segment);
+    const whisper_token eot = whisper_token_eot(s->ctx);
+    std::string pending;
+    int pendingStart = 0;
+
+    for (int i = 0; i < n; i++) {
+        const whisper_token_data d = whisper_full_get_token_data(s->ctx, segment, i);
+        if (d.id >= eot) continue;                       // 特殊 token
+        const char* t = whisper_full_get_token_text(s->ctx, segment, i);
+        if (t == nullptr || *t == '\0') continue;
+        if (pending.empty()) {
+            const int64_t at = d.t_dtw >= 0 ? d.t_dtw : d.t0;
+            pendingStart = static_cast<int>(at * 10);     // whisper 的单位是 10ms
+        }
+        pending += t;
+
+        bool illegal = false;
+        if (endsWithCompleteUtf8(pending, &illegal)) {
+            s->words.push_back({pending, pendingStart});
+            pending.clear();
+        } else if (illegal) {
+            pending.clear();                              // 拼不出合法字符,丢掉这几个字节
+        }
+        // 否则:末尾截断,继续攒下一个 token
+    }
+    // 收尾:仍然不完整就丢弃,**绝不把半个字符交出去**
+    return static_cast<jint>(s->words.size());
 }
 
-/**
- * token 文本。**原样返回,不去空格** —— whisper 的英文 token 自带前导空格
- * (" deal"),而子词 token 没有("prog" + "rammatic")。谁该带空格只有它自己知道,
- * 上层去 trim 再按规则补空格会把子词拼错。上层的约定是:把 token 文本直接拼起来
- * 就等于整句(见 Kotlin 侧 TranscribedSegment.words 的注释)。
- *
- * 特殊 token(`<|zh|>`、`[_BEG_]` 这类)由上层按 id 过滤,这里不做判断。
- */
 JNIEXPORT jstring JNICALL
-Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTokenText(
-        JNIEnv* env, jobject, jlong handle, jint segment, jint index) {
+Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeWordText(
+        JNIEnv* env, jobject, jlong handle, jint index) {
     Session* s = asSession(handle);
-    if (s == nullptr || s->ctx == nullptr) return env->NewStringUTF("");
-    const char* t = whisper_full_get_token_text(s->ctx, segment, index);
-    return env->NewStringUTF(t == nullptr ? "" : t);
+    if (s == nullptr || index < 0 || static_cast<size_t>(index) >= s->words.size()) {
+        return env->NewStringUTF("");
+    }
+    return safeString(env, s->words[index].text);
 }
 
-/// token 是否是特殊标记(语言标记 / 时间戳 / BEG / EOT 等),上层跳过它们。
-JNIEXPORT jboolean JNICALL
-Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTokenIsSpecial(
-        JNIEnv*, jobject, jlong handle, jint segment, jint index) {
-    Session* s = asSession(handle);
-    if (s == nullptr || s->ctx == nullptr) return JNI_TRUE;
-    const whisper_token_data d = whisper_full_get_token_data(s->ctx, segment, index);
-    return d.id >= whisper_token_eot(s->ctx) ? JNI_TRUE : JNI_FALSE;
-}
-
-/**
- * token 的时刻(毫秒)。取 **`t_dtw`** —— DTW 对齐出来的位置,才是"这个词什么时候被说出来"。
- * `t0/t1` 是解码器给的粗略区间,抖动大,做逐词高亮会明显跳。
- * DTW 不可用时(比如没开 dtw_token_timestamps)`t_dtw` 是 -1,这里回退到 t0。
- */
 JNIEXPORT jint JNICALL
-Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTokenStartMs(
-        JNIEnv*, jobject, jlong handle, jint segment, jint index) {
+Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeWordStartMs(
+        JNIEnv*, jobject, jlong handle, jint index) {
     Session* s = asSession(handle);
-    if (s == nullptr || s->ctx == nullptr) return 0;
-    const whisper_token_data d = whisper_full_get_token_data(s->ctx, segment, index);
-    const int64_t t = d.t_dtw >= 0 ? d.t_dtw : d.t0;
-    return static_cast<jint>(t * 10);
+    if (s == nullptr || index < 0 || static_cast<size_t>(index) >= s->words.size()) return 0;
+    return s->words[index].startMs;
 }
 
 }  // extern "C"

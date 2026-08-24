@@ -23,13 +23,15 @@ import java.io.File
  * 于是用户能**边转边看**,而不是等十几分钟一次性出现。内存也因此封在 10 MB 量级
  * (整集一次性解码是 230 MB,见 `PcmDecoder`)。
  *
- * 真机实测(SM8845 / 4 线程 / base-q5_1,真实中文播客):
- * - **应用内约 8 倍实时**(120.7 秒的块 14.2 秒、59.3 秒的块 8.1 秒)⇒ 1 小时约 7~8 分钟;
- * - 同机同模型的命令行(whisper-cli)只有 4.0~4.6 倍。**差别来自 `no_context = true`** ——
- *   分块识别必须关掉跨块上下文(否则复读),代价是少了上文提示、质量略降,
- *   收益是快了近一倍。这个取舍是刻意的,详见 TRANSCRIPT.md。
+ * 真机实测(SM8845 / 4 线程 / base-q5_1,同一段真实中文播客,冷机):
+ * - **词级时间戳开着(当前配置)**:120 秒的块 22.4 秒 ⇒ **约 5.4 倍实时**,1 小时约 11 分钟;
+ * - 关掉词级时间戳(即 flash attn 开、DTW 关):同一块 13.0 秒 ⇒ 9.2 倍实时,1 小时约 6.5 分钟。
  *
- * 换模型或升级 whisper.cpp 之后**要重新量**,别照抄这个数(见 tools/build-asr.sh)。
+ * **也就是说逐字高亮的代价是多花约 70% 的时间**(DTW 本身要算,而且它与 flash attention
+ * 不兼容,只能把 flash attn 一起关掉)。这个取舍是刻意的,详见 TRANSCRIPT.md。
+ *
+ * 另外别拿命令行的数字对照:命令行带跨块上下文、我们这里 `no_context = true`,
+ * 两者不是同一个配置。换模型或升级 whisper.cpp 之后**要重新量**(见 tools/build-asr.sh)。
  */
 class WhisperEngine(context: Context) : AsrEngine {
 
@@ -96,7 +98,7 @@ class WhisperEngine(context: Context) : AsrEngine {
                      * token 文本**自带该有的空格**,所以 spaced = false —— 上层不能再补,
                      * 否则 "prog" + "rammatic" 会被拼成两个词。
                      */
-                    val tokens = tokensOf(handle, i, startMs)
+                    val tokens = wordsOf(handle, i, startMs)
                     val lines = if (tokens.size > 1) {
                         TranscriptLines.mergeWords(tokens, spaced = false)
                     } else {
@@ -145,19 +147,23 @@ class WhisperEngine(context: Context) : AsrEngine {
     }
 
     /**
-     * 取一句里的 token 作为词级条目。跳过特殊 token(`<|zh|>`、时间戳这些)与空文本。
+     * 取一句的词单元(词级高亮用)。
      *
-     * 时间取的是 DTW 对齐后的 `t_dtw`(见 JNI 侧注释),终点用**下一条的起点**补 ——
-     * whisper 不给 token 级终点,而对高亮来说"下一个词开始"就等于"这个词结束"。
+     * **拼接与 UTF-8 校验都在 C++ 侧做完**(见 `nativePrepareWords` 的注释):
+     * whisper 是字节级 BPE,一个汉字可能被劈在两个 token 里,半个字符交给 JNI 的
+     * `NewStringUTF` 会**直接 abort 整个进程**。这里拿到的每一条都已经是合法 UTF-8。
+     *
+     * 终点用**下一条的起点**补 —— whisper 不给词级终点,而对高亮来说
+     * "下一个字开始"就等于"这个字结束";最后一条给 200ms 的兜底长度。
      */
-    private fun tokensOf(handle: Long, segment: Int, offsetMs: Int): List<TranscribedWord> {
-        val n = nativeTokenCount(handle, segment)
+    private fun wordsOf(handle: Long, segment: Int, offsetMs: Int): List<TranscribedWord> {
+        val n = nativePrepareWords(handle, segment)
+        if (n <= 0) return emptyList()
         val raw = ArrayList<TranscribedWord>(n)
-        for (t in 0 until n) {
-            if (nativeTokenIsSpecial(handle, segment, t)) continue
-            val txt = nativeTokenText(handle, segment, t)
+        for (i in 0 until n) {
+            val txt = nativeWordText(handle, i)
             if (txt.isEmpty()) continue
-            raw.add(TranscribedWord(txt, offsetMs + nativeTokenStartMs(handle, segment, t), 0))
+            raw.add(TranscribedWord(txt, offsetMs + nativeWordStartMs(handle, i), 0))
         }
         return raw.mapIndexed { i, w ->
             val end = raw.getOrNull(i + 1)?.startMs ?: (w.startMs + 200)
@@ -231,10 +237,9 @@ class WhisperEngine(context: Context) : AsrEngine {
     private external fun nativeSegmentText(handle: Long, index: Int): String
     private external fun nativeSegmentStartMs(handle: Long, index: Int): Int
     private external fun nativeSegmentEndMs(handle: Long, index: Int): Int
-    private external fun nativeTokenCount(handle: Long, segment: Int): Int
-    private external fun nativeTokenText(handle: Long, segment: Int, index: Int): String
-    private external fun nativeTokenIsSpecial(handle: Long, segment: Int, index: Int): Boolean
-    private external fun nativeTokenStartMs(handle: Long, segment: Int, index: Int): Int
+    private external fun nativePrepareWords(handle: Long, segment: Int): Int
+    private external fun nativeWordText(handle: Long, index: Int): String
+    private external fun nativeWordStartMs(handle: Long, index: Int): Int
 
     companion object {
         private const val MODEL_ASSET = "whisper-model.bin"

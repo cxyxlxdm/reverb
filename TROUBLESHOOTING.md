@@ -1158,3 +1158,51 @@
   2. **修一个行为常会换出另一个行为**(给了标点提示 → 句子变长)。改完要把整条链再看一遍,
      别只验刚改的那一处;
   3. 两处都在做"把长文本切成能读的一行",那就该是一份实现。发现第二处时正是抽公共的时机。
+
+### H58. whisper 的 token 会把一个汉字劈成两半,半个字符交给 `NewStringUTF` 会**直接 abort 进程**
+
+- **现象**:用户报「播一半应用会自动退出」。系统退出记录(`dumpsys activity exit-info`)显示
+  `reason=5 (APP CRASH(NATIVE))`,崩溃缓冲里是:
+
+  ```
+  Fatal signal 6 (SIGABRT) … DefaultDispatch
+  Abort message: 'JNI DETECTED ERROR IN APPLICATION:
+    input is not valid Modified UTF-8: illegal continuation byte 0
+    from java.lang.String …WhisperEngine.nativeTokenText(long, int, int)'
+  ```
+- **根因**:whisper 用**字节级 BPE**,一个汉字 3 个 UTF-8 字节,**可能被劈到两个 token 里**。
+  把这半个字符的 `char*` 交给 `env->NewStringUTF()`,JVM 判定为非法 Modified UTF-8 并
+  **abort 整个进程**(debug 包开着 CheckJNI 必崩;release 下不崩,但会得到一段坏字符串 ——
+  那更难查)。
+- **修法**:token 的拼接与校验都放 C++ 侧,**攒够字节形成完整字符才交出去**
+  (`nativePrepareWords` + `nativeWordText`);JNI 边界上所有字符串统一走一个
+  `safeString()`,验不过就给空串,**绝不让它 abort**。
+- **教训 / 规律**:
+  1. **凡是把模型/解析器产出的字节直接 `NewStringUTF` 的地方,都是一颗雷**。
+     字节级 tokenizer 天然会产出不完整字符;
+  2. `NewStringUTF` 的失败方式是**杀进程**,不是抛异常 —— 上层 `try/catch` 一点用都没有;
+  3. 用户说「应用自动退出」时,先看 `dumpsys activity exit-info`:它会直接告诉你是崩溃、
+     被系统回收、还是**被一次覆盖安装打断**(reason=16 PACKAGE UPDATED)。这次三种都出现了,
+     而其中一种是我自己在用户使用期间 `adb install` 造成的 —— 别把那个也算成 bug。
+
+### H59. `flash_attn` 默认开着,会**静默关掉** whisper 的词级时间戳
+
+- **现象**:开了 `dtw_token_timestamps` 之后,`whisper_token_data.t_dtw` 与 `t0` **全是 -1**,
+  界面上逐字高亮完全不动;但一切正常,不报错。
+- **根因**:`whisper_context_default_params()` 里 **`flash_attn` 默认是 `true`**,而库里有一句
+
+  ```
+  dtw_token_timestamps is not supported with flash_attn - disabling
+  ```
+
+  于是 DTW 被悄悄关掉。**这句 WARN 库是打了的**,但它默认写 stderr —— 在 Android 上等于扔掉。
+- **修法**:开 DTW 就必须 `cp.flash_attn = false`;并且**把库的日志接到 logcat**
+  (`whisper_log_set` → `__android_log_write`)。后者不是锦上添花:装上之后
+  `flash attn = 0 / dtw = 1` 这两行自述直接可见,这类"库已经告诉你了而你没听见"的坑就没了。
+- **顺带修正一个我自己下错的结论**:此前测出"DTW 几乎不花时间"是**错的** ——
+  那几次 DTW 根本没生效。真实代价见 H55 表格下方与 TRANSCRIPT.md:**多约 70% 时间**。
+- **教训 / 规律**:
+  1. **接第三方库的第一件事就是把它的日志接出来**。没接日志的排查等于蒙眼;
+  2. 参数之间可能互相排斥,而库往往选择"静默降级"而不是报错。开了某个开关之后,
+     要**验证它真的生效**(这里就是打印库的自述行),不能只看"没报错";
+  3. 性能结论必须绑定配置。"开着某功能测出来一样快"的第一嫌疑是**那个功能没开**。
