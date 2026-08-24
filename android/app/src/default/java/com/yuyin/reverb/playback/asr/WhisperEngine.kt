@@ -4,6 +4,7 @@ import android.content.Context
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.TranscribedSegment
+import com.yuyin.reverb.data.model.TranscribedWord
 import com.yuyin.reverb.util.TranscriptLines
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -84,16 +85,29 @@ class WhisperEngine(context: Context) : AsrEngine {
                     if (!keep(text, lastText)) continue
                     lastText = text
                     /**
-                     * **一句还要再切**。给了带标点的提示词之后,whisper 会把一整段话当成一句吐出来
-                     * (实测 3 分钟音频只有 21 句,一句能有两三百字)—— 那样跟读高亮的粒度就没了,
-                     * 一段要亮二十多秒。切分与官方稿共用同一套规则(中文一行 24 字、西文 42),
-                     * 时间按字符占比插值。
+                     * **按 token 重新组行**,而不是把整句丢出去。两个收益一次拿到:
+                     *
+                     * 1. 给了带标点的提示词之后,whisper 会把一整段话当成一句吐出来
+                     *    (实测 3 分钟音频只有 21 句、一句两三百字),必须切成能读的一行;
+                     * 2. token 自带 DTW 对齐的时刻 ⇒ 顺带有了**词级时间**,
+                     *    于是中文也能逐字高亮(whisper 的中文 token 就是一到两个汉字)。
+                     *
+                     * 组行规则与官方稿共用同一份实现(`TranscriptLines.mergeWords`)。
+                     * token 文本**自带该有的空格**,所以 spaced = false —— 上层不能再补,
+                     * 否则 "prog" + "rammatic" 会被拼成两个词。
                      */
-                    for (line in TranscriptLines.split(
-                        text,
-                        startMs + nativeSegmentStartMs(handle, i),
-                        startMs + nativeSegmentEndMs(handle, i)
-                    )) {
+                    val tokens = tokensOf(handle, i, startMs)
+                    val lines = if (tokens.size > 1) {
+                        TranscriptLines.mergeWords(tokens, spaced = false)
+                    } else {
+                        // 拿不到 token(理论上不该发生)则退回按字数切、时间插值
+                        TranscriptLines.split(
+                            text,
+                            startMs + nativeSegmentStartMs(handle, i),
+                            startMs + nativeSegmentEndMs(handle, i)
+                        )
+                    }
+                    for (line in lines) {
                         emitted++
                         onSegment(line)
                     }
@@ -128,6 +142,27 @@ class WhisperEngine(context: Context) : AsrEngine {
         if (text == lastText) return false
         if (text.length <= 24 && MARKER.matches(text)) return false
         return true
+    }
+
+    /**
+     * 取一句里的 token 作为词级条目。跳过特殊 token(`<|zh|>`、时间戳这些)与空文本。
+     *
+     * 时间取的是 DTW 对齐后的 `t_dtw`(见 JNI 侧注释),终点用**下一条的起点**补 ——
+     * whisper 不给 token 级终点,而对高亮来说"下一个词开始"就等于"这个词结束"。
+     */
+    private fun tokensOf(handle: Long, segment: Int, offsetMs: Int): List<TranscribedWord> {
+        val n = nativeTokenCount(handle, segment)
+        val raw = ArrayList<TranscribedWord>(n)
+        for (t in 0 until n) {
+            if (nativeTokenIsSpecial(handle, segment, t)) continue
+            val txt = nativeTokenText(handle, segment, t)
+            if (txt.isEmpty()) continue
+            raw.add(TranscribedWord(txt, offsetMs + nativeTokenStartMs(handle, segment, t), 0))
+        }
+        return raw.mapIndexed { i, w ->
+            val end = raw.getOrNull(i + 1)?.startMs ?: (w.startMs + 200)
+            TranscribedWord(w.text, w.startMs, maxOf(end, w.startMs))
+        }
     }
 
     /// `zh-CN` → `zh`。whisper 认的是两字母语言码;空串表示让它自己判断("auto")。
@@ -196,6 +231,10 @@ class WhisperEngine(context: Context) : AsrEngine {
     private external fun nativeSegmentText(handle: Long, index: Int): String
     private external fun nativeSegmentStartMs(handle: Long, index: Int): Int
     private external fun nativeSegmentEndMs(handle: Long, index: Int): Int
+    private external fun nativeTokenCount(handle: Long, segment: Int): Int
+    private external fun nativeTokenText(handle: Long, segment: Int, index: Int): String
+    private external fun nativeTokenIsSpecial(handle: Long, segment: Int, index: Int): Boolean
+    private external fun nativeTokenStartMs(handle: Long, segment: Int, index: Int): Int
 
     companion object {
         private const val MODEL_ASSET = "whisper-model.bin"

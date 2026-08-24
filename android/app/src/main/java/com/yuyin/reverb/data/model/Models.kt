@@ -37,7 +37,14 @@ data class Episode(
     val transcriptType: String = ""
 )
 
-/// 逐字稿里的一个词及其时间(卡拉OK逐词高亮用)。与 macOS `TranscribedWord` 字段一致。
+/**
+ * 逐字稿里的一个词/字及其时刻(逐词高亮用)。与 macOS `TranscribedWord` 字段一致。
+ *
+ * **不变式:同一句里各条 `text` 原样拼接 == `TranscribedSegment.text`。**
+ * 也就是说该带的空格就带在 text 里(英文 " deal"),不该带就不带(中文、以及
+ * "prog"+"rammatic" 这种子词)。渲染方因此可以直接顺序拼接、只给当前那条上色,
+ * 不需要猜哪里该补空格 —— 猜错的后果是英文子词被拼成两个词。
+ */
 data class TranscribedWord(
     val text: String,
     val startMs: Int,

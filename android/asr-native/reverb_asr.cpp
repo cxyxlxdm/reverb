@@ -29,8 +29,22 @@ Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeInit(JNIEnv* env, jobject
     const char* path = env->GetStringUTFChars(modelPath, nullptr);
     whisper_context_params cp = whisper_context_default_params();
     // 手机上不用 GPU:Adreno 的后端在 whisper.cpp 里还不稳,而 CPU 已经够快
-    // (实测 base-q5_1 在 SM8845 上 4 线程约 4.6 倍实时)。
+    // (实测 base-q5_1 在 SM8845 上 4 线程约 8 倍实时)。
     cp.use_gpu = false;
+
+    /**
+     * **词级时间戳(DTW 对齐)**。开了它 `whisper_token_data.t_dtw` 才有值,
+     * 逐词/逐字高亮才有据可依 —— 否则只有 `t0/t1` 那种句级时间。
+     *
+     * 两个必须配对的点:
+     * - `dtw_aheads_preset` **要与模型档位一致**。我们内置的是 base,所以是
+     *   `WHISPER_AHEADS_BASE`;换成 tiny/small 必须同步改,不然对齐结果是错的;
+     * - `dtw_mem_size` 是一块预留的 scratch 内存。库里默认 128 MB,在手机上太奢侈;
+     *   我们一次只喂 2 分钟的块,32 MB 够用(真机验过)。
+     */
+    cp.dtw_token_timestamps = true;
+    cp.dtw_aheads_preset = WHISPER_AHEADS_BASE;
+    cp.dtw_mem_size = 32u * 1024 * 1024;
     whisper_context* ctx = whisper_init_from_file_with_params(path, cp);
     env->ReleaseStringUTFChars(modelPath, path);
     if (ctx == nullptr) return 0;
@@ -133,6 +147,57 @@ Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeSegmentEndMs(
     Session* s = asSession(handle);
     if (s == nullptr || s->ctx == nullptr) return 0;
     return static_cast<jint>(whisper_full_get_segment_t1(s->ctx, index) * 10);
+}
+
+/// 某句里的 token 数(词级高亮用)。
+JNIEXPORT jint JNICALL
+Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTokenCount(
+        JNIEnv*, jobject, jlong handle, jint segment) {
+    Session* s = asSession(handle);
+    if (s == nullptr || s->ctx == nullptr) return 0;
+    return whisper_full_n_tokens(s->ctx, segment);
+}
+
+/**
+ * token 文本。**原样返回,不去空格** —— whisper 的英文 token 自带前导空格
+ * (" deal"),而子词 token 没有("prog" + "rammatic")。谁该带空格只有它自己知道,
+ * 上层去 trim 再按规则补空格会把子词拼错。上层的约定是:把 token 文本直接拼起来
+ * 就等于整句(见 Kotlin 侧 TranscribedSegment.words 的注释)。
+ *
+ * 特殊 token(`<|zh|>`、`[_BEG_]` 这类)由上层按 id 过滤,这里不做判断。
+ */
+JNIEXPORT jstring JNICALL
+Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTokenText(
+        JNIEnv* env, jobject, jlong handle, jint segment, jint index) {
+    Session* s = asSession(handle);
+    if (s == nullptr || s->ctx == nullptr) return env->NewStringUTF("");
+    const char* t = whisper_full_get_token_text(s->ctx, segment, index);
+    return env->NewStringUTF(t == nullptr ? "" : t);
+}
+
+/// token 是否是特殊标记(语言标记 / 时间戳 / BEG / EOT 等),上层跳过它们。
+JNIEXPORT jboolean JNICALL
+Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTokenIsSpecial(
+        JNIEnv*, jobject, jlong handle, jint segment, jint index) {
+    Session* s = asSession(handle);
+    if (s == nullptr || s->ctx == nullptr) return JNI_TRUE;
+    const whisper_token_data d = whisper_full_get_token_data(s->ctx, segment, index);
+    return d.id >= whisper_token_eot(s->ctx) ? JNI_TRUE : JNI_FALSE;
+}
+
+/**
+ * token 的时刻(毫秒)。取 **`t_dtw`** —— DTW 对齐出来的位置,才是"这个词什么时候被说出来"。
+ * `t0/t1` 是解码器给的粗略区间,抖动大,做逐词高亮会明显跳。
+ * DTW 不可用时(比如没开 dtw_token_timestamps)`t_dtw` 是 -1,这里回退到 t0。
+ */
+JNIEXPORT jint JNICALL
+Java_com_yuyin_reverb_playback_asr_WhisperEngine_nativeTokenStartMs(
+        JNIEnv*, jobject, jlong handle, jint segment, jint index) {
+    Session* s = asSession(handle);
+    if (s == nullptr || s->ctx == nullptr) return 0;
+    const whisper_token_data d = whisper_full_get_token_data(s->ctx, segment, index);
+    const int64_t t = d.t_dtw >= 0 ? d.t_dtw : d.t0;
+    return static_cast<jint>(t * 10);
 }
 
 }  // extern "C"

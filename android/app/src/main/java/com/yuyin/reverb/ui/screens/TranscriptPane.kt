@@ -43,7 +43,6 @@ import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.TranscribedSegment
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.playback.asr.AsrFactory
-import com.yuyin.reverb.util.TranscriptLines
 
 /**
  * 播放页第三页:逐字稿。对应 macOS `UI/TranscriptPage.swift`。
@@ -239,9 +238,10 @@ private fun TranscriptList(
  * - 是当前句且有词级时间:**已读到的那个词**用强调色 + 半粗,同句其余部分用强调色的 55% ——
  *   这样"这一句在读"和"读到这儿了"两层信息同时看得见,而不是只有其中一层。
  *
- * 文本**由 words 重新拼**而不是拿 seg.text 去找子串:拼接规则(西文词前补空格、中文不补)
- * 与 `TranscriptFetcher` 合并成行时用的是同一条,所以拼出来与 seg.text 一致,
- * 而按子串定位会在重复词上错位。
+ * 文本**由 words 原样拼**而不是拿 seg.text 去找子串:`TranscribedWord` 那边立了不变式
+ * ——各条 text 直接拼起来就等于整句(该带的空格已折在 text 里)。所以这里既不用补空格
+ * (补了会把英文子词 "prog"+"rammatic" 拼成两个词),也不用按子串定位
+ * (重复词上会错位)。
  */
 private fun karaokeLine(
     seg: TranscribedSegment,
@@ -265,7 +265,6 @@ private fun karaokeLine(
     val at = SpanStyle(color = accent, fontWeight = FontWeight.SemiBold)
     return buildAnnotatedString {
         for ((idx, w) in words.withIndex()) {
-            if (length > 0 && TranscriptLines.isAsciiHead(w.text)) append(' ')
             withStyle(if (idx == spoken) at else read) { append(w.text) }
         }
     }

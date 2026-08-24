@@ -171,60 +171,13 @@ class TranscriptFetcher(private val client: OkHttpClient) {
             if (s < 0) continue
             words.add(TranscribedWord(body, s, if (e > s) e else s))
         }
-        return if (words.isEmpty()) null else mergeIntoLines(words)
-    }
-
-    /**
-     * 把细碎条目合成一行。三个断句依据,先到先断:
-     * 1. 正文以句末标点结尾(中英都算);
-     * 2. 累计长度超过一行能放的字数(**含词间空格** —— 漏算空格会让英文行超出目标一截:
-     *    实测 10245 词的真实稿里最长行到过 65 字,补上空格后回到 50 上下);
-     * 3. 与下一条之间**静音超过 900ms** —— 通常是换气或换人说话,断在这里最自然。
-     *
-     * 合完还要走一遍 `TranscriptLines.glueOrphans` —— 见那里的注释。
-     */
-    private fun mergeIntoLines(words: List<TranscribedWord>): List<TranscribedSegment> {
-        val out = ArrayList<TranscribedSegment>()
-        var buf = ArrayList<TranscribedWord>()
-        var len = 0
-
-        fun flush() {
-            if (buf.isEmpty()) return
-            // 中文之间不加空格,英文词之间要加 —— 以是否 ASCII 起头粗判,够用
-            val sb = StringBuilder()
-            for (w in buf) {
-                if (sb.isNotEmpty() && TranscriptLines.isAsciiHead(w.text)) sb.append(' ')
-                sb.append(w.text)
-            }
-            out.add(
-                TranscribedSegment(
-                    text = sb.toString().trim(),
-                    startMs = buf.first().startMs,
-                    endMs = buf.last().endMs,
-                    // 只有真的合了多条才留词级时间;本来就是整句的稿留了也没用,白占缓存
-                    words = if (buf.size > 1) ArrayList(buf) else null
-                )
-            )
-            buf = ArrayList()
-            len = 0
-        }
-
-        for ((i, w) in words.withIndex()) {
-            val needsSpace = len > 0 && TranscriptLines.isAsciiHead(w.text)
-            buf.add(w)
-            len += w.text.length + if (needsSpace) 1 else 0
-            val endsSentence = w.text.trimEnd().lastOrNull()?.let { it in TranscriptLines.SENTENCE_END } == true
-            val gapNext = words.getOrNull(i + 1)?.let { it.startMs - w.endMs } ?: 0
-            if (endsSentence || len >= TranscriptLines.WEST_CHARS || gapNext > MAX_GAP_MS) flush()
-        }
-        flush()
-        return TranscriptLines.glueOrphans(out)
+        // 合并成可读行 + 保留词级时间,与 whisper 那条路共用同一份实现。
+        // 这里的条目**不自带空格**(JSON 稿是纯词),所以 spaced = true
+        return if (words.isEmpty()) null else TranscriptLines.mergeWords(words, spaced = true)
     }
 
     private companion object {
         /// 8 MB:再离谱的逐字稿也到不了这个量级,超过就是链接指错了东西
         const val MAX_BYTES = 8L * 1024 * 1024
-        /// 词级条目之间静音超过这个值就断句 —— 通常是换气或换人说话
-        const val MAX_GAP_MS = 900
     }
 }

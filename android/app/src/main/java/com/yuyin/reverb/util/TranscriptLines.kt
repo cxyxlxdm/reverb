@@ -76,14 +76,15 @@ object TranscriptLines {
         for (seg in lines) {
             val prev = out.lastOrNull()
             if (prev != null && seg.text.length < ORPHAN_CHARS && seg.startMs - prev.endMs < GLUE_GAP_MS) {
-                val sep = if (isAsciiHead(seg.text)) " " else ""
+                // 空格折进被并进来那一段的文本里,维持"words 拼接 == 整句"的不变式
+                val glued = if (isAsciiHead(seg.text)) " ${seg.text}" else seg.text
                 out[out.size - 1] = prev.copy(
-                    text = prev.text + sep + seg.text,
+                    text = prev.text + glued,
                     endMs = seg.endMs,
                     words = when {
                         prev.words == null && seg.words == null -> null
                         else -> (prev.words ?: listOf(TranscribedWord(prev.text, prev.startMs, prev.endMs))) +
-                                (seg.words ?: listOf(TranscribedWord(seg.text, seg.startMs, seg.endMs)))
+                                (seg.words ?: listOf(TranscribedWord(glued, seg.startMs, seg.endMs)))
                     }
                 )
             } else {
@@ -96,12 +97,67 @@ object TranscriptLines {
     /// 以 ASCII 起头 ⇒ 拼接时前面要加空格(中文之间不加)。
     fun isAsciiHead(s: String): Boolean = s.firstOrNull()?.code?.let { it < 128 } == true
 
+    /**
+     * **细碎条目 → 可读的一行**,并把原始条目留在 `words` 里(于是能逐词高亮)。
+     *
+     * 三种来源都走这里,因为它们是同一个问题:
+     * - 官方 JSON 稿:一条一个词(实测一集 10245 条);
+     * - whisper 的 token:一条一到两个汉字 / 一个英文子词;
+     * - (将来)鸿蒙若换三方引擎,同样是 token 流。
+     *
+     * 三个断句依据,先到先断:句末标点 / 累计长度超过一行 / 与下一条之间静音超过 900ms
+     * (换气或换人说话)。行宽按内容选:多数是汉字用 24,否则 42。
+     *
+     * @param spaced 传 true 表示条目**不自带空格**,需要按 ASCII 规则补(官方 JSON 稿);
+     *   传 false 表示条目自带该有的空格(whisper token),原样拼接。
+     *   无论哪种,产出都满足 `words` 拼接 == 行文本这条不变式。
+     */
+    fun mergeWords(words: List<TranscribedWord>, spaced: Boolean): List<TranscribedSegment> {
+        val out = ArrayList<TranscribedSegment>()
+        var buf = ArrayList<TranscribedWord>()
+        var len = 0
+        // 行宽按**这一行的首条**判中西文并锁定。逐条重判会在中文句里夹一个英文词时
+        // 突然把行宽从 24 放到 42,断句就一会儿宽一会儿窄。
+        var target = WEST_CHARS
+
+        fun flush() {
+            if (buf.isEmpty()) return
+            val text = buf.joinToString("") { it.text }
+            out.add(
+                TranscribedSegment(
+                    text = text,
+                    startMs = buf.first().startMs,
+                    endMs = buf.last().endMs,
+                    // 只有真的合了多条才留词级时间;本来就是整句的稿留了也没用,白占缓存
+                    words = if (buf.size > 1) ArrayList(buf) else null
+                )
+            )
+            buf = ArrayList()
+            len = 0
+        }
+
+        for ((i, w) in words.withIndex()) {
+            // 需要补空格时**把空格折进 text**,以维持"拼接 == 整句"的不变式
+            val text = if (spaced && len > 0 && isAsciiHead(w.text)) " ${w.text}" else w.text
+            if (buf.isEmpty()) target = targetChars(text)
+            buf.add(TranscribedWord(text, w.startMs, w.endMs))
+            len += text.length
+            val endsSentence = text.trimEnd().lastOrNull()?.let { it in SENTENCE_END } == true
+            val gapNext = words.getOrNull(i + 1)?.let { it.startMs - w.endMs } ?: 0
+            if (endsSentence || len >= target || gapNext > MAX_GAP_MS) flush()
+        }
+        flush()
+        return glueOrphans(out)
+    }
+
     /// 句末标点(中西都收)。合并细碎条目与切分长句都按它断。
     val SENTENCE_END = charArrayOf('。', '！', '？', '；', '.', '!', '?', ';', '…')
 
     /// 中文一行 24 字、西文 42 字符 —— 都是按手机屏宽估的
     const val CJK_CHARS = 24
     const val WEST_CHARS = 42
+    /// 细碎条目之间静音超过这个值就断句 —— 通常是换气或换人说话
+    const val MAX_GAP_MS = 900
     const val ORPHAN_CHARS = 12
     const val GLUE_GAP_MS = 400
 }

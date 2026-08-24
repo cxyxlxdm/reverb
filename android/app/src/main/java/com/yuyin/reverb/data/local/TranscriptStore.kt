@@ -117,6 +117,19 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         engine: AsrEngine?
     ) {
         val loc = localeFor(uiLanguage)
+        /**
+         * **同一集正在转就别再起一遍。**
+         *
+         * 实测一次点击会跑两遍(日志里两条「开始转写」相隔十几秒):按钮所在的
+         * `TranscriptPane` 在 `HorizontalPager` 里,页面重组/重建时那次点击的回调有机会再跑一遍。
+         * 不挡住的话就是两倍的满载计算 —— 手机烫、电掉得快,而结果一模一样。
+         *
+         * 失败后的「重试」不受影响:那时 job 已经结束,isActive 为 false。
+         */
+        if (job?.isActive == true && episode.id == episodeId && loc == localeId) {
+            com.yuyin.reverb.util.Logger.i(TAG, "已在转写中,忽略重复的开始请求 id=${episode.id}")
+            return
+        }
         cancel()
         generation += 1
         val gen = generation
