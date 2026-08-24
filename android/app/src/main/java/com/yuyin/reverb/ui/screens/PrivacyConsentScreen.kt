@@ -92,13 +92,21 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                         // 14sp 在长文上读着费劲。本页同样受设置里「字号」倍率影响
                         // (整棵树在 ReverbTheme 内)。
                         //
-                        // 正文之后追加**按渠道不同的两段**(见 src/default|store/res/values-* 各一份):
-                        // 「节目检索」与「离线语音转文字」。大陆商店渠道两样都没有,那边这两个
-                        // 字符串是空串,于是一个字都不渲染 —— 长文本体两个渠道共用,不必维护两份。
+                        /**
+                         * 正文之后追加**按渠道不同的三段**(见 src/default|store/res/values-* 各一份):
+                         * 「节目检索」「离线语音转文字」「真实频谱(麦克风)」。
+                         * 大陆商店渠道三样都没有,那边这三个字符串是空串,于是一个字都不渲染 ——
+                         * 长文本体两个渠道共用,不必维护两份。
+                         *
+                         * 麦克风那一段是后补的:同意门**两个渠道都出**(见 MainActivity,无渠道条件),
+                         * 而自分发完整版为「真实频谱」声明了 RECORD_AUDIO —— 正文里原先那句
+                         * 「不申请……麦克风……」对完整版是不成立的,必须如实说明用途与边界。
+                         */
                         listOf(
                             stringResource(R.string.privacy_consent_body),
                             stringResource(R.string.privacy_consent_catalog),
-                            stringResource(R.string.privacy_consent_asr)
+                            stringResource(R.string.privacy_consent_asr),
+                            stringResource(R.string.privacy_consent_mic)
                         ).filter { it.isNotBlank() }.joinToString("\n\n"),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
