@@ -962,7 +962,7 @@
     },
     {
       "name": "privacy_consent_asr",
-      "value": "Transcripts. The player can turn an episode into text. If the publisher provides a transcript in its RSS feed, it is downloaded from that address; otherwise the system’s built-in offline speech recogniser transcribes it on this device — neither the audio nor the result is uploaded. Everything stays on this device, stored in the app’s private directory and removed when you uninstall."
+      "value": "Transcripts. If the publisher provides a transcript in its RSS feed, the player can download it so you can read along — it only fetches the address the publisher gave, the same as audio and artwork. The downloaded text is stored in the app’s private directory and removed when you uninstall. This build contains no speech recognition and never uploads your audio."
     },
     {
       "name": "privacy_read_full",
@@ -1050,7 +1050,7 @@
     },
     {
       "name": "set_word_highlight_sub",
-      "value": "Light up each word as it is spoken. This needs a publisher-provided transcript; the system recogniser gives no per-word timings, so locally transcribed episodes highlight a line at a time."
+      "value": "Light up each word as it is spoken. Requires a publisher transcript that carries per-word timings (JSON transcripts usually do); otherwise a whole line is highlighted."
     },
     {
       "name": "transcript_prompt",
@@ -1086,7 +1086,7 @@
     },
     {
       "name": "transcript_none",
-      "value": "The publisher provides no transcript for this episode, and the system speech recogniser is unavailable here."
+      "value": "The publisher provides no transcript for this episode"
     }
   ]
 }

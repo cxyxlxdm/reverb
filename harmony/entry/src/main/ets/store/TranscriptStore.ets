@@ -177,10 +177,21 @@ export class TranscriptStore implements TranscriptSink {
       Log.w(TranscriptStore.TAG, `官方稿取不到,回退系统识别 id=${episode.id}`);
     }
 
-    // 2) 系统识别
+    // 2) 本机识别(没装配识别器时这条路不存在,见 Features.LOCAL_ASR)
     const t = this.transcriber;
     if (t === null || !t.available()) {
-      if (gen === this.generation) this.state = TranscriptState.Unsupported;
+      if (gen === this.generation) {
+        /**
+         * 这里要分清两种情况,否则文案会骗人:
+         * - **有稿但取失败**(网络问题、链接坏了)⇒ `Failed`,界面给「重试」;
+         * - 压根没有稿 ⇒ `Unsupported`,界面说"发布方未提供"。
+         * 只走官方稿的版本里,前一种才是常见情形 —— 早先一律置 Unsupported,
+         * 于是"下载失败"被说成"发布方没提供",用户还以为这集永远没有稿。
+         */
+        this.state = episode.transcriptUrl.length > 0
+          ? TranscriptState.Failed
+          : TranscriptState.Unsupported;
+      }
       return;
     }
     const ok = await t.transcribe(episode, localPath, loc, this, (s: TranscriptState) => {

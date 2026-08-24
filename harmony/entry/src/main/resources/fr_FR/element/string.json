@@ -962,7 +962,7 @@
     },
     {
       "name": "privacy_consent_asr",
-      "value": "Transcriptions. Le lecteur peut convertir un épisode en texte. Si l’éditeur fournit une transcription dans son flux RSS, elle est téléchargée depuis cette adresse ; sinon, la reconnaissance vocale hors ligne du système la génère sur cet appareil — ni l’audio ni le résultat ne sont envoyés. Tout reste sur cet appareil, dans le répertoire privé de l’application, et est supprimé à la désinstallation."
+      "value": "Transcriptions. Si l’éditeur fournit une transcription dans son flux RSS, le lecteur peut la télécharger pour lire en écoutant : seule l’adresse indiquée par l’éditeur est consultée, comme pour l’audio et la pochette. Le texte téléchargé est conservé dans le répertoire privé de l’application et supprimé à la désinstallation. Cette version n’intègre aucune reconnaissance vocale et n’envoie jamais votre audio."
     },
     {
       "name": "privacy_read_full",
@@ -1050,7 +1050,7 @@
     },
     {
       "name": "set_word_highlight_sub",
-      "value": "Surligne chaque mot au fur et à mesure. Nécessite une transcription fournie par l’éditeur ; la reconnaissance du système ne donne pas de temps par mot, les transcriptions locales sont donc surlignées ligne par ligne."
+      "value": "Surligne chaque mot au fur et à mesure. Nécessite une transcription de l’éditeur comportant des temps par mot (les transcriptions JSON en ont généralement) ; sinon la ligne entière est surlignée."
     },
     {
       "name": "transcript_prompt",
@@ -1086,7 +1086,7 @@
     },
     {
       "name": "transcript_none",
-      "value": "L’éditeur ne fournit pas de transcription pour cet épisode et la reconnaissance vocale du système est indisponible ici."
+      "value": "L’éditeur ne fournit pas de transcription pour cet épisode"
     }
   ]
 }

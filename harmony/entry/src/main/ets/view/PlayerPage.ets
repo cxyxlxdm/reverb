@@ -13,6 +13,7 @@ import { htmlToText } from '../util/HtmlText';
 import { sealOptions, SealOption } from '../store/StampStore';
 import { MomentCard, snapshotToPng, saveToGallery } from './MomentCard';
 import { TranscriptPane } from './TranscriptPane';
+import { Features } from '../Features';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
 
@@ -48,14 +49,16 @@ export struct PlayerPage {
 
   /**
    * 有没有第三页(逐字稿)。与 Android 用**同一个表达式**:
-   * - 设置里开着「逐字稿」⇒ 任何一集都能出(本端有系统语音识别);
-   * - 关掉之后**只有发布方给了逐字稿的那些集**还出 —— 那种稿是现成的文件,
-   *   显示它既不耗电也不占算力,没理由连它一起藏掉。
+   * `(有本机识别 && 设置开着) || 这一集有官方稿`。
+   *
+   * 本端 `Features.LOCAL_ASR` 目前是 false(系统识别质量不够用,见那里的注释),
+   * 于是这个式子退化成"**只有发布方给了逐字稿的那些集才有第三页**" ——
+   * 与 Android 大陆商店渠道同一行为:没稿就别出一个空页。
    */
   private showTranscript(): boolean {
     const e = this.player.current;
     if (e === null) return false;
-    return this.settings.transcriptionEnabled || e.transcriptUrl.length > 0;
+    return (Features.LOCAL_ASR && this.settings.transcriptionEnabled) || e.transcriptUrl.length > 0;
   }
 
   private pageDots(): number[] {

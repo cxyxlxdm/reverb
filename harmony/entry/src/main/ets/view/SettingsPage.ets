@@ -172,11 +172,15 @@ export struct SettingsPage {
           this.switchRow(L.s('set_wifi_only'), () => L.s('set_wifi_only_sub'),
             !this.settings.allowCellular,
             (on: boolean) => { this.settings.setAllowCellular(!on); })
-          this.switchRow(L.s('set_transcription'), () => L.s('set_transcription_sub'),
-            this.settings.transcriptionEnabled,
-            (on: boolean) => { this.settings.setTranscriptionEnabled(on); })
-          // 逐字高亮**在本端只对发布方给的逐字稿有效**:系统语音识别不给逐字时间。
-          // 副标题已如实说明,不因此把开关藏起来 —— 藏了用户就不知道"为什么 Android 有这个"。
+          // 「逐字稿」总开关**只在有本机识别时才有意义**:那时它决定"任何一集都能转"。
+          // 本端 LOCAL_ASR = false,第三页仅在该集有官方稿时出现 —— 没有可开关的东西,
+          // 摆一个开了也不变的开关只会让人困惑(与 Android 大陆商店渠道同样不显示)。
+          if (Features.LOCAL_ASR) {
+            this.switchRow(L.s('set_transcription'), () => L.s('set_transcription_sub'),
+              this.settings.transcriptionEnabled,
+              (on: boolean) => { this.settings.setTranscriptionEnabled(on); })
+          }
+          // 逐字高亮**保留**:官方的 JSON 稿一词一条、自带词级时间,那个效果是真的
           this.switchRow(L.s('set_word_highlight'), () => L.s('set_word_highlight_sub'),
             this.settings.wordHighlight,
             (on: boolean) => { this.settings.setWordHighlight(on); })

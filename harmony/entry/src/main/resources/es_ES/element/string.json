@@ -962,7 +962,7 @@
     },
     {
       "name": "privacy_consent_asr",
-      "value": "Transcripciones. El reproductor puede convertir un episodio en texto. Si el editor ofrece una transcripción en su RSS, se descarga de esa dirección; si no, el reconocimiento de voz sin conexión del sistema la genera en este dispositivo: ni el audio ni el resultado se suben. Todo permanece en este dispositivo, en el directorio privado de la app, y se elimina al desinstalar."
+      "value": "Transcripciones. Si el editor ofrece una transcripción en su RSS, el reproductor puede descargarla para leer mientras escuchas: solo se accede a la dirección indicada por el editor, igual que con el audio y la portada. El texto descargado se guarda en el directorio privado de la app y se elimina al desinstalar. Esta versión no incluye reconocimiento de voz y nunca sube tu audio."
     },
     {
       "name": "privacy_read_full",
@@ -1050,7 +1050,7 @@
     },
     {
       "name": "set_word_highlight_sub",
-      "value": "Ilumina cada palabra mientras se pronuncia. Requiere una transcripción del editor; el reconocimiento del sistema no da tiempos por palabra, así que las transcripciones locales se resaltan por línea."
+      "value": "Ilumina cada palabra mientras se pronuncia. Requiere una transcripción del editor con tiempos por palabra (las de formato JSON suelen tenerlos); si no, se resalta la línea completa."
     },
     {
       "name": "transcript_prompt",
@@ -1086,7 +1086,7 @@
     },
     {
       "name": "transcript_none",
-      "value": "El editor no ofrece transcripción para este episodio y el reconocimiento de voz del sistema no está disponible aquí."
+      "value": "El editor no ofrece transcripción para este episodio"
     }
   ]
 }

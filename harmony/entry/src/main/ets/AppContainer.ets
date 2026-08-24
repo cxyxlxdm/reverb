@@ -18,6 +18,7 @@ import { Episode } from './model/Models';
 import { PlayerController } from './playback/PlayerController';
 import { AvSessionBridge } from './playback/AvSessionBridge';
 import { RadioStation } from './playback/RadioStation';
+import { Features } from './Features';
 import { Log } from './util/Logger';
 import { L } from './util/L';
 
@@ -80,12 +81,16 @@ export class AppContainer {
     GuideEpisode.prepare(ctx);
     this.stamps.load();
     /**
-     * 逐字稿是**纯本地**的:缓存读写在私有目录,系统语音识别在设备上跑、音频不出设备。
-     * 所以放在同意隐私政策之前装配没有问题(与上面几个 store 同一性质)。
-     * 真正联网的只有"取发布方的官方稿"和"下载音频",那两步都由用户点了才发生。
+     * 逐字稿:这里装配的只是**状态机与本地缓存**(私有目录读写),不联网、不碰权限,
+     * 所以放在同意隐私政策之前没有问题(与上面几个 store 同一性质)。
+     * 唯一联网的动作是"取发布方的官方稿",那一步由用户点了才发生。
      */
     this.transcripts.init(ctx.filesDir);
-    this.transcripts.transcriber = new SpeechTranscriber(ctx);
+    // 本机识别当前关着(系统识别质量不够用,见 Features.LOCAL_ASR 的长注释)。
+    // 不装配识别器 ⇒ store 只走"发布方提供的逐字稿"那一条路。
+    if (Features.LOCAL_ASR) {
+      this.transcripts.transcriber = new SpeechTranscriber(ctx);
+    }
     this.downloads.load();
     this.downloadManager.init(ctx.filesDir, this.downloads);
     this.listenStats.load();
