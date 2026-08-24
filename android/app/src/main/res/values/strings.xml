@@ -79,7 +79,7 @@
     <string name="privacy_decline">不同意并退出</string>
     <string name="privacy_url">https://cxyxl.cn/reverb/privacy.html</string>
     <!-- APP备案号。登记通过后填入,例:粤ICP备12345678号-1A。留空则关于页不显示该行 -->
-    <string name="beian_number"></string>
+    <string name="beian_number">浙ICP备2026068045号-1A</string>
     <string name="starter_title">从添加订阅开始</string>
     <string name="starter_desc">余音是一个播客 RSS 工具：在上方粘贴播客的 RSS 地址即可订阅，或一键导入一份推荐清单。你的订阅只保存在本机。</string>
     <string name="import_recommended">导入推荐订阅</string>

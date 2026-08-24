@@ -4864,6 +4864,6 @@
     },
     "obfName": "entry/src/main/ets/view/Widgets.ets"
   },
-  "compileSdkVersion": "6.1.1.125",
-  "entryPackageInfo": "entry|1.0.0"
+  "entryPackageInfo": "entry|1.0.0",
+  "compileSdkVersion": "6.1.1.125"
 }
