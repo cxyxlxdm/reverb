@@ -54,10 +54,16 @@ ui/             ReverbRoot(导航) · theme/ · components/ · screens/(Discover
 - `android/` — Android 版(Kotlin / Jetpack Compose)
 - `harmony/` — HarmonyOS 版(ArkTS / ArkUI)
 - `macos/` — macOS 版(Swift / SwiftUI)
-- `FEATURES.md` — 全平台功能清单
+- `PRODUCT.md` — **功能介绍**(面向使用者与评审:每个功能是什么、怎么用、三端与两渠道有何不同)
+- `FEATURES.md` — **功能清单**(开发用矩阵,逐项标注平台差异;需要精确对照时以这份为准)
+- `ARCHITECTURE.md` — **核心技术实现**(分层、播放链路、持久化、渠道隔离、native 模块、性能规律)
+- `HISTORY.md` — **开发历程**(199 次提交的顺序与因果,以及哪里返了工)
 - `TRANSCRIPT.md` — 逐字稿 / 语音转文字的三端实现与取舍(含鸿蒙将来换三方引擎的路子)
-- `TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律
+- `TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律(62 条)
 - `BEIAN.md` / `PRIVACY.md` — 合规口径与隐私政策
+
+> `PRODUCT.md` 与 `FEATURES.md` 是同一件事的两种粒度:前者叙述、后者矩阵。
+> 功能有变动时**两份都要改** —— 这个项目已经因为"功能改了自述没改"栽过一轮(见 `HISTORY.md` 阶段七)。
 
 ## 构建 · Android
 

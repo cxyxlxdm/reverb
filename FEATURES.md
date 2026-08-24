@@ -14,8 +14,11 @@
 >
 > 鸿蒙端的**图标体系**用系统 Symbol 字体(`SymbolGlyph`)与 Android 的 Material Rounded 逐个对应
 > —— `sys.media.*` 仅 66 个图标、缺齿轮/柱状图/宫格/心形/月亮/下载等,不足以对齐。
+> 鸿蒙端还具备:**逐字稿(读发布方在 RSS 里提供的稿,播放页第三页跟读高亮)**。
 > 鸿蒙端**尚未包含**:真实频谱(鸿蒙无等价系统混音抓取,按 macOS 走纯程序化墨纹)、
-> 离线转录(macOS 独有,依赖 Apple Speech;鸿蒙需换 Core Speech Kit 且词级时间戳未必对齐)。
+> **本机语音转写** —— 该端的 native 解码链已就绪并真机验过,但系统的 Core Speech Kit 离线档
+> 是给短语音输入设计的,实测质量不够用(见 `TROUBLESHOOTING.md` H62),故由
+> `Features.LOCAL_ASR = false` 关着;要开需先换引擎,路径见 `TRANSCRIPT.md`。
 
 ---
 
