@@ -94,6 +94,34 @@ object TranscriptLines {
         return out
     }
 
+    /**
+     * 把起点夹成**单调不减**、且不为负。所有带词级时间的稿都要过这一道。
+     *
+     * 为什么非做不可:渲染侧判断"读到哪个词/哪句"用的是
+     * `indexOfLast { it.startMs <= nowMs }` —— 这个写法只在起点单调时才正确。
+     * 队尾只要混进一个异常小的值,它就永远满足条件,于是**高亮钉死在那一条再也不动**
+     * (真实事故见 TROUBLESHOOTING H60:某些 token 算不出时刻、退化成 -1)。
+     *
+     * 这里是所有来源的共同入口(发布方的 JSON 稿、whisper 的 token),所以放在这里最省事:
+     * 本机识别那条在 C++ 侧已经保证过一遍,这一道额外覆盖**发布方给的稿** ——
+     * 别人生成的文件不能假定一定按时间排好。终点同时保证不早于起点。
+     */
+    private fun monotonic(words: List<TranscribedWord>): List<TranscribedWord> {
+        var prev = 0
+        var needFix = false
+        for (w in words) {
+            if (w.startMs < prev || w.startMs < 0 || w.endMs < w.startMs) { needFix = true; break }
+            prev = w.startMs
+        }
+        if (!needFix) return words                 // 绝大多数情况:原样返回,不复制
+        var at = 0
+        return words.map { w ->
+            val s = maxOf(w.startMs, at)
+            at = s
+            TranscribedWord(w.text, s, maxOf(w.endMs, s))
+        }
+    }
+
     /// 以 ASCII 起头 ⇒ 拼接时前面要加空格(中文之间不加)。
     fun isAsciiHead(s: String): Boolean = s.firstOrNull()?.code?.let { it < 128 } == true
 
@@ -113,6 +141,7 @@ object TranscriptLines {
      *   无论哪种,产出都满足 `words` 拼接 == 行文本这条不变式。
      */
     fun mergeWords(words: List<TranscribedWord>, spaced: Boolean): List<TranscribedSegment> {
+        @Suppress("NAME_SHADOWING") val words = monotonic(words)
         val out = ArrayList<TranscribedSegment>()
         var buf = ArrayList<TranscribedWord>()
         var len = 0

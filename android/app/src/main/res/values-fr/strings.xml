@@ -334,6 +334,7 @@
     <string name="transcript_fetching">Récupération de la transcription de l\'éditeur…</string>
     <string name="transcript_preparing_audio">Préparation de l\'audio…</string>
     <string name="transcript_loading_model">Chargement du modèle vocal…</string>
+    <string name="transcript_running">Transcription en cours — la première ligne va bientôt apparaître…</string>
     <string name="transcript_failed">Échec de la transcription. Touchez pour réessayer</string>
     <string name="transcript_none">L\'éditeur ne fournit pas de transcription pour cet épisode et cette version n\'intègre pas la reconnaissance sur l\'appareil</string>
     <string name="action_retry">Réessayer</string>

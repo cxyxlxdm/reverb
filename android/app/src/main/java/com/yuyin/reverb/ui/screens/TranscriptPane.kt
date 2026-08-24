@@ -1,6 +1,7 @@
 package com.yuyin.reverb.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -77,7 +78,15 @@ fun TranscriptPane(
     }
 
     val nowMs = rememberExtrapolatedPosition(position, isPlaying, active)
-    val currentIndex = remember(segments, nowMs) {
+    /**
+     * 当前是第几句。**按 100ms 一档重算**,不跟着每一帧 —— 句子最短也有一两秒,
+     * 换行的时机差 100ms 人眼分辨不出来,而每帧扫一遍上千行的列表是白烧电。
+     * (词级高亮那层仍按 80ms 走,见 `karaokeLine` 的调用处。)
+     *
+     * `indexOfLast` 的正确性依赖**句子起点单调不减**:官方稿本来按时间排,本机识别那条
+     * 由 C++ 侧 `tidyWords` 保证。见那里的注释 —— 队尾一个异常小的值就会把高亮钉死。
+     */
+    val currentIndex = remember(segments, nowMs / 100) {
         segments.indexOfLast { it.startMs <= nowMs }
     }
 
@@ -85,8 +94,15 @@ fun TranscriptPane(
 
     Column(Modifier.fillMaxSize()) {
         when (val s = state) {
+            // 已经有句子就显示列表(识别中也边出边看)。**还没有第一句时要给进度**,
+            // 否则 `Running` 状态下渲染的是一个空 LazyColumn —— 用户看见的是一整片空白,
+            // 不知道是在算还是坏了(首块要算十几秒,这段空白很显眼)。
             is TranscriptStore.State.Done, is TranscriptStore.State.Running ->
-                TranscriptList(segments, tail, currentIndex, nowMs, active, wordHighlight)
+                if (segments.isEmpty() && tail.isBlank()) {
+                    Progress(stringResource(R.string.transcript_running))
+                } else {
+                    TranscriptList(segments, tail, currentIndex, nowMs, active, wordHighlight)
+                }
 
             // 有官方稿与没有官方稿,**要说不同的话**:前者只是下载一个文件(一两秒),
             // 后者是本机满载算几分钟。都写成「离线转成文字」是不诚实的。
@@ -178,10 +194,20 @@ private fun TranscriptList(
     /**
      * 当前句滚进视线。**只在用户没有手动滚动时**才自动跟随 ——
      * 否则往上翻看前文会被一次次拽回来。手指一碰就停,4 秒后恢复跟随。
+     *
+     * **必须只认真正的手指拖动**(`DragInteraction`),不能用 `isScrollInProgress`:
+     * 下面那次 `animateScrollToItem` 自己也会把 `isScrollInProgress` 置真,于是
+     * "自动滚动"把自己判成了"用户在滚",接着 4 秒内不再跟随;4 秒后滚一次、又把自己
+     * 禁言 4 秒 …… 净效果是**每 4 秒才跳一下**,看上去就是高亮压根不跟着念。
+     * 这是用户报的"高亮根本不会跟随语音播放切换"的另一半原因。
      */
     var userScrolledAt by remember { mutableStateOf(0L) }
-    LaunchedEffect(listState.isScrollInProgress) {
-        if (listState.isScrollInProgress) userScrolledAt = System.currentTimeMillis()
+    LaunchedEffect(listState.interactionSource) {
+        listState.interactionSource.interactions.collect { i ->
+            if (i is DragInteraction.Start || i is DragInteraction.Stop) {
+                userScrolledAt = System.currentTimeMillis()
+            }
+        }
     }
     LaunchedEffect(currentIndex, autoScroll) {
         if (!autoScroll || currentIndex < 0) return@LaunchedEffect

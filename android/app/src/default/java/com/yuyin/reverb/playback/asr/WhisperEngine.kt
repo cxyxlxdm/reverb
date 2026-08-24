@@ -24,11 +24,11 @@ import java.io.File
  * (整集一次性解码是 230 MB,见 `PcmDecoder`)。
  *
  * 真机实测(SM8845 / 4 线程 / base-q5_1,同一段真实中文播客,冷机):
- * - **词级时间戳开着(当前配置)**:120 秒的块 22.4 秒 ⇒ **约 5.4 倍实时**,1 小时约 11 分钟;
- * - 关掉词级时间戳(即 flash attn 开、DTW 关):同一块 13.0 秒 ⇒ 9.2 倍实时,1 小时约 6.5 分钟。
+ * 120 秒的块约 13 秒 ⇒ **约 9 倍实时**,1 小时的单集约 6.5 分钟。
  *
- * **也就是说逐字高亮的代价是多花约 70% 的时间**(DTW 本身要算,而且它与 flash attention
- * 不兼容,只能把 flash attn 一起关掉)。这个取舍是刻意的,详见 TRANSCRIPT.md。
+ * **逐字高亮不再有额外代价。** 早先那一版用 DTW 对齐取词级时刻,必须关掉 flash attention,
+ * 因此开逐字高亮要多花约 70% 的时间;后来量明白 DTW 既慢又偏晚(见 `reverb_asr.cpp`
+ * `nativeInit` 的注释),改用 whisper 自带的 `token_timestamps` 之后两者同速。
  *
  * 另外别拿命令行的数字对照:命令行带跨块上下文、我们这里 `no_context = true`,
  * 两者不是同一个配置。换模型或升级 whisper.cpp 之后**要重新量**(见 tools/build-asr.sh)。
@@ -37,9 +37,6 @@ class WhisperEngine(context: Context) : AsrEngine {
 
     private val appCtx = context.applicationContext
     private var handle: Long = 0
-    /// 当前上下文是按"要不要词级时间"哪一档建的。开关一变就得重建 —— 这个参数在
-    /// `whisper_init` 时就定死了(DTW 与 flash attention 都在 context params 里)。
-    private var handleWordTs: Boolean = false
     private val TAG = "Whisper"
 
     override suspend fun transcribe(
@@ -65,16 +62,8 @@ class WhisperEngine(context: Context) : AsrEngine {
             // 2) 模型
             onStage(AsrEngine.Stage.LoadingModel)
             val model = ensureModel() ?: return@withContext false
-            if (handle != 0L && handleWordTs != wordTimestamps) {
-                // 用户刚改了「逐字高亮」开关:上下文要按新档位重建
-                com.yuyin.reverb.util.Logger.i(TAG, "逐字高亮开关变了($handleWordTs → $wordTimestamps),重建上下文")
-                nativeFree(handle)
-                handle = 0
-            }
-            if (handle == 0L) {
-                handle = nativeInit(model.absolutePath, wordTimestamps)
-                handleWordTs = wordTimestamps
-            }
+            // 「逐字高亮」是**每次调用**的参数,不进上下文 —— 用户拨开关不必重建模型
+            if (handle == 0L) handle = nativeInit(model.absolutePath)
             if (handle == 0L) {
                 com.yuyin.reverb.util.Logger.e(TAG, "模型加载失败 path=${model.absolutePath}")
                 return@withContext false
@@ -89,7 +78,7 @@ class WhisperEngine(context: Context) : AsrEngine {
             val ok = PcmDecoder.decodeInChunks(audio) { samples, startMs ->
                 if (!currentCoroutineContext().isActive) return@decodeInChunks
                 val t0 = System.currentTimeMillis()
-                val n = nativeTranscribe(handle, samples, lang, promptFor(localeId), THREADS)
+                val n = nativeTranscribe(handle, samples, lang, promptFor(localeId), THREADS, wordTimestamps)
                 com.yuyin.reverb.util.Logger.i(TAG, "块 startMs=$startMs 样本=${samples.size} → $n 句,耗时 ${System.currentTimeMillis() - t0}ms")
                 if (n < 0) {
                     com.yuyin.reverb.util.Logger.w(TAG, "识别返回失败 startMs=$startMs")
@@ -163,26 +152,30 @@ class WhisperEngine(context: Context) : AsrEngine {
     /**
      * 取一句的词单元(词级高亮用)。
      *
-     * **拼接与 UTF-8 校验都在 C++ 侧做完**(见 `nativePrepareWords` 的注释):
-     * whisper 是字节级 BPE,一个汉字可能被劈在两个 token 里,半个字符交给 JNI 的
-     * `NewStringUTF` 会**直接 abort 整个进程**。这里拿到的每一条都已经是合法 UTF-8。
+     * **拼接、UTF-8 校验、时刻补齐与单调化都在 C++ 侧做完**(见 `nativePrepareWords`
+     * 与 `tidyWords` 的注释):whisper 是字节级 BPE,一个汉字可能被劈在两个 token 里,
+     * 半个字符交给 JNI 的 `NewStringUTF` 会**直接 abort 整个进程**;而时刻只要有一条
+     * 异常小,渲染侧的 `indexOfLast` 就会把高亮永久钉住。
+     * 这里拿到的每一条都已经是合法 UTF-8、起点单调不减。
      *
-     * 终点用**下一条的起点**补 —— whisper 不给词级终点,而对高亮来说
-     * "下一个字开始"就等于"这个字结束";最后一条给 200ms 的兜底长度。
+     * 本函数只做一件事:把块内相对毫秒加上这一块在整集里的偏移。
      */
     private fun wordsOf(handle: Long, segment: Int, offsetMs: Int): List<TranscribedWord> {
         val n = nativePrepareWords(handle, segment)
         if (n <= 0) return emptyList()
-        val raw = ArrayList<TranscribedWord>(n)
+        val out = ArrayList<TranscribedWord>(n)
         for (i in 0 until n) {
             val txt = nativeWordText(handle, i)
             if (txt.isEmpty()) continue
-            raw.add(TranscribedWord(txt, offsetMs + nativeWordStartMs(handle, i), 0))
+            out.add(
+                TranscribedWord(
+                    txt,
+                    offsetMs + nativeWordStartMs(handle, i),
+                    offsetMs + nativeWordEndMs(handle, i)
+                )
+            )
         }
-        return raw.mapIndexed { i, w ->
-            val end = raw.getOrNull(i + 1)?.startMs ?: (w.startMs + 200)
-            TranscribedWord(w.text, w.startMs, maxOf(end, w.startMs))
-        }
+        return out
     }
 
     /// `zh-CN` → `zh`。whisper 认的是两字母语言码;空串表示让它自己判断("auto")。
@@ -243,10 +236,11 @@ class WhisperEngine(context: Context) : AsrEngine {
         null
     }
 
-    private external fun nativeInit(modelPath: String, wordTimestamps: Boolean): Long
+    private external fun nativeInit(modelPath: String): Long
     private external fun nativeFree(handle: Long)
     private external fun nativeTranscribe(
-        handle: Long, pcm: FloatArray, language: String, initialPrompt: String, threads: Int
+        handle: Long, pcm: FloatArray, language: String, initialPrompt: String, threads: Int,
+        wordTimestamps: Boolean
     ): Int
     private external fun nativeSegmentText(handle: Long, index: Int): String
     private external fun nativeSegmentStartMs(handle: Long, index: Int): Int
@@ -254,6 +248,7 @@ class WhisperEngine(context: Context) : AsrEngine {
     private external fun nativePrepareWords(handle: Long, segment: Int): Int
     private external fun nativeWordText(handle: Long, index: Int): String
     private external fun nativeWordStartMs(handle: Long, index: Int): Int
+    private external fun nativeWordEndMs(handle: Long, index: Int): Int
 
     companion object {
         private const val MODEL_ASSET = "whisper-model.bin"

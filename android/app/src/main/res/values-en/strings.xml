@@ -334,6 +334,7 @@
     <string name="transcript_fetching">Fetching the publisher\'s transcript…</string>
     <string name="transcript_preparing_audio">Preparing audio…</string>
     <string name="transcript_loading_model">Loading the speech model…</string>
+    <string name="transcript_running">Transcribing — the first line will appear shortly…</string>
     <string name="transcript_failed">Transcription failed. Tap to retry</string>
     <string name="transcript_none">The publisher provides no transcript for this episode, and this build has no on-device recognition</string>
     <string name="action_retry">Retry</string>

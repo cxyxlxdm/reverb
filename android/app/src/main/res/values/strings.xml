@@ -350,6 +350,7 @@
     <string name="transcript_fetching">正在获取发布方提供的逐字稿…</string>
     <string name="transcript_preparing_audio">正在准备音频…</string>
     <string name="transcript_loading_model">正在加载识别模型…</string>
+    <string name="transcript_running">正在识别,第一句稍后出现…</string>
     <string name="transcript_failed">转写失败,点按重试</string>
     <string name="transcript_none">这一集发布方未提供逐字稿,本版本也不含离线识别</string>
     <string name="action_retry">重试</string>

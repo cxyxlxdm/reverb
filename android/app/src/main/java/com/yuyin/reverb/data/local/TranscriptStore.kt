@@ -221,13 +221,25 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
     private fun cacheFile(episodeId: String, loc: String) =
         File(dir, "${sanitize(episodeId)}.${loc.ifEmpty { "auto" }}.json")
 
-    /// 只认 `complete = true` 的缓存 —— 半截的转写下次要重来,不该当成完整稿显示。
+    /// 只认 `complete = true` 且**时间轴口径没变**的缓存 —— 半截的转写下次要重来,不该当成完整稿显示。
     private fun loadCache(episodeId: String, loc: String): List<TranscribedSegment>? {
         val f = cacheFile(episodeId, loc)
         if (!f.exists()) return null
         return try {
             val root = JSONObject(f.readText())
             if (!root.optBoolean("complete")) return null
+            /**
+             * **旧版本的稿一律作废重转。**
+             *
+             * 时间轴的算法改过之后,老缓存里的时刻是按旧口径存的 —— 界面无从分辨,
+             * 只会照着显示,于是"修好了却还是对不上",而且用户根本没有清缓存的入口去自救。
+             * 缺 `version` 字段的就是 v1(改用 whisper 自带 token_timestamps 之前的 DTW 时代)。
+             */
+            if (root.optInt("version", 1) < CACHE_VERSION) {
+                com.yuyin.reverb.util.Logger.i(TAG, "缓存是旧口径(v${root.optInt("version", 1)}),丢弃重转")
+                runCatching { f.delete() }
+                return null
+            }
             val arr = root.optJSONArray("segments") ?: return null
             val out = ArrayList<TranscribedSegment>(arr.length())
             for (i in 0 until arr.length()) {
@@ -273,7 +285,12 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
                 arr.put(o)
             }
             cacheFile(episodeId, loc).writeText(
-                JSONObject().put("localeId", loc).put("complete", true).put("segments", arr).toString()
+                JSONObject()
+                    .put("localeId", loc)
+                    .put("complete", true)
+                    .put("version", CACHE_VERSION)
+                    .put("segments", arr)
+                    .toString()
             )
         } catch (e: Exception) {
             com.yuyin.reverb.util.Logger.w(TAG, "缓存写失败:${e.message}")
@@ -292,6 +309,15 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         runCatching { dir.listFiles()?.sumOf { it.length() } ?: 0L }.getOrDefault(0L)
 
     companion object {
+        /**
+         * 缓存格式/时间轴口径的版本。**改了时刻的算法就要 +1**,否则用户手机上已经生成的稿
+         * 会继续按旧时间轴显示,修复等于没生效。
+         *
+         * - v1:词级时刻取 whisper 的 DTW(`t_dtw`)—— 整体偏晚 0.4~0.9 秒,已废弃;
+         * - v2:改用 whisper 自带的 `token_timestamps`(t0/t1),并保证起点单调不减。
+         */
+        const val CACHE_VERSION = 2
+
         /**
          * 界面语言 → 识别/取稿语言。与 macOS `TranscriptStore.locale(for:)` 同一张表。
          * `""`(跟随系统)交给识别引擎自己判断,不在这里猜。

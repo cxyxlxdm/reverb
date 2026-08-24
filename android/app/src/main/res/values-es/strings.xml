@@ -334,6 +334,7 @@
     <string name="transcript_fetching">Obteniendo la transcripción del editor…</string>
     <string name="transcript_preparing_audio">Preparando el audio…</string>
     <string name="transcript_loading_model">Cargando el modelo de voz…</string>
+    <string name="transcript_running">Transcribiendo: la primera línea aparecerá en breve…</string>
     <string name="transcript_failed">La transcripción falló. Toca para reintentar</string>
     <string name="transcript_none">El editor no ofrece transcripción de este episodio y esta versión no incluye reconocimiento en el dispositivo</string>
     <string name="action_retry">Reintentar</string>

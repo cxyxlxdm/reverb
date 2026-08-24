@@ -11,9 +11,10 @@ import java.nio.ByteOrder
  * 把 m4a / mp3 解成识别引擎要的 **16 kHz 单声道 float PCM**,并**分块交出**。
  *
  * 为什么分块而不是一次解完:1 小时音频的 16k float 是 **230 MB**
- * (3600 × 16000 × 4 字节)—— 整段进内存在手机上不可接受。按 2 分钟一块交出,
+ * (3600 × 16000 × 4 字节)—— 整段进内存在手机上不可接受。最大 2 分钟一块交出,
  * 峰值降到约 7.7 MB,顺带让界面能**边转边出**(每块识别完就有新句子),
- * 而不是转完十几分钟才一次性出现。
+ * 而不是转完十几分钟才一次性出现。块长**开头小、之后放大**(见 `CHUNK_SEC_RAMP`):
+ * 首字快出来,后面换识别质量。
  *
  * 块边界会**往静音处挪**(在目标点前后 3 秒内找能量最低的位置):正好切在词中间会让
  * 那个词两边都识别错。挪到静音处并不能完全消除边界损失,但比硬切好得多。
@@ -25,8 +26,21 @@ object PcmDecoder {
 
     const val TARGET_RATE = 16000
 
-    /// 每块的目标长度。2 分钟:内存约 7.7 MB,识别一块约十几秒,界面更新的节奏也合适。
-    private const val CHUNK_SEC = 120
+    /**
+     * 每块的目标长度,**逐块放大**:30 → 60 → 120 秒,之后维持 120。
+     *
+     * 为什么不一律 120 秒:那是"点了生成之后要盯着空白等二十多秒"的直接原因 ——
+     * 第一句要等整个首块识别完才出现,120 秒的块在真机上要算十几秒(还没算解码与加载模型)。
+     * 首块缩到 30 秒,首字大约 5~6 秒就出来,**观感差别很大**。
+     *
+     * 为什么起点是 30 秒而不是更小:whisper 内部一律按 **30 秒窗**处理,喂 10 秒和喂 30 秒
+     * 的编码器开销几乎一样 —— 再小只是浪费,换不来更快。
+     *
+     * 为什么后面要放大回 120 秒:一次 `whisper_full` 内部的多个 30 秒窗之间是带上下文的,
+     * 块越大跨窗上下文越完整、识别越准;而块边界处必然有损失。所以只在开头用小块换响应速度,
+     * 之后回到大块换质量。
+     */
+    private val CHUNK_SEC_RAMP = intArrayOf(30, 60, 120)
     /// 找静音的搜索半径
     private const val SEEK_SILENCE_SEC = 3
 
@@ -62,10 +76,12 @@ object PcmDecoder {
             codec.configure(inFormat, null, null, 0)
             codec.start()
 
-            // 累积缓冲:攒够一块(含静音搜索余量)再交出去
-            val chunkTarget = CHUNK_SEC * TARGET_RATE
+            // 累积缓冲:攒够一块(含静音搜索余量)再交出去。块长按 ramp 逐块放大
+            var chunkIndex = 0
+            var chunkTarget = CHUNK_SEC_RAMP[0] * TARGET_RATE
             val searchSpan = SEEK_SILENCE_SEC * TARGET_RATE
-            var buf = FloatArray(chunkTarget + searchSpan * 2)
+            val maxTarget = CHUNK_SEC_RAMP.last() * TARGET_RATE
+            var buf = FloatArray(maxTarget + searchSpan * 2)
             var used = 0
             /**
              * 已交出的总样本数 → 用来算 startMs。**必须是 Long**:
@@ -134,11 +150,13 @@ object PcmDecoder {
 
                         // 攒够一块就切:边界挪到静音处
                         while (used >= chunkTarget + searchSpan) {
-                            val cut = quietestNear(buf, chunkTarget, searchSpan)
+                            val cut = quietestNear(buf, chunkTarget, searchSpan, used)
                             onChunk(buf.copyOfRange(0, cut), (emittedSamples * 1000 / TARGET_RATE).toInt())
                             emittedSamples += cut
                             System.arraycopy(buf, cut, buf, 0, used - cut)
                             used -= cut
+                            chunkIndex++
+                            chunkTarget = CHUNK_SEC_RAMP[minOf(chunkIndex, CHUNK_SEC_RAMP.size - 1)] * TARGET_RATE
                         }
                     }
                 }
@@ -159,13 +177,17 @@ object PcmDecoder {
     /**
      * 在 `center ± span` 里找 20ms 窗能量最低的位置当切点。
      * 找不到更安静的地方就返回 center —— 宁可硬切,也不要把块拉得过长。
+     *
+     * `used` 是缓冲里**真实有效的样本数**。上界必须按它算而不是按 `buf.size`:
+     * buf 是按最大块长预分配的,尾部要么是零、要么是上一块搬移后的残留 ——
+     * 那片区域"能量最低",不排除掉就会一直被选成切点。
      */
-    private fun quietestNear(buf: FloatArray, center: Int, span: Int): Int {
+    private fun quietestNear(buf: FloatArray, center: Int, span: Int, used: Int): Int {
         val win = TARGET_RATE / 50            // 20ms
         var best = center
         var bestEnergy = Float.MAX_VALUE
         var at = (center - span).coerceAtLeast(win)
-        val end = (center + span).coerceAtMost(buf.size - win)
+        val end = (center + span).coerceAtMost(used - win)
         while (at < end) {
             var e = 0f
             var i = at

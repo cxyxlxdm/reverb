@@ -334,6 +334,7 @@
     <string name="transcript_fetching">正在取得發布方提供的逐字稿…</string>
     <string name="transcript_preparing_audio">正在準備音訊…</string>
     <string name="transcript_loading_model">正在載入辨識模型…</string>
+    <string name="transcript_running">正在辨識,第一句稍後出現…</string>
     <string name="transcript_failed">轉寫失敗,點按重試</string>
     <string name="transcript_none">這一集發布方未提供逐字稿,本版本也不含離線辨識</string>
     <string name="action_retry">重試</string>
