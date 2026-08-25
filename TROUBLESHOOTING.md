@@ -1309,3 +1309,33 @@ native 模块,见 TRANSCRIPT.md 的迁移路径);官方逐字稿那条路不受�
    (这里从 14 行变成 0 行)。
 3. 前三个坑的错误信息都指向下游症状(not in sync mode / Invalid data / write failed),
    根因分别在"没开开关""配置不全""时序不对"。**逐个二分,不要指望一次改对。**
+
+### H63. 签名口令进了 43 个历史提交 —— 而泄露它的是**构建缓存**,不是配置文件本身
+
+- **现象**:准备开源前扫全历史,`harmony/build-profile.json5` 在 **43 个提交**里带着
+  release 签名的 `storePassword` / `keyPassword` / `keyAlias`。
+  该文件后来已加进 `.gitignore`,但**加之前的提交永久留在历史里**。
+- **更隐蔽的一处**:清掉那个文件之后再扫,口令串**仍有 42 处命中** ——
+  来自 `harmony/.hvigor/outputs/sync/output.json` 与 `harmony/.hvigor/cache/task-cache.json`。
+  **hvigor 的构建缓存把整份签名配置(含口令)内嵌进了缓存文件。**
+  `.gitignore` 里只有 `harmony/.hvigor`,而根目录、`android/`、`entry/src/main/ets/` 下
+  还各留过一个 `build.log` —— 忽略规则不是全层级的。
+- **严重程度要说准**:`.p12` 私钥本体**从未入库**,所以光有口令签不出包。
+  但口令的作用就是保护私钥,一旦私钥从别处泄露,这层保护已经不存在。
+  DevEco 存的是加密形式,**不要假设它安全** —— 行业惯例是等同明文对待。
+- **修法**:`git filter-repo --invert-paths` 清理路径,分三类:
+  1. 口令载体:`harmony/build-profile.json5`、`harmony/.hvigor`、`*.hvigor/*`;
+  2. 个人数据:发布截图(48 张真实订阅与收听记录);
+  3. 误提交的二进制:`store-android.zip`、`entry-default-*.hap`、`harmony/entry/build`。
+  再用 `--replace-text` 擦掉历史里的本机绝对路径与 分发平台证书标识。
+  结果:`.git` 从 **145 MB → 3.7 MB**,提交数 203 → 198(5 个只碰被删路径的提交变空被剪掉)。
+- **教训 / 规律**:
+  1. **扫历史不能只扫「敏感文件名」,要扫「敏感字符串」。** 按文件名扫只会找到
+     `build-profile.json5`;按口令串扫才会发现构建缓存也带着它。
+     决定性的一步是**先看本地那份未入库的文件里口令长什么样,再拿那个串去搜全历史**。
+  2. **构建缓存 / 日志 / 同步产物是二等泄露源。** 它们会把配置内容复制一份进去,
+     而人只会去 gitignore「配置文件」。忽略规则要写成全层级(`.hvigor/` 而不是 `/.hvigor`)。
+  3. **`.gitignore` 是从现在开始生效的,不追溯。** 加规则那一刻之前的提交不会被清理。
+  4. **不可逆操作前先做 bundle 备份**(`git bundle create ... --all`),
+     并把仍需保留的未追踪文件(这里是发布截图)另拷一份 —— 历史重写会把工作区重置到新 HEAD。
+  5. 顺带:清理后文档里引用的「199 次提交」等数字会失效,要一并改。
