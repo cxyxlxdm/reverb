@@ -57,15 +57,15 @@ ui/             ReverbRoot(导航) · theme/ · components/ · screens/(Discover
 - `docs/PRODUCT.md` — **功能介绍**(面向使用者与评审:每个功能是什么、怎么用、三端与两渠道有何不同)
 - `docs/FEATURES.md` — **功能清单**(开发用矩阵,逐项标注平台差异;需要精确对照时以这份为准)
 - `docs/ARCHITECTURE.md` — **核心技术实现**(分层、播放链路、持久化、渠道隔离、native 模块、性能规律)
-- `docs/HISTORY.md` — **开发历程**(198 次提交的顺序与因果,以及哪里返了工)
+- `docs/HISTORY.md` — **开发历程**(203 次提交的顺序与因果,以及哪里返了工)
 - `docs/ROADMAP.md` — **进度、遗留问题与演进方向**(三端各到什么程度、哪些路径还没验过、以后可能往哪走)
 - `docs/TRANSCRIPT.md` — 逐字稿 / 语音转文字的三端实现与取舍(含鸿蒙将来换三方引擎的路子)
-- `docs/TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律(67 条)
+- `docs/TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律(68 条)
 - `docs/PRIVACY.md` — 隐私政策(与 `reverb/privacy.html` 必须同步)
 
 > 分发登记材料(主体信息、证书指纹、域名与账号相关)**不入版本控制** —— 属个人身份信息,
 > 只留在本地。为什么大陆商店渠道要去掉内容目录,见 `docs/HISTORY.md` 阶段五与 `docs/FEATURES.md`「渠道差异」。
-- `AGENTS.md` — **在本仓库工作的约定**(构建命令、17 条硬规矩、代码与提交风格);`CLAUDE.md` 是指向它的薄指针
+- `AGENTS.md` — **在本仓库工作的约定**(构建命令、18 条硬规矩、代码与提交风格);`CLAUDE.md` 是指向它的薄指针
 
 > `docs/PRODUCT.md` 与 `docs/FEATURES.md` 是同一件事的两种粒度:前者叙述、后者矩阵。
 > 功能有变动时**两份都要改** —— 这个项目已经因为"功能改了自述没改"栽过一轮(见 `docs/HISTORY.md` 阶段七)。

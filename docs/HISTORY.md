@@ -1,11 +1,11 @@
 # 余音 · Reverb 开发历程
 
 > 三端(Android / macOS / HarmonyOS)从零到发布前的完整过程记录。
-> **2026-08-01 ~ 08-25,198 次提交**,Android 11.4k 行 Kotlin、鸿蒙 11.8k 行 ArkTS、
+> **2026-08-01 ~ 08-26,203 次提交**,Android 11.4k 行 Kotlin、鸿蒙 11.8k 行 ArkTS、
 > macOS 6.0k 行 Swift,外加 767 行 C/C++(两端各一个 native 模块)。
 >
 > 这份文档记的是**顺序与因果**:每一段做了什么、为什么这么做、哪里返了工。
-> 具体的坑与修法在 `TROUBLESHOOTING.md`(67 条);功能全貌见 `PRODUCT.md` / `FEATURES.md`;
+> 具体的坑与修法在 `TROUBLESHOOTING.md`(68 条);功能全貌见 `PRODUCT.md` / `FEATURES.md`;
 > 实现细节见 `ARCHITECTURE.md`。
 >
 > **写这份文档的一个自觉**:返工的部分写得比顺利的部分详细。顺利的地方对后来者没有信息量,
