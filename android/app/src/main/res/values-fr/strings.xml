@@ -245,7 +245,7 @@
     <string name="set_updates_sub">Me notifier des nouveaux épisodes</string>
 
     <string name="set_clear_cache">Vider le cache</string>
-    <string name="set_clear_cache_sub">Classements &amp; images · %s</string>
+    <string name="set_clear_cache_sub">Classements, chaînes, images &amp; transcriptions · %s</string>
     <string name="set_clear_downloads">Effacer les téléchargements</string>
     <string name="set_clear_downloads_sub">Audio téléchargé · %s</string>
     <string name="set_clear_history">Effacer l\'historique</string>
@@ -264,7 +264,7 @@
     <string name="dlg_skip_fwd_title">Avancer de</string>
     <string name="dlg_language_title">Langue</string>
 
-    <string name="confirm_clear_cache">Vide les classements et le cache d\'images. Abonnements et téléchargements non affectés.</string>
+    <string name="confirm_clear_cache">Vide les classements, chaînes, images et transcriptions générées en cache. Abonnements et téléchargements non affectés.</string>
     <string name="confirm_clear_downloads">Supprime tous les fichiers audio téléchargés. Irréversible.</string>
     <string name="confirm_clear_history">Efface tout l\'historique et les positions de reprise.</string>
 

@@ -702,7 +702,7 @@
     },
     {
       "name": "set_clear_cache_sub",
-      "value": "熱門榜、圖片與逐字稿快取 · %s"
+      "value": "頻道與逐字稿快取 · %s"
     },
     {
       "name": "set_clear_downloads",
@@ -718,7 +718,7 @@
     },
     {
       "name": "confirm_clear_cache",
-      "value": "將清除熱門榜、圖片與已產生的逐字稿,不影響訂閱與下載。"
+      "value": "將清除頻道快取與已產生的逐字稿,不影響訂閱與下載。"
     },
     {
       "name": "confirm_clear_downloads",

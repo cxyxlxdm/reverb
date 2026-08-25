@@ -702,7 +702,7 @@
     },
     {
       "name": "set_clear_cache_sub",
-      "value": "热门榜、图片与逐字稿缓存 · %s"
+      "value": "频道与逐字稿缓存 · %s"
     },
     {
       "name": "set_clear_downloads",
@@ -718,7 +718,7 @@
     },
     {
       "name": "confirm_clear_cache",
-      "value": "将清除热门榜、图片与已生成的逐字稿,不影响订阅与下载。"
+      "value": "将清除频道缓存与已生成的逐字稿,不影响订阅与下载。"
     },
     {
       "name": "confirm_clear_downloads",

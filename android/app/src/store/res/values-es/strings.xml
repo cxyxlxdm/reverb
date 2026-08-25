@@ -7,4 +7,8 @@
     <string name="about_p_features">· Suscribirse: pega una URL RSS o importa una lista recomendada con un toque\n· Biblioteca: suscripciones, novedades, favoritos, descargas e historial\n· Sin conexión: descarga episodios, opcionalmente solo con Wi-Fi\n· Reproducción: velocidad, saltos, temporizador, reanudar, controles en segundo plano y pantalla de bloqueo\n· Transcripción: en los episodios cuyo editor la ofrece, puedes leer mientras escuchas\n· Notas del programa: desliza en la página del reproductor\n· Avisos de novedades: notificación cuando llega un episodio nuevo\n· Apariencia: oscuro/claro/sistema, tamaño de texto, color de acento, varios idiomas</string>
     <string name="about_p_philosophy">La estética toma la tinta china, el celadón y el dorado de las vigas; el nombre y el icono evocan el «sonido que perdura».\n\nEl origen del contenido es gratuito de principio a fin, sin inicio de sesión ni claves de API: todo vuelve al RSS público del propio editor y el audio original se reproduce en streaming; derechos limpios y coste cero.\n\nPrivacidad: suscripciones, historial y descargas solo existen en tu dispositivo. Nada se sube ni se rastrea.</string>
     <string name="privacy_consent_mic"></string>
+    <!-- 这个渠道没有内容目录,也就没有「榜单」缓存 —— 主 res 那份副标题会把它说进去,
+         而设置页这两处是**用户看得见的文案**,不实就是自己推翻合规口径(见 docs/HISTORY.md 阶段七) -->
+    <string name="set_clear_cache_sub">Canales, imágenes y transcripciones · %s</string>
+    <string name="confirm_clear_cache">Borra canales, imágenes y transcripciones generadas en caché. Las suscripciones y descargas no se ven afectadas.</string>
 </resources>

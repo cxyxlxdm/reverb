@@ -5,7 +5,7 @@
 > macOS 6.0k 行 Swift,外加 767 行 C/C++(两端各一个 native 模块)。
 >
 > 这份文档记的是**顺序与因果**:每一段做了什么、为什么这么做、哪里返了工。
-> 具体的坑与修法在 `TROUBLESHOOTING.md`(66 条);功能全貌见 `PRODUCT.md` / `FEATURES.md`;
+> 具体的坑与修法在 `TROUBLESHOOTING.md`(67 条);功能全貌见 `PRODUCT.md` / `FEATURES.md`;
 > 实现细节见 `ARCHITECTURE.md`。
 >
 > **写这份文档的一个自觉**:返工的部分写得比顺利的部分详细。顺利的地方对后来者没有信息量,

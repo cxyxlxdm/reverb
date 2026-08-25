@@ -702,7 +702,7 @@
     },
     {
       "name": "set_clear_cache_sub",
-      "value": "Charts, images and transcripts · %s"
+      "value": "Channel and transcript caches · %s"
     },
     {
       "name": "set_clear_downloads",
@@ -718,7 +718,7 @@
     },
     {
       "name": "confirm_clear_cache",
-      "value": "Clears cached charts, images and generated transcripts. Subscriptions and downloads are not affected."
+      "value": "Clears cached channels and generated transcripts. Subscriptions and downloads are not affected."
     },
     {
       "name": "confirm_clear_downloads",

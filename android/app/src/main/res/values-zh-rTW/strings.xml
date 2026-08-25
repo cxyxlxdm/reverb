@@ -245,7 +245,7 @@
     <string name="set_updates_sub">訂閱有新一集時通知你</string>
 
     <string name="set_clear_cache">清除快取</string>
-    <string name="set_clear_cache_sub">熱門榜與圖片快取 · %s</string>
+    <string name="set_clear_cache_sub">榜單、頻道、圖片與逐字稿快取 · %s</string>
     <string name="set_clear_downloads">清除下載</string>
     <string name="set_clear_downloads_sub">已下載音訊 · %s</string>
     <string name="set_clear_history">清空播放歷史</string>
@@ -264,7 +264,7 @@
     <string name="dlg_skip_fwd_title">快進秒數</string>
     <string name="dlg_language_title">語言</string>
 
-    <string name="confirm_clear_cache">將清除熱門榜與圖片快取，不影響訂閱與下載。</string>
+    <string name="confirm_clear_cache">將清除榜單、頻道快取、圖片與已產生的逐字稿，不影響訂閱與下載。</string>
     <string name="confirm_clear_downloads">將刪除全部已下載的音訊檔，無法復原。</string>
     <string name="confirm_clear_history">將清空全部收聽記錄與續播位置。</string>
 

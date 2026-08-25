@@ -245,7 +245,7 @@
     <string name="set_updates_sub">Avisarme cuando haya un nuevo episodio</string>
 
     <string name="set_clear_cache">Borrar caché</string>
-    <string name="set_clear_cache_sub">Listas e imágenes · %s</string>
+    <string name="set_clear_cache_sub">Listas, canales, imágenes y transcripciones · %s</string>
     <string name="set_clear_downloads">Borrar descargas</string>
     <string name="set_clear_downloads_sub">Audio descargado · %s</string>
     <string name="set_clear_history">Borrar historial</string>
@@ -264,7 +264,7 @@
     <string name="dlg_skip_fwd_title">Avanzar</string>
     <string name="dlg_language_title">Idioma</string>
 
-    <string name="confirm_clear_cache">Borra listas y caché de imágenes. Las suscripciones y descargas no se ven afectadas.</string>
+    <string name="confirm_clear_cache">Borra listas, canales, imágenes y transcripciones generadas en caché. Las suscripciones y descargas no se ven afectadas.</string>
     <string name="confirm_clear_downloads">Elimina todos los audios descargados. No se puede deshacer.</string>
     <string name="confirm_clear_history">Borra todo el historial y las posiciones de reanudación.</string>
 

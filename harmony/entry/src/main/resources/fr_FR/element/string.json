@@ -702,7 +702,7 @@
     },
     {
       "name": "set_clear_cache_sub",
-      "value": "Classements, images et transcriptions · %s"
+      "value": "Caches des chaînes et transcriptions · %s"
     },
     {
       "name": "set_clear_downloads",
@@ -718,7 +718,7 @@
     },
     {
       "name": "confirm_clear_cache",
-      "value": "Efface les classements, les images et les transcriptions générées. Les abonnements et les téléchargements ne sont pas affectés."
+      "value": "Efface les chaînes et les transcriptions générées en cache. Les abonnements et les téléchargements ne sont pas affectés."
     },
     {
       "name": "confirm_clear_downloads",

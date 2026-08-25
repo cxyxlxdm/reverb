@@ -245,7 +245,7 @@
     <string name="set_updates_sub">Notify me when a subscription has a new episode</string>
 
     <string name="set_clear_cache">Clear cache</string>
-    <string name="set_clear_cache_sub">Charts &amp; image cache · %s</string>
+    <string name="set_clear_cache_sub">Charts, channel, image &amp; transcript caches · %s</string>
     <string name="set_clear_downloads">Clear downloads</string>
     <string name="set_clear_downloads_sub">Downloaded audio · %s</string>
     <string name="set_clear_history">Clear play history</string>
@@ -264,7 +264,7 @@
     <string name="dlg_skip_fwd_title">Skip forward</string>
     <string name="dlg_language_title">Language</string>
 
-    <string name="confirm_clear_cache">This clears the charts and image cache. Subscriptions and downloads are unaffected.</string>
+    <string name="confirm_clear_cache">This clears cached charts, channels, images and generated transcripts. Subscriptions and downloads are unaffected.</string>
     <string name="confirm_clear_downloads">This deletes all downloaded audio files and cannot be undone.</string>
     <string name="confirm_clear_history">This clears all listening history and resume positions.</string>
 

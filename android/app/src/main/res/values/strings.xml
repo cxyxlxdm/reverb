@@ -254,7 +254,7 @@
     <string name="set_updates_sub">订阅有新一期时通知你</string>
 
     <string name="set_clear_cache">清除缓存</string>
-    <string name="set_clear_cache_sub">热门榜与图片缓存 · %s</string>
+    <string name="set_clear_cache_sub">榜单、频道、图片与逐字稿缓存 · %s</string>
     <string name="set_clear_downloads">清除下载</string>
     <string name="set_clear_downloads_sub">已下载音频 · %s</string>
     <string name="set_clear_history">清空播放历史</string>
@@ -275,7 +275,7 @@
     <string name="dlg_language_title">语言</string>
 
     <!-- 清理确认 -->
-    <string name="confirm_clear_cache">将清除热门榜与图片缓存，不影响订阅与下载。</string>
+    <string name="confirm_clear_cache">将清除榜单、频道缓存、图片与已生成的逐字稿，不影响订阅与下载。</string>
     <string name="confirm_clear_downloads">将删除全部已下载的音频文件，无法恢复。</string>
     <string name="confirm_clear_history">将清空全部收听记录与续播位置。</string>
 
