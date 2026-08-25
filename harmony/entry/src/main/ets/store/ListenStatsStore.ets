@@ -14,6 +14,12 @@ import { Log } from '../util/Logger';
  * 首启种子记在**共用的 seed 格**(不是本机格)——历史本身也会被备份合并,
  * 两台设备从同一份历史各自种子若记在各自名下就会翻倍。
  */
+/// 未落盘累计量的容器。**刻意是普通类**:嵌套的非观察对象不参与依赖收集,
+/// 于是每 500ms 的累加不会推动界面重渲(见 ListenStatsStore.pending 的注释与 H64)。
+class PendingMs {
+  ms: number = 0;
+}
+
 @Observed
 export class ListenStatsStore {
   /// 已按累计时长降序,供页面直接渲染横条。
@@ -25,7 +31,16 @@ export class ListenStatsStore {
   static readonly SEED_KEY = 'seed';
 
   private table: Map<string, ChannelListen> = new Map<string, ChannelListen>();
-  private pendingMs = 0;
+  /**
+   * 未落盘的累计毫秒。**装在一个普通对象里,不是本类的字段** ——
+   * 本类是 `@Observed`,而 `add()` 由播放的 500ms ticker 调用,若直接 `this.pendingMs += d`
+   * 就等于每半秒通知一次界面(`Index` 用 `@State` 持有本 store,一通知就是整棵树重建)。
+   * 与 `PlaybackClock` 同一个道理,见 H64。
+   *
+   * `table` 是 Map,`set()` 是方法调用而非属性赋值,本来就不会触发通知;
+   * 真正对外的 `stats` 只在 `publish()`(约每 5 秒 flush 一次)重排,那是真实的数据变化。
+   */
+  private pending: PendingMs = new PendingMs();
   private deviceId = '';
 
   load(): void {
@@ -75,14 +90,14 @@ export class ListenStatsStore {
     if (e.podcastTitle.length > 0) c.title = e.podcastTitle;
     if (e.artworkUrl.length > 0) c.artworkUrl = e.artworkUrl;
     this.table.set(k, c);
-    this.pendingMs += deltaMs;
-    if (this.pendingMs >= ListenStatsStore.FLUSH_THRESHOLD_MS) this.flush();
+    this.pending.ms += deltaMs;
+    if (this.pending.ms >= ListenStatsStore.FLUSH_THRESHOLD_MS) this.flush();
   }
 
   /// 立即落盘并刷新(暂停/播完/切集时调用)。
   flush(): void {
-    if (this.pendingMs <= 0) return;
-    this.pendingMs = 0;
+    if (this.pending.ms <= 0) return;
+    this.pending.ms = 0;
     this.persist();
     this.publish();
   }

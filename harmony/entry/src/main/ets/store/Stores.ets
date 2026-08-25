@@ -191,10 +191,14 @@ export class HistoryStore {
     this.persist();
   }
 
+  /// 惰性落盘:播放中每 5 秒就更新一次进度,而这里是**整份历史写回**(可达几百 KB),
+  /// 序列化推迟到去抖到期,连续多次只做一次(见 `JsonFile.writeJsonDebouncedLazy`)。
   private persist(): void {
-    const arr: Object[] = [];
-    for (let i = 0; i < this.history.length; i++) arr.push(Codec.historyToJson(this.history[i]));
-    JsonFile.writeJsonDebounced(HistoryStore.FILE, arr);
+    JsonFile.writeJsonDebouncedLazy(HistoryStore.FILE, (): Object => {
+      const arr: Object[] = [];
+      for (let i = 0; i < this.history.length; i++) arr.push(Codec.historyToJson(this.history[i]));
+      return arr;
+    });
   }
 }
 

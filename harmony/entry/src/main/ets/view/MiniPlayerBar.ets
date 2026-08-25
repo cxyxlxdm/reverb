@@ -8,12 +8,52 @@ import { Artwork } from './Widgets';
 export struct MiniPlayerBar {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
-  @ObjectLink player: PlayerController;
+  /// 播放状态变化(播放/暂停/换集…)要重渲;**进度不在其中**,见下面的 pct
+  @ObjectLink @Watch('onPlayerChange') player: PlayerController;
   onExpand: () => void = () => {};
 
-  private progress(): number {
-    if (this.player.durationMs <= 0) return 0;
-    return Math.min(1, Math.max(0, this.player.positionMs / this.player.durationMs));
+  /**
+   * 进度线的百分比,**取整**。
+   *
+   * 进度不再由 `@Observed` 推过来(那会让整页每秒重建十次,见 `PlaybackClock`),
+   * 改为这里自己 1 秒轮询一次 clock。取整到 1% 是为了「值没变就不赋值」——
+   * 一集 30 分钟的话 1% ≈ 18 秒,也就是这条 2px 细线平均 18 秒才重渲一次,
+   * 而它的宽度精度本来就只有屏幕宽 /100。
+   */
+  @State pct: number = 0;
+  private timer: number = -1;
+
+  aboutToAppear(): void {
+    this.sample();
+    this.onPlayerChange();
+  }
+
+  aboutToDisappear(): void {
+    this.stopTimer();
+  }
+
+  /// 只在播放中轮询;暂停/无内容时停表,并补采一次(seek 后松手也要更新)
+  private onPlayerChange(): void {
+    const want = this.player.isPlaying && this.player.current !== null;
+    if (want && this.timer < 0) {
+      this.timer = setInterval(() => this.sample(), 1000);
+    } else if (!want && this.timer >= 0) {
+      this.stopTimer();
+      this.sample();
+    }
+  }
+
+  private stopTimer(): void {
+    if (this.timer >= 0) {
+      clearInterval(this.timer);
+      this.timer = -1;
+    }
+  }
+
+  private sample(): void {
+    const dur = this.player.durationMs;
+    const p = dur <= 0 ? 0 : Math.min(100, Math.max(0, Math.floor(this.player.positionMs / dur * 100)));
+    if (p !== this.pct) this.pct = p;
   }
 
   build() {
@@ -21,7 +61,7 @@ export struct MiniPlayerBar {
       // 细进度线
       Stack({ alignContent: Alignment.Start }) {
         Row().width('100%').height(2).backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.18))
-        Row().width(`${this.progress() * 100}%`).height(2).backgroundColor(this.scheme.primary)
+        Row().width(`${this.pct}%`).height(2).backgroundColor(this.scheme.primary)
       }
       .width('100%').height(2)
 

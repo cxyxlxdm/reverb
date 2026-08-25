@@ -148,9 +148,12 @@ export class InboxStore {
     return urls.join('|');
   }
 
+  /// 惰性落盘(冷启动时每源都会刷一次列表,序列化只做最后一次)
   private persist(): void {
-    const arr: Object[] = [];
-    for (let i = 0; i < this.episodes.length; i++) arr.push(Codec.episodeToJson(this.episodes[i]));
-    JsonFile.writeJsonDebounced(InboxStore.FILE, arr);
+    JsonFile.writeJsonDebouncedLazy(InboxStore.FILE, (): Object => {
+      const arr: Object[] = [];
+      for (let i = 0; i < this.episodes.length; i++) arr.push(Codec.episodeToJson(this.episodes[i]));
+      return arr;
+    });
   }
 }

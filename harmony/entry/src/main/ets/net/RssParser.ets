@@ -23,6 +23,10 @@ export class RssParser {
 
   static parse(xmlText: string, feedUrl: string): FeedResult | null {
     try {
+      // 解析全程在 UI 线程上(ArkTS 没有协程,TaskPool 是另一套模型)。
+      // 把耗时打出来是为了能判断"卡"到底出在网络还是解析 —— 一个 1000 集的源
+      // 光 htmlToText 就要跑一千遍十来道正则。见 H64 与 ROADMAP 里的后续项。
+      const t0 = Date.now();
       const st = new ParseState(feedUrl);
       const buf = new util.TextEncoder().encodeInto(xmlText).buffer as ArrayBuffer;
       const parser = new xml.XmlPullParser(buf, 'utf-8');
@@ -39,7 +43,8 @@ export class RssParser {
         }
       });
       const result = st.finish();
-      Log.i('Rss', `解析完成 title="${result.podcast.title}" 集数=${result.episodes.length} url=${feedUrl}`);
+      Log.i('Rss', `解析完成 title="${result.podcast.title}" 集数=${result.episodes.length} `
+        + `解析耗时=${Date.now() - t0}ms 字节=${xmlText.length} url=${feedUrl}`);
       // 与 macOS 一致:空结果视为失败,让上层继续降级
       if (result.episodes.length === 0 && result.podcast.title.length === 0) return null;
       return result;

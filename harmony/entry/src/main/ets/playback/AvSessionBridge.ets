@@ -25,6 +25,10 @@ export class AvSessionBridge {
   private ctx: common.UIAbilityContext | null = null;
   private lastAssetId = '';
   private lastDuration = 0;
+  /// 上一次推给系统的播放状态签名与位置锚点(用于跳过无意义的重复同步,见 sync 注释)
+  private lastStateSig = '';
+  private lastPushedPosMs = -1;
+  private lastPushedAt = 0;
 
   async setup(ctx: common.UIAbilityContext, player: PlayerController): Promise<void> {
     if (this.session !== null) return;
@@ -85,19 +89,39 @@ export class AvSessionBridge {
         });
         Log.i('AVSession', `元信息已写 duration=${player.durationMs} title="${e.title}"`);
       }
-      await s.setAVPlaybackState({
-        state: player.isPlaying ? avSession.PlaybackState.PLAYBACK_STATE_PLAY
-          : avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
-        // updateTime = 「设置 elapsedTime 时的系统时间」,实测就是 **epoch 毫秒**
-        // (`Date.now()`)。系统按 elapsedTime + (now − updateTime) 外推当前位置,
-        // 传开机 uptime(量级小 5 个数量级)会让外推值溢出、被钳到时长 ——
-        // 表现为锁屏两端都显示总时长、进度条满格。详见 TROUBLESHOOTING H17。
-        position: {
-          elapsedTime: player.positionMs,
-          updateTime: new Date().getTime()
-        },
-        speed: player.speed
-      });
+      // 只在**真的有变化**时才推播放状态。
+      //
+      // 系统自己会按 `elapsedTime + (now − updateTime) × speed` 外推位置,所以
+      // 稳态播放期间反复推同一个状态毫无意义 —— 原先跟着 500ms ticker 走,一秒两次 IPC,
+      // 日志里还常伴 `SetAVPlaybackState in syncExecutor timeout`。
+      //
+      // 判据两条:① 状态签名(播放中/倍速)变了;② 实际位置与"系统按上次锚点外推出来的值"
+      // 差超过 1.5 秒 —— seek、自动续集、缓冲卡顿造成的偏差都落在这一条里,
+      // 于是不必让调用方区分"这次变化要不要同步"。
+      const sig = `${player.isPlaying ? 1 : 0}|${player.speed}`;
+      const now = new Date().getTime();
+      const predicted = this.lastPushedPosMs < 0 ? -1
+        : this.lastPushedPosMs + (player.isPlaying ? (now - this.lastPushedAt) * player.speed : 0);
+      const drifted = predicted < 0 || Math.abs(player.positionMs - predicted) > 1500;
+      // 注意:这里不能 return —— 后面还有长时任务的申请/释放。
+      if (sig !== this.lastStateSig || drifted) {
+        this.lastStateSig = sig;
+        this.lastPushedPosMs = player.positionMs;
+        this.lastPushedAt = now;
+        await s.setAVPlaybackState({
+          state: player.isPlaying ? avSession.PlaybackState.PLAYBACK_STATE_PLAY
+            : avSession.PlaybackState.PLAYBACK_STATE_PAUSE,
+          // updateTime = 「设置 elapsedTime 时的系统时间」,实测就是 **epoch 毫秒**
+          // (`Date.now()`)。系统按 elapsedTime + (now − updateTime) 外推当前位置,
+          // 传开机 uptime(量级小 5 个数量级)会让外推值溢出、被钳到时长 ——
+          // 表现为锁屏两端都显示总时长、进度条满格。详见 TROUBLESHOOTING H17。
+          position: {
+            elapsedTime: player.positionMs,
+            updateTime: now
+          },
+          speed: player.speed
+        });
+      }
     } catch (err) {
       Log.w('AVSession', `同步失败 ${(err as Error).message}`);
     }

@@ -1,5 +1,7 @@
+import taskpool from '@ohos.taskpool';
 import { Episode, Podcast, FeedResult, SearchOutcome } from '../model/Models';
 import { RssParser } from './RssParser';
+import { fetchFeedConcurrent } from './FeedTask';
 import { PopularCacheStore } from '../store/Stores';
 import { SeedCatalog } from '../store/SeedCatalog';
 import { FeedCacheStore } from '../store/FeedCacheStore';
@@ -88,11 +90,24 @@ export class PodcastRepository {
     return [];
   }
 
-  /// 解析某个 feed(频道详情 / 最新聚合都走这里)。成功回写磁盘缓存;
-  /// 失败返回 null(旧缓存保留,由调用方决定是否用)。
+  /**
+   * 解析某个 feed(频道详情 / 最新聚合都走这里)。成功回写磁盘缓存;
+   * 失败返回 null(旧缓存保留,由调用方决定是否用)。
+   *
+   * **走 TaskPool 子线程**:解析是同步 JS,大源能占住 UI 线程近两秒(见 `FeedTask` 与 H64)。
+   * 子线程不可用时**回落到本线程解析** —— 宁可卡一下也不能让刷新整个失效
+   * (与本仓库其它降级链同一取舍)。
+   */
   async feed(feedUrl: string): Promise<FeedResult | null> {
     if (feedUrl.trim().length === 0) return null;
-    const r = await RssParser.fetch(feedUrl);
+    let r: FeedResult | null = null;
+    try {
+      const out: Object = await taskpool.execute(fetchFeedConcurrent, feedUrl);
+      r = out === null || out === undefined ? null : out as FeedResult;
+    } catch (e) {
+      Log.w('Repo', `子线程解析失败,回落本线程:${(e as Error).message}`);
+      r = await RssParser.fetch(feedUrl);
+    }
     if (r !== null && r.episodes.length > 0) this.feedCache.put(feedUrl, r);
     return r;
   }

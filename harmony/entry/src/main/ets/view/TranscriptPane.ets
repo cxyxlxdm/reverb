@@ -38,10 +38,14 @@ export struct TranscriptPane {
   /**
    * 外推出来的"现在播到哪儿了",毫秒。
    *
-   * 为什么不直接用 `player.positionMs`:那个值 **500ms 才更新一次**,直接拿它找当前句会让
-   * 高亮一跳一跳(短句只有一两秒,采样误差就占了一半),逐字高亮更是完全看不出跟读感。
+   * 为什么不直接用 `player.positionMs`:那个值来自 AVPlayer 的 `timeUpdate`,
+   * **约 100ms 一档且间隔不匀**,直接拿它找当前句会让高亮一跳一跳
+   * (短句只有一两秒,采样误差就占了一半),逐字高亮更是完全看不出跟读感。
    * 这里记住"上一次采样值 + 采样时刻",两次采样之间按真实流逝时间往前推 ——
    * 与 Android `rememberExtrapolatedPosition`、macOS 的 anchorMs/anchorAt 同一手法。
+   *
+   * 另外注意:进度**不会**推动本组件重渲(它存在非观察的 `PlaybackClock` 里,见 H64),
+   * 所以下面那个 80ms 心跳不是"锦上添花",而是这一页唯一的刷新来源。
    */
   @State nowMs: number = 0;
 

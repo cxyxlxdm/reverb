@@ -3,7 +3,7 @@
 > 三端(Android / macOS / HarmonyOS)的架构与关键实现,以及**为什么这样选**。
 >
 > 范围划分:功能全貌见 `PRODUCT.md` / `FEATURES.md`;逐字稿单独成篇见 `TRANSCRIPT.md`;
-> 具体故障的现象-根因-修法见 `TROUBLESHOOTING.md`(63 条);做的顺序与返工见 `HISTORY.md`。
+> 具体故障的现象-根因-修法见 `TROUBLESHOOTING.md`(65 条);做的顺序与返工见 `HISTORY.md`。
 > 本文只讲**结构与取舍**,不重复那几份里的细节。
 
 规模(2026-08-25):
@@ -93,6 +93,10 @@ Apple iTunes Search / Charts → fyyd.de → gpodder.net → RSS 直连。
 
 HTTP 层各用平台原生:Android **OkHttp**、macOS **URLSession**、鸿蒙 **`@ohos.net.http`**。
 请求统一带 `User-Agent`,**不携带任何鉴权凭据与用户标识**。
+
+**取源与解析在哪个线程上跑**:Android 在 IO 调度器、macOS 在 `Task` 里;
+鸿蒙没有协程,所以整段(取 + 解析)进 `taskpool` 子线程 —— 否则大源的同步解析会占住
+UI 线程近两秒(见第十节与 H65)。
 
 ---
 
@@ -295,6 +299,42 @@ Android 在 C++ 侧 `tidyWords` 做,共享的 `TranscriptLines.monotonic` 再兜
 
 **规律**:`isScrollInProgress`、`onValueChange` 这类信号分不清是谁干的,
 要用只有人能产生的事件。
+
+### 状态的**观察粒度**决定重渲范围(鸿蒙特有)
+
+ArkUI V1 的 `@Observed` / `@ObjectLink` 是**对象级**观察:被观察对象的任何字段被赋值,
+所有持有者都会重跑 `build()`,而且**不区分 private**。于是 `PlayerController.positionMs = t`
+(AVPlayer 的 `timeUpdate` 约 100ms 一次)让播放中的整页每秒重建十次 ——
+实测静置 10 秒 62 帧 jank,下拉刷新时最明显(H64)。
+
+做法上分三层:
+
+1. **高频量搬进普通对象**:`playback/PlaybackClock.ets` 承载播放位置、ticker 跳数、
+   收听计数基线;`ListenStatsStore` 的未落盘累计量同理。嵌套的非观察对象不参与依赖收集。
+   `positionMs` 保留成 getter —— 读法不变,但不建立依赖。
+2. **需要连续值的界面各自轮询**,频率按自己的精度需求定:进度条 250ms、
+   迷你条细线 1s(且按整数百分比去重)、逐字稿沿用 80ms 外推心跳。
+3. **高频刷新下沉到最小组件**:进度条独立成 `view/SeekBar.ets`,
+   于是进度更新不再重渲包含轮播三页 + 水墨画布 + shownotes 长文的整个播放页。
+
+同一条规律也管着与系统的通信:AVSession 的播放状态原先跟着 500ms ticker 推,
+改成「状态签名变了 or 实际位置与系统外推值差 >1.5s」才推 —— 系统本来就会按
+`elapsedTime + (now − updateTime) × speed` 自己外推。
+
+### 重解析必须离开 UI 线程 —— 而 ArkTS 没有协程
+
+**"异步"只保证等待不阻塞,不保证计算不阻塞。** `Http` 的 await 是异步的,但
+`XmlPullParser` 的逐 token JS 回调、每集一遍的 `htmlToText`、上千个对象的构造全是同步 JS:
+一个 8.5 MB / 1026 集的订阅源实测解析 **1833ms**,一轮 15 源刷新约 **4.5 秒**占着 UI 线程(H65)。
+
+Kotlin 那边一句 `withContext(Dispatchers.IO)` 就搬走了,ArkTS 只能用
+`@Concurrent` + `taskpool`(`net/FeedTask.ets`)。两个刻意的决定:
+**连网络一起搬进子线程**(8.5 MB 的字符串压根不出现在 UI 线程的堆上,跨线程只传 url 与结果),
+以及**保留回落本线程的降级**(子线程不可用时宁可卡一下,不让刷新整个失效)。
+
+配套的一处:去抖写盘要**连"生成数据"一起去抖**。`JsonFile.writeJsonDebouncedLazy`
+传的是取值函数而不是值 —— 否则频道缓存每源一次 `put` 就把整份 600KB 重新序列化,
+一轮刷新做 15 遍,而去抖只省下了写盘。
 
 ---
 

@@ -12,6 +12,7 @@ import { formatTime } from './Components';
 import { htmlToText } from '../util/HtmlText';
 import { sealOptions, SealOption } from '../store/StampStore';
 import { MomentCard, snapshotToPng, saveToGallery } from './MomentCard';
+import { SeekBar } from './SeekBar';
 import { TranscriptPane } from './TranscriptPane';
 import { Features } from '../Features';
 import { Log } from '../util/Logger';
@@ -33,8 +34,15 @@ export struct PlayerPage {
   onOpenQueue: () => void = () => {};
 
   @State page: number = 0;
-  @State dragging: boolean = false;
-  @State dragValue: number = 0;
+  /**
+   * 离屏剪藏卡上要写的时间点。
+   *
+   * 为什么要单独存一个:进度已经不再驱动本页重渲(见 `SeekBar` / `PlaybackClock`),
+   * 那张常驻离屏的卡片若还读实时进度,截出来的图会停在**它最后一次重渲时**的时刻。
+   * 所以改成按「剪藏」的那一下取值 —— 这也更贴合「剪藏此刻」的语义:
+   * 用户按下时听到的那一秒,而不是渲染发生的那一秒。
+   */
+  @State momentPosMs: number = 0;
   @State showSpeed: boolean = false;
   @State showSleep: boolean = false;
   @State showSeals: boolean = false;
@@ -42,10 +50,6 @@ export struct PlayerPage {
 
   private app: AppContainer = AppContainer.get();
   private sleepMinutes: number[] = [15, 30, 45, 60];
-
-  private sliderValue(): number {
-    return this.dragging ? this.dragValue : this.player.positionMs;
-  }
 
   /**
    * 有没有第三页(逐字稿)。与 Android 用**同一个表达式**:
@@ -142,7 +146,15 @@ export struct PlayerPage {
       .margin({ bottom: 10 })
 
       this.titleBlock()
-      this.seekBar()
+      // 进度条是独立组件:它自己轮询播放位置,于是进度更新不再重渲整个播放页(H64)
+      SeekBar({
+        scheme: this.scheme,
+        fontScale: this.fontScale,
+        durationMs: this.player.durationMs,
+        playing: this.player.isPlaying,
+        clock: this.player.clock,
+        onSeek: (ms: number) => { this.player.seekTo(ms); }
+      })
       this.controls()
       if (this.momentHint.length > 0) {
         Text(this.momentHint)
@@ -154,7 +166,7 @@ export struct PlayerPage {
       if (this.player.current !== null) {
         MomentCard({
           scheme: this.scheme, fontScale: this.fontScale,
-          episode: this.player.current, positionMs: this.player.positionMs,
+          episode: this.player.current, positionMs: this.momentPosMs,
           seal: this.currentSeal()
         })
           .id('reverb-moment-card')
@@ -270,43 +282,6 @@ export struct PlayerPage {
     }
     .width('100%')
     .margin({ bottom: 20 })
-  }
-
-  @Builder
-  seekBar() {
-    Column() {
-      Slider({
-        value: this.sliderValue(),
-        min: 0,
-        max: Math.max(1, this.player.durationMs),
-        style: SliderStyle.OutSet
-      })
-        .selectedColor(this.scheme.primary)
-        .trackColor(withAlpha(this.scheme.onSurfaceVariant, 0.25))
-        .blockColor(this.scheme.primary)
-        .width('100%')
-        .onChange((v: number, mode: SliderChangeMode) => {
-          if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
-            this.dragging = true;
-            this.dragValue = v;
-          } else {
-            // 松手才真正 seek(拖动期间不被播放位置回写)
-            this.player.seekTo(Math.floor(v));
-            this.dragging = false;
-          }
-        })
-      Row() {
-        Text(formatTime(this.sliderValue()))
-          .fontSize(TypeScale.caption * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-        Blank()
-        Text(formatTime(this.player.durationMs))
-          .fontSize(TypeScale.caption * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-      }
-      .width('100%')
-    }
-    .width('100%')
   }
 
   @Builder
@@ -587,6 +562,19 @@ export struct PlayerPage {
     .backgroundColor(this.scheme.surface)
   }
 
+  /**
+   * 把「此刻」的时刻写进离屏卡片,并等它真正重渲完再截图。
+   *
+   * 卡片是常驻离屏的(不能用 `visibility.None`,那样截不到),而进度已不再驱动本页重渲,
+   * 所以必须显式赋值 + 让出一帧 —— 状态改完到渲染出来隔一个 vsync,
+   * 立刻截图会拿到**改之前**的那一帧。48ms 给足两帧余量;这条路径本来就是异步的
+   * (写文件 + 拉起分享面板),用户感知不到。
+   */
+  private async armMomentCard(): Promise<void> {
+    this.momentPosMs = this.player.positionMs;
+    await new Promise<void>((resolve: () => void) => setTimeout(resolve, 48));
+  }
+
   /// 剪藏 · 分享此刻:同样截图成 PNG,但交给系统分享面板而不是存相册。
   /// 对应 Android MoreMenu 的 onClip(那边走 ShareCards.share)。
   private async shareMoment(): Promise<void> {
@@ -594,6 +582,7 @@ export struct PlayerPage {
     if (e === null) return;
     const ui = this.getUIContext();
     const ctx = ui.getHostContext() as common.UIAbilityContext;
+    await this.armMomentCard();
     const png = await snapshotToPng(ui, ctx, 'reverb-moment-card', 'reverb-moment.png');
     if (png === null) {
       this.momentHint = L.s('moment_failed');
@@ -608,6 +597,7 @@ export struct PlayerPage {
     if (e === null) return;
     const ui = this.getUIContext();
     const ctx = ui.getHostContext() as common.UIAbilityContext;
+    await this.armMomentCard();
     const png = await snapshotToPng(ui, ctx, 'reverb-moment-card', 'reverb-moment.png');
     if (png === null) {
       this.momentHint = L.s('moment_failed');

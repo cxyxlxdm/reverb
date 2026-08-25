@@ -6,6 +6,7 @@ import audio from '@ohos.multimedia.audio';
 import { Episode } from '../model/Models';
 import { HistoryStore } from '../store/Stores';
 import { SettingsStore } from '../store/SettingsStore';
+import { PlaybackClock } from './PlaybackClock';
 import { Log } from '../util/Logger';
 
 /// 播放请求的 User-Agent。与 Http.ets 的 UA 同一形态 —— 不少播客 CDN 会按 UA 拒绝请求。
@@ -33,7 +34,6 @@ export class PlayerController {
   // ── 对外状态(界面直接观察)──
   current: Episode | null = null;
   isPlaying: boolean = false;
-  positionMs: number = 0;
   durationMs: number = 0;
   buffering: boolean = false;
   speed: number = 1.0;
@@ -47,6 +47,20 @@ export class PlayerController {
   radioMode: boolean = false;
 
   readonly speedSteps: number[] = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0];
+
+  /**
+   * 播放进度**不放在本类字段上**,而是放进这个普通对象里 —— 见 `PlaybackClock` 的注释:
+   * 本类是 `@Observed`,而 ArkUI V1 的观察粒度是整个对象,`timeUpdate` 每 100ms 写一次
+   * 就等于把界面整页重建 10 次/秒(H64)。
+   *
+   * `positionMs` 保留为 **getter**:读起来和以前一样,但 getter 不是自有属性,
+   * 读它不会建立依赖、写 clock 也不会触发重建。需要连续进度的界面各自轮询。
+   */
+  readonly clock: PlaybackClock = new PlaybackClock();
+
+  get positionMs(): number {
+    return this.clock.positionMs;
+  }
 
   // ── 内部 ──
   private player: media.AVPlayer | null = null;
@@ -68,14 +82,11 @@ export class PlayerController {
 
   private pendingSeekMs = 0;
   private tickTimer = -1;
-  private tickCount = 0;
   private loadRetries = 0;
   /// 本地播放时打开的文件句柄(AVPlayer 的 url 只收 fd:// 或网络地址,本地必须走 fdSrc)
   private localFile: fs.File | null = null;
 
-  // 收听时长计数基线
-  private lastCountedPosMs = 0;
-  private lastCountedEpId = '';
+  // 收听时长计数基线放在 clock 里 —— 它每 500ms 变一次,留在本类字段上就会推动整页重建(H64)
   private onListened: ((e: Episode, deltaMs: number) => void) | null = null;
   private onListenFlush: (() => void) | null = null;
 
@@ -126,7 +137,7 @@ export class PlayerController {
   private async playEpisode(e: Episode): Promise<void> {
     this.playbackError = '';
     this.current = e;
-    this.positionMs = 0;
+    this.clock.positionMs = 0;
     this.durationMs = 0;
     if (this.onListenFlush !== null) this.onListenFlush();   // 结算上一集残余
 
@@ -137,8 +148,8 @@ export class PlayerController {
     const resumeMs = (isGuide || this.history === null) ? 0 : this.history.positionFor(e.id);
     this.pendingSeekMs = resumeMs;
     // 统计基线对齐续播起点,避免把 resume 跳转记成收听
-    this.lastCountedEpId = e.id;
-    this.lastCountedPosMs = resumeMs;
+    this.clock.countedEpId = e.id;
+    this.clock.countedPosMs = resumeMs;
 
     const local = this.localFileProvider === null ? null : this.localFileProvider(e);
     const useLocal = local !== null && local.length > 0;
@@ -214,7 +225,8 @@ export class PlayerController {
       this.onPlayerState(state as media.AVPlayerState);
     });
     p.on('timeUpdate', (t: number) => {
-      this.positionMs = t;
+      // 约 100ms 一次。**只写 clock、不 notify** —— 这一行是整页重建的源头(H64)
+      this.clock.positionMs = t;
     });
     p.on('durationUpdate', (d: number) => {
       this.durationMs = d;
@@ -256,7 +268,7 @@ export class PlayerController {
       this.pendingSeekMs = 0;
       if (seekMs > 3000 && (this.durationMs <= 0 || seekMs < this.durationMs - 10000)) {
         p.seek(seekMs, media.SeekMode.SEEK_PREV_SYNC);
-        this.positionMs = seekMs;
+        this.clock.positionMs = seekMs;
       }
       p.setVolume(0);         // 淡入起点
       try {
@@ -353,9 +365,10 @@ export class PlayerController {
       Log.w('Player', `seek 失败 ${(e as Error).message}`);
       return;
     }
-    this.positionMs = t;
+    this.clock.positionMs = t;
     // seek 后把基线推到新位置,避免跳变被计入收听
-    this.lastCountedPosMs = t;
+    this.clock.countedPosMs = t;
+    // seek 是"位置突变",必须 notify:锁屏/控制中心的进度只靠这一下纠偏
     this.notify();
   }
 
@@ -605,15 +618,22 @@ export class PlayerController {
 
   // ── 500ms ticker:进度落盘 + 收听时长计数 ──
 
+  /**
+   * 这里**刻意不 notify**。
+   *
+   * 原先每 500ms notify 一次,用来驱动界面进度刷新 —— 但 notify 会把 `Index` 的
+   * `@State tick` +1,那是整棵树的重建,而且还顺带每 500ms 往 AVSession 推一次状态
+   * (日志里伴随 `syncExecutor timeout`)。进度改由各界面按需轮询 `clock` 之后,
+   * 这一跳就没有消费者了:notify 只留给**真实状态变化**(播放/暂停/换集/seek/倍速/缓冲/时长)。
+   */
   private startTicker(): void {
     this.stopTicker();
     this.tickTimer = setInterval(() => {
       const p = this.player;
       if (p === null) return;
       this.countListening();
-      this.tickCount += 1;
-      if (this.tickCount % 10 === 0) this.saveProgress();   // 约每 5 秒
-      this.notify();
+      this.clock.ticks += 1;
+      if (this.clock.ticks % 10 === 0) this.saveProgress();   // 约每 5 秒
     }, 500);
   }
 
@@ -637,18 +657,18 @@ export class PlayerController {
   private countListening(): void {
     const e = this.current;
     if (e === null) {
-      this.lastCountedEpId = '';
+      this.clock.countedEpId = '';
       return;
     }
     if (GuideEpisode.isGuide(e.id)) return;   // 引导音频不计时长
-    if (e.id === this.lastCountedEpId) {
-      const delta = this.positionMs - this.lastCountedPosMs;
+    if (e.id === this.clock.countedEpId) {
+      const delta = this.positionMs - this.clock.countedPosMs;
       if (this.isPlaying && delta >= 1 && delta <= 3000 && this.onListened !== null) {
         this.onListened(e, delta);
       }
     }
-    this.lastCountedPosMs = this.positionMs;
-    this.lastCountedEpId = e.id;
+    this.clock.countedPosMs = this.positionMs;
+    this.clock.countedEpId = e.id;
   }
 
   /// 关闭上一次本地播放的文件句柄(换源/释放时必须调,否则 fd 泄漏)。

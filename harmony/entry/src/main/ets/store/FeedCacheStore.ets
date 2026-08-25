@@ -106,7 +106,17 @@ export class FeedCacheStore {
     return JsonFile.sizeBytes(FeedCacheStore.FILE);
   }
 
+  /**
+   * 落盘走**惰性**去抖:一次「最新」刷新会 put 15 次(每源一次),而每次 put 都要把整份缓存
+   * (20 频道 × 50 集,约 600KB)重建成 JSON 对象再 stringify。原先那 15 遍全落在 UI 线程上,
+   * 下拉刷新的转圈就卡在这儿。改成登记"怎么取值",到期只做一次(见 H64 与
+   * `JsonFile.writeJsonDebouncedLazy`)。
+   */
   private persist(): void {
+    JsonFile.writeJsonDebouncedLazy(FeedCacheStore.FILE, (): Object => this.snapshot());
+  }
+
+  private snapshot(): Record<string, Object> {
     const out: Record<string, Object> = {};
     const keys = Object.keys(this.mem);
     for (let i = 0; i < keys.length; i++) {
@@ -115,6 +125,6 @@ export class FeedCacheStore {
       for (let j = 0; j < e.episodes.length; j++) eps.push(Codec.episodeToJson(e.episodes[j]));
       out[keys[i]] = new StoredFeed(e.fetchedAt, Codec.podcastToJson(e.podcast), eps);
     }
-    JsonFile.writeJsonDebounced(FeedCacheStore.FILE, out);
+    return out;
   }
 }
