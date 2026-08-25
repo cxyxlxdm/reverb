@@ -4,6 +4,8 @@ import { Stamp } from './StampStore';
 import { AppContainer } from '../AppContainer';
 import { J } from '../net/Http';
 import { xmlUnescape } from '../util/HtmlText';
+import taskpool from '@ohos.taskpool';
+import { stringifyPrettyConcurrent, parseObjectConcurrent } from './JsonTask';
 import { Log } from '../util/Logger';
 
 /// 可备份的数据分区(与 Android / macOS 的 7 项一致)。
@@ -50,7 +52,22 @@ export class BackupManager {
   private static VERSION = 1;
 
   /// 导出为 JSON 字符串。
-  static build(app: AppContainer, include: BackupSection[]): string {
+  /**
+   * 组装备份内容并序列化。**序列化走子线程**(几百 KB 到几 MB 的 `stringify` 不该占 UI 线程,
+   * 见 H65);组装本身必须留在 UI 线程 —— 它要读各个 store。
+   */
+  static async build(app: AppContainer, include: BackupSection[]): Promise<string> {
+    const root = BackupManager.buildRoot(app, include);
+    try {
+      const out: Object = await taskpool.execute(stringifyPrettyConcurrent, root);
+      return out as string;
+    } catch (e) {
+      Log.w('Backup', `子线程序列化失败,回落本线程:${(e as Error).message}`);
+      return JSON.stringify(root, null, 2);
+    }
+  }
+
+  private static buildRoot(app: AppContainer, include: BackupSection[]): Record<string, Object> {
     const root: Record<string, Object> = {};
     root['version'] = BackupManager.VERSION;
     const has = (s: BackupSection): boolean => include.indexOf(s) >= 0;
@@ -115,19 +132,35 @@ export class BackupManager {
       } as Record<string, Object>;
     }
     Log.i('Backup', `导出 分区=${include.length}`);
-    return JSON.stringify(root, null, 2);
+    return root;
   }
 
-  /// 探测备份里含哪些非空分区。
-  static sectionsIn(json: string): BackupSection[] {
-    const out: BackupSection[] = [];
-    let root: Record<string, Object> | null = null;
+  /// 把备份文本解析成对象。**走子线程** —— 导入的文件可以很大,而这一步是纯数据运算。
+  /// 解析失败(或不是对象)返回 null。
+  static async parseRoot(json: string): Promise<Record<string, Object> | null> {
     try {
-      const o: Object = JSON.parse(json);
-      root = Array.isArray(o) ? null : o as Record<string, Object>;
+      const out: Object = await taskpool.execute(parseObjectConcurrent, json);
+      return out === null || out === undefined ? null : out as Record<string, Object>;
     } catch (e) {
-      return out;
+      Log.w('Backup', `子线程解析失败,回落本线程:${(e as Error).message}`);
+      try {
+        const o: Object = JSON.parse(json);
+        return Array.isArray(o) ? null : o as Record<string, Object>;
+      } catch (e2) {
+        return null;
+      }
     }
+  }
+
+  /// 探测备份里含哪些非空分区(文本版:自己解析一遍)。
+  static async sectionsIn(json: string): Promise<BackupSection[]> {
+    return BackupManager.sectionsInRoot(await BackupManager.parseRoot(json));
+  }
+
+  /// 探测备份里含哪些非空分区。**已解析版** —— 导入流程要先探测再应用,
+  /// 两步共用同一份 root,避免把同一个大 JSON 解析两遍(原先就是解析两遍)。
+  static sectionsInRoot(root: Record<string, Object> | null): BackupSection[] {
+    const out: BackupSection[] = [];
     if (root === null) return out;
     for (let i = 0; i < ALL_SECTIONS.length; i++) {
       const s = ALL_SECTIONS[i];
@@ -143,16 +176,17 @@ export class BackupManager {
   }
 
   /// 应用备份(合并,不覆盖)。返回是否导入了设置(调用方据此刷新界面)。
-  static apply(app: AppContainer, json: string, include: BackupSection[]): boolean {
-    let root: Record<string, Object> | null = null;
-    try {
-      const o: Object = JSON.parse(json);
-      root = Array.isArray(o) ? null : o as Record<string, Object>;
-    } catch (e) {
+  static async apply(app: AppContainer, json: string, include: BackupSection[]): Promise<boolean> {
+    return BackupManager.applyRoot(app, await BackupManager.parseRoot(json), include);
+  }
+
+  /// 应用备份的**已解析版**。合并逻辑一字未动 —— 这是数据安全路径,
+  /// 这轮只把"解析"挪出 UI 线程,不碰任何合并规则(G-Counter 取 max、历史按 updatedAt 取新)。
+  static applyRoot(app: AppContainer, root: Record<string, Object> | null, include: BackupSection[]): boolean {
+    if (root === null) {
       Log.e('Backup', '恢复解析失败');
       return false;
     }
-    if (root === null) return false;
     const has = (s: BackupSection): boolean => include.indexOf(s) >= 0;
 
     if (has(BackupSection.SUBSCRIPTIONS)) {

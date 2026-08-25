@@ -145,6 +145,10 @@ export struct TranscriptPane {
           this.hasOfficial() ? L.s('transcript_show') : L.s('transcript_start'),
           false
         )
+      } else if (this.store.state === TranscriptState.LoadingCache) {
+        // 读本机缓存(在子线程里,通常几十毫秒)。用通用的「加载中」而不是「正在取官方稿」——
+        // 这一步不联网,说取稿是不实的。有这个分支是为了不闪出「开始转写」按钮
+        this.progress(L.s('loading'))
       } else if (this.store.state === TranscriptState.FetchingOfficial) {
         this.progress(L.s('transcript_fetching'))
       } else if (this.store.state === TranscriptState.DownloadingAudio) {

@@ -240,8 +240,8 @@ export class PopularCacheStore {
     JsonFile.remove(PopularCacheStore.FILE);
   }
 
-  sizeBytes(): number {
-    return JsonFile.sizeBytes(PopularCacheStore.FILE);
+  async sizeBytes(): Promise<number> {
+    return JsonFile.sizeBytesAsync(PopularCacheStore.FILE);
   }
 
   private persist(): void {

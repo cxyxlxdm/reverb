@@ -488,14 +488,22 @@ export struct SettingsPage {
     this.recomputeSizes();
   }
 
-  /// 重算三处占用。进页面时算一次,清理后再算一次(与 Android 的 refreshTick 同思路)。
-  private recomputeSizes(): void {
+  /**
+   * 重算三处占用。进页面时算一次,清理后再算一次(与 Android 的 refreshTick 同思路)。
+   *
+   * **异步**:这些数字来自 `stat`,而下载与逐字稿都是"一集一个文件",条数一多就是
+   * O(N) 次同步 IO 压在首帧上(见 H65)。界面在 `< 0` 时显示「计算中」,
+   * 所以异步返回天然有落位。
+   */
+  private async recomputeSizes(): Promise<void> {
     // 逐字稿也算进"缓存":它可重生成、体积不小(一集几十 KB),而且用户需要一个
     // 能把它清掉的入口 —— 时间轴口径变了时,重转是唯一的自救办法
-    this.cacheBytes = this.app.popularCache.sizeBytes() + this.app.feedCache.sizeBytes()
-      + this.app.transcripts.usageBytes();
-    this.dlBytes = this.app.downloadManager.usageBytes();
-    this.logBytes = Log.sizeBytes();
+    this.logBytes = Log.sizeBytes();   // 只读内存环形缓冲,零 IO
+    const popular = await this.app.popularCache.sizeBytes();
+    const feeds = await this.app.feedCache.sizeBytes();
+    const transcripts = await this.app.transcripts.usageBytes();
+    this.cacheBytes = popular + feeds + transcripts;
+    this.dlBytes = await this.app.downloadManager.usageBytes();
   }
 
   private cacheStr(): string {
@@ -581,7 +589,7 @@ export struct SettingsPage {
   }
 
   private async exportBackup(): Promise<void> {
-    const json = BackupManager.build(this.app, ALL_SECTIONS);
+    const json = await BackupManager.build(this.app, ALL_SECTIONS);
     const ok = await Files.saveText(this.ctx(), 'reverb-backup.json', json);
     this.hint = ok ? L.s('backup_done') : L.s('backup_failed');
   }
@@ -592,12 +600,14 @@ export struct SettingsPage {
       this.hint = L.s('backup_failed');
       return;
     }
-    const found = BackupManager.sectionsIn(text);
+    // 解析一次,探测与应用共用同一份 root(原先是把同一个大 JSON 解析两遍)
+    const root = await BackupManager.parseRoot(text);
+    const found = BackupManager.sectionsInRoot(root);
     if (found.length === 0) {
       this.hint = L.s('backup_failed');
       return;
     }
-    BackupManager.apply(this.app, text, found);
+    BackupManager.applyRoot(this.app, root, found);
     this.hint = L.s('backup_restored');
     this.onChanged();
   }

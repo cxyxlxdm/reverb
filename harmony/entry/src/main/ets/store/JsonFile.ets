@@ -204,7 +204,24 @@ export class JsonFile {
     }
   }
 
-  /// 文件占用字节(设置页展示缓存用量)。
+  /**
+   * 文件占用字节(设置页展示缓存用量)。**异步版** ——
+   * `statSync` 单次只有几毫秒,但设置页一进来要对若干缓存文件 + 每个逐字稿 + 每个下载各来一次,
+   * 是 O(N) 的同步 IO 摊在首帧上。用 Promise 版把它挪出关键路径(见 H65 的教训)。
+   */
+  static async sizeBytesAsync(name: string): Promise<number> {
+    if (JsonFile.dir.length === 0) return 0;
+    try {
+      const p = JsonFile.path(name);
+      if (!await fs.access(p)) return 0;
+      const st = await fs.stat(p);
+      return st.size;
+    } catch (e) {
+      return 0;
+    }
+  }
+
+  /// 同步版:只留给"必须当场拿到"的场合(目前无调用方,保留以免以后重复实现)。
   static sizeBytes(name: string): number {
     if (JsonFile.dir.length === 0) return 0;
     try {

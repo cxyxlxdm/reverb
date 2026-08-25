@@ -73,9 +73,10 @@ export class Files {
         Log.i('Files', '用户取消保存');
         return false;
       }
-      const f = fs.openSync(uris[0], fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
-      fs.writeSync(f.fd, text);
-      fs.closeSync(f);
+      // 异步写:备份文件可达几 MB,同步写会卡住 UI 线程(见 H65)
+      const f = await fs.open(uris[0], fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
+      await fs.write(f.fd, text);
+      await fs.close(f);
       Log.i('Files', `已保存 ${suggestName}`);
       return true;
     } catch (e) {
@@ -90,11 +91,11 @@ export class Files {
       const p = new picker.DocumentViewPicker(ctx);
       const uris = await p.select({ maxSelectNumber: 1 });
       if (uris.length === 0) return null;
-      const f = fs.openSync(uris[0], fs.OpenMode.READ_ONLY);
-      const stat = fs.statSync(f.fd);
+      const f = await fs.open(uris[0], fs.OpenMode.READ_ONLY);
+      const stat = await fs.stat(f.fd);
       const buf = new ArrayBuffer(stat.size);
-      fs.readSync(f.fd, buf);
-      fs.closeSync(f);
+      await fs.read(f.fd, buf);
+      await fs.close(f);
       return new util.TextDecoder().decodeToString(new Uint8Array(buf));
     } catch (e) {
       Log.e('Files', `读取失败 ${(e as Error).message}`);

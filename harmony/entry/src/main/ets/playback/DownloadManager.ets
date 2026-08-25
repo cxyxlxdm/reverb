@@ -80,41 +80,93 @@ export class DownloadManager {
     const target = `${this.dir}/${DownloadManager.fileName(e.id, e.audioUrl)}`;
     const part = `${target}.part`;
     const req = http.createHttp();
+    let file: fs.File | null = null;
     try {
       this.setState(e.id, DownloadState.DOWNLOADING, 0);
-      // ArkTS 的 http 无流式回调下载,这里整体取回再落盘(播客单集通常几十 MB,可接受)
-      const resp = await req.request(e.audioUrl, {
+      file = await fs.open(part, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+      const fd = file.fd;
+
+      /*
+       * **流式下载 + 异步分片写**。原先是 `expectDataType: ARRAY_BUFFER` 整块取回、
+       * 再 `fs.writeSync` 一次写完 —— 两个问题:
+       *  1. 一集几十 MB **整块进 JS 堆**(大文件还有 OOM 风险);
+       *  2. `writeSync` 是同步的,**几十 MB 的写卡在 UI 线程上**(见 H64/H65 的教训:
+       *     ArkTS 没有协程,同步调用占的就是调用方的线程,而这里的调用方是 UI 线程)。
+       * Android 侧本来就是 `Dispatchers.IO` + `byteStream()` 流式拷贝,macOS 是
+       * `URLSession.downloadTask` 由系统托管落盘 —— 只有这一端是整块同步写。
+       *
+       * `requestInStream` 的分片通过 `dataReceive` 事件到达,**可能比写盘更快**,
+       * 所以用一条 Promise 串行链把写序列化:既保证顺序(音频文件错序即损坏),
+       * 又不会同时发起多个写。
+       */
+      let chain: Promise<void> = Promise.resolve();
+      let written = 0;
+      let writeFailed = '';
+      req.on('dataReceive', (chunk: ArrayBuffer) => {
+        chain = chain.then((): Promise<void> => {
+          if (writeFailed.length > 0) return Promise.resolve();
+          return fs.write(fd, chunk).then((n: number) => {
+            written += n;
+          }).catch((err: Error) => {
+            // 记下来,等 requestInStream 返回后统一按失败处理(这里抛出去没人接)
+            writeFailed = err.message;
+          });
+        });
+      });
+      // 真实进度:按**整数百分比**去重再写状态。states 挂在 @Observed 上,
+      // 每次赋值都会让持有者重渲 —— 一次下载几千个分片,不去重就是几千次重渲(H64)。
+      let lastPct = -1;
+      req.on('dataReceiveProgress', (info: http.DataReceiveProgressInfo) => {
+        if (info.totalSize <= 0) return;
+        const pct = Math.floor(info.receiveSize / info.totalSize * 100);
+        if (pct !== lastPct) {
+          lastPct = pct;
+          this.setState(e.id, DownloadState.DOWNLOADING, pct / 100);
+        }
+      });
+
+      const code = await req.requestInStream(e.audioUrl, {
         method: http.RequestMethod.GET,
         header: { 'User-Agent': 'Reverb/1.0 (HarmonyOS podcast client)' },
         connectTimeout: 15000,
-        readTimeout: 120000,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER
+        readTimeout: 120000
       });
-      if (resp.responseCode !== 200) {
-        Log.w('Download', `http ${resp.responseCode} id=${e.id}`);
+      await chain;          // 等最后几片写完
+      await fs.close(file);
+      file = null;
+
+      if (code !== 200 || writeFailed.length > 0 || written === 0) {
+        Log.w('Download', `失败 code=${code} 写入=${written}B ${writeFailed} id=${e.id}`);
+        await this.cleanupAsync(part);
         this.setState(e.id, DownloadState.FAILED, 0);
         return;
       }
-      const buf = resp.result as ArrayBuffer;
+
       // 先写 .part,成功后再 rename —— 失败不留半截可播文件
-      const f = fs.openSync(part, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
-      fs.writeSync(f.fd, buf);
-      fs.closeSync(f);
       try {
-        if (fs.accessSync(target)) fs.unlinkSync(target);
+        if (await fs.access(target)) await fs.unlink(target);
       } catch (err) {
         // 忽略
       }
-      fs.renameSync(part, target);
+      await fs.rename(part, target);
 
       this.store.add(e, target);
       this.setState(e.id, DownloadState.COMPLETED, 1);
-      Log.i('Download', `完成 "${e.title}" ${Math.round(buf.byteLength / 1024)}KB`);
+      Log.i('Download', `完成 "${e.title}" ${Math.round(written / 1024)}KB`);
     } catch (err) {
       Log.e('Download', `失败 id=${e.id} ${(err as Error).message}`);
-      this.cleanup(part);
+      if (file !== null) {
+        try {
+          await fs.close(file);
+        } catch (e2) {
+          // 忽略
+        }
+      }
+      await this.cleanupAsync(part);
       this.setState(e.id, DownloadState.FAILED, 0);
     } finally {
+      req.off('dataReceive');
+      req.off('dataReceiveProgress');
       req.destroy();
     }
   }
@@ -138,14 +190,18 @@ export class DownloadManager {
     this.states = {};
   }
 
-  /// 下载占用字节(设置页展示用量)。
-  usageBytes(): number {
+  /// 下载占用字节(设置页展示用量)。**异步**:每个已下载单集一次 access+stat,
+  /// 原先是 O(N) 同步 IO 摊在设置页首帧上(见 H65)。
+  async usageBytes(): Promise<number> {
     if (this.store === null) return 0;
     let sum = 0;
     const list = this.store.downloads;
     for (let i = 0; i < list.length; i++) {
       try {
-        if (fs.accessSync(list[i].localPath)) sum += fs.statSync(list[i].localPath).size;
+        if (await fs.access(list[i].localPath)) {
+          const st = await fs.stat(list[i].localPath);
+          sum += st.size;
+        }
       } catch (e) {
         // 忽略
       }
@@ -156,6 +212,15 @@ export class DownloadManager {
   private cleanup(path: string): void {
     try {
       if (fs.accessSync(path)) fs.unlinkSync(path);
+    } catch (e) {
+      // 忽略
+    }
+  }
+
+  /// 下载路径上用的删除:异步版,不占 UI 线程(删一个大文件也要几毫秒)。
+  private async cleanupAsync(path: string): Promise<void> {
+    try {
+      if (await fs.access(path)) await fs.unlink(path);
     } catch (e) {
       // 忽略
     }

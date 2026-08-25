@@ -1,8 +1,13 @@
 import fs from '@ohos.file.fs';
 import i18n from '@ohos.i18n';
+import taskpool from '@ohos.taskpool';
 import { Episode, TranscribedSegment, TranscribedWord } from '../model/Models';
 import { TranscriptFetcher } from '../net/TranscriptFetcher';
+import { fetchTranscriptConcurrent } from '../net/TranscriptFetchTask';
 import { J } from '../net/Http';
+import {
+  loadTranscriptCacheConcurrent, saveTranscriptCacheConcurrent, TranscriptCacheOut
+} from './TranscriptTask';
 import { Log } from '../util/Logger';
 
 /**
@@ -21,7 +26,15 @@ export enum TranscriptState {
   Done = 4,
   Failed = 5,
   /// 这台设备上没有可用的系统语音识别,且这一集也没有官方稿
-  Unsupported = 6
+  Unsupported = 6,
+  /**
+   * 正在读本机缓存。
+   *
+   * 为什么要有这么一个短命状态:读缓存搬到子线程之后不再是"同一帧内出结果",
+   * 中间那几十毫秒如果沿用 `Idle`,界面会**闪一下「开始转写」按钮**再跳到全文。
+   * 与 `FetchingOfficial` 分开是因为这一步没有联网,文案不能说"正在取官方稿"。
+   */
+  LoadingCache = 7
 }
 
 /**
@@ -99,22 +112,27 @@ export class TranscriptStore implements TranscriptSink {
    * 切到某单集/语言时调用。命中缓存直接显示;否则置初始态**等用户手动开始** ——
    * 不自动转写:那是几分钟的满载计算,得由用户点了才做。
    */
-  prepare(episode: Episode, uiLanguage: string): void {
+  async prepare(episode: Episode, uiLanguage: string): Promise<void> {
     const loc = TranscriptStore.localeFor(uiLanguage);
     if (episode.id === this.episodeId && loc === this.localeId && this.state !== TranscriptState.Idle) return;
     this.cancel();
     this.generation += 1;
+    const gen = this.generation;
     this.episodeId = episode.id;
     this.localeId = loc;
     this.volatileTail = '';
+    this.segments = [];
 
-    const cached = this.loadCache(episode.id, loc);
+    // 读缓存在子线程里,期间用 LoadingCache 占位(否则会闪一下"开始转写")
+    this.state = TranscriptState.LoadingCache;
+    const cached = await this.loadCacheAsync(episode.id, loc);
+    // 读的过程中用户可能已经切集/切语言 —— 那时这份结果作废
+    if (gen !== this.generation) return;
     if (cached.length > 0) {
       this.segments = cached;
       this.state = TranscriptState.Done;
       return;
     }
-    this.segments = [];
     // 有官方稿就一定能出东西;没有则要看这台设备的系统识别在不在
     const canRecognize = this.transcriber !== null && this.transcriber.available();
     this.state = (episode.transcriptUrl.length > 0 || canRecognize)
@@ -164,12 +182,12 @@ export class TranscriptStore implements TranscriptSink {
     // 1) 官方稿优先
     if (episode.transcriptUrl.length > 0) {
       this.state = TranscriptState.FetchingOfficial;
-      const segs = await TranscriptFetcher.fetch(episode.transcriptUrl, episode.transcriptType);
+      const segs = await this.fetchOfficial(episode.transcriptUrl, episode.transcriptType);
       if (gen !== this.generation) return;
       if (segs.length > 0) {
         this.segments = segs;
         this.state = TranscriptState.Done;
-        this.saveCache(episode.id, loc, segs);
+        await this.saveCacheAsync(episode.id, loc, segs);
         Log.i(TranscriptStore.TAG, `用官方稿 ${segs.length} 句 id=${episode.id}`);
         return;
       }
@@ -204,7 +222,18 @@ export class TranscriptStore implements TranscriptSink {
     } else {
       this.state = ok ? TranscriptState.Done : TranscriptState.Failed;
       // 半截的稿也存 —— 但标 complete=false,下次不会当成完整稿显示(与另两端一致)
-      this.saveCache(episode.id, loc, this.segments, ok);
+      await this.saveCacheAsync(episode.id, loc, this.segments, ok);
+    }
+  }
+
+  /// 取官方稿:走子线程(解析上万条词级条目),失败回落本线程。
+  private async fetchOfficial(url: string, declaredType: string): Promise<TranscribedSegment[]> {
+    try {
+      const out: Object = await taskpool.execute(fetchTranscriptConcurrent, url, declaredType);
+      return out === null || out === undefined ? [] : out as TranscribedSegment[];
+    } catch (e) {
+      Log.w(TranscriptStore.TAG, `子线程取官方稿失败,回落本线程:${(e as Error).message}`);
+      return TranscriptFetcher.fetch(url, declaredType);
     }
   }
 
@@ -226,7 +255,27 @@ export class TranscriptStore implements TranscriptSink {
     return `${TranscriptStore.DIR}/${TranscriptStore.sanitize(episodeId)}.${loc.length === 0 ? 'auto' : loc}.json`;
   }
 
-  /// 只认 `complete = true` 且**时间轴口径没变**的缓存。
+  /**
+   * 读缓存:**走子线程**(见 `TranscriptTask`)。这是本应用最大的一份 JSON,
+   * 上千句 + 上万条词级条目,解析放在 UI 线程上会让打开逐字稿页顿一下。
+   * 子线程不可用时回落本线程(宁可顿一下,不能读不出稿)。
+   */
+  private async loadCacheAsync(episodeId: string, loc: string): Promise<TranscribedSegment[]> {
+    if (this.filesDir.length === 0) return [];
+    const p = `${this.filesDir}/${this.cacheName(episodeId, loc)}`;
+    try {
+      const out: Object = await taskpool.execute(
+        loadTranscriptCacheConcurrent, p, TranscriptStore.CACHE_VERSION);
+      const r = out as TranscriptCacheOut;
+      if (r.stale) Log.i(TranscriptStore.TAG, '缓存是旧口径,已丢弃,需重转');
+      return r.segments;
+    } catch (e) {
+      Log.w(TranscriptStore.TAG, `子线程读缓存失败,回落本线程:${(e as Error).message}`);
+      return this.loadCache(episodeId, loc);
+    }
+  }
+
+  /// 只认 `complete = true` 且**时间轴口径没变**的缓存。(本线程版:子线程不可用时的回落)
   private loadCache(episodeId: string, loc: string): TranscribedSegment[] {
     if (this.filesDir.length === 0) return [];
     const p = `${this.filesDir}/${this.cacheName(episodeId, loc)}`;
@@ -271,6 +320,25 @@ export class TranscriptStore implements TranscriptSink {
     }
   }
 
+  /**
+   * 写缓存:同样走子线程 —— 一万多条词级条目的 `JSON.stringify` 不该占 UI 线程。
+   * 失败(含子线程不可用)时回落本线程写:缓存写不成只是下次要重转,但不能因此丢稿。
+   */
+  private async saveCacheAsync(episodeId: string, loc: string, segs: TranscribedSegment[],
+    complete: boolean = true): Promise<void> {
+    if (this.filesDir.length === 0) return;
+    const p = `${this.filesDir}/${this.cacheName(episodeId, loc)}`;
+    try {
+      const ok: Object = await taskpool.execute(saveTranscriptCacheConcurrent,
+        p, loc, complete, TranscriptStore.CACHE_VERSION, segs);
+      if (ok as boolean) return;
+    } catch (e) {
+      Log.w(TranscriptStore.TAG, `子线程写缓存失败,回落本线程:${(e as Error).message}`);
+    }
+    this.saveCache(episodeId, loc, segs, complete);
+  }
+
+  /// 本线程版(子线程不可用时的回落)。
   private saveCache(episodeId: string, loc: string, segs: TranscribedSegment[], complete: boolean = true): void {
     if (this.filesDir.length === 0) return;
     const arr: Object[] = [];
@@ -326,14 +394,19 @@ export class TranscriptStore implements TranscriptSink {
     this.episodeId = '';
   }
 
-  usageBytes(): number {
+  /// 逐字稿目录占用。**异步**:一集一个文件,`listFileSync` + 逐文件 `statSync`
+  /// 是 O(N) 同步 IO,原先摊在设置页首帧上(见 H65)。
+  async usageBytes(): Promise<number> {
     if (this.filesDir.length === 0) return 0;
     const d = `${this.filesDir}/${TranscriptStore.DIR}`;
     let sum = 0;
     try {
-      const names = fs.listFileSync(d);
+      const names = await fs.listFile(d);
       for (let i = 0; i < names.length; i++) {
-        try { sum += fs.statSync(`${d}/${names[i]}`).size; } catch (e) { /* 忽略 */ }
+        try {
+          const st = await fs.stat(`${d}/${names[i]}`);
+          sum += st.size;
+        } catch (e) { /* 忽略单个失败 */ }
       }
     } catch (e) {
       // 目录不存在

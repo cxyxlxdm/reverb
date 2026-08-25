@@ -102,8 +102,8 @@ export class FeedCacheStore {
     JsonFile.remove(FeedCacheStore.FILE);
   }
 
-  sizeBytes(): number {
-    return JsonFile.sizeBytes(FeedCacheStore.FILE);
+  async sizeBytes(): Promise<number> {
+    return JsonFile.sizeBytesAsync(FeedCacheStore.FILE);
   }
 
   /**
