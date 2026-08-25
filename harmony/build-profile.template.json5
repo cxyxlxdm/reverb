@@ -57,12 +57,12 @@
         "name": "default",
         "type": "HarmonyOS",
         "material": {
-          "certpath": "<本机路径>/.ohos/config/<调试证书>.cer",
+          "certpath": "<你的 .ohos 配置目录>/<调试证书>.cer",
           "keyAlias": "debugKey",
           "keyPassword": "",
-          "profile": "<本机路径>/.ohos/config/<调试证书>.p7b",
+          "profile": "<你的 .ohos 配置目录>/<调试证书>.p7b",
           "signAlg": "SHA256withECDSA",
-          "storeFile": "<本机路径>/.ohos/config/<调试证书>.p12",
+          "storeFile": "<你的 .ohos 配置目录>/<调试证书>.p12",
           "storePassword": ""
         }
       },

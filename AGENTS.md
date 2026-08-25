@@ -232,3 +232,12 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 
 **动手之前**:改逐字稿看 `TRANSCRIPT.md`;改渠道相关看 `FEATURES.md` 渠道差异一节 +
 `ARCHITECTURE.md` 第六节;不确定某个坑踩过没有,先 grep 一遍 `TROUBLESHOOTING.md`。
+
+## 共享记忆
+
+会话开始时读取：
+
+- 全局偏好：`~/.agent-memory/global/MEMORY.md`
+- 本项目记忆：`~/.agent-memory/projects/source-cast/MEMORY.md`
+
+`projects/` 是 Claude Code 原生记忆的只读镜像，勿直接编辑（会被 sync 覆盖）。
