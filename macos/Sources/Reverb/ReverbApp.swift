@@ -18,6 +18,21 @@ struct Main {
 struct ReverbApp: App {
     @StateObject private var env = AppEnvironment()
 
+    /**
+     * 退出前把去抖中的落盘补完。
+     *
+     * `AppSupport.save` 改成「去抖 + 后台编码写盘」之后(见 Stores.swift 的注释),
+     * 最后一次写可能还在 400ms 的窗口里 —— 直接退出就会丢掉最近的播放进度。
+     * 三端同一处理:鸿蒙在 `EntryAbility.onBackground` 调 `JsonFile.flushPending()`。
+     */
+    init() {
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification, object: nil, queue: .main
+        ) { _ in
+            AppSupport.flushPending()
+        }
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

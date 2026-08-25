@@ -116,13 +116,12 @@ class InboxStore(context: Context) {
         }
     }
 
+    /// 去抖异步写(冷启动逐源填充时会连着调多次,只落最后一次);失败静默,不影响内存态
     private fun persist(list: List<Episode>) {
-        try {
+        JsonWriter.write(file) {
             val arr = JSONArray()
             for (e in list) arr.put(EpisodeJson.toJson(e))
-            file.writeText(arr.toString())
-        } catch (e: Exception) {
-            // 持久化失败不影响内存态,忽略
+            arr.toString()
         }
     }
 

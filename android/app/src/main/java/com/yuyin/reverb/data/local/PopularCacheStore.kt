@@ -53,13 +53,13 @@ class PopularCacheStore(context: Context) {
         }
     }
 
+    /// 去抖异步写;先取快照(理由同 FeedCacheStore.persist)
     private fun persist() {
-        try {
+        val snapshot = mem.toList()
+        JsonWriter.write(file) {
             val root = JSONObject()
-            for ((k, list) in mem) root.put(k, list.toJsonArray())
-            file.writeText(root.toString())
-        } catch (e: Exception) {
-            // 缓存写失败不影响功能
+            for ((k, list) in snapshot) root.put(k, list.toJsonArray())
+            root.toString()
         }
     }
 

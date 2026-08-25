@@ -40,7 +40,7 @@ struct TranscriptPage: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 16)
         .task(id: episode.id + "|" + localeId) {
-            transcripts.prepare(episodeId: episode.id, localeId: localeId)
+            await transcripts.prepare(episodeId: episode.id, localeId: localeId)
         }
         // 每次播放进度采样(约 0.5s)刷新锚点,当前句据此逐帧外推
         .onChange(of: player.positionMs) { _, new in
@@ -65,6 +65,8 @@ struct TranscriptPage: View {
             switch transcripts.state {
             case .idle:
                 startPrompt
+            case .loadingCache:
+                progress("正在读取…")
             case .downloadingAudio:
                 progress("正在准备音频…")
             case .installingModel:

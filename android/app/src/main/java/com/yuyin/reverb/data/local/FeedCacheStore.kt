@@ -89,10 +89,16 @@ class FeedCacheStore(context: Context) {
         return out
     }
 
+    /**
+     * 去抖异步写。**先取快照**:mem 是可变 Map,而一轮「最新」刷新会逐源 put 十几次,
+     * 把遍历推迟到 IO 线程会撞上并发修改(鸿蒙那边同样的地方也是这么处理的)。
+     * 快照是浅拷贝,真正贵的是后面的 JSON 构造 —— 那部分才是要挪走的。
+     */
     private fun persist() {
-        try {
+        val snapshot = mem.toList()
+        JsonWriter.write(file) {
             val root = JSONObject()
-            for ((url, entry) in mem) {
+            for ((url, entry) in snapshot) {
                 val eps = JSONArray()
                 for (e in entry.result.episodes) eps.put(EpisodeJson.toJson(e))
                 root.put(
@@ -103,9 +109,7 @@ class FeedCacheStore(context: Context) {
                         .put("episodes", eps)
                 )
             }
-            file.writeText(root.toString())
-        } catch (e: Exception) {
-            // 缓存写失败不影响功能
+            root.toString()
         }
     }
 

@@ -99,8 +99,13 @@ class HistoryStore(context: Context) {
         }
     }
 
+    /**
+     * 去抖异步写。**JSON 的构造也推迟到 IO 线程上**(见 [JsonWriter]) ——
+     * 播放中每约 5 秒就会走一次这里,而这份文件实测可达几百 KB,
+     * 原先整段跑在主线程的 ticker 上。
+     */
     private fun persist(list: List<HistoryEntry>) {
-        try {
+        JsonWriter.write(file) {
             val arr = JSONArray()
             for (h in list) {
                 arr.put(
@@ -112,8 +117,7 @@ class HistoryStore(context: Context) {
                         .put("played", h.played)
                 )
             }
-            file.writeText(arr.toString())
-        } catch (e: Exception) {
+            arr.toString()
         }
     }
 }

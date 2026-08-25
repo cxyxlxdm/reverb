@@ -218,12 +218,18 @@ class ListenStatsStore(context: Context) {
         }
     }
 
+    /**
+     * 去抖异步写。注意**先取 table 的快照**再交给 [JsonWriter]:
+     * table 是可变 Map,若把遍历推迟到 IO 线程,期间主线程还在往里加时长
+     * (播放中每 500ms 一次)就会撞上并发修改。取快照是一次浅拷贝,几十个频道量级,
+     * 与 JSON 构造的代价不在一个数量级。
+     */
     private fun persist() {
-        try {
+        val snapshot = table.values.toList()
+        JsonWriter.write(file) {
             val arr = JSONArray()
-            for (c in table.values) arr.put(ChannelListenJson.toJson(c))
-            file.writeText(arr.toString())
-        } catch (e: Exception) {
+            for (c in snapshot) arr.put(ChannelListenJson.toJson(c))
+            arr.toString()
         }
     }
 }

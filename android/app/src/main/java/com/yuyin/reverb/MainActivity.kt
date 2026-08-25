@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.yuyin.reverb.data.local.JsonWriter
 import com.yuyin.reverb.util.LocaleUtil
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -53,6 +54,20 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * 退到后台时把去抖中的持久化补完。
+     *
+     * `JsonWriter` 把「整份写回」类的落盘改成了 400ms 去抖 + IO 线程(否则播放中每 5 秒
+     * 就在主线程上构造并写掉几百 KB,见 TROUBLESHOOTING H65)。代价是进程被杀时可能丢
+     * 窗口内的最后一次写 —— 所以这里必须同步落一次。
+     * 放在 `onStop` 而不是 `onPause`:切后台一定经过 onStop,而 onPause 会被弹窗之类频繁触发。
+     * 三端同一处理:鸿蒙在 `EntryAbility.onBackground`、macOS 在 `willTerminate`。
+     */
+    override fun onStop() {
+        super.onStop()
+        JsonWriter.flush()
     }
 
     /**

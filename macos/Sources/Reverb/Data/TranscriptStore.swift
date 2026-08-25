@@ -7,6 +7,9 @@ import Foundation
 
     enum State: Equatable {
         case idle              // 未转录:显示"生成转录"
+        /// 正在读本机缓存。解码搬到后台之后不再是同一帧出结果,
+        /// 这几十毫秒若沿用 idle 会**闪一下「生成转录」按钮**。与鸿蒙的 LoadingCache 对齐。
+        case loadingCache
         case downloadingAudio  // 流式单集:先下载音频
         case installingModel   // 首次:系统下载语言模型
         case running           // 识别中
@@ -36,18 +39,24 @@ import Foundation
     // MARK: - 对外
 
     /// 切到某单集/语言时调用:取消旧任务,命中缓存则直接显示,否则置 idle 等待用户手动生成。
-    func prepare(episodeId: String, localeId: String) {
+    /// **async**:缓存解码在后台(实测一份 192 KB,主 actor 上解码是白占主线程)。
+    func prepare(episodeId: String, localeId: String) async {
         guard episodeId != self.episodeId || localeId != self.localeId || state == .idle else { return }
         cancel()
         generation += 1
+        let gen = generation
         self.episodeId = episodeId
         self.localeId = localeId
         volatileTail = ""
-        if let cached = loadCache(episodeId: episodeId, localeId: localeId), cached.complete {
+        segments = []
+        state = .loadingCache
+        let cached = await loadCache(episodeId: episodeId, localeId: localeId)
+        // 解码期间用户可能已经切集/切语言 —— 那时这份结果作废(与鸿蒙同一守卫)
+        guard gen == generation else { return }
+        if let cached, cached.complete {
             segments = cached.segments   // 缓存命中:秒显全文,不重播打字机
             state = .done
         } else {
-            segments = []
             state = .idle
         }
     }
@@ -147,14 +156,24 @@ import Foundation
     private func cacheURL(episodeId: String, localeId: String) -> URL {
         Self.subdir.appendingPathComponent("\(Self.sanitize(episodeId)).\(localeId.isEmpty ? "auto" : localeId).json")
     }
-    private func loadCache(episodeId: String, localeId: String) -> Cached? {
-        guard let data = try? Data(contentsOf: cacheURL(episodeId: episodeId, localeId: localeId)) else { return nil }
-        return try? JSONDecoder().decode(Cached.self, from: data)
+    /// 读缓存:**在后台线程解码**。逐字稿是本 App 最大的一份 JSON
+    /// (一集词级稿实测 192 KB,长单集更大),放在主 actor 上解码会让切集卡一下。
+    private func loadCache(episodeId: String, localeId: String) async -> Cached? {
+        let url = cacheURL(episodeId: episodeId, localeId: localeId)
+        return await Task.detached(priority: .userInitiated) { () -> Cached? in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return try? JSONDecoder().decode(Cached.self, from: data)
+        }.value
     }
+
+    /// 写缓存:同样在后台编码 + 写盘。segments 是值类型,捕获即快照,不存在数据竞争。
     private func saveCache(episodeId: String, localeId: String, segments: [TranscribedSegment]) {
+        let url = cacheURL(episodeId: episodeId, localeId: localeId)
         let c = Cached(localeId: localeId, complete: true, segments: segments)
-        if let data = try? JSONEncoder().encode(c) {
-            try? data.write(to: cacheURL(episodeId: episodeId, localeId: localeId), options: .atomic)
+        Task.detached(priority: .utility) {
+            if let data = try? JSONEncoder().encode(c) {
+                try? data.write(to: url, options: .atomic)
+            }
         }
     }
 

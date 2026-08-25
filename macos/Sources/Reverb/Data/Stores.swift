@@ -15,11 +15,52 @@ enum AppSupport {
         return try? JSONDecoder().decode(T.self, from: data)
     }
 
+    // ── 落盘:去抖 + 离开主线程 ────────────────────────────────────────────────
+    //
+    // 为什么需要:这些 store 都是 `@MainActor`,而 `save` 原先在主 actor 上
+    // **同步**做 `JSONEncoder().encode` + `write(to:)`。播放中每 5 秒
+    // `history.updatePosition` 就会整份写回一次 —— 本机实测 history.json **270 KB**、
+    // inbox.json **747 KB**,这是主线程上每 5 秒一次的固定开销。
+    // 与鸿蒙那一轮同一个道理(TROUBLESHOOTING H65):去抖要连"生成数据"一起去抖,
+    // 只把写盘挪走、编码还留在主线程是没解决问题。
+    //
+    // 做法:值类型先被闭包捕获(数组是值语义,拷贝即快照),编码与写盘都在后台队列;
+    // 同一文件在 debounce 窗口内的多次调用只落最后一次。
+    // **代价**:进程被杀时最多丢窗口内的一次写入 —— 所以退出前必须 `flushPending()`
+    // (见 `ReverbApp` 的 willTerminate 钩子)。
+
+    private static let ioQueue = DispatchQueue(label: "cn.cxyxl.reverb.appsupport-io", qos: .utility)
+    private static let debounce: TimeInterval = 0.4
+    private static let lock = NSLock()
+    /// 文件名 → 待执行的"编码并写盘";同一文件只保留最新一份
+    nonisolated(unsafe) private static var pending: [String: () -> Void] = [:]
+
     static func save<T: Encodable>(_ file: String, _ value: T) {
-        let url = dir.appendingPathComponent(file)
-        if let data = try? JSONEncoder().encode(value) {
-            try? data.write(to: url, options: .atomic)
+        let work: () -> Void = {
+            let url = dir.appendingPathComponent(file)
+            if let data = try? JSONEncoder().encode(value) {
+                try? data.write(to: url, options: .atomic)
+            }
         }
+        lock.lock()
+        pending[file] = work
+        lock.unlock()
+        ioQueue.asyncAfter(deadline: .now() + debounce) {
+            lock.lock()
+            let w = pending.removeValue(forKey: file)
+            lock.unlock()
+            w?()          // 已被更新的那次取走时,这里就是 nil,天然去抖
+        }
+    }
+
+    /// 立刻把待写内容落盘(同步)。退出前必须调,否则会丢最后一次进度。
+    static func flushPending() {
+        lock.lock()
+        let all = pending
+        pending.removeAll()
+        lock.unlock()
+        for (_, w) in all { w() }
+        if !all.isEmpty { Log.i("Store", "退出前落盘 \(all.count) 个文件") }
     }
 }
 
