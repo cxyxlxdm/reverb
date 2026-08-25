@@ -11,7 +11,7 @@
 #   ./build-release.sh [渠道] --bundle 同时打 AAB(Google Play 需要 AAB)
 #
 # 为什么有这个渠道:它是**大陆商店版**(各家应用市场 共用),与默认渠道功能不同
-# (无内容目录,合规口径见 docs/BEIAN.md),故必须是独立包名 com.yuyin.reverb.android ——
+# (无内容目录,合规口径见 docs/HISTORY.md 阶段五),故必须是独立包名 com.yuyin.reverb.android ——
 # 否则商店更新会把功能完整的自分发版覆盖成删减版。默认渠道包名不变。
 #
 set -euo pipefail

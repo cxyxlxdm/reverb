@@ -15,3 +15,9 @@ store-*.zip
 # 需要时按 AGENTS.md「截图」一节重拍;生成口径(尺寸/垫边色)也在那里。
 /reverb/shots/
 /reverb-android/shots/
+
+# 分发登记材料:含主体信息(真名)、分发平台证书标识与证书指纹,属个人身份信息。
+# 文件保留在本地(发布时要照着填),但不入版本控制 —— 这个仓库可能公开。
+# 口径与流程的**知识**已沉淀在 docs/HISTORY.md 阶段五,不随这份文件一起丢。
+docs/BEIAN.md
+BEIAN.md
