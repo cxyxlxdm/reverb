@@ -55,5 +55,5 @@ echo "▸ 转 16k 单声道:$(basename "$AUDIO")"
 ffmpeg -v error -y -i "$AUDIO" -ar 16000 -ac 1 -c:a pcm_s16le "$WAV"
 
 # 语言与提示词要**与线上一致**,否则量出来的偏差不是线上的偏差
-# (提示词会让每块头几秒的时刻偏早,见 TRANSCRIPT.md)
+# (提示词会让每块头几秒的时刻偏早,见 docs/TRANSCRIPT.md)
 exec /tmp/asr-probe "$MODEL" "$WAV" zh "以下是普通话的句子。"

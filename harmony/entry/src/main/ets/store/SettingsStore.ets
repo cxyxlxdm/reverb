@@ -16,7 +16,7 @@ export class SettingsStore {
    * 变更历史:
    *   1 = 首个版本(2026-08)。
    *
-   * 改这个数之后**必须重新打包两端**,并同步更新 PRIVACY.md 与 reverb/privacy.html。
+   * 改这个数之后**必须重新打包两端**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
    */
   static readonly PRIVACY_VERSION: number = 1;
 

@@ -54,18 +54,18 @@ ui/             ReverbRoot(导航) · theme/ · components/ · screens/(Discover
 - `android/` — Android 版(Kotlin / Jetpack Compose)
 - `harmony/` — HarmonyOS 版(ArkTS / ArkUI)
 - `macos/` — macOS 版(Swift / SwiftUI)
-- `PRODUCT.md` — **功能介绍**(面向使用者与评审:每个功能是什么、怎么用、三端与两渠道有何不同)
-- `FEATURES.md` — **功能清单**(开发用矩阵,逐项标注平台差异;需要精确对照时以这份为准)
-- `ARCHITECTURE.md` — **核心技术实现**(分层、播放链路、持久化、渠道隔离、native 模块、性能规律)
-- `HISTORY.md` — **开发历程**(198 次提交的顺序与因果,以及哪里返了工)
-- `ROADMAP.md` — **进度、遗留问题与演进方向**(三端各到什么程度、哪些路径还没验过、以后可能往哪走)
-- `TRANSCRIPT.md` — 逐字稿 / 语音转文字的三端实现与取舍(含鸿蒙将来换三方引擎的路子)
-- `TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律(65 条)
-- `BEIAN.md` / `PRIVACY.md` — 合规口径与隐私政策
+- `docs/PRODUCT.md` — **功能介绍**(面向使用者与评审:每个功能是什么、怎么用、三端与两渠道有何不同)
+- `docs/FEATURES.md` — **功能清单**(开发用矩阵,逐项标注平台差异;需要精确对照时以这份为准)
+- `docs/ARCHITECTURE.md` — **核心技术实现**(分层、播放链路、持久化、渠道隔离、native 模块、性能规律)
+- `docs/HISTORY.md` — **开发历程**(198 次提交的顺序与因果,以及哪里返了工)
+- `docs/ROADMAP.md` — **进度、遗留问题与演进方向**(三端各到什么程度、哪些路径还没验过、以后可能往哪走)
+- `docs/TRANSCRIPT.md` — 逐字稿 / 语音转文字的三端实现与取舍(含鸿蒙将来换三方引擎的路子)
+- `docs/TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律(66 条)
+- `docs/BEIAN.md` / `docs/PRIVACY.md` — 合规口径与隐私政策
 - `AGENTS.md` — **在本仓库工作的约定**(构建命令、17 条硬规矩、代码与提交风格);`CLAUDE.md` 是指向它的薄指针
 
-> `PRODUCT.md` 与 `FEATURES.md` 是同一件事的两种粒度:前者叙述、后者矩阵。
-> 功能有变动时**两份都要改** —— 这个项目已经因为"功能改了自述没改"栽过一轮(见 `HISTORY.md` 阶段七)。
+> `docs/PRODUCT.md` 与 `docs/FEATURES.md` 是同一件事的两种粒度:前者叙述、后者矩阵。
+> 功能有变动时**两份都要改** —— 这个项目已经因为"功能改了自述没改"栽过一轮(见 `docs/HISTORY.md` 阶段七)。
 
 ## 构建 · Android
 

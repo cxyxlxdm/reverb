@@ -30,7 +30,7 @@ import { Log } from '../util/Logger';
  * **2. 没有词级时间 ⇒ 本机识别出来的稿只能整句高亮。** 设置里的「逐字高亮」对这种稿没有效果,
  *    只对**发布方提供的 JSON 逐字稿**有效(那种稿一词一条)。设置项的副标题已如实说明。
  *
- * 将来若要换成三方引擎(拿到词级时间),替换点见 TRANSCRIPT.md 的迁移路径:
+ * 将来若要换成三方引擎(拿到词级时间),替换点见 docs/TRANSCRIPT.md 的迁移路径:
  * 只要满足 `SpeechTranscriberLike`,`TranscriptStore` 一行都不用改。
  */
 export class SpeechTranscriber implements SpeechTranscriberLike {

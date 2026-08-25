@@ -1425,3 +1425,51 @@ native 模块,见 TRANSCRIPT.md 的迁移路径);官方逐字稿那条路不受�
   3. **去抖要连"生成数据"一起去抖。** 只去抖 IO 而每次都序列化,等于没解决 UI 线程上的那部分。
   4. 一处已知代价:子线程里的 `Log` 走 hilog 照常可见,但 `Log` 的内存环形缓冲是每线程一份,
      **设置页「分享日志」拿不到子线程那些行**。
+
+### H66. 三端扫一遍「UI 线程上的耗时操作」——同一类毛病,三端各犯一种
+
+- **起因**:H64/H65 修完鸿蒙的下拉刷新之后,顺着问「**还有没有别的**」,
+  按五类扫了三端:同步文件 IO / 大对象序列化 / 解析与正则 / 图像编解码 / 渲染路径里的重循环。
+  结论:**有,而且分四族**。这条记的是扫查方法与各族结论,具体修法见对应提交。
+- **族一(鸿蒙独有,最重)**:
+  1. `DownloadManager` 用 `expectDataType: ARRAY_BUFFER` 把一集**几十 MB 整块读进 JS 堆**,
+     再 `fs.writeSync` 一次写完 —— 内存尖峰 + UI 线程上的大写。
+     Android 侧本来就是 `Dispatchers.IO` + `byteStream()` 流式,macOS 是
+     `URLSession.downloadTask` 由系统托管落盘,**只有这一端是整块同步写**。
+     改用 `requestInStream` + `dataReceive` 分片 + Promise 串行链序列化写。
+  2. 逐字稿缓存(**本应用最大的一份 JSON**,词级稿约 1 万条条目 / 600 KB)
+     `readTextSync` + `JSON.parse` / `stringify` + `writeSync` 全在 UI 线程;
+     官方稿的解析与断行合并同样。→ 各自搬进 `@Concurrent` + taskpool,带回落本线程的降级。
+  3. 设置页 `recomputeSizes()` 一进页面就 `listFileSync` + 逐文件 `statSync`(O(N) 同步 IO)。
+  4. 备份的 `JSON.stringify(root, null, 2)` / `JSON.parse` 在 UI 线程,
+     且导入流程把同一个大 JSON **解析了两遍**(探测分区一遍、应用一遍)。
+- **族二(三端共有)**:播放中**每约 5 秒整份写回** history / listen_stats。
+  Android 的 ticker 用 `Handler(Looper.getMainLooper())`;macOS 的 store 是 `@MainActor`
+  且 `AppSupport.save` 同步 encode + write。本机实测 history.json **270 KB**、inbox.json **747 KB**。
+- **族三(macOS)**:逐字稿缓存在主 actor 上同步解码(实测 192 KB)。
+- **族四(冷启动,三端共有)**:Android 有 **8 个 store 在构造函数里读盘**
+  (`MutableStateFlow(load())`),而容器在 `Application.onCreate` 构造;macOS 各 store 的
+  `init` 同步读;鸿蒙 `boot()` 同步读。→ **实测后决定不改**:`am start -W` 冷启动
+  **219 ms**、macOS 各 store 合计约 53 ms。并行化要动装配顺序,风险大于收益。
+- **量化工具(两端不同,都别只看一个数)**:
+  ```bash
+  # 鸿蒙:jank 事件数 + 整页重建次数(搜索框每次重建都打一行)
+  hdc shell hilog -x | grep -c ProcessJank
+  hdc shell hilog -x | grep -c "AceTextField.*SetIsEnable"
+  # Android:掉帧分布(比鸿蒙那个计数准得多)
+  adb shell dumpsys gfxinfo <pkg> reset && …交互… && adb shell dumpsys gfxinfo <pkg>
+  #   看 Janky frames / 99th percentile / Number Slow UI thread
+  ```
+- **教训 / 规律**:
+  1. **同一个毛病在三端的表现不一样,不能只查报障的那一端。** 这次是鸿蒙报"下拉刷新卡",
+     但同族问题 Android 与 macOS 各有一份;反过来,鸿蒙最重的那处(下载写盘)
+     另两端压根不存在 —— 因为那两端的框架天然把它放在后台。
+  2. **先量再改,量完可能是"不改"。** 族四看起来最像问题(8 个 store 同步读盘),
+     实测冷启动 219 ms,改它是白担风险。**"扫出来"不等于"该修"。**
+  3. **`ProcessJank` 只能比相对量。** 它记的是 jank 事件不是掉帧数,
+     一次 1.8 秒停顿也只记一条(H65 差点因此下错结论)。Android 的 `gfxinfo` 才给分布。
+  4. **可变容器的遍历不能推迟到别的线程。** 把"生成 JSON"挪到 IO 线程时,
+     若直接遍历 `mem` / `table` 这类可变 Map,就会与主线程的写入撞车 ——
+     要先取一次浅拷贝快照,贵的是后面的 JSON 构造,不是拷贝。
+  5. **数据安全路径上只搬纯运算。** 备份只把 `stringify`/`parse` 挪进子线程,
+     合并规则(G-Counter 取 max、历史按 updatedAt 取新)一字不动。

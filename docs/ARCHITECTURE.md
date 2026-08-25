@@ -3,7 +3,7 @@
 > 三端(Android / macOS / HarmonyOS)的架构与关键实现,以及**为什么这样选**。
 >
 > 范围划分:功能全貌见 `PRODUCT.md` / `FEATURES.md`;逐字稿单独成篇见 `TRANSCRIPT.md`;
-> 具体故障的现象-根因-修法见 `TROUBLESHOOTING.md`(65 条);做的顺序与返工见 `HISTORY.md`。
+> 具体故障的现象-根因-修法见 `TROUBLESHOOTING.md`(66 条);做的顺序与返工见 `HISTORY.md`。
 > 本文只讲**结构与取舍**,不重复那几份里的细节。
 
 规模(2026-08-25):
@@ -335,6 +335,22 @@ Kotlin 那边一句 `withContext(Dispatchers.IO)` 就搬走了,ArkTS 只能用
 配套的一处:去抖写盘要**连"生成数据"一起去抖**。`JsonFile.writeJsonDebouncedLazy`
 传的是取值函数而不是值 —— 否则频道缓存每源一次 `put` 就把整份 600KB 重新序列化,
 一轮刷新做 15 遍,而去抖只省下了写盘。
+
+### 三端各自把重活放在哪(同一原则,三种机制)
+
+| | 取源与解析 | 周期落盘(播放中每约 5 秒) | 逐字稿缓存 | 下载写盘 |
+|---|---|---|---|---|
+| Android | `withContext(Dispatchers.IO)` | `JsonWriter`:400ms 去抖 + IO 线程,收**取值函数** | `Dispatchers.Default` 协程 | `Dispatchers.IO` + `byteStream()` 流式 |
+| macOS | `Task` / `URLSession` | `AppSupport.save`:去抖 + 后台串行队列 | `Task.detached` 编解码 | `URLSession.downloadTask`,系统托管 |
+| HarmonyOS | `@Concurrent` + **taskpool**(`net/FeedTask.ets`) | `JsonFile.writeJsonDebouncedLazy` | taskpool(`store/TranscriptTask.ets`) | `requestInStream` 分片 + 异步写 |
+
+三处共同的约定:**退出/切后台前必须同步补一次落盘**
+(Android `MainActivity.onStop` → `JsonWriter.flush()`、macOS `willTerminate` →
+`AppSupport.flushPending()`、鸿蒙 `EntryAbility.onBackground` → `JsonFile.flushPending()`)——
+去抖的代价就是那一个窗口,不补就会丢用户刚听到的位置。
+
+而**用户单次操作触发的小数据**(订阅、收藏、印记)三端**都仍是同步写**:
+一次点按几毫秒看不出来,而同步写没有"进程被杀丢一次"的窗口 —— 那些是用户明确做出的动作。
 
 ---
 

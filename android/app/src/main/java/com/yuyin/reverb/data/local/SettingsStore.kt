@@ -105,7 +105,7 @@ class SettingsStore(context: Context) {
          *   1 = 首个版本(2026-08)。含:无后端服务、本地存储项、网络访问地址(发布方 RSS /
          *       官网推荐清单 / 可选的公开检索接口)、网络状态权限与 SSID 说明、权限清单。
          *
-         * 改这个数之后**必须重新打包**,并同步更新 PRIVACY.md 与 reverb/privacy.html。
+         * 改这个数之后**必须重新打包**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
          */
         const val PRIVACY_VERSION = 1
     }

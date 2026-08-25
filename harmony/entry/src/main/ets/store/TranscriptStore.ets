@@ -39,7 +39,7 @@ export enum TranscriptState {
 
 /**
  * 一次转写的产出接收口。由 `SpeechTranscriber` 回调进来,`TranscriptStore` 负责落到状态与缓存。
- * 抽成接口是为了让识别实现不认识 store,也便于将来换成三方引擎(见 TRANSCRIPT.md 的迁移路径)。
+ * 抽成接口是为了让识别实现不认识 store,也便于将来换成三方引擎(见 docs/TRANSCRIPT.md 的迁移路径)。
  */
 export interface TranscriptSink {
   onSegment(seg: TranscribedSegment): void;
@@ -473,7 +473,7 @@ export class TranscriptStore implements TranscriptSink {
 
 /**
  * `TranscriptStore` 对识别实现的最小要求。放在这里而不是引 `SpeechTranscriber` ——
- * store 不该认识具体引擎,将来换三方实现只要满足这个形状(见 TRANSCRIPT.md 的迁移路径)。
+ * store 不该认识具体引擎,将来换三方实现只要满足这个形状(见 docs/TRANSCRIPT.md 的迁移路径)。
  */
 export interface SpeechTranscriberLike {
   /// 这台设备上系统识别能不能用

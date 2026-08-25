@@ -28,7 +28,7 @@
 4. **「删掉」必须可验证。** 声明某渠道没有某功能,验收方式是**解包 grep**。
 
 Android 有**两个渠道**(`default` 自分发 / `store` 大陆商店),功能范围不同;
-鸿蒙只有商店渠道;macOS 自分发。差异见 `FEATURES.md`「渠道差异」。
+鸿蒙只有商店渠道;macOS 自分发。差异见 `docs/FEATURES.md`「渠道差异」。
 
 ---
 
@@ -115,9 +115,9 @@ Kotlin/R8 会折叠常量并删掉整支;**ArkTS 没有 DCE**,`Features.X ? A : 
 native 库与模型是构建系统按 source set 打进包的。渠道要「没有」它们,
 只能靠那个 source set 里压根没有这些文件(`app/src/default/jniLibs`、`app/src/default/assets`)。
 
-### 4. 修完 bug 或性能问题,必须更新 `TROUBLESHOOTING.md`
+### 4. 修完 bug 或性能问题,必须更新 `docs/TROUBLESHOOTING.md`
 
-格式固定:**现象 / 根因 / 修法 / 教训与可复用的规律**。当前 65 条,编号连续(H1…H65)。
+格式固定:**现象 / 根因 / 修法 / 教训与可复用的规律**。当前 66 条,编号连续(H1…H66)。
 这是本仓库最有价值的文档,不要跳过。
 
 ### 5. 改功能就会让「自述」过期 —— 有一张必须同步的清单
@@ -128,9 +128,9 @@ native 库与模型是构建系统按 source set 打进包的。渠道要「没�
 |---|---|
 | **App 内关于页**(`about_p_features` / `about_p_philosophy`) | 复核人员一定会读到;Android 需按渠道分别写 |
 | 设置项标题与副标题 | 副标题常含「为什么/代价」,行为一改就不成立 |
-| `PRODUCT.md` + `FEATURES.md` | 同一件事的叙述版与矩阵版,**两份都要改** |
+| `docs/PRODUCT.md` + `docs/FEATURES.md` | 同一件事的叙述版与矩阵版,**两份都要改** |
 | 发布文案 `*/store/发布文案.txt` | 两端各一份 |
-| `PRIVACY.md` + `reverb/privacy.html` + 同意页正文 | 涉及权限/网络/数据用途时 |
+| `docs/PRIVACY.md` + `reverb/privacy.html` + 同意页正文 | 涉及权限/网络/数据用途时 |
 | 发布截图 | 任何 UI/文案改动都会让它过期 |
 
 **五个语种一起改**:简中 / 繁中 / 英 / 法 / 西。
@@ -249,18 +249,18 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 | 文档 | 内容 |
 |---|---|
 | `README.md` | 入口与索引 |
-| `PRODUCT.md` | 功能介绍(叙述,面向使用者/评审) |
-| `FEATURES.md` | 功能清单(矩阵,**精确对照以这份为准**) |
-| `ARCHITECTURE.md` | 核心技术实现(分层、播放、持久化、渠道隔离、native、性能规律) |
-| `TRANSCRIPT.md` | 逐字稿专篇(三端取字方式与取舍,含鸿蒙换引擎的迁移路径) |
-| `TROUBLESHOOTING.md` | **65 条踩坑**:现象/根因/修法/规律 |
-| `HISTORY.md` | 开发历程(198 次提交的顺序与因果,返工写得更详细) |
-| `ROADMAP.md` | 进度、遗留问题、演进方向(**含「没验过的路径」清单**) |
-| `BEIAN.md` | 登记信息与流程(只记公开信息,不含私钥口令) |
-| `PRIVACY.md` | 隐私政策(与 `reverb/privacy.html` 必须同步) |
+| `docs/PRODUCT.md` | 功能介绍(叙述,面向使用者/评审) |
+| `docs/FEATURES.md` | 功能清单(矩阵,**精确对照以这份为准**) |
+| `docs/ARCHITECTURE.md` | 核心技术实现(分层、播放、持久化、渠道隔离、native、性能规律) |
+| `docs/TRANSCRIPT.md` | 逐字稿专篇(三端取字方式与取舍,含鸿蒙换引擎的迁移路径) |
+| `docs/TROUBLESHOOTING.md` | **66 条踩坑**:现象/根因/修法/规律 |
+| `docs/HISTORY.md` | 开发历程(198 次提交的顺序与因果,返工写得更详细) |
+| `docs/ROADMAP.md` | 进度、遗留问题、演进方向(**含「没验过的路径」清单**) |
+| `docs/BEIAN.md` | 登记信息与流程(只记公开信息,不含私钥口令) |
+| `docs/PRIVACY.md` | 隐私政策(与 `reverb/privacy.html` 必须同步) |
 
-**动手之前**:改逐字稿看 `TRANSCRIPT.md`;改渠道相关看 `FEATURES.md` 渠道差异一节 +
-`ARCHITECTURE.md` 第六节;不确定某个坑踩过没有,先 grep 一遍 `TROUBLESHOOTING.md`。
+**动手之前**:改逐字稿看 `docs/TRANSCRIPT.md`;改渠道相关看 `docs/FEATURES.md` 渠道差异一节 +
+`docs/ARCHITECTURE.md` 第六节;不确定某个坑踩过没有,先 grep 一遍 `docs/TROUBLESHOOTING.md`。
 
 ## 共享记忆
 

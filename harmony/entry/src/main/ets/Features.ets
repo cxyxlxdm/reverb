@@ -34,7 +34,7 @@ export class Features {
    *
    * **要打开这个开关需要先把引擎换掉**:把 whisper.cpp 链进已经建好的 native 模块
    * (`cpp/reverb_pcm.cpp` 那套解码链真机验过,能用),换掉 `SpeechTranscriber`。
-   * 迁移路径见 TRANSCRIPT.md。届时这一行改成 true,上面三条会同时恢复。
+   * 迁移路径见 docs/TRANSCRIPT.md。届时这一行改成 true,上面三条会同时恢复。
    */
   static readonly LOCAL_ASR: boolean = false;
 }
