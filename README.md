@@ -2,7 +2,7 @@
 
 > 余音绕梁，隽永悠长。 · *Every echo lingers.*
 
-一款轻量的 Android 播客客户端。水墨底 + 青瓷 + 梁金配色，图标以「金色横梁 + 环绕向上的声波」诠释「余音绕梁」。
+一款轻量的多端播客客户端，三个原生端：**Android**(Kotlin / Compose)、**HarmonyOS**(ArkTS / ArkUI)、**macOS**(Swift / SwiftUI)。水墨底 + 青瓷 + 梁金配色，图标以「金色横梁 + 环绕向上的声波」诠释「余音绕梁」。
 
 ---
 
@@ -18,35 +18,44 @@
 | 兜底① | **fyyd.de 搜索 API** | 公开播客搜索，`data[].xmlURL` 即 RSS。无需 Key、无需登录。 | 免费 |
 | 兜底② | **gpodder.net 搜索 API** | 公开播客目录，返回 feed url。无需 Key、无需登录。 | 免费 |
 | 兜底③ | **RSS 直连 / OPML 导入** | 用户直接粘贴 feed 地址（输入框自动识别 http/https），或从其他客户端导出的 OPML 批量导入。 | 免费 |
-| 播放核心 | **发布方 RSS 的 enclosure 原始直链** | 无论从哪发现节目，播放时都回到发布方 RSS，由 ExoPlayer 直接流式拉取原始音频。 | 免费 |
+| 播放核心 | **发布方 RSS 的 enclosure 原始直链** | 无论从哪发现节目，播放时都回到发布方 RSS，由各端系统播放器直接流式拉取原始音频。 | 免费 |
 
 > 为什么不用需要 Key 的目录（如 PodcastIndex）或自建代理服务？——Key 会带来配置负担且易被限流，自建服务会引入托管成本、维护与单点故障，均与「零成本、无限制、打开即用」相悖。上述全部源都是公开、免鉴权的，无需任何后端。
 
+> **上表只对自分发渠道成立。** 大陆商店渠道与鸿蒙端按合规口径只保留「粘贴 RSS 地址」与
+> 「导入推荐订阅」，目录检索的代码与接口地址**压根不在安装包里**（可解包 grep 验证）。
+> 见 `docs/FEATURES.md`「渠道差异」。
+
 ### 关于 getpodcast.xyz
-该站点（及同类下载器）本质也是「目录检索 → 解析 RSS → 取 enclosure 直链」这套模型，只是多了一层第三方 Web 中继——会带来可用性风险与潜在 ToS 问题。余音选择**直接对接 Apple / PodcastIndex / RSS**，更稳、更可控。
+该站点（及同类下载器）本质也是「目录检索 → 解析 RSS → 取 enclosure 直链」这套模型，只是多了一层第三方 Web 中继——会带来可用性风险与潜在 ToS 问题。余音选择**直接对接 Apple / fyyd / gpodder / RSS**，更稳、更可控。
 
 ### 版权与成本
 - **不转存、不代理、不抓取音频**：只流式播放发布方自己的 CDN 直链，这正是所有正规播客客户端的做法，是播客内容被设计出来的消费方式，**版权干净**。
-- **仅使用免费、公开、面向客户端开放的接口**（Apple 免 Key，PodcastIndex 免费 Key），**运行成本为 0**。
+- **仅使用免费、公开、面向客户端开放的接口**（全部免 Key、免登录、免鉴权），**运行成本为 0**。
 - 未做任何付费墙内容抓取。
 
 ---
 
-## 技术架构
+## 技术架构 · Android
+
+> 三端的分层、播放链路、渠道隔离与 native 模块见 `docs/ARCHITECTURE.md`，本节只是 Android 侧的速览。
 
 - **UI**：Jetpack Compose + Material3（Compose BOM 2024.06），单 Activity + Navigation Compose。
-- **播放**：Media3（ExoPlayer + MediaSessionService），后台播放、媒体通知、锁屏控制。
+- **播放**：Media3 1.3.1（ExoPlayer + MediaSessionService），后台播放、媒体通知、锁屏控制。
 - **网络**：OkHttp；JSON 用内置 `org.json`，RSS/OPML 用内置 `XmlPullParser`——**零额外解析依赖**。
-- **持久化**：订阅以 JSON 存于应用私有目录，**不引入数据库**，构建更稳。
+- **持久化**：一组 JSON 文件存于应用私有目录，**不引入数据库**，构建更稳。
 - **依赖注入**：手写 `AppContainer`，避免 DI 框架带来的构建复杂度。
 
 ```
 data/
   model/        Podcast、Episode、FeedResult
-  remote/       ITunesSource(默认) · PodcastIndexSource(兜底) · RssParser · OpmlSupport · PodcastRepository(编排/降级)
-  local/        SubscriptionStore(JSON 持久化)
+  remote/       ITunesSource(检索) · AppleChartsSource(热榜) · FyydSource · GpodderSource(兜底) ·
+                RssParser · OpmlSupport · TranscriptFetcher · PodcastRepository(编排/降级)
+  local/        SubscriptionStore / HistoryStore / InboxStore / ListenStatsStore /
+                TranscriptStore / BackupManager … 各功能域一个 JSON store
 playback/       PlaybackService(MediaSessionService) · PlayerController(门面/StateFlow)
-ui/             ReverbRoot(导航) · theme/ · components/ · screens/(Discover/Library/PodcastDetail/Player) · ViewModels
+ui/             ReverbRoot(导航) · theme/ · components/ · screens/ · share/(剪藏与足迹海报) · ViewModels
+update/         WorkManager 订阅更新巡检 + 新集通知
 ```
 
 ## 仓库结构
@@ -70,27 +79,38 @@ ui/             ReverbRoot(导航) · theme/ · components/ · screens/(Discover
 > `docs/PRODUCT.md` 与 `docs/FEATURES.md` 是同一件事的两种粒度:前者叙述、后者矩阵。
 > 功能有变动时**两份都要改** —— 这个项目已经因为"功能改了自述没改"栽过一轮(见 `docs/HISTORY.md` 阶段七)。
 
-## 构建 · Android
+## 构建
+
+完整命令（含渠道解包核对、ASR 产物、截图生成）见 `AGENTS.md`「常用命令」。
+
+**Android** —— JDK 17 + Android SDK（platform 34, build-tools 34）
 
 ```bash
 cd android
-# JDK 17 + Android SDK（platform 34, build-tools 34）
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
-./gradlew :app:assembleDebug
+./tools/build-asr.sh                # 备齐离线识别的 .so 与模型(不入版本管理,缺了打包会报错)
+./build-release.sh                  # 自分发渠道  → dist/reverb.apk(≈64 MB,含语音模型)
+./build-release.sh --store         # 大陆商店渠道 → dist/reverb-store.apk(≈3.9 MB)
+./gradlew :app:assembleDebug        # 只要一个能装的 debug 包
 ```
 
-产物：`android/app/build/outputs/apk/debug/app-debug.apk`
-安装到设备：`adb install -r android/app/build/outputs/apk/debug/app-debug.apk`
+**HarmonyOS** —— DevEco Studio 的 SDK 与 hvigor
 
-## 构建 · macOS
+```bash
+cd harmony
+export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk
+./build-release.sh                  # → dist/reverb.app + reverb-symbol.zip
+```
+
+**macOS** —— 无需 Xcode GUI
 
 ```bash
 cd macos
-./package.sh   # swift build → 组装 .app → ad-hoc 签名 → 打 dmg
+./package.sh                        # swift build → 组装 .app → ad-hoc 签名 → 打 dmg
 ```
 
 产物：`macos/build/余音-Reverb.dmg`
 
 ## 配置项
-- 版本：minSdk 26 / targetSdk 34 / compileSdk 34
+- Android：minSdk 26 / targetSdk 34 / compileSdk 34
 - 无需任何配置或密钥：所有播客源均为公开、免鉴权接口。
