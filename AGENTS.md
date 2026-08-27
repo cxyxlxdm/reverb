@@ -267,7 +267,7 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 | `docs/ARCHITECTURE.md` | 核心技术实现(分层、播放、持久化、渠道隔离、native、性能规律) |
 | `docs/TRANSCRIPT.md` | 逐字稿专篇(三端取字方式与取舍,含鸿蒙换引擎的迁移路径) |
 | `docs/TROUBLESHOOTING.md` | **68 条踩坑**:现象/根因/修法/规律 |
-| `docs/HISTORY.md` | 开发历程(203 次提交的顺序与因果,返工写得更详细) |
+| `docs/HISTORY.md` | 开发历程(顺序与因果,返工写得更详细) |
 | `docs/ROADMAP.md` | 进度、遗留问题、演进方向(**含「没验过的路径」清单**) |
 | ~~分发登记材料~~ | **不入版本控制**(主体信息与证书指纹属个人身份信息,只在本地);口径与理由见 `docs/HISTORY.md` 阶段五 |
 | `docs/PRIVACY.md` | 隐私政策(与 `reverb/privacy.html` 必须同步) |
