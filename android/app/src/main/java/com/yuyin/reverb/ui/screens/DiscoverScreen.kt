@@ -160,7 +160,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             title = stringResource(R.string.app_name),
             subtitle = stringResource(R.string.slogan),
             action = {
-                // 电台是**内容推荐**功能:商店渠道不含(CATALOG=false),理由见 build.gradle。
+                // 电台受内容目录开关门控;若合规要求降级为纯 RSS 工具,会随 CATALOG 一起隐藏。
                 if (BuildConfig.CATALOG) {
                 val mode = if (contextualRadio) RadioStation.Mode.CONTEXTUAL else RadioStation.Mode.RANDOM
                 val label = stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
@@ -528,23 +528,17 @@ private fun ReorderCategoriesDialog(
 }
 
 /**
- * 无内容目录渠道（应用市场）的首屏主体，**按有没有订阅分成两种布局**。
+ * `CATALOG=false` 时的纯 RSS 首屏,**按有没有订阅分成两种布局**。
  *
- * 为什么本渠道长这样：合规口径把「内置内容目录 / 分类浏览 / 内容推荐」判定为提供视听节目服务，
- * 需《相应内容分发许可资质》——个人主体拿不到；而「用户自行添加 RSS 源」的纯工具不需要。
- * 所以本渠道**不在应用内渲染任何可浏览的节目目录**，包括导入过程本身：
- * 推荐清单是一份挂在官网的 OPML，点一下**整份导入**，不做"列出来让你挑"的中间页
- * —— 那等于把目录又搬回了应用里。
+ * 这条降级路径为合规要求纯 RSS 工具时保留:推荐清单是一份挂在官网的 OPML,
+ * 点一下**整份导入**,不做“列出来让你挑”的中间页 —— 那等于把目录又搬回应用。
  *
- * 为什么还要按订阅数分叉：原先不论有 0 个还是几十个订阅，首屏都顶着一大块
- * 「从添加订阅开始 + 导入推荐订阅」。那是给零订阅新用户看的引导，已有一堆订阅的人
- * 每次打开先看它很怪，而且首屏没有任何"我的订阅有什么新的"——那恰恰是播客应用首屏最该有的。
+ * 为什么按订阅数分叉:原先不论有 0 个还是几十个订阅,首屏都顶着一大块
+ * 「从添加订阅开始 + 导入推荐订阅」。那是给零订阅新用户看的引导,已有一堆订阅的人
+ * 每次打开先看它很怪,而且首屏没有任何“我的订阅有什么新的”——那恰恰是播客应用首屏最该有的。
  *
- * 分叉**没有放宽合规口径**：展示的全是用户自己订阅的内容，不是可浏览的第三方目录，
- * 分类榜 / 电台 / 关键词检索仍然整体不存在（CATALOG=false，R8 连地址字符串一起剔除，见 H46）。
- *
- * 「最新更新」直接用已有的 InboxStore，与「音阁 · 最新」是同一份数据、两个入口
- * —— 有意保留：首屏看新内容，音阁做管理。
+ * 「最新更新」直接用已有的 InboxStore,与「音阁 · 最新」是同一份数据、两个入口:
+ * 首屏看新内容,音阁做管理。
  */
 @Composable
 private fun SubscribeStarter(

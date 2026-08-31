@@ -382,7 +382,7 @@ struct Index {
             history: this.history,
             subscriptions: this.subscriptions,
             radio: this.radio,
-            // 无内容目录渠道下,有订阅的人首屏主体就是「最新」+ 播放态高亮(见 subscribeStarter)
+            // `CATALOG=false` 的降级渠道下,有订阅的人首屏主体就是「最新」+ 播放态高亮(见 subscribeStarter)
             inbox: this.inbox,
             player: this.player,
             onOpenPodcast: (p: Podcast) => this.openPodcast(p),

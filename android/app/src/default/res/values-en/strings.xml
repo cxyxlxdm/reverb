@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  隐私同意页里**按渠道不同**的两段。长文本体在 src/main/res/,两个渠道共用;
-  只有这两段各渠道一份 —— 这样国内包里不会出现任何它用不上的话,
-  也不必把一整篇长文维护两份 × 五个语种。
-
-  与之配对的是 src/store/res/values/strings.xml,那边两段都是空串(不渲染)。
+  Channel-specific privacy-consent entries. privacy_consent_catalog now lives in
+  src/main/res/ and is shared by both channels; default only overrides ASR,
+  word highlighting, and microphone disclosure. The store-channel file keeps its own
+  channel-correct overrides and is no longer entirely empty.
 -->
 <resources>
-    <string name="privacy_consent_catalog">Show search. This build lets you search shows by keyword, which contacts public search APIs (Apple Podcasts, fyyd.de, gpodder.net). Those requests carry no credentials and no user identifiers either.</string>
     <string name="privacy_consent_asr">Offline speech-to-text. This build bundles offline speech recognition (the open-source whisper.cpp plus a bundled model). Turning an episode\'s audio into text happens <b>entirely on your device — the audio is never uploaded, never leaves the device, and never passes through any server</b>. You can turn this off in Settings.</string>
     <string name="set_word_highlight_sub">Light up each word as it is spoken. On-device recognition produces word timings along the way, so this costs no extra transcription time.</string>
     <string name="privacy_consent_mic">Real spectrum (optional). Turning on "Real spectrum" in Settings makes the ink wave follow the actual loudness. That needs microphone access, which the system asks for separately when you enable it; the audio is only analysed on device — never recorded, stored or sent anywhere — and is no longer used once you turn the switch off.</string>

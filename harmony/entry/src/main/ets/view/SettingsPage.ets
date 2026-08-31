@@ -131,8 +131,8 @@ export struct SettingsPage {
         // (原先是 外观 → 内容 → 播放 → 备份 → 其他,自成一套。)
         Column({ space: 0 }) {
           this.sectionLabel(L.s('sec_content'))
-          // 「地区」只作用于分类榜单、关键词检索与电台的取材范围 —— 这三者在本端都不存在
-          // (Features.CATALOG=false),留着就是个改了也没反应的死设置。
+          // 「地区」只作用于分类榜单、关键词检索与电台的取材范围;
+          // 与电台模式一起受 CATALOG 门控,合规要求降级时两项会同步隐藏。
           if (Features.CATALOG) {
             this.choiceRow(L.s('set_region'), () => '', REGIONS.map((r: RegionOption) => regionLabel(r)),
               () => this.regionIndex(),
@@ -140,7 +140,6 @@ export struct SettingsPage {
           }
           // 听觉足迹:Android 也是放在这一段的一条,不在音阁页头
           this.actionRow(L.s('set_footprint'), () => L.s('set_footprint_sub'), () => this.onOpenFootprint())
-          // 电台本身就是「内容推荐」,本端已整体去掉,设置项自然也不该留
           if (Features.CATALOG) {
             this.choiceRow(L.s('set_radio_mode'), () => '', [L.s('radio_random'), L.s('radio_contextual')],
               () => this.settings.contextualRadio ? 1 : 0,

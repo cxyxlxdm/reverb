@@ -93,14 +93,13 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                         // (整棵树在 ReverbTheme 内)。
                         //
                         /**
-                         * 正文之后追加**按渠道不同的三段**(见 src/default|store/res/values-* 各一份):
-                         * 「节目检索」「离线语音转文字」「真实频谱(麦克风)」。
-                         * 大陆商店渠道三样都没有,那边这三个字符串是空串,于是一个字都不渲染 ——
-                         * 长文本体两个渠道共用,不必维护两份。
+                         * 正文之后追加三段能力说明:
+                         * 「节目检索」已提升到 src/main/res,两个渠道都渲染;
+                         * 「离线语音转文字」「真实频谱(麦克风)」仍由 default / store source set
+                         * 分渠道覆盖,大陆商店版是空串,所以不渲染(见 H70)。
                          *
-                         * 麦克风那一段是后补的:同意门**两个渠道都出**(见 MainActivity,无渠道条件),
-                         * 而自分发完整版为「真实频谱」声明了 RECORD_AUDIO —— 正文里原先那句
-                         * 「不申请……麦克风……」对完整版是不成立的,必须如实说明用途与边界。
+                         * 麦克风这段不能并入共用正文:同意门**两个渠道都出**(见 MainActivity,无渠道条件),
+                         * 但只有自分发完整版声明 RECORD_AUDIO。按渠道放字符串才能让可见声明与包内权限一致。
                          */
                         listOf(
                             stringResource(R.string.privacy_consent_body),

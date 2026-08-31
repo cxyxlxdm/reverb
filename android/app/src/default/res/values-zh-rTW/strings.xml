@@ -1,13 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  隐私同意页里**按渠道不同**的两段。长文本体在 src/main/res/,两个渠道共用;
-  只有这两段各渠道一份 —— 这样国内包里不会出现任何它用不上的话,
-  也不必把一整篇长文维护两份 × 五个语种。
-
-  与之配对的是 src/store/res/values/strings.xml,那边两段都是空串(不渲染)。
+  隱私同意頁裡按渠道不同的三項。privacy_consent_catalog 已提升到 src/main/res/、
+  兩個渠道共用;default 只覆蓋 ASR、逐字高亮與麥克風說明。
+  商店渠道那份仍保留渠道正確的覆蓋,不再是「兩段都是空字串」。
 -->
 <resources>
-    <string name="privacy_consent_catalog">節目檢索。本版本提供依關鍵字檢索節目,會存取 Apple 播客目錄、fyyd.de、gpodder.net 等公開檢索介面;這些請求同樣不攜帶任何鑑權憑證與使用者識別碼。</string>
     <string name="privacy_consent_asr">離線語音轉文字。本版本內建離線語音辨識(開源元件 whisper.cpp 與隨附的辨識模型),將單集音訊轉成文字**全程在本機完成,音訊不上傳、不離開裝置,也不經過任何伺服器**。此功能可在設定中關閉。</string>
     <string name="set_word_highlight_sub">跟讀時逐字點亮。本機辨識順帶就能算出逐字時間,不額外增加轉寫耗時</string>
     <string name="privacy_consent_mic">真實頻譜（可選）。在設定裡開啟「真實頻譜」後，封面的水墨聲波會跟隨實際音量起伏。這需要麥克風權限，系統會在你開啟時單獨徵求同意；音訊**只在本機做頻譜計算，不錄製、不儲存、不外傳**，關掉這個開關即不再使用。</string>

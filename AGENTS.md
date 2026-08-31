@@ -25,7 +25,7 @@
 1. **零后端。** 没有服务器、没有账号、没有云同步、**没有任何上传数据的代码路径**。
 2. **不接任何第三方 SDK。** 系统能力不算三方。分享一律走系统分享。
 3. **合规是设计输入。** 隐私同意门与渠道功能隔离在架构层面体现,不是界面上加判断。
-4. **「删掉」必须可验证。** 声明某渠道没有某功能,验收方式是**解包 grep**。
+4. **包里有 / 没有,都必须可验证。** 声明某渠道包含或不含某功能,验收方式是**解包 grep**。
 
 Android 有**两个渠道**(`default` 自分发 / `store` 大陆商店),功能范围不同;
 鸿蒙只有商店渠道;macOS 自分发。差异见 `docs/FEATURES.md`「渠道差异」。
@@ -93,14 +93,18 @@ ffmpeg -i 原图.png -vf "pad=1512:2688:(ow-iw)/2:0:0x141E20" -pix_fmt rgb24 发
 
 下面每一条都对应一次真实事故。违反的代价不是风格问题,是返工或线上故障。
 
-### 1. 渠道隔离的验收是解包 grep,不是点界面
+### 1. 包里有 / 没有,以解包 grep 为准
 
 ```bash
-# 大陆商店渠道:必须全为 0
-unzip -l dist/reverb-store.apk | grep -icE 'lib/|whisper-model'
-LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder'
-aapt2 dump permissions dist/reverb-store.apk | grep -c RECORD_AUDIO
+# Android 大陆商店渠道当前期望(H70):目录接口非 0;native / 模型与录音权限仍为 0
+unzip -l dist/reverb-store.apk | grep -icE 'lib/|whisper-model'              # 0
+LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder'       # 非 0
+aapt2 dump permissions dist/reverb-store.apk | grep -c RECORD_AUDIO         # 0
+# HarmonyOS 商店包当前同样应能 grep 到目录接口 URL(非 0)
 ```
+
+这里的方法论是「声明加回来也要验、声明删掉也要验」,不是把某组期望值永久写死。
+产品决策翻转时,grep 的期望值也会翻转(见 H70),并且必须同步 `docs/FEATURES.md`。
 
 **中文字符串必须用 `LC_ALL=C grep -a` 搜原始字节** —— `resources.arsc` / `resources.index`
 里的中文不是 ASCII,`strings` 看不见,曾因此差点得出错误结论。

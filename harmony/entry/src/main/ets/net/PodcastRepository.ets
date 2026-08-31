@@ -1,6 +1,7 @@
 import taskpool from '@ohos.taskpool';
 import { Episode, Podcast, FeedResult, SearchOutcome } from '../model/Models';
 import { RssParser } from './RssParser';
+import { ITunesSource, AppleChartsSource, FyydSource, GpodderSource } from './Sources';
 import { fetchFeedConcurrent } from './FeedTask';
 import { PopularCacheStore } from '../store/Stores';
 import { SeedCatalog } from '../store/SeedCatalog';
@@ -8,16 +9,10 @@ import { FeedCacheStore } from '../store/FeedCacheStore';
 import { Log } from '../util/Logger';
 
 /**
- * 取源门面。本端只有 **RSS 直连** 一条路。
+ * 取源门面。频道搜索按 RSS 直连 → Apple → fyyd → gpodder 降级;
+ * 榜单按 Apple 地区/分类榜 → 美国综合榜 → fyyd 热门降级。
  *
- * 原先还有「Apple iTunes / Apple 榜单 / fyyd.de / gpodder.net」四路目录源(降级链),
- * 由 `Features.CATALOG` 在这一层拦住。但**光拦住不够** —— ArkTS 没有 R8 那样的
- * dead code elimination,常量为 false 也照样把类和 URL 编进 `modules.abc`,解包 grep 一抓就有,
- * 而合规申报写的是"仅作为 RSS 订阅解析工具"(见 TROUBLESHOOTING H46 / H54)。
- * 所以那四个类**整个移出了编译树**,现在在 `harmony/shelved/net/Sources.ets`。
- * 要放开内容目录的话,照 `harmony/shelved/README.md` 把三处 `TODO(catalog)` 接回来。
- *
- * 播放一律回落发布方 RSS 的 enclosure 原始直链。
+ * 目录接口只负责发现节目,播放始终回落发布方 RSS 的 enclosure 原始直链。
  */
 export class PodcastRepository {
   private cache: PopularCacheStore;
@@ -32,9 +27,7 @@ export class PodcastRepository {
     this.feedCache = feedCache;
   }
 
-  /// 搜索频道:**只认 RSS 地址直连**。
-  /// TODO(catalog): 放开内容目录时,URL 解析失败要继续降级到 Apple → fyyd → gpodder
-  /// (Android 侧的行为;macOS 是直接返回空)。
+  /// 搜索频道:RSS 直连优先,失败后按 Apple → fyyd → gpodder 降级。
   async search(query: string, region: string): Promise<SearchOutcome> {
     const q = query.trim();
     if (q.length === 0) return { podcasts: [], sourceLabel: '', failed: false };
@@ -47,17 +40,35 @@ export class PodcastRepository {
       }
     }
 
-    // 到此为止:关键词检索返回的是节目列表,同样构成动态目录(Features.CATALOG=false)。
+    const apple = await ITunesSource.search(q, region);
+    if (apple.length > 0) {
+      Log.i('Repo', `搜索经 Apple 命中 ${apple.length} 条`);
+      return { podcasts: apple, sourceLabel: 'Apple Podcasts', failed: false };
+    }
+
+    const fyyd = await FyydSource.search(q);
+    if (fyyd.length > 0) {
+      Log.i('Repo', `搜索经 fyyd 命中 ${fyyd.length} 条`);
+      return { podcasts: fyyd, sourceLabel: 'fyyd.de', failed: false };
+    }
+
+    const gpodder = await GpodderSource.search(q);
+    if (gpodder.length > 0) {
+      Log.i('Repo', `搜索经 gpodder 命中 ${gpodder.length} 条`);
+      return { podcasts: gpodder, sourceLabel: 'gpodder.net', failed: false };
+    }
+
     Log.w('Repo', `搜索无结果 q="${q}"`);
     return { podcasts: [], sourceLabel: '', failed: true };
   }
 
-  /// 搜索单集:本端不提供(单集检索只有 Apple 有,属内容目录)。
-  /// TODO(catalog): 放开内容目录时接回 `ITunesSource.searchEpisodes`;注意 **URL 输入不参与**
-  /// (与 Android 一致)—— 把一条 RSS 地址当关键词丢给 iTunes,既拿不到结果,
-  /// 又平白多一次目录请求。
+  /// 按关键词搜索单集;URL 输入只参与频道 RSS 直连,不额外请求目录。
   async searchEpisodes(query: string, region: string): Promise<Episode[]> {
-    return [];
+    const q = query.trim();
+    if (q.length === 0 || q.startsWith('http://') || q.startsWith('https://')) return [];
+    const episodes = await ITunesSource.searchEpisodes(q, region);
+    Log.i('Repo', `单集搜索命中 ${episodes.length} 条`);
+    return episodes;
   }
 
   cacheKey(genreId: number, region: string): string {
@@ -83,11 +94,19 @@ export class PodcastRepository {
     return this.seed.generatedAt();
   }
 
-  /// 刷新热门榜:本端不提供(榜单即内容目录),恒返回空。
-  /// TODO(catalog): 放开内容目录时接回三层降级 —— 分类榜/综合榜 →(综合榜且非 us 时)
-  /// 回落 us → fyyd hot;**只有拿到非空结果才写缓存**,失败保留旧缓存。
+  /// 刷新热门榜:分类榜/地区综合榜 → 美国综合榜 → fyyd 热门;失败保留旧缓存。
   async refreshPopular(genreId: number, region: string): Promise<Podcast[]> {
-    return [];
+    Log.i('Repo', `刷新榜单 genre=${genreId > 0 ? `${genreId}` : 'all'} region=${region}`);
+    let list = genreId > 0
+      ? await AppleChartsSource.topByGenre(region, genreId, 30)
+      : await AppleChartsSource.top(region, 30);
+    if (list.length === 0 && genreId <= 0) {
+      if (region !== 'us') list = await AppleChartsSource.top('us', 30);
+      if (list.length === 0) list = await FyydSource.hot(30);
+    }
+    if (list.length > 0) this.cache.put(this.cacheKey(genreId, region), list);
+    Log.i('Repo', `榜单刷新完成 count=${list.length}`);
+    return list;
   }
 
   /**

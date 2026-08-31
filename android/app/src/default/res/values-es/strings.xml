@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  隐私同意页里**按渠道不同**的两段。长文本体在 src/main/res/,两个渠道共用;
-  只有这两段各渠道一份 —— 这样国内包里不会出现任何它用不上的话,
-  也不必把一整篇长文维护两份 × 五个语种。
-
-  与之配对的是 src/store/res/values/strings.xml,那边两段都是空串(不渲染)。
+  Entradas del consentimiento que cambian por canal. privacy_consent_catalog ahora
+  está en src/main/res/ y se comparte; default solo reemplaza ASR, resaltado palabra
+  por palabra y micrófono. El canal de tienda conserva reemplazos propios y ya no está vacío.
 -->
 <resources>
-    <string name="privacy_consent_catalog">Show search. This build lets you search shows by keyword, which contacts public search APIs (Apple Podcasts, fyyd.de, gpodder.net). Those requests carry no credentials and no user identifiers either.</string>
-    <string name="privacy_consent_asr">Offline speech-to-text. This build bundles offline speech recognition (the open-source whisper.cpp plus a bundled model). Turning an episode\'s audio into text happens <b>entirely on your device — the audio is never uploaded, never leaves the device, and never passes through any server</b>. You can turn this off in Settings.</string>
+    <string name="privacy_consent_asr">Transcripción de voz sin conexión. Esta versión incluye reconocimiento sin conexión (el componente de código abierto whisper.cpp y su modelo). La conversión del audio de un episodio en texto se realiza <b>por completo en tu dispositivo: el audio nunca se sube, nunca sale del dispositivo y nunca pasa por ningún servidor</b>. Puedes desactivar esta función en Ajustes.</string>
     <string name="set_word_highlight_sub">Ilumina cada palabra mientras se pronuncia. El reconocimiento en el dispositivo obtiene los tiempos por palabra de paso, así que no añade tiempo de transcripción.</string>
     <string name="privacy_consent_mic">Espectro real (opcional). Al activar «Espectro real» en Ajustes, la onda de tinta sigue el volumen real. Requiere acceso al micrófono, que el sistema solicita por separado al activarlo; el audio solo se analiza en el dispositivo — nunca se graba, guarda ni envía — y deja de usarse al desactivar la opción.</string>
 </resources>

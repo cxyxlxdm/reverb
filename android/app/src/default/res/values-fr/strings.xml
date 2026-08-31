@@ -1,14 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  隐私同意页里**按渠道不同**的两段。长文本体在 src/main/res/,两个渠道共用;
-  只有这两段各渠道一份 —— 这样国内包里不会出现任何它用不上的话,
-  也不必把一整篇长文维护两份 × 五个语种。
-
-  与之配对的是 src/store/res/values/strings.xml,那边两段都是空串(不渲染)。
+  Entrées du consentement propres au canal. privacy_consent_catalog se trouve
+  désormais dans src/main/res/ et est partagé; default ne remplace que l’ASR,
+  le surlignage mot à mot et le microphone. Le canal boutique garde ses propres variantes.
 -->
 <resources>
-    <string name="privacy_consent_catalog">Show search. This build lets you search shows by keyword, which contacts public search APIs (Apple Podcasts, fyyd.de, gpodder.net). Those requests carry no credentials and no user identifiers either.</string>
-    <string name="privacy_consent_asr">Offline speech-to-text. This build bundles offline speech recognition (the open-source whisper.cpp plus a bundled model). Turning an episode\'s audio into text happens <b>entirely on your device — the audio is never uploaded, never leaves the device, and never passes through any server</b>. You can turn this off in Settings.</string>
+    <string name="privacy_consent_asr">Transcription vocale hors ligne. Cette version intègre la reconnaissance hors ligne (le composant open source whisper.cpp et son modèle). La conversion de l\'audio d\'un épisode en texte s\'effectue <b>entièrement sur votre appareil : l\'audio n\'est jamais envoyé, ne quitte jamais l\'appareil et ne transite par aucun serveur</b>. Vous pouvez désactiver cette fonction dans les réglages.</string>
     <string name="set_word_highlight_sub">Surligne chaque mot au fur et à mesure. La reconnaissance sur l\'appareil fournit les temps par mot au passage, sans allonger la transcription.</string>
     <string name="privacy_consent_mic">Spectre réel (facultatif). En activant « Spectre réel » dans les réglages, l\'onde suit le volume réel. Cela nécessite l\'accès au micro, que le système demande séparément au moment de l\'activation ; l\'audio est uniquement analysé sur l\'appareil — jamais enregistré, stocké ni envoyé — et n\'est plus utilisé dès que vous désactivez l\'option.</string>
 </resources>

@@ -78,9 +78,10 @@ macOS `AppEnvironment`,都是全局单例,界面直接取用。理由很实际�
 
 ## 四、取源与解析
 
-**取源策略是多层兜底**(仅自分发版有目录相关的层):
+**取源策略是多层兜底**(当前三个端与两个渠道都有在线目录层):
 Apple iTunes Search / Charts → fyyd.de → gpodder.net → RSS 直连。
-一处不通自动换下一处,最终一律回到发布方自己的 RSS。
+一处不通自动换下一处,最终一律回到发布方自己的 RSS。大陆商店 Android / 鸿蒙仍不打包
+内置 `seed_podcasts.json`,所以首次无网且无缓存时没有精选快照回退。
 
 **RSS 解析器三端各写一份,但规则对齐**,都要处理真实世界的脏数据:
 
@@ -140,30 +141,33 @@ popular_cache.json  transcripts/<单集>.<语言>.json
 
 ## 六、渠道隔离:三种工具链,三种做法
 
-这是整个项目最需要架构层面处理的合规问题。目标:大陆商店渠道**包里真的没有**
-内容目录相关的代码与数据,可解包验证。
+这是整个项目最需要架构层面处理的合规问题。目标不是永久规定商店包「必须没有目录」,
+而是让每次产品决策都能在产物中验证。H70 后商店渠道恢复 `CATALOG`,但仍关闭
+`SPECTRUM` / `LOCAL_ASR`,并且不打包内置种子。
 
 ### Android:flavor + source set + R8
 
 ```
-app/src/main/     共享代码
+app/src/main/     共享代码与两个渠道共用的目录隐私说明
 app/src/default/  自分发渠道:AsrFactory(返回 WhisperEngine)、jniLibs/*.so、assets/模型、
-                  AndroidManifest 里的 RECORD_AUDIO、privacy_consent_* 的完整版文案
-app/src/store/   商店渠道:AsrFactory(返回 null)、对应文案为空串或渠道正确的版本
+                  AndroidManifest 里的 RECORD_AUDIO、ASR / 麦克风相关文案
+app/src/store/   商店渠道:AsrFactory(返回 null)、无 native / 模型 / RECORD_AUDIO、
+                  无本机转写与真实频谱的渠道文案
 ```
 
 两种机制配合:
 
 - **编译期常量 + R8**:`BuildConfig.CATALOG` / `AsrFactory.HAS_ENGINE` 是 `const`,
-  R8 折叠之后整套目录代码与字符串一并被删除;
-- **source set**:R8 **删不掉 `.so` 与 assets**,native 库与模型是构建系统按 source set
-  打进包的——所以商店渠道必须靠"那个 source set 里压根没有这些文件"来保证。
+  R8 能折叠关闭的代码分支。当前商店渠道的 `CATALOG` 已开启;若合规要求回退,再关闭并验包;
+- **source set**:R8 **删不掉 `.so` 与 assets**,native 库、模型和种子是构建系统按 source set
+  打进包的——所以商店渠道仍靠「那个 source set 里压根没有这些文件」保证不含 ASR 与内置精选。
 
-### HarmonyOS:必须把代码移出编译树
+### HarmonyOS:没有 DCE,降级必须移出编译树
 
-**ArkTS 没有 DCE。** `Features.CATALOG ? A : B` 的两支都会进包,
-release hap 里照样能 grep 到 iTunes/fyyd/gpodder 的类名与 URL。
-最终把那四路取源**整体移出编译树**(挪到 `harmony/shelved/`,留 `TODO(catalog)` 标记)。
+**ArkTS 没有 DCE。** `Features.CATALOG ? A : B` 的两支都会进包。
+此前为纯 RSS 口径,目录实现整体移到 `harmony/shelved/`;H70 恢复目录时又把 `Sources.ets`
+移回编译树并接回降级链。若合规要求再次降级,不能只把开关设为 `false`,必须重新把目录实现
+移出编译树。这个工具链差异不因当前恢复目录而失效。
 
 > 这是一条不能类推的经验:**"编译期开关能删代码"取决于工具链有没有 DCE。**
 > 同样的写法在 Kotlin/R8 下成立,在 ArkTS 下不成立。
@@ -171,16 +175,18 @@ release hap 里照样能 grep 到 iTunes/fyyd/gpodder 的类名与 URL。
 ### 验收方式写死在流程里
 
 ```bash
-# 商店渠道:必须全为 0
-unzip -l dist/reverb-store.apk | grep -icE 'lib/|whisper-model'
-LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder'
-aapt2 dump permissions dist/reverb-store.apk | grep -c RECORD_AUDIO
-# 自分发渠道:必须都有
+# Android 商店渠道当前期望(H70):目录 URL 非 0;native / 模型 / 录音权限仍为 0
+unzip -l dist/reverb-store.apk | grep -icE 'lib/|whisper-model'              # 0
+LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder'       # 非 0
+aapt2 dump permissions dist/reverb-store.apk | grep -c RECORD_AUDIO         # 0
+# HarmonyOS 商店包:目录 URL 同样非 0,本机转写与真实频谱产物仍不存在
+# 自分发渠道:whisper 模型与 native 库必须都有
 unzip -l dist/reverb.apk | grep -cE 'whisper-model.bin|libreverb_asr.so'
 ```
 
-**中文字符串要用 `LC_ALL=C grep -a` 对原始字节搜**——`resources.arsc` / `resources.index`
-里的中文不是 ASCII,`strings` 看不见,曾因此差点得出错误结论。
+期望值随产品决策翻转,方法论不变:声明加回来也要验,声明删掉也要验;翻转时同步
+`docs/FEATURES.md`。**中文字符串要用 `LC_ALL=C grep -a` 对原始字节搜**——
+`resources.arsc` / `resources.index` 里的中文不是 ASCII,`strings` 看不见,曾因此差点得出错误结论。
 
 ---
 

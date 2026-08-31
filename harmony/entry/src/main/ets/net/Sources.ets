@@ -91,7 +91,9 @@ export class ITunesSource {
         podcastTitle: J.str(o, 'collectionName'),
         durationSec: durMs > 0 ? Math.floor(durMs / 1000) : 0,
         pubDate: J.str(o, 'releaseDate').substring(0, 10),
-        feedUrl: J.str(o, 'feedUrl')
+        feedUrl: J.str(o, 'feedUrl'),
+        transcriptUrl: '',
+        transcriptType: ''
       });
     }
     return out;

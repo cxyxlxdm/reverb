@@ -30,7 +30,7 @@ export struct DiscoverPage {
   @ObjectLink subscriptions: SubscriptionStore;
   @ObjectLink radio: RadioStation;
   /**
-   * 「最新」聚合。无内容目录的渠道下,**有订阅的人的首屏主体就是它**(见 subscribeStarter)。
+   * 「最新」聚合。`CATALOG=false` 的降级渠道下,**有订阅的人的首屏主体就是它**(见 subscribeStarter)。
    * 与「音阁 · 最新」是同一份数据、两个入口 —— 不是各存一份。
    */
   @ObjectLink inbox: InboxStore;
@@ -50,7 +50,7 @@ export struct DiscoverPage {
   /// 标成「每日热门」会误导,故标题改为「内置精选」。
   @State seedFlags: boolean[] = [];
   @State refreshing: boolean = false;
-  /// 「导入推荐订阅」进行中(无内容目录渠道的首屏动作)
+  /// 「导入推荐订阅」进行中(`CATALOG=false` 的降级渠道的首屏动作)
   @State importing: boolean = false;
   /// 导入结果提示。沿用本项目既有形态(设置页的 hint)——内联一行文字,不用 toast。
   @State importHint: string = '';
@@ -63,6 +63,8 @@ export struct DiscoverPage {
   @State searchEpisodes: Episode[] = [];
   @State searchLabel: string = '';
   @State searched: boolean = false;
+  // 网络返回顺序不可控;只允许最后一次提交的结果落到界面。
+  private searchGeneration: number = 0;
 
   private app: AppContainer = AppContainer.get();
 
@@ -79,10 +81,10 @@ export struct DiscoverPage {
     this.lists = l;
     this.loadingFlags = f;
     this.seedFlags = sd;
-    // 无内容目录的渠道**不拉榜单** —— 那是内容目录请求,而且界面上压根不展示它。
+    // `CATALOG=false` 的降级渠道**不拉榜单** —— 那是内容目录请求,而且界面上压根不展示它。
     // 漏了这一句的后果不是报错,是"看不见的目录请求"仍然在发,抓包一看就露。
     if (Features.CATALOG) this.loadCategory(0, false);
-    // 反过来,无内容目录渠道的首屏主体是「最新」,进页就得按需刷一次。
+    // 反过来,`CATALOG=false` 的降级渠道的首屏主体是「最新」,进页就得按需刷一次。
     // refreshIfStale 自带订阅集签名判断与防重入,和音阁那边同时调用不会重复拉。
     else this.refreshInbox(false);
   }
@@ -142,14 +144,16 @@ export struct DiscoverPage {
 
   private async runSearch(): Promise<void> {
     const q = this.query.trim();
-    // 无内容目录的渠道**不做关键词检索** —— 关键词返回的是节目列表,同样构成动态目录。
-    // 只接受 http(s) 的 RSS 地址;输入别的就提示一句,不发请求。
+    const generation = ++this.searchGeneration;
+    // CATALOG=false 的降级包只接受 RSS 地址;输入别的就提示一句,不发请求。
     if (!Features.CATALOG && q.length > 0
       && !q.startsWith('http://') && !q.startsWith('https://')) {
+      this.searching = false;
       this.importHint = L.s('search_url_only');
       return;
     }
     if (q.length === 0) {
+      this.searching = false;
       this.searched = false;
       this.searchPodcasts = [];
       this.searchEpisodes = [];
@@ -158,11 +162,14 @@ export struct DiscoverPage {
     this.searching = true;
     this.searched = true;
     const region = this.app.region();
-    const outcome: SearchOutcome = await this.app.repository.search(q, region);
+    const podcastsPromise: Promise<SearchOutcome> = this.app.repository.search(q, region);
+    const episodesPromise: Promise<Episode[]> = this.app.repository.searchEpisodes(q, region);
+    const outcome: SearchOutcome = await podcastsPromise;
+    const episodes: Episode[] = await episodesPromise;
+    if (generation !== this.searchGeneration || this.query.trim() !== q) return;
     this.searchPodcasts = outcome.podcasts;
     this.searchLabel = outcome.sourceLabel;
-    // 单集只有 Apple 提供
-    this.searchEpisodes = await this.app.repository.searchEpisodes(q, region);
+    this.searchEpisodes = episodes;
     this.searching = false;
     Log.i('Discover', `搜索 "${q}" 节目=${this.searchPodcasts.length} 单集=${this.searchEpisodes.length} 源=${this.searchLabel}`);
   }
@@ -176,7 +183,7 @@ export struct DiscoverPage {
         // (「发现」只作底部 tab 的标签)。
         title: L.s('app_title'),
         subtitle: L.s('app_slogan'),
-        // 电台是**内容推荐**功能,无内容目录的渠道不出现(见 Features.CATALOG)
+        // 电台是**内容推荐**功能,`CATALOG=false` 的降级渠道不出现(见 Features.CATALOG)
         action: () => { this.headerAction() }
       })
 
@@ -288,7 +295,7 @@ export struct DiscoverPage {
   }
 
   /**
-   * 无内容目录渠道的首屏主体,**按有没有订阅分成两种布局**。
+   * `CATALOG=false` 的降级渠道的首屏主体,**按有没有订阅分成两种布局**。
    *
    * 为什么分叉:原先不论有没有订阅,首屏顶着一大块「从添加订阅开始 + 导入推荐订阅」——
    * 那是给零订阅的新用户看的引导,一个已有几十个订阅的人每次打开都先看见它,很怪。
@@ -515,7 +522,9 @@ export struct DiscoverPage {
           .fontSize(TypeScale.label * this.fontScale)
           .fontColor(this.scheme.primary)
           .onClick(() => {
+            this.searchGeneration++;
             this.query = '';
+            this.searching = false;
             this.searched = false;
             this.searchPodcasts = [];
             this.searchEpisodes = [];

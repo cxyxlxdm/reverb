@@ -918,7 +918,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Subscribe: paste an RSS URL, or import a recommended list in one tap\n· Library: subscriptions, latest, favorites, downloads and history\n· Offline: download episodes, optionally Wi-Fi only\n· Playback: speed, skip, sleep timer, resume, background and lock screen controls\n· Transcript: for episodes whose publisher provides one, read along in the player\n· Show notes: swipe on the player page\n· Update reminders: get notified when a new episode lands\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
+      "value": "· Discover: browse daily charts by region and category\n· Search: find shows or episodes by keyword, or paste an RSS URL\n· Radio: roam at random or follow time-of-day moods\n· Library: subscriptions, latest, favorites, downloads and history\n· Offline: download episodes, optionally Wi-Fi only\n· Playback: speed, skip, sleep timer, resume, background and lock screen controls\n· Transcript: for episodes whose publisher provides one, read along in the player\n· Show notes: swipe on the player page\n· Update reminders: get notified when a new episode lands\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
     },
     {
       "name": "about_h_philosophy",
@@ -926,7 +926,7 @@
     },
     {
       "name": "about_p_philosophy",
-      "value": "The look draws on ink wash, celadon and beam gold; the name and icon echo \"lingering sound\" — a wave wrapping a roof beam.\n\nSourcing stays free end to end, with no login and no API key: everything comes back to the publisher's own public RSS, streaming the original audio directly — clean rights, zero cost.\n\nPrivacy: subscriptions, history and downloads live only on your device. Nothing is uploaded or tracked."
+      "value": "The look draws on ink wash, celadon and beam gold; the name and icon echo \"lingering sound\" — a wave wrapping a roof beam.\n\nSourcing stays free end to end, with no login and no API key: discovery uses public directories including Apple, fyyd and gpodder, while playback always comes back to the publisher's own RSS and streams the original audio — clean rights, zero cost.\n\nPrivacy: subscriptions, history and downloads live only on your device. Nothing is uploaded or tracked."
     },
     {
       "name": "queue_play_next",
@@ -958,7 +958,7 @@
     },
     {
       "name": "privacy_consent_body",
-      "value": "Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\nWe collect no personal information. There is no server, no account, no third-party SDKs, no analytics and no ads.\n\nYour data stays on this device. Subscriptions, history, favorites, downloads, listening time, stamps and settings are stored in the app's private directory and removed on uninstall.\n\nWhat the network is used for. To fetch and play podcasts, your device directly contacts the publishers' own RSS, audio and artwork URLs; when you tap \"Import recommended feeds\", it downloads a subscription list from this app's website. No credentials and no user identifiers are attached; see the full policy for the complete list.\n\nPermissions. Internet, network state (to detect Wi-Fi for \"download on Wi-Fi only\"), background audio playback, and notifications (only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
+      "value": "Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\nWe collect no personal information. There is no server, no account, no third-party SDKs, no analytics and no ads.\n\nYour data stays on this device. Subscriptions, history, favorites, downloads, listening time, stamps and settings are stored in the app's private directory and removed on uninstall.\n\nWhat the network is used for. To discover and play podcasts, your device contacts public directories for Apple Podcasts search (itunes.apple.com), Apple charts (rss.marketingtools.apple.com), fyyd.de and gpodder.net, plus the publishers' own RSS, audio and artwork URLs; when you tap \"Import recommended feeds\", it also downloads a subscription list from this app's website. No credentials and no user identifiers are attached; see the full policy for the complete list.\n\nPermissions. Internet, network state (to detect Wi-Fi for \"download on Wi-Fi only\"), background audio playback, and notifications (only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
     },
     {
       "name": "privacy_consent_asr",
