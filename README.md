@@ -69,7 +69,7 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 - `docs/HISTORY.md` — **开发历程**(顺序与因果,以及哪里返了工)
 - `docs/ROADMAP.md` — **进度、遗留问题与演进方向**(三端各到什么程度、哪些路径还没验过、以后可能往哪走)
 - `docs/TRANSCRIPT.md` — 逐字稿 / 语音转文字的三端实现与取舍(含鸿蒙将来换三方引擎的路子)
-- `docs/TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律(68 条)
+- `docs/TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律
 - `docs/PRIVACY.md` — 隐私政策(与 `reverb/privacy.html` 必须同步)
 
 > 分发登记材料(主体信息、证书指纹、域名与账号相关)**不入版本控制** —— 属个人身份信息,

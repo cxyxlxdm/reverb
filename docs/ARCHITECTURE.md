@@ -3,7 +3,7 @@
 > 三端(Android / macOS / HarmonyOS)的架构与关键实现,以及**为什么这样选**。
 >
 > 范围划分:功能全貌见 `PRODUCT.md` / `FEATURES.md`;逐字稿单独成篇见 `TRANSCRIPT.md`;
-> 具体故障的现象-根因-修法见 `TROUBLESHOOTING.md`(68 条);做的顺序与返工见 `HISTORY.md`。
+> 具体故障的现象-根因-修法见 `TROUBLESHOOTING.md`;做的顺序与返工见 `HISTORY.md`。
 > 本文只讲**结构与取舍**,不重复那几份里的细节。
 
 规模(2026-08-25):

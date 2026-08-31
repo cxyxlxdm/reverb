@@ -144,6 +144,33 @@ struct Index {
     this.stack.pushPathByName('podcast', null);
   }
 
+  /**
+   * 从播放页跳频道主页。播放中的单集只带 `feedUrl`,这里把它还原成一个 Podcast 种子。
+   *
+   * 先在订阅里找现成的 —— 已订阅的频道能立刻显示作者与简介,不必等 RSS 回来。
+   * 找不到(从「最新」或电台播的、还没订阅的频道)就用单集信息拼一个最小种子:
+   * **详情页只依赖 `seed.feedUrl` 去取 RSS**,其余字段拉到之后会被 `loaded` 整体覆盖,
+   * 所以这个种子只需要够撑住第一帧不空白。
+   */
+  private openPodcastByFeed(feedUrl: string): void {
+    if (feedUrl.length === 0) return;
+    const subs: Podcast[] = this.subscriptions.subscriptions;
+    const idx: number = subs.findIndex((p: Podcast) => p.feedUrl === feedUrl);
+    if (idx >= 0) {
+      this.openPodcast(subs[idx]);
+      return;
+    }
+    const seed: Podcast = emptyPodcast();
+    seed.feedUrl = feedUrl;
+    seed.id = feedUrl;
+    const e: Episode | null = this.player.current;
+    if (e !== null) {
+      seed.title = e.podcastTitle;
+      seed.artworkUrl = e.artworkUrl;
+    }
+    this.openPodcast(seed);
+  }
+
   private playEpisode(e: Episode, queue: Episode[]): void {
     Log.i('UI', `播放 "${e.title}" 队列=${queue.length}`);
     this.player.playOrToggle(e, queue);
@@ -243,7 +270,8 @@ struct Index {
           stamps: this.stamps,
           settings: this.settings,
           onBack: () => { this.stack.pop(); },
-          onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
+          onOpenQueue: () => { this.stack.pushPathByName('queue', null); },
+          onOpenPodcast: (feedUrl: string) => { this.openPodcastByFeed(feedUrl); }
         })
       }
       .hideTitleBar(true)

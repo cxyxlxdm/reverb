@@ -32,6 +32,15 @@ export struct PlayerPage {
   @ObjectLink settings: SettingsStore;
   onBack: () => void = () => {};
   onOpenQueue: () => void = () => {};
+  /**
+   * 频道名点击 → 跳该频道主页。
+   *
+   * **这个入口不是锦上添花:它是播放中单集能到达频道页的唯一路径。**
+   * 从「最新」聚合或电台播出来的单集,那个频道很可能还没订阅,音阁的订阅列表里
+   * 自然也找不到 —— 于是没有任何地方能订阅它。漏了这个回调,鸿蒙端就等于
+   * 「听到喜欢的节目但订阅不了」(见 H69)。
+   */
+  onOpenPodcast: (feedUrl: string) => void = () => {};
 
   @State page: number = 0;
   /**
@@ -244,6 +253,12 @@ export struct PlayerPage {
     return this.noteVal.length > 0 ? this.noteVal : L.s('shownotes_empty');
   }
 
+  /// 当前单集所属频道的 RSS 地址;没在播或该集没带 feedUrl 时是空串。
+  /// 空串意味着到不了频道页(例如引导音频),此时频道名不可点。
+  private currentFeedUrl(): string {
+    return this.player.current === null ? '' : this.player.current.feedUrl;
+  }
+
   @Builder
   /**
    * 单集标题 + 频道名。**字体与间距对齐 Android 播放页**(`PlayerScreen.kt` 的同一块)。
@@ -274,11 +289,15 @@ export struct PlayerPage {
         .width('100%')
       Text(this.player.current === null ? '' : this.player.current.podcastTitle)
         .fontSize(TypeScale.body * this.fontScale)
-        .fontColor(this.scheme.onSurfaceVariant)
+        .fontColor(this.currentFeedUrl().length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
         .maxLines(1)
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Center)
         .width('100%')
+        .onClick(() => {
+          const feed: string = this.currentFeedUrl();
+          if (feed.length > 0) this.onOpenPodcast(feed);
+        })
     }
     .width('100%')
     .margin({ bottom: 20 })
