@@ -1,4 +1,5 @@
 import type common from '@ohos.app.ability.common';
+import i18n from '@ohos.i18n';
 import { Prefs } from './store/Prefs';
 import { JsonFile } from './store/JsonFile';
 import { SettingsStore } from './store/SettingsStore';
@@ -134,15 +135,25 @@ export class AppContainer {
     this.player.bindListen(
       (e: Episode, delta: number) => { this.listenStats.add(e, delta); },
       () => { this.listenStats.flush(); });
-    this.radio.configure(this.repository, this.player, this.region());
+    this.radio.configure(this.repository, this.player, () => this.region());
     const bridge = AvSessionBridge.get();
     bridge.setup(ctx, this.player);
     this.player.onStateChanged = () => { bridge.sync(this.player); };
   }
 
-  /// 当前生效地区:设置覆盖优先,否则回落 us(与两端一致)。
+  /// 当前生效地区:设置覆盖优先;自动模式跟随设备地区,无地区信息时才回落 us。
   region(): string {
-    const o = this.settings.regionOverride;
-    return o.length > 0 ? o : 'us';
+    const override = this.settings.regionOverride;
+    if (override.length > 0) return override.toLowerCase();
+    try {
+      const parts = i18n.System.getSystemLocaleInstance().toString().split('-');
+      if (parts.length >= 2) {
+        const country = parts[parts.length - 1];
+        if (country.length === 2) return country.toLowerCase();
+      }
+    } catch (e) {
+      Log.w('App', `读取设备地区失败:${(e as Error).message}`);
+    }
+    return 'us';
   }
 }

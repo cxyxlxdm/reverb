@@ -144,12 +144,14 @@ export class PodcastRepository {
     return e === null ? 0 : e.fetchedAt;
   }
 
-  /// 随机取一集(随机/情境电台用)。先用缓存榜单组池,零联网;池不够再补拉一次。
+  /// 随机取一集(随机/情境电台用)。电台严格当前地区,不读可能含跨区回退的综合榜缓存。
   async randomEpisode(region: string, genreIds: number[], exclude: string[]): Promise<Episode | null> {
     const pool: Podcast[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < genreIds.length; i++) {
-      const list = this.cachedPopular(genreIds[i], region);
+      const genreId = genreIds[i];
+      if (genreId <= 0) continue;
+      const list = this.cachedPopular(genreId, region);
       for (let j = 0; j < list.length; j++) {
         const p = list[j];
         if (p.feedUrl.length === 0 || seen.has(p.feedUrl)) continue;
@@ -158,14 +160,20 @@ export class PodcastRepository {
       }
     }
     if (pool.length < 10) {
-      const extra = await this.refreshPopular(0, region);
-      for (let j = 0; j < extra.length; j++) {
-        const p = extra[j];
-        if (p.feedUrl.length === 0 || seen.has(p.feedUrl)) continue;
-        seen.add(p.feedUrl);
-        pool.push(p);
+      for (let i = 0; i < genreIds.length; i++) {
+        const genreId = genreIds[i];
+        if (genreId <= 0 || this.cache.get(this.cacheKey(genreId, region)).length > 0) continue;
+        const extra = await this.refreshPopular(genreId, region);
+        for (let j = 0; j < extra.length; j++) {
+          const p = extra[j];
+          if (p.feedUrl.length === 0 || seen.has(p.feedUrl)) continue;
+          seen.add(p.feedUrl);
+          pool.push(p);
+        }
+        if (pool.length >= 10) break;
       }
     }
+    Log.i('Repo', `电台候选 region=${region} count=${pool.length}`);
     if (pool.length === 0) return null;
 
     // 付费源常拿不到直链;全付费则放开
@@ -175,11 +183,13 @@ export class PodcastRepository {
     const picked = shuffle(candidates).slice(0, 6);
     const excludeSet = new Set<string>(exclude);
     for (let i = 0; i < picked.length; i++) {
-      const feed = await this.feed(picked[i].feedUrl);
+      const podcast = picked[i];
+      const feed = await this.feed(podcast.feedUrl);
       if (feed === null) continue;
       const usable = feed.episodes.filter((e: Episode) => e.audioUrl.length > 0 && !excludeSet.has(e.id));
       if (usable.length === 0) continue;
       const idx = Math.floor(Math.random() * usable.length);
+      Log.i('Repo', `电台选中 region=${region} podcast="${podcast.title}"`);
       return usable[idx];
     }
     return null;

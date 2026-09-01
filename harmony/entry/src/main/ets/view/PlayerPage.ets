@@ -327,7 +327,7 @@ export struct PlayerPage {
         // 主播放键
         Stack() {
           Circle().width(72).height(72).fill(this.scheme.primary)
-          if (this.player.buffering) {
+          if (this.player.loading || this.player.buffering) {
             LoadingProgress().width(30).height(30).color(this.scheme.onPrimary)
           } else {
             Image(this.player.isPlaying ? $r('sys.media.ohos_ic_public_pause') : $r('sys.media.ohos_ic_public_play'))

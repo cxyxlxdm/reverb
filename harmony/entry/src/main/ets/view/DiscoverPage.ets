@@ -274,11 +274,12 @@ export struct DiscoverPage {
     }
     .alignItems(VerticalAlign.Center)
     .onClick(() => {
+      const region = this.app.region();
       if (this.radio.mode !== null) {
-        this.radio.skip();
+        this.radio.skip(region);
       } else {
         const mode = this.settings.contextualRadio ? RadioMode.CONTEXTUAL : RadioMode.RANDOM;
-        this.radio.start(mode);
+        this.radio.start(mode, region);
       }
     })
     .gesture(LongPressGesture().onAction(() => {
@@ -567,6 +568,7 @@ export struct DiscoverPage {
               Text(L.f(this.seedFlags[idx] ? 'discover_seed_list' : 'discover_daily_hot',
                 categoryLabel(DISCOVER_CATEGORIES[idx])))
                 .fontSize(TypeScale.caption * this.fontScale)
+                .fontWeight(FontWeight.Medium)
                 .fontColor(this.scheme.onSurfaceVariant)
                 .padding({ left: Metrics.pagePadding, top: 4, bottom: 4 })
             }

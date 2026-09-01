@@ -29,29 +29,35 @@ export class RadioStation {
 
   private repo: PodcastRepository | null = null;
   private player: PlayerController | null = null;
-  private region = 'us';
+  private regionProvider: (() => string) | null = null;
+  private activeRegion = 'us';
+  private requestGeneration = 0;
+  private preparingGeneration = -1;
   /// 最近 40 首去重(避免刚听过的又被抓到)
   private recent: string[] = [];
   private readonly recentCap = 40;
-  /// 随机模式的候选分类(null=综合榜,用 0 表示)
-  private readonly randomGenreIds: number[] = [0, 1489, 1321, 1318, 1324, 1533, 1303, 1512, 1310];
+  /// 随机模式只用分类榜;综合榜可能含跨地区回退,不能进电台候选池。
+  private readonly randomGenreIds: number[] = [1489, 1321, 1318, 1324, 1533, 1303, 1512, 1310];
 
-  configure(repo: PodcastRepository, player: PlayerController, region: string): void {
+  configure(repo: PodcastRepository, player: PlayerController, regionProvider: () => string): void {
     this.repo = repo;
     this.player = player;
-    this.region = region;
+    this.regionProvider = regionProvider;
   }
 
   /// 开台并立刻起播一首。返回是否成功。
-  async start(mode: RadioMode): Promise<boolean> {
+  async start(mode: RadioMode, region: string): Promise<boolean> {
     const p = this.player;
     if (p === null) return false;
     this.mode = mode;
-    Log.i('Radio', `开台 mode=${mode === RadioMode.CONTEXTUAL ? '情境' : '随机'}`);
+    this.activeRegion = region.toLowerCase();
+    const generation = ++this.requestGeneration;
+    Log.i('Radio', `开台 mode=${mode === RadioMode.CONTEXTUAL ? '情境' : '随机'} region=${this.activeRegion}`);
     p.startRadio(() => this.fetchNext());
-    const first = await this.fetchNext();
+    const first = await this.fetchNextFor(generation, this.activeRegion);
+    if (generation !== this.requestGeneration || this.mode !== mode) return false;
     if (first === null) {
-      Log.w('Radio', '首次抓取失败,停台');
+      Log.w('Radio', `首次抓取失败 region=${this.activeRegion},停台`);
       this.stop();
       return false;
     }
@@ -59,34 +65,61 @@ export class RadioStation {
     return true;
   }
 
-  /// 换下一首(等价于 next)。
-  skip(): void {
+  /// 换下一首;地区改变时先丢弃旧地区的前后导航历史。
+  skip(region: string): void {
     const p = this.player;
-    if (p !== null && p.radioMode) p.next();
+    if (p === null || !p.radioMode || this.preparing !== null) return;
+    this.applyRegion(region, p);
+    p.next();
   }
 
   stop(): void {
+    this.requestGeneration += 1;
     this.mode = null;
     this.preparing = null;
+    this.preparingGeneration = -1;
     const p = this.player;
     if (p !== null) p.stopRadio();
   }
 
   /// 抓一首没在最近列表里的随机单集(并记入最近列表)。
   private async fetchNext(): Promise<Episode | null> {
+    const p = this.player;
+    const provider = this.regionProvider;
+    if (p === null || provider === null) return null;
+    this.applyRegion(provider(), p);
+    const generation = this.requestGeneration;
+    return this.fetchNextFor(generation, this.activeRegion);
+  }
+
+  private async fetchNextFor(generation: number, region: string): Promise<Episode | null> {
     const r = this.repo;
-    if (r === null) return null;
+    if (r === null || this.mode === null) return null;
     this.preparing = this.mode;
+    this.preparingGeneration = generation;
     try {
-      const e = await r.randomEpisode(this.region, this.effectiveGenreIds(), this.recent);
+      const e = await r.randomEpisode(region, this.effectiveGenreIds(), this.recent);
+      if (generation !== this.requestGeneration || region !== this.activeRegion || this.mode === null) return null;
       if (e !== null) this.remember(e.id);
       return e;
     } catch (err) {
-      Log.e('Radio', `抓取失败 ${(err as Error).message}`);
+      Log.e('Radio', `抓取失败 region=${region} ${(err as Error).message}`);
       return null;
     } finally {
-      this.preparing = null;
+      if (this.preparingGeneration === generation) {
+        this.preparing = null;
+        this.preparingGeneration = -1;
+      }
     }
+  }
+
+  private applyRegion(region: string, p: PlayerController): void {
+    const current = region.toLowerCase();
+    if (current === this.activeRegion) return;
+    Log.i('Radio', `地区切换 ${this.activeRegion} → ${current},清空电台导航历史`);
+    this.activeRegion = current;
+    this.requestGeneration += 1;
+    p.startRadio(() => this.fetchNext());
   }
 
   private effectiveGenreIds(): number[] {

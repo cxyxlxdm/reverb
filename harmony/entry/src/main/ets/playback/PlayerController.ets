@@ -35,6 +35,7 @@ export class PlayerController {
   current: Episode | null = null;
   isPlaying: boolean = false;
   durationMs: number = 0;
+  loading: boolean = false;
   buffering: boolean = false;
   speed: number = 1.0;
   hasNext: boolean = false;
@@ -76,6 +77,7 @@ export class PlayerController {
 
   // 电台:下一首从哪来由 RadioStation 提供,是否在台/自动续播由本类统一持有
   private radioNext: (() => Promise<Episode | null>) | null = null;
+  private radioAdvancing = false;
   private radioHistory: Episode[] = [];
   private radioPos = -1;
   private readonly radioHistoryCap = 100;
@@ -83,6 +85,13 @@ export class PlayerController {
   private pendingSeekMs = 0;
   private tickTimer = -1;
   private loadRetries = 0;
+  private loadGeneration = 0;
+  private sourceGeneration = 0;
+  private failedGeneration = -1;
+  private retryTimer = -1;
+  private loadTask: Promise<void> = Promise.resolve();
+  private playerCreation: Promise<media.AVPlayer | null> | null = null;
+  private released = false;
   /// 本地播放时打开的文件句柄(AVPlayer 的 url 只收 fd:// 或网络地址,本地必须走 fdSrc)
   private localFile: fs.File | null = null;
 
@@ -118,9 +127,8 @@ export class PlayerController {
     if (this.radioMode) this.stopRadio();   // 手动播放即退出电台
     this.queue = list;
     this.queueIndex = Math.max(0, Math.min(startIndex, list.length - 1));
-    this.loadRetries = 0;
     this.updateNavFlags();
-    this.playEpisode(this.queue[this.queueIndex]);
+    this.startEpisode(this.queue[this.queueIndex], true);
   }
 
   /// 同一集则暂停/继续,否则以该列表为队列起播。
@@ -134,11 +142,34 @@ export class PlayerController {
     this.playQueue(queue.length > 0 ? queue : [e], idx);
   }
 
-  private async playEpisode(e: Episode): Promise<void> {
-    this.playbackError = '';
+  private startEpisode(e: Episode, resetRetries: boolean): void {
+    if (this.released) return;
+    this.cancelLoadRetry();
+    if (resetRetries) {
+      this.loadRetries = 0;
+      this.playbackError = '';
+    }
+    const generation = ++this.loadGeneration;
+    this.failedGeneration = -1;
+    this.loadTask = this.loadTask
+      .then((): Promise<void> => this.playEpisode(e, generation))
+      .catch((err: Error): void => {
+        Log.e('Player', `装载队列异常 ${(err as Error).message}`);
+        this.handleLoadFailure(e, generation);
+      });
+  }
+
+  private async playEpisode(e: Episode, generation: number): Promise<void> {
+    if (generation !== this.loadGeneration) return;
     this.current = e;
     this.clock.positionMs = 0;
     this.durationMs = 0;
+    this.loading = true;
+    this.buffering = false;
+    this.isPlaying = false;
+    this.clearFade();
+    this.stopTicker();
+    this.notify();
     if (this.onListenFlush !== null) this.onListenFlush();   // 结算上一集残余
 
     // 内置引导音频不是一集真正的播客:不进历史、不计收听时长,
@@ -154,18 +185,28 @@ export class PlayerController {
     const local = this.localFileProvider === null ? null : this.localFileProvider(e);
     const useLocal = local !== null && local.length > 0;
     if (!useLocal && e.audioUrl.length === 0) {
+      this.loading = false;
       this.playbackError = L.s('audio_url_invalid');
+      this.notify();
       return;
     }
-    Log.i('Player', `播放 "${e.title}" 源=${useLocal ? '本地' : '网络'} resume=${resumeMs}ms`);
+    Log.i('Player', `播放 "${e.title}" 源=${useLocal ? '本地' : '网络'} resume=${resumeMs}ms generation=${generation}`);
 
     try {
-      await this.ensurePlayer();
-      const p = this.player;
-      if (p === null) return;
-      // 换源必须先回到 idle
+      const p = await this.ensurePlayer();
+      if (generation !== this.loadGeneration) return;
+      if (p === null) {
+        this.handleLoadFailure(e, generation);
+        return;
+      }
+      // 换源前先解绑旧音源回调;reset 的延迟事件不能套用新代次。
+      this.sourceGeneration = 0;
+      this.unbindSourceEvents(p);
       if (p.state !== 'idle') await p.reset();
+      if (generation !== this.loadGeneration) return;
       this.closeLocalFile();
+      this.sourceGeneration = generation;
+      this.bindSourceEvents(p, generation);
       if (useLocal) {
         // AVPlayer 不接受普通文件路径,必须用 fdSrc 传文件描述符
         const f = fs.openSync(local, fs.OpenMode.READ_ONLY);
@@ -177,9 +218,8 @@ export class PlayerController {
       // prepare 在 stateChange 的 'initialized' 分支触发
     } catch (err) {
       Log.e('Player', `装载失败 ${(err as Error).message}`);
-      this.handleLoadFailure(e);
+      this.handleLoadFailure(e, generation);
     }
-    this.notify();
   }
 
   /**
@@ -204,15 +244,31 @@ export class PlayerController {
     p.url = url;
   }
 
-  private async ensurePlayer(): Promise<void> {
-    if (this.player !== null) return;
+  private async ensurePlayer(): Promise<media.AVPlayer | null> {
+    if (this.released) return null;
+    if (this.player !== null) return this.player;
+    if (this.playerCreation === null) this.playerCreation = this.createPlayer();
+    const creating = this.playerCreation;
+    const p = await creating;
+    if (this.playerCreation === creating) this.playerCreation = null;
+    return p;
+  }
+
+  private async createPlayer(): Promise<media.AVPlayer | null> {
     let p: media.AVPlayer;
     try {
       p = await media.createAVPlayer();
     } catch (e) {
       Log.e('Player', `创建播放器失败 ${(e as Error).message}`);
-      this.playbackError = L.s('player_init_failed');
-      return;
+      return null;
+    }
+    if (this.released) {
+      try {
+        await p.release();
+      } catch (e) {
+        Log.w('Player', `释放刚创建的播放器失败 ${(e as Error).message}`);
+      }
+      return null;
     }
     // 声明为音乐用途,系统才允许后台继续出声
     p.audioRendererInfo = {
@@ -221,18 +277,25 @@ export class PlayerController {
     };
     p.audioInterruptMode = audio.InterruptMode.SHARE_MODE;
 
-    p.on('stateChange', (state: string) => {
-      this.onPlayerState(state as media.AVPlayerState);
-    });
     p.on('timeUpdate', (t: number) => {
       // 约 100ms 一次。**只写 clock、不 notify** —— 这一行是整页重建的源头(H64)
       this.clock.positionMs = t;
     });
+    this.player = p;
+    return p;
+  }
+
+  private bindSourceEvents(p: media.AVPlayer, generation: number): void {
+    p.on('stateChange', (state: string) => {
+      this.onPlayerState(state as media.AVPlayerState, generation);
+    });
     p.on('durationUpdate', (d: number) => {
+      if (generation !== this.loadGeneration) return;
       this.durationMs = d;
       this.notify();
     });
     p.on('bufferingUpdate', (type: media.BufferingInfoType, _v: number) => {
+      if (generation !== this.loadGeneration) return;
       const b = type === media.BufferingInfoType.BUFFERING_START;
       if (this.buffering !== b) {
         this.buffering = b;
@@ -240,28 +303,34 @@ export class PlayerController {
       }
     });
     p.on('error', (err: Error) => {
-      Log.e('Player', `播放错误 ${err.message}`);
+      Log.e('Player', `播放错误 generation=${generation} ${err.message}`);
       const cur = this.current;
-      if (cur !== null) this.handleLoadFailure(cur);
+      if (cur !== null) this.handleLoadFailure(cur, generation);
     });
-    this.player = p;
   }
 
-  private async onPlayerState(state: media.AVPlayerState): Promise<void> {
+  private unbindSourceEvents(p: media.AVPlayer): void {
+    p.off('stateChange');
+    p.off('durationUpdate');
+    p.off('bufferingUpdate');
+    p.off('error');
+  }
+
+  private async onPlayerState(state: media.AVPlayerState, generation: number): Promise<void> {
+    if (generation <= 0 || generation !== this.loadGeneration) return;
     const p = this.player;
     if (p === null) return;
-    Log.d('Player', `state=${state}`);
+    Log.d('Player', `state=${state} generation=${generation}`);
     if (state === 'initialized') {
       try {
         await p.prepare();
       } catch (e) {
         const cur = this.current;
-        if (cur !== null) this.handleLoadFailure(cur);
+        if (cur !== null) this.handleLoadFailure(cur, generation);
       }
       return;
     }
     if (state === 'prepared') {
-      this.loadRetries = 0;
       this.durationMs = p.duration > 0 ? p.duration : 0;
       // 续播两条护栏:>3s 才回跳、距末尾 10s 内不回跳(AVPlayer 必须在 prepared 后 seek)
       const seekMs = this.pendingSeekMs;
@@ -270,23 +339,32 @@ export class PlayerController {
         p.seek(seekMs, media.SeekMode.SEEK_PREV_SYNC);
         this.clock.positionMs = seekMs;
       }
-      p.setVolume(0);         // 淡入起点
       try {
+        p.setVolume(0);         // 淡入起点
         await p.play();
+        if (generation !== this.loadGeneration) return;
+        this.applyRate(p, this.speed);
+        this.fadeVolume(1.0, this.fadeInMs, generation);
       } catch (e) {
-        Log.w('Player', '起播失败');
+        Log.w('Player', `起播失败 ${(e as Error).message}`);
+        const cur = this.current;
+        if (cur !== null) this.handleLoadFailure(cur, generation);
       }
-      this.applyRate(p, this.speed);
-      this.fadeVolume(1.0, this.fadeInMs);
       return;
     }
     if (state === 'playing') {
+      this.loadRetries = 0;
+      this.loading = false;
+      this.buffering = false;
+      this.playbackError = '';
+      this.cancelLoadRetry();
       this.isPlaying = true;
       this.startTicker();
       this.notify();
       return;
     }
     if (state === 'paused') {
+      this.loading = false;
       this.isPlaying = false;
       this.stopTicker();
       this.saveProgress();
@@ -295,6 +373,7 @@ export class PlayerController {
       return;
     }
     if (state === 'completed') {
+      this.loading = false;
       this.isPlaying = false;
       this.stopTicker();
       const cur = this.current;
@@ -314,44 +393,77 @@ export class PlayerController {
     }
   }
 
-  /// 加载失败:同集自动重试至多 3 次(退避 0.8s),超限给出可见提示。
-  private handleLoadFailure(e: Episode): void {
-    if (this.current === null || this.current.id !== e.id) return;
+  /// 同一代次的 prepare/error/play 失败只处理一次;自动重试始终只有一个待执行任务。
+  private handleLoadFailure(e: Episode, generation: number): void {
+    if (generation <= 0 || generation !== this.loadGeneration
+      || this.current === null || this.current.id !== e.id
+      || this.failedGeneration === generation) return;
+    this.failedGeneration = generation;
+    this.clearFade();
+    this.stopTicker();
+    this.isPlaying = false;
+    this.buffering = false;
     if (this.loadRetries < 3) {
       this.loadRetries += 1;
-      Log.w('Player', `加载失败,自动重试 ${this.loadRetries}/3`);
-      setTimeout(() => {
-        if (this.current !== null && this.current.id === e.id) this.playEpisode(e);
+      this.loading = true;
+      Log.w('Player', `加载失败,自动重试 ${this.loadRetries}/3 generation=${generation}`);
+      this.retryTimer = setTimeout(() => {
+        this.retryTimer = -1;
+        if (generation === this.loadGeneration && this.current !== null && this.current.id === e.id) {
+          this.startEpisode(e, false);
+        }
       }, 800);
     } else {
-      this.loadRetries = 0;
+      this.loading = false;
       this.playbackError = L.s('playback_load_failed');
-      Log.e('Player', '重试耗尽,等待用户手动重试');
-      this.notify();
+      Log.e('Player', `重试耗尽 generation=${generation},等待用户手动重试`);
+    }
+    this.notify();
+  }
+
+  private cancelLoadRetry(): void {
+    if (this.retryTimer >= 0) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = -1;
     }
   }
 
   retry(): void {
     const e = this.current;
     if (e === null) return;
-    this.loadRetries = 0;
-    this.playEpisode(e);
+    this.startEpisode(e, true);
   }
 
   // ── 传输控制 ──
 
   togglePlayPause(): void {
+    if (this.loading) return;
+    if (this.playbackError.length > 0) {
+      this.retry();
+      return;
+    }
+    this.togglePlayPauseAsync();
+  }
+
+  private async togglePlayPauseAsync(): Promise<void> {
     const p = this.player;
-    if (p === null) return;
+    if (p === null) {
+      const cur = this.current;
+      if (cur !== null) this.retry();
+      return;
+    }
     try {
       if (this.isPlaying) {
-        p.pause();
+        await p.pause();
       } else {
-        p.play();
+        await p.play();
+        if (this.sourceGeneration !== this.loadGeneration) return;
         this.applyRate(p, this.speed);
       }
     } catch (e) {
       Log.w('Player', `播放/暂停失败 ${(e as Error).message}`);
+      const cur = this.current;
+      if (cur !== null) this.handleLoadFailure(cur, this.sourceGeneration);
     }
   }
 
@@ -391,8 +503,9 @@ export class PlayerController {
     this.notify();
   }
 
-  /// 设置倍速。setPlaybackRate 可能抛(状态不允许时),集中兜住。
+  /// 设置倍速。AVPlayer 只有播放态允许 setPlaybackRate,状态切换中不发无效操作。
   private applyRate(p: media.AVPlayer, rate: number): void {
+    if (p.state !== 'playing') return;
     try {
       p.setPlaybackRate(rate);
     } catch (e) {
@@ -403,12 +516,11 @@ export class PlayerController {
   // ── 队列导航 ──
 
   next(): void {
-    this.loadRetries = 0;
     if (this.radioMode) {
       if (this.radioPos >= 0 && this.radioPos < this.radioHistory.length - 1) {
         this.radioPos += 1;
         this.updateNavFlags();
-        this.playEpisode(this.radioHistory[this.radioPos]);
+        this.startEpisode(this.radioHistory[this.radioPos], true);
       } else {
         this.advanceRadio();
       }
@@ -421,24 +533,23 @@ export class PlayerController {
     if (this.queueIndex < this.queue.length - 1) {
       this.queueIndex += 1;
       this.updateNavFlags();
-      this.playEpisode(this.queue[this.queueIndex]);
+      this.startEpisode(this.queue[this.queueIndex], true);
     }
   }
 
   previous(): void {
-    this.loadRetries = 0;
     if (this.radioMode) {
       if (this.radioPos > 0) {
         this.radioPos -= 1;
         this.updateNavFlags();
-        this.playEpisode(this.radioHistory[this.radioPos]);
+        this.startEpisode(this.radioHistory[this.radioPos], true);
       }
       return;
     }
     if (this.queueIndex > 0) {
       this.queueIndex -= 1;
       this.updateNavFlags();
-      this.playEpisode(this.queue[this.queueIndex]);
+      this.startEpisode(this.queue[this.queueIndex], true);
     }
   }
 
@@ -477,26 +588,40 @@ export class PlayerController {
     this.updateNavFlags();
   }
 
+  /// 地区改变时只丢弃电台前后导航,当前音频与普通收听历史不受影响。
+  resetRadioHistory(): void {
+    this.radioHistory = [];
+    this.radioPos = -1;
+    this.updateNavFlags();
+  }
+
   /// 播放电台抓到的一集(记入电台历史,便于「上一首」回看)。
   playRadioEpisode(e: Episode): void {
-    this.loadRetries = 0;
     this.radioHistory.push(e);
     if (this.radioHistory.length > this.radioHistoryCap) this.radioHistory.shift();
     this.radioPos = this.radioHistory.length - 1;
     this.updateNavFlags();
-    this.playEpisode(e);
+    this.startEpisode(e, true);
   }
 
   /// 本集播完:抓下一首;抓不到则自动停台。
+  /// 单飞:快速连点「下一首」会并发进来多个,只让第一个真正抓源,
+  /// 否则后到的 null 结果会把前一个成功请求刚开的台停掉(见 H74)。
   private async advanceRadio(): Promise<void> {
+    if (this.radioAdvancing) return;
     const next = this.radioNext;
     if (next === null) return;
+    this.radioAdvancing = true;
     Log.i('Radio', '抓下一首…');
-    const e = await next();
-    if (e !== null && this.radioMode) this.playRadioEpisode(e);
-    else {
-      Log.w('Radio', '无下一首,停台');
-      this.stopRadio();
+    try {
+      const e = await next();
+      if (e !== null && this.radioMode) this.playRadioEpisode(e);
+      else {
+        Log.w('Radio', '无下一首,停台');
+        this.stopRadio();
+      }
+    } finally {
+      this.radioAdvancing = false;
     }
   }
 
@@ -523,7 +648,7 @@ export class PlayerController {
     this.queue = [head];
     this.queueIndex = 0;
     this.updateNavFlags();
-    this.playEpisode(head);
+    this.startEpisode(head, true);
   }
 
   private updateNavFlags(): void {
@@ -596,15 +721,30 @@ export class PlayerController {
 
   // ── 淡入(50ms 步进软件调音量,与两端一致)──
 
-  private fadeVolume(target: number, durationMs: number): void {
+  private fadeVolume(target: number, durationMs: number, generation: number): void {
     this.clearFade();
     const steps = Math.max(1, Math.floor(durationMs / 50));
     let i = 0;
     this.fadeTimer = setInterval(() => {
+      if (generation !== this.loadGeneration) {
+        this.clearFade();
+        return;
+      }
+      const p = this.player;
+      if (p === null || (p.state !== 'prepared' && p.state !== 'playing'
+        && p.state !== 'paused' && p.state !== 'completed')) {
+        this.clearFade();
+        return;
+      }
       i += 1;
       const f = Math.min(1, i / steps);
-      const p = this.player;
-      if (p !== null) p.setVolume(target * f);
+      try {
+        p.setVolume(target * f);
+      } catch (e) {
+        Log.w('Player', `淡入失败 ${(e as Error).message}`);
+        this.clearFade();
+        return;
+      }
       if (i >= steps) this.clearFade();
     }, 50);
   }
@@ -689,14 +829,27 @@ export class PlayerController {
   }
 
   async release(): Promise<void> {
+    this.released = true;
+    this.loadGeneration += 1;
+    this.sourceGeneration = 0;
+    this.failedGeneration = -1;
+    this.cancelLoadRetry();
     this.stopTicker();
     this.clearFade();
     this.clearSleepTicker();
-    const p = this.player;
+    this.loading = false;
+    this.buffering = false;
+    await this.loadTask;
+    let p = this.player;
+    const creating = this.playerCreation;
+    if (p === null && creating !== null) p = await creating;
+    this.playerCreation = null;
     this.player = null;
     this.closeLocalFile();
     if (p !== null) {
       try {
+        this.unbindSourceEvents(p);
+        p.off('timeUpdate');
         await p.release();
       } catch (e) {
         // 忽略

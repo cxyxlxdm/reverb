@@ -66,29 +66,33 @@ export struct MiniPlayerBar {
       .width('100%').height(2)
 
       Row({ space: 10 }) {
-        Artwork({
-          scheme: this.scheme,
-          url: this.player.current === null ? '' : this.player.current.artworkUrl,
-          dim: 42, corner: 8
-        })
-        Column({ space: 2 }) {
-          Text(this.player.current === null ? '' : this.player.current.title)
-            .fontSize(TypeScale.label * this.fontScale)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.scheme.onBackground)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-          Text(this.player.current === null ? '' : this.player.current.podcastTitle)
-            .fontSize(TypeScale.caption * this.fontScale)
-            .fontColor(this.scheme.onSurfaceVariant)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        Row({ space: 10 }) {
+          Artwork({
+            scheme: this.scheme,
+            url: this.player.current === null ? '' : this.player.current.artworkUrl,
+            dim: 42, corner: 8
+          })
+          Column({ space: 2 }) {
+            Text(this.player.current === null ? '' : this.player.current.title)
+              .fontSize(TypeScale.label * this.fontScale)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.scheme.onBackground)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text(this.player.current === null ? '' : this.player.current.podcastTitle)
+              .fontSize(TypeScale.caption * this.fontScale)
+              .fontColor(this.scheme.onSurfaceVariant)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
         }
-        .alignItems(HorizontalAlign.Start)
         .layoutWeight(1)
+        .alignItems(VerticalAlign.Center)
         .onClick(() => this.onExpand())
 
-        if (this.player.buffering) {
+        if (this.player.loading || this.player.buffering) {
           LoadingProgress().width(22).height(22).color(this.scheme.primary)
         } else {
           Image(this.player.isPlaying ? $r('sys.media.ohos_ic_public_pause') : $r('sys.media.ohos_ic_public_play'))
