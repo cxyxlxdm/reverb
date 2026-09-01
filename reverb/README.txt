@@ -5,10 +5,9 @@
   index.html          官网首页(图标已内联,只依赖 shots/web/)
   privacy.html        隐私政策(分发平台填的 URL 指向它)
   shots/web/*.jpg     官网用截图(已压缩,32–68 KB),4 张:
-                        01-discover 取自 **Android 完整版**(分类榜只在完整版里有,
-                          鸿蒙包与 Android 商店渠道都没有内容目录 —— 官网若放那张就是不实宣传);
-                        03-player / 09-settings / 10-licenses 取自鸿蒙那套原图压缩而来。
-                        收听时长与听觉足迹两张**不上官网**(含个人收听数据)。
+                        01-discover / 03-player / 09-settings / 10-licenses
+                        均取自当前目录版真机界面;收听时长与听觉足迹两张**不上官网**
+                        (含个人收听数据)。
 
   站点地址示例:
     https://cxyxl.cn/reverb/
