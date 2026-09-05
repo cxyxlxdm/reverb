@@ -121,6 +121,22 @@
       "value": "No se encontraron episodios"
     },
     {
+      "name": "search_rss_failed",
+      "value": "No se pudo importar este canal RSS. Comprueba que la URL sea accesible y válida."
+    },
+    {
+      "name": "search_probe_checking",
+      "value": "Comprobando…"
+    },
+    {
+      "name": "search_probe_available",
+      "value": "Disponible"
+    },
+    {
+      "name": "search_probe_unreachable",
+      "value": "No accesible en la red actual"
+    },
+    {
       "name": "lib_subscriptions",
       "value": "Suscritos"
     },
@@ -191,6 +207,10 @@
     {
       "name": "detail_load_failed",
       "value": "Error al cargar, revisa la red"
+    },
+    {
+      "name": "detail_network_unreachable",
+      "value": "Este canal no es accesible en la red actual"
     },
     {
       "name": "offline_cached_at",
@@ -654,7 +674,7 @@
     },
     {
       "name": "about_body",
-      "value": "Un cliente de podcast ligero. Totalmente local: sin backend, sin claves de API, sin SDK de terceros."
+      "value": "Un cliente de pódcast ligero, sin servidor del desarrollador ni cuenta. Usa capacidades del sistema y código propio, sin SDK de publicidad o analítica."
     },
     {
       "name": "licenses_title",
@@ -695,6 +715,18 @@
     {
       "name": "set_wifi_only_sub",
       "value": "Desactívalo para permitir datos móviles"
+    },
+    {
+      "name": "download_wifi_required",
+      "value": "No hay conexión Wi-Fi. Descarga cancelada."
+    },
+    {
+      "name": "download_no_network",
+      "value": "No hay conexión de red"
+    },
+    {
+      "name": "notification_permission_denied",
+      "value": "No se concedió el permiso de notificaciones. Los avisos siguen desactivados."
     },
     {
       "name": "set_clear_cache",
@@ -926,7 +958,7 @@
     },
     {
       "name": "about_p_philosophy",
-      "value": "La estética toma la tinta china, el celadón y el dorado de las vigas; el nombre y el icono evocan el «sonido que perdura».\n\nEl origen del contenido es gratuito de principio a fin, sin inicio de sesión ni claves de API: el descubrimiento usa directorios públicos como Apple, fyyd y gpodder, mientras que la reproducción siempre vuelve al RSS del editor y transmite el audio original; derechos limpios y coste cero.\n\nPrivacidad: suscripciones, historial y descargas solo existen en tu dispositivo. Nada se sube ni se rastrea."
+      "value": "La estética toma la tinta china, el celadón y el dorado de las vigas; el nombre y el icono evocan el «sonido que perdura».\n\nEl origen del contenido es gratuito, sin inicio de sesión ni claves de API: el descubrimiento usa directorios públicos como Apple, fyyd y gpodder, mientras que la reproducción vuelve al RSS del editor.\n\nPrivacidad: suscripciones, historial y descargas permanecen en tu dispositivo, no se suben automáticamente al desarrollador ni se usan para seguimiento entre aplicaciones."
     },
     {
       "name": "queue_play_next",
@@ -958,7 +990,7 @@
     },
     {
       "name": "privacy_consent_body",
-      "value": "Reverb es un cliente de podcasts totalmente local. Antes de empezar, esto es cómo se tratan tus datos.\n\nNo recopilamos información personal. No hay servidor, ni cuenta, ni SDK de terceros, ni analítica, ni anuncios.\n\nTus datos se quedan en este dispositivo. Suscripciones, historial, favoritos, descargas, tiempo de escucha, sellos y ajustes se guardan en el directorio privado de la app y se eliminan al desinstalarla.\n\nPara qué se usa la red. Para descubrir y reproducir podcasts, tu dispositivo accede a los directorios públicos de búsqueda de Apple Podcasts (itunes.apple.com), las listas de Apple (rss.marketingtools.apple.com), fyyd.de y gpodder.net, además de las direcciones RSS, de audio y de portada de los propios editores; cuando pulsas «Importar suscripciones recomendadas», también se descarga una lista del sitio web de esta app. No se adjuntan credenciales ni identificadores de usuario; consulta la política completa para la lista detallada.\n\nPermisos. Internet, estado de la red (para detectar Wi-Fi y permitir «descargar solo con Wi-Fi»), reproducción de audio en segundo plano y notificaciones (solo si activas los avisos de novedades). No se solicita acceso a ubicación, contactos, cámara, micrófono, SMS, registro de llamadas ni calendario.\n\nAl pulsar «Aceptar y continuar» confirmas que has leído y aceptas esta política."
+      "value": "Reverb procesa la mayoría de los datos en tu dispositivo. No tiene servidor del desarrollador, cuenta, anuncios, analítica, atribución, inicio de sesión o notificaciones push de terceros, informes de fallos ni seguimiento entre aplicaciones. Suscripciones, historial, favoritos, descargas, estadísticas de escucha, ajustes, un identificador aleatorio de instalación y registros se procesan localmente y no se suben automáticamente al desarrollador. La versión HarmonyOS usa capacidades del sistema y código propio.\n\nAl conectarse, los términos de búsqueda, la región o la categoría se envían a directorios públicos como Apple, fyyd y gpodder. RSS, portadas, audio y transcripciones se solicitan directamente a editores o alojadores, que ven tu IP, User-Agent y el recurso solicitado. Los registros pueden contener identificadores de programa o episodio y los nombres de host de los servicios consultados; solo salen de la app si eliges compartirlos o exportarlos. Consulta la política completa.\n\nAl pulsar «Aceptar y continuar» confirmas que has leído y aceptas esta política."
     },
     {
       "name": "privacy_consent_asr",
@@ -1042,7 +1074,7 @@
     },
     {
       "name": "set_transcription_sub",
-      "value": "Desliza a la tercera página del reproductor para leer. Si el editor no ofrece transcripción, el reconocimiento de voz del sistema la genera en este dispositivo."
+      "value": "Desliza a la tercera página para leer la transcripción del editor. Si no hay ninguna, esa página se oculta."
     },
     {
       "name": "set_word_highlight",

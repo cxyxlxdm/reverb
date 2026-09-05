@@ -6,6 +6,7 @@ import { Recommended } from '../net/Recommended';
 import { Podcast, Episode, SearchOutcome, HistoryEntry } from '../model/Models';
 import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
+import { FeedProbeState } from '../net/PodcastRepository';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
 import { PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
@@ -57,11 +58,14 @@ export struct DiscoverPage {
 
   // 搜索
   @State query: string = '';
-  @State searching: boolean = false;
+  @State searchingPodcasts: boolean = false;
+  @State searchingEpisodes: boolean = false;
   @State searchTab: number = 0;            // 0 节目 / 1 单集
   @State searchPodcasts: Podcast[] = [];
   @State searchEpisodes: Episode[] = [];
+  @State searchProbeStates: FeedProbeState[] = [];
   @State searchLabel: string = '';
+  @State searchRssFailed: boolean = false;
   @State searched: boolean = false;
   // 网络返回顺序不可控;只允许最后一次提交的结果落到界面。
   private searchGeneration: number = 0;
@@ -148,30 +152,142 @@ export struct DiscoverPage {
     // CATALOG=false 的降级包只接受 RSS 地址;输入别的就提示一句,不发请求。
     if (!Features.CATALOG && q.length > 0
       && !q.startsWith('http://') && !q.startsWith('https://')) {
-      this.searching = false;
+      this.searchingPodcasts = false;
+      this.searchingEpisodes = false;
+      this.searched = false;
       this.importHint = L.s('search_url_only');
       return;
     }
     if (q.length === 0) {
-      this.searching = false;
+      this.searchingPodcasts = false;
+      this.searchingEpisodes = false;
       this.searched = false;
       this.searchPodcasts = [];
       this.searchEpisodes = [];
+      this.searchProbeStates = [];
+      this.searchRssFailed = false;
       return;
     }
-    this.searching = true;
+
+    this.importHint = '';
     this.searched = true;
+    this.searchingPodcasts = true;
+    this.searchingEpisodes = true;
+    this.searchPodcasts = [];
+    this.searchEpisodes = [];
+    this.searchProbeStates = [];
+    this.searchLabel = '';
+    this.searchRssFailed = false;
     const region = this.app.region();
-    const podcastsPromise: Promise<SearchOutcome> = this.app.repository.search(q, region);
-    const episodesPromise: Promise<Episode[]> = this.app.repository.searchEpisodes(q, region);
-    const outcome: SearchOutcome = await podcastsPromise;
-    const episodes: Episode[] = await episodesPromise;
+    // 两类检索并行且各自落 UI；不再先等节目、再等单集，任一完成都能立即显示。
+    const podcastsWork = this.loadSearchPodcasts(q, region, generation);
+    const episodesWork = this.loadSearchEpisodes(q, region, generation);
+    await Promise.all([podcastsWork, episodesWork]);
+  }
+
+  private async loadSearchPodcasts(q: string, region: string, generation: number): Promise<void> {
+    let outcome: SearchOutcome = { podcasts: [], sourceLabel: '', failed: true };
+    try {
+      outcome = await this.app.repository.search(q, region);
+    } catch (_e) {
+      Log.w('Discover', '节目搜索异常');
+    }
     if (generation !== this.searchGeneration || this.query.trim() !== q) return;
     this.searchPodcasts = outcome.podcasts;
     this.searchLabel = outcome.sourceLabel;
+    this.searchRssFailed = outcome.failed && (q.startsWith('http://') || q.startsWith('https://'));
+    this.searchingPodcasts = false;
+    Log.i('Discover', `节目搜索完成 count=${outcome.podcasts.length} 源=${outcome.sourceLabel}`);
+    await this.probeSearchPodcasts(outcome.podcasts, q, generation);
+  }
+
+  private async loadSearchEpisodes(q: string, region: string, generation: number): Promise<void> {
+    let episodes: Episode[] = [];
+    try {
+      episodes = await this.app.repository.searchEpisodes(q, region);
+    } catch (_e) {
+      Log.w('Discover', '单集搜索异常');
+    }
+    if (generation !== this.searchGeneration || this.query.trim() !== q) return;
     this.searchEpisodes = episodes;
-    this.searching = false;
-    Log.i('Discover', `搜索 "${q}" 节目=${this.searchPodcasts.length} 单集=${this.searchEpisodes.length} 源=${this.searchLabel}`);
+    this.searchingEpisodes = false;
+    Log.i('Discover', `单集搜索完成 count=${episodes.length}`);
+  }
+
+  /** 前四条预检，固定两个 worker；第五条以后保持未检测且可点击。 */
+  private async probeSearchPodcasts(podcasts: Podcast[], q: string, generation: number): Promise<void> {
+    const limit = Math.min(4, podcasts.length);
+    const initial: FeedProbeState[] = [];
+    for (let i = 0; i < podcasts.length; i++) {
+      if (i >= limit) {
+        initial.push(FeedProbeState.UNCHECKED);
+        continue;
+      }
+      const state = this.app.repository.feedProbeState(podcasts[i].feedUrl);
+      initial.push(state === FeedProbeState.UNCHECKED ? FeedProbeState.CHECKING : state);
+    }
+    if (generation !== this.searchGeneration || this.query.trim() !== q) return;
+    this.searchProbeStates = initial;
+
+    let next = 0;
+    const worker = async (): Promise<void> => {
+      while (true) {
+        // 新搜索只允许已在网络中的任务自然走到硬截止；旧 worker 不再领取后续条目。
+        if (generation !== this.searchGeneration || this.query.trim() !== q) return;
+        const index = next;
+        next += 1;
+        if (index >= limit) return;
+        const state = this.app.repository.feedProbeState(podcasts[index].feedUrl);
+        if (state === FeedProbeState.AVAILABLE || state === FeedProbeState.UNREACHABLE) {
+          this.setSearchProbeState(index, state, q, generation);
+          continue;
+        }
+        this.setSearchProbeState(index, FeedProbeState.CHECKING, q, generation);
+        let available = false;
+        try {
+          available = await this.app.repository.probeFeed(podcasts[index].feedUrl);
+        } catch (_e) {
+          Log.w('Discover', 'RSS 预检异常');
+        }
+        this.setSearchProbeState(index,
+          available ? FeedProbeState.AVAILABLE : FeedProbeState.UNREACHABLE, q, generation);
+      }
+    };
+    const pool: Promise<void>[] = [];
+    for (let i = 0; i < Math.min(2, limit); i++) pool.push(worker());
+    await Promise.all(pool);
+  }
+
+  private setSearchProbeState(index: number, state: FeedProbeState, q: string, generation: number): void {
+    if (generation !== this.searchGeneration || this.query.trim() !== q) return;
+    const next = this.searchProbeStates.slice();
+    next[index] = state;
+    this.searchProbeStates = next;
+  }
+
+  private searchProbeState(index: number): FeedProbeState {
+    const state = this.searchProbeStates[index];
+    return state === undefined ? FeedProbeState.UNCHECKED : state;
+  }
+
+  private searchProbeLabel(index: number): string {
+    const state = this.searchProbeState(index);
+    if (state === FeedProbeState.CHECKING) return L.s('search_probe_checking');
+    if (state === FeedProbeState.AVAILABLE) return L.s('search_probe_available');
+    if (state === FeedProbeState.UNREACHABLE) return L.s('search_probe_unreachable');
+    return '';
+  }
+
+  private clearSearchResults(): void {
+    this.searchGeneration += 1;
+    this.searchingPodcasts = false;
+    this.searchingEpisodes = false;
+    this.searched = false;
+    this.searchPodcasts = [];
+    this.searchEpisodes = [];
+    this.searchProbeStates = [];
+    this.searchLabel = '';
+    this.searchRssFailed = false;
   }
 
   build() {
@@ -516,19 +632,18 @@ export struct DiscoverPage {
         .borderRadius(0)
         .padding(0)
         .layoutWeight(1)
-        .onChange((v: string) => { this.query = v; })
+        .onChange((v: string) => {
+          if (v !== this.query && this.searched) this.clearSearchResults();
+          this.query = v;
+        })
         .onSubmit(() => { this.runSearch(); })
       if (this.query.length > 0) {
         Text(L.s('action_cancel'))
           .fontSize(TypeScale.label * this.fontScale)
           .fontColor(this.scheme.primary)
           .onClick(() => {
-            this.searchGeneration++;
+            this.clearSearchResults();
             this.query = '';
-            this.searching = false;
-            this.searched = false;
-            this.searchPodcasts = [];
-            this.searchEpisodes = [];
           })
       }
     }
@@ -715,17 +830,27 @@ export struct DiscoverPage {
       .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, bottom: 6 })
       .alignItems(VerticalAlign.Center)
 
-      if (this.searching) {
-        LoadingBox({ scheme: this.scheme, fontScale: this.fontScale }).layoutWeight(1)
-      } else if (this.searchTab === 0) {
-        if (this.searchPodcasts.length === 0) {
-          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('search_no_shows') }).layoutWeight(1)
+      if (this.searchTab === 0) {
+        if (this.searchingPodcasts && this.searchPodcasts.length === 0) {
+          LoadingBox({ scheme: this.scheme, fontScale: this.fontScale }).layoutWeight(1)
+        } else if (this.searchPodcasts.length === 0) {
+          EmptyHint({
+            scheme: this.scheme,
+            fontScale: this.fontScale,
+            text: this.searchRssFailed ? L.s('search_rss_failed') : L.s('search_no_shows')
+          }).layoutWeight(1)
         } else {
           List() {
-            ForEach(this.searchPodcasts, (p: Podcast) => {
+            ForEach(this.searchPodcasts, (p: Podcast, idx: number) => {
               ListItem() {
                 PodcastListItem({
-                  scheme: this.scheme, fontScale: this.fontScale, podcast: p,
+                  scheme: this.scheme,
+                  fontScale: this.fontScale,
+                  podcast: p,
+                  status: this.searchProbeLabel(idx),
+                  statusError: this.searchProbeState(idx) === FeedProbeState.UNREACHABLE,
+                  tapEnabled: this.searchProbeState(idx) === FeedProbeState.UNCHECKED
+                    || this.searchProbeState(idx) === FeedProbeState.AVAILABLE,
                   onTap: () => this.onOpenPodcast(p)
                 })
               }
@@ -735,7 +860,9 @@ export struct DiscoverPage {
           .layoutWeight(1)
         }
       } else {
-        if (this.searchEpisodes.length === 0) {
+        if (this.searchingEpisodes && this.searchEpisodes.length === 0) {
+          LoadingBox({ scheme: this.scheme, fontScale: this.fontScale }).layoutWeight(1)
+        } else if (this.searchEpisodes.length === 0) {
           EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('search_no_episodes') }).layoutWeight(1)
         } else {
           List() {

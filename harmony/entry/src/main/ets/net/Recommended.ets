@@ -22,7 +22,7 @@ export class Recommended {
     const url = L.s('recommended_opml_url');
     const opml = await Http.text(url);
     if (opml === null || opml.length === 0) {
-      Log.w('Recommended', `拉取清单失败 ${url}`);
+      Log.w('Recommended', `拉取清单失败 host=${Http.host(url)}`);
       return -1;
     }
     const urls = BackupManager.extractFeedUrls(opml);

@@ -27,7 +27,7 @@ export class TranscriptFetcher {
     if (url.length === 0) return [];
     const body = await Http.text(url);
     if (body === null || body.length === 0) {
-      Log.w(TranscriptFetcher.TAG, `官方稿取不到 url=${url}`);
+      Log.w(TranscriptFetcher.TAG, `官方稿取不到 host=${Http.host(url)}`);
       return [];
     }
     if (body.length > TranscriptFetcher.MAX_BYTES) {
@@ -46,7 +46,7 @@ export class TranscriptFetcher {
       // 剩下的按 SRT/VTT 的 cue 结构解 —— 两者的时间行只差一个分隔符,同一个解析器能吃
       segs = TranscriptFetcher.parseCues(head);
     }
-    Log.i(TranscriptFetcher.TAG, `官方稿解析出 ${segs.length} 句 url=${url}`);
+    Log.i(TranscriptFetcher.TAG, `官方稿解析出 ${segs.length} 句 host=${Http.host(url)}`);
     return segs;
   }
 

@@ -117,7 +117,7 @@ export class SpeechTranscriber implements SpeechTranscriberLike {
       // 2) 打开解码器。16kHz 单声道 16bit —— 识别引擎只吃这一种
       reader = PcmReader.open(audio, SpeechTranscriber.SAMPLE_RATE);
       if (reader === null) {
-        Log.w(SpeechTranscriber.TAG, `打不开音频 ${audio}`);
+        Log.w(SpeechTranscriber.TAG, '打不开待转写音频');
         return false;
       }
 

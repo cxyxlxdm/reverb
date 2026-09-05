@@ -121,6 +121,22 @@
       "value": "没有找到单集"
     },
     {
+      "name": "search_rss_failed",
+      "value": "RSS 导入失败，请确认地址可访问且内容有效"
+    },
+    {
+      "name": "search_probe_checking",
+      "value": "检测中"
+    },
+    {
+      "name": "search_probe_available",
+      "value": "可用"
+    },
+    {
+      "name": "search_probe_unreachable",
+      "value": "当前网络不可访问"
+    },
+    {
       "name": "lib_subscriptions",
       "value": "订阅"
     },
@@ -191,6 +207,10 @@
     {
       "name": "detail_load_failed",
       "value": "加载失败,请检查网络"
+    },
+    {
+      "name": "detail_network_unreachable",
+      "value": "当前网络无法访问该频道"
     },
     {
       "name": "offline_cached_at",
@@ -654,7 +674,7 @@
     },
     {
       "name": "about_body",
-      "value": "一款轻量的播客客户端。纯客户端、零后端、零 API Key、不接任何三方 SDK,打开即用。"
+      "value": "一款轻量的播客客户端。无开发者后端与账号，使用系统能力和自有代码，不含广告、统计等数据上报 SDK。"
     },
     {
       "name": "licenses_title",
@@ -695,6 +715,18 @@
     {
       "name": "set_wifi_only_sub",
       "value": "关闭后蜂窝网络也允许下载"
+    },
+    {
+      "name": "download_wifi_required",
+      "value": "当前不是 Wi-Fi，已取消下载"
+    },
+    {
+      "name": "download_no_network",
+      "value": "当前无可用网络"
+    },
+    {
+      "name": "notification_permission_denied",
+      "value": "未获得通知权限，订阅更新提示保持关闭"
     },
     {
       "name": "set_clear_cache",
@@ -926,7 +958,7 @@
     },
     {
       "name": "about_p_philosophy",
-      "value": "美学上取「水墨 + 青瓷 + 梁金」的底色，名字与图标呼应「余音绕梁」——声波环绕横梁，余韵不散。\n\n取源上坚持全链路免费、无需登录、无需任何 API Key：检索基于 Apple、fyyd、gpodder 等公开目录，最终始终回到发布方自己的 RSS，直接流式播放原始音频——版权干净、成本为零。\n\n隐私上，订阅、历史、下载全部只存在你的设备本地，不上传、不追踪。"
+      "value": "美学上取「水墨 + 青瓷 + 梁金」的底色，名字与图标呼应「余音绕梁」——声波环绕横梁，余韵不散。\n\n取源上坚持全链路免费、无需登录、无需任何 API Key：检索基于 Apple、fyyd、gpodder 等公开目录，最终始终回到发布方自己的 RSS，直接流式播放原始音频——版权干净、成本为零。\n\n隐私上，订阅、历史和下载保存在设备本地，不向开发者自动上传，也不用于跨应用追踪。"
     },
     {
       "name": "queue_play_next",
@@ -958,7 +990,7 @@
     },
     {
       "name": "privacy_consent_body",
-      "value": "余音是一款纯本地的播客客户端。在你开始使用前，请先了解我们如何处理你的数据。\n\n我们不收集你的个人信息。本应用没有服务器，不要求注册或登录，不接入任何第三方 SDK，不埋点、不做用户行为分析、不展示广告。\n\n你的数据只存在这台设备上。订阅、播放历史、收藏、下载、收听时长、听觉印记与应用设置，全部保存在应用私有目录，卸载即删除。\n\n联网做什么。为了检索和播放播客，你的设备会访问 Apple 播客检索（itunes.apple.com）、Apple 热门榜（rss.marketingtools.apple.com）、fyyd.de、gpodder.net 等公开目录，以及播客发布方自己的 RSS、音频与封面原始链接；当你主动点击「导入推荐订阅」时，还会从本应用官网下载一份订阅清单。以上请求都不携带任何鉴权凭据、也不附加任何用户标识；完整清单见「阅读完整隐私政策」。\n\n权限清单。网络访问、获取网络状态（用于判断是否为 Wi-Fi，以支持「仅在 Wi-Fi 下载」）、后台音频播放、通知（仅在你开启「订阅更新提醒」时）。本应用不申请位置、通讯录、相机、麦克风、短信、通话记录、日历等任何权限。\n\n点击「同意并继续」表示你已阅读并接受本政策。"
+      "value": "余音以本机处理为主。没有开发者后端、账号、广告、统计、归因、第三方登录、第三方推送、崩溃上报或跨应用追踪。订阅、历史、收藏、下载、收听统计、设置、安装随机标识和运行日志在本机处理，不会自动上传给开发者；HarmonyOS 版使用系统能力与自有代码。\n\n联网时，搜索词、地区或分类会发给 Apple、fyyd、gpodder 等公开目录；RSS、封面、音频和逐字稿直接请求发布方或托管方，因此对方会看到 IP 地址、User-Agent 和访问资源。日志可能包含节目或单集标识及所访问服务的主机名，只有你主动分享或导出时才离开应用。详情请阅读完整隐私政策。\n\n点击「同意并继续」表示你已阅读并接受本政策。"
     },
     {
       "name": "privacy_consent_asr",
@@ -1042,7 +1074,7 @@
     },
     {
       "name": "set_transcription_sub",
-      "value": "播放页横滑到第三页看文字;没有发布方提供的稿时,用系统的离线语音识别在本机转写"
+      "value": "播放页横滑到第三页看发布方提供的逐字稿;没有稿时不显示第三页"
     },
     {
       "name": "set_word_highlight",

@@ -68,7 +68,7 @@ export class ListenStatsStore {
     }
     this.publish();
     if (migrated) this.persist();
-    Log.i('ListenStats', `加载 ${this.table.size} 个频道 device=${this.deviceId.substring(0, 8)} 迁移=${migrated}`);
+    Log.i('ListenStats', `加载 ${this.table.size} 个频道 迁移=${migrated}`);
   }
 
   /// 查询某频道累计毫秒(各设备之和)。

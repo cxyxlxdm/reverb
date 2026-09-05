@@ -15,15 +15,15 @@ import { Genres } from '../model/Genres';
  * 以规避 ignoreNameSpace 语义的不确定性。
  */
 export class RssParser {
-  static async fetch(feedUrl: string): Promise<FeedResult | null> {
-    const text = await Http.text(feedUrl);
+  static async fetch(feedUrl: string, timeoutMs: number): Promise<FeedResult | null> {
+    const text = await Http.text(feedUrl, timeoutMs);
     if (text === null) return null;
     return RssParser.parse(text, feedUrl);
   }
 
   static parse(xmlText: string, feedUrl: string): FeedResult | null {
     try {
-      // 解析全程在 UI 线程上(ArkTS 没有协程,TaskPool 是另一套模型)。
+      // 正常路径在 TaskPool 中解析；只有 TaskPool 调度异常的回落路径会占用 UI 线程。
       // 把耗时打出来是为了能判断"卡"到底出在网络还是解析 —— 一个 1000 集的源
       // 光 htmlToText 就要跑一千遍十来道正则。见 H64 与 ROADMAP 里的后续项。
       const t0 = Date.now();
@@ -44,12 +44,12 @@ export class RssParser {
       });
       const result = st.finish();
       Log.i('Rss', `解析完成 title="${result.podcast.title}" 集数=${result.episodes.length} `
-        + `解析耗时=${Date.now() - t0}ms 字节=${xmlText.length} url=${feedUrl}`);
-      // 与 macOS 一致:空结果视为失败,让上层继续降级
-      if (result.episodes.length === 0 && result.podcast.title.length === 0) return null;
+        + `解析耗时=${Date.now() - t0}ms 字节=${xmlText.length} host=${Http.host(feedUrl)}`);
+      // 频道标题不是可用内容。没有任何单集时详情页无东西可播,预检也不能把它标成「可用」。
+      if (result.episodes.length === 0) return null;
       return result;
     } catch (e) {
-      Log.e('Rss', `解析失败 url=${feedUrl} err=${(e as Error).message}`);
+      Log.e('Rss', `解析失败 host=${Http.host(feedUrl)} err=${(e as Error).message}`);
       return null;
     }
   }

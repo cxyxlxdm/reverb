@@ -25,6 +25,37 @@ function stamp(d: Date): string {
   return `${date} ${time}.${pad(d.getMilliseconds(), 3)}`;
 }
 
+function endpointOf(url: string): string {
+  const marker = url.indexOf('://');
+  if (marker <= 0) return 'invalid';
+  const start = marker + 3;
+  let end = url.length;
+  const slash = url.indexOf('/', start);
+  const query = url.indexOf('?', start);
+  const fragment = url.indexOf('#', start);
+  if (slash >= 0 && slash < end) end = slash;
+  if (query >= 0 && query < end) end = query;
+  if (fragment >= 0 && fragment < end) end = fragment;
+  let authority = url.substring(start, end);
+  const at = authority.lastIndexOf('@');
+  if (at >= 0) authority = authority.substring(at + 1);
+  if (authority.length === 0) return 'invalid';
+  let host = authority;
+  if (authority.startsWith('[')) {
+    const close = authority.indexOf(']');
+    if (close < 0) return 'invalid';
+    host = authority.substring(0, close + 1);
+  } else {
+    const colon = authority.lastIndexOf(':');
+    if (colon > 0) host = authority.substring(0, colon);
+  }
+  return host.length === 0 ? 'invalid' : `${url.substring(0, marker).toLowerCase()}://${host}`;
+}
+
+function sanitize(msg: string): string {
+  return msg.replace(/https?:\/\/[^\s"'<>]+/gi, (url: string): string => endpointOf(url));
+}
+
 function remember(level: string, tag: string, msg: string): void {
   ring.push(`${stamp(new Date())} ${level}/${tag}: ${msg}`);
   if (ring.length > RING_CAP) ring.shift();
@@ -51,20 +82,28 @@ export class Log {
     Log.i('Log', '日志已清空');
   }
 
+  static endpoint(url: string): string {
+    return endpointOf(url);
+  }
+
   static d(tag: string, msg: string): void {
-    remember('D', tag, msg);
-    hilog.debug(DOMAIN, PREFIX, '%{public}s', `[${tag}] ${msg}`);
+    const safe = sanitize(msg);
+    remember('D', tag, safe);
+    hilog.debug(DOMAIN, PREFIX, '%{public}s', `[${tag}] ${safe}`);
   }
   static i(tag: string, msg: string): void {
-    remember('I', tag, msg);
-    hilog.info(DOMAIN, PREFIX, '%{public}s', `[${tag}] ${msg}`);
+    const safe = sanitize(msg);
+    remember('I', tag, safe);
+    hilog.info(DOMAIN, PREFIX, '%{public}s', `[${tag}] ${safe}`);
   }
   static w(tag: string, msg: string): void {
-    remember('W', tag, msg);
-    hilog.warn(DOMAIN, PREFIX, '%{public}s', `[${tag}] ${msg}`);
+    const safe = sanitize(msg);
+    remember('W', tag, safe);
+    hilog.warn(DOMAIN, PREFIX, '%{public}s', `[${tag}] ${safe}`);
   }
   static e(tag: string, msg: string): void {
-    remember('E', tag, msg);
-    hilog.error(DOMAIN, PREFIX, '%{public}s', `[${tag}] ${msg}`);
+    const safe = sanitize(msg);
+    remember('E', tag, safe);
+    hilog.error(DOMAIN, PREFIX, '%{public}s', `[${tag}] ${safe}`);
   }
 }

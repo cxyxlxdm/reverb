@@ -65,6 +65,18 @@ export class PlayerController {
 
   // ── 内部 ──
   private player: media.AVPlayer | null = null;
+  private readonly audioSessionManager: audio.AudioSessionManager =
+    audio.getAudioManager().getSessionManager();
+  /// AudioSession 的目标态与操作代次。系统接口是异步的,快速暂停/继续时必须串行收敛到最后一次意图,
+  /// 不能让较早的 activate/deactivate 回来后覆盖较新的动作。
+  private audioSessionDesiredActive = false;
+  private audioSessionGeneration = 0;
+  private audioSessionTask: Promise<void> = Promise.resolve();
+  /// 用户最后一次明确的播放意图。加载阶段也必须保留暂停命令,不能只看尚未变成 true 的 isPlaying。
+  private playbackDesiredPlaying = false;
+  /// 明确的暂停/恢复也串行执行:pause 尚未完成时收到 resume,必须等 pause 落地后再恢复。
+  private playbackActionGeneration = 0;
+  private playbackActionTask: Promise<void> = Promise.resolve();
   private history: HistoryStore | null = null;
   private settings: SettingsStore | null = null;
   /// 已下载单集的本地路径提供者(闭包注入,解耦下载模块;采纳 macOS 设计)
@@ -149,6 +161,9 @@ export class PlayerController {
       this.loadRetries = 0;
       this.playbackError = '';
     }
+    // 新音源会自动起播,此前排队的暂停/恢复动作不得再落到它身上。
+    this.playbackDesiredPlaying = true;
+    this.playbackActionGeneration += 1;
     const generation = ++this.loadGeneration;
     this.failedGeneration = -1;
     this.loadTask = this.loadTask
@@ -186,7 +201,9 @@ export class PlayerController {
     const useLocal = local !== null && local.length > 0;
     if (!useLocal && e.audioUrl.length === 0) {
       this.loading = false;
+      this.playbackDesiredPlaying = false;
       this.playbackError = L.s('audio_url_invalid');
+      this.deactivateAudioSession();
       this.notify();
       return;
     }
@@ -285,6 +302,60 @@ export class PlayerController {
     return p;
   }
 
+  /**
+   * AudioSession 只有一条异步操作链。每次意图变化都换代,排到队头时已过期的任务直接跳过;
+   * 已经发给系统的旧操作无法取消,但它结束后新代次一定紧跟着把系统状态收敛到最新目标。
+   */
+  private requestAudioSession(active: boolean): number {
+    this.audioSessionDesiredActive = active;
+    const generation = ++this.audioSessionGeneration;
+    this.audioSessionTask = this.audioSessionTask.then((): Promise<void> => {
+      return this.reconcileAudioSession(generation);
+    });
+    return generation;
+  }
+
+  private async reconcileAudioSession(generation: number): Promise<void> {
+    if (generation !== this.audioSessionGeneration) return;
+    try {
+      const active = this.audioSessionManager.isAudioSessionActivated();
+      if (this.audioSessionDesiredActive) {
+        if (!active) {
+          await this.audioSessionManager.activateAudioSession({
+            concurrencyMode: audio.AudioConcurrencyMode.CONCURRENCY_PAUSE_OTHERS
+          });
+          Log.i('Player', `AudioSession 已激活 generation=${generation}`);
+        }
+      } else if (active) {
+        await this.audioSessionManager.deactivateAudioSession();
+        Log.i('Player', `AudioSession 已撤销 generation=${generation}`);
+      }
+    } catch (e) {
+      Log.w('Player', `AudioSession 协调失败 generation=${generation} ${(e as Error).message}`);
+    }
+  }
+
+  private async activateAudioSession(): Promise<number> {
+    const generation = this.requestAudioSession(true);
+    const task = this.audioSessionTask;
+    await task;
+    return generation;
+  }
+
+  private isAudioSessionReady(generation: number): boolean {
+    if (generation !== this.audioSessionGeneration || !this.audioSessionDesiredActive || this.released) return false;
+    try {
+      return this.audioSessionManager.isAudioSessionActivated();
+    } catch (e) {
+      Log.w('Player', `读取 AudioSession 状态失败 ${(e as Error).message}`);
+      return false;
+    }
+  }
+
+  private deactivateAudioSession(): void {
+    this.requestAudioSession(false);
+  }
+
   private bindSourceEvents(p: media.AVPlayer, generation: number): void {
     p.on('stateChange', (state: string) => {
       this.onPlayerState(state as media.AVPlayerState, generation);
@@ -339,10 +410,31 @@ export class PlayerController {
         p.seek(seekMs, media.SeekMode.SEEK_PREV_SYNC);
         this.clock.positionMs = seekMs;
       }
+      // 用户可能在 prepare 或 AudioSession 激活期间按了暂停。prepared 不能把旧的自动起播意图复活。
+      if (!this.playbackDesiredPlaying) {
+        this.loading = false;
+        this.notify();
+        return;
+      }
       try {
+        const sessionGeneration = await this.activateAudioSession();
+        // 激活期间可能已经换集、释放或被暂停。旧异步结果只能退出,不能再让旧源开声。
+        if (generation !== this.loadGeneration || this.sourceGeneration !== generation
+          || this.released || this.player !== p || !this.playbackDesiredPlaying
+          || sessionGeneration !== this.audioSessionGeneration || !this.audioSessionDesiredActive) return;
+        if (!this.isAudioSessionReady(sessionGeneration)) {
+          this.handleAudioSessionFailure(generation);
+          return;
+        }
         p.setVolume(0);         // 淡入起点
         await p.play();
-        if (generation !== this.loadGeneration) return;
+        if (generation !== this.loadGeneration || this.sourceGeneration !== generation
+          || this.released || this.player !== p || !this.playbackDesiredPlaying
+          || sessionGeneration !== this.audioSessionGeneration || !this.audioSessionDesiredActive) {
+          // pause 可能落在 play() 调用与 Promise 完成之间;只按最新目标态纠偏,不能反向覆盖更新的 resume。
+          if (!this.audioSessionDesiredActive && this.player === p && p.state === 'playing') await p.pause();
+          return;
+        }
         this.applyRate(p, this.speed);
         this.fadeVolume(1.0, this.fadeInMs, generation);
       } catch (e) {
@@ -353,6 +445,15 @@ export class PlayerController {
       return;
     }
     if (state === 'playing') {
+      // pause 可能比 play() 的状态回调先到。最终意图已是暂停时,不能把迟到的 playing 当成成功起播。
+      if (!this.playbackDesiredPlaying) {
+        try {
+          await p.pause();
+        } catch (e) {
+          Log.w('Player', `纠正迟到起播失败 ${(e as Error).message}`);
+        }
+        return;
+      }
       this.loadRetries = 0;
       this.loading = false;
       this.buffering = false;
@@ -369,6 +470,8 @@ export class PlayerController {
       this.stopTicker();
       this.saveProgress();
       if (this.onListenFlush !== null) this.onListenFlush();
+      // 快速 pause→resume 时旧 paused 事件可能晚到；只让仍然有效的暂停意图释放会话。
+      if (!this.playbackDesiredPlaying) this.deactivateAudioSession();
       this.notify();
       return;
     }
@@ -384,13 +487,39 @@ export class PlayerController {
       if (this.onListenFlush !== null) this.onListenFlush();
       const stopAfter = this.sleepEndOfEpisode;
       this.sleepEndOfEpisode = false;
+      let continues = false;
       if (!stopAfter) {
-        if (this.radioMode) this.advanceRadio();
-        else if (this.userQueue.length > 0) this.consumeQueueHead();
-        else if (this.queueIndex < this.queue.length - 1) this.next();
+        if (this.radioMode) {
+          continues = true;
+          this.advanceRadio();
+        } else if (this.userQueue.length > 0) {
+          continues = true;
+          this.consumeQueueHead();
+        } else if (this.queueIndex < this.queue.length - 1) {
+          continues = true;
+          this.next();
+        }
+      }
+      // 自动续集/用户队列/电台取下一首期间保持会话;只有真正播完或睡眠到集尾才释放。
+      if (!continues) {
+        this.playbackDesiredPlaying = false;
+        this.deactivateAudioSession();
       }
       this.notify();
     }
+  }
+
+  /// AudioSession 失败不是媒体源失败,不能为此重置音源并重新下载三次。
+  private handleAudioSessionFailure(generation: number): void {
+    if (generation <= 0 || generation !== this.loadGeneration) return;
+    this.loading = false;
+    this.isPlaying = false;
+    this.buffering = false;
+    this.playbackDesiredPlaying = false;
+    this.playbackError = L.s('playback_load_failed');
+    this.deactivateAudioSession();
+    Log.e('Player', `AudioSession 激活失败 generation=${generation}`);
+    this.notify();
   }
 
   /// 同一代次的 prepare/error/play 失败只处理一次;自动重试始终只有一个待执行任务。
@@ -415,7 +544,9 @@ export class PlayerController {
       }, 800);
     } else {
       this.loading = false;
+      this.playbackDesiredPlaying = false;
       this.playbackError = L.s('playback_load_failed');
+      this.deactivateAudioSession();
       Log.e('Player', `重试耗尽 generation=${generation},等待用户手动重试`);
     }
     this.notify();
@@ -437,33 +568,86 @@ export class PlayerController {
   // ── 传输控制 ──
 
   togglePlayPause(): void {
+    // loading 时 isPlaying 还没变成 true,只能按明确意图判断这次点击是暂停还是恢复。
+    if (this.loading ? this.playbackDesiredPlaying : this.isPlaying) this.pausePlayback();
+    else this.resumePlayback();
+  }
+
+  /// 明确暂停动作,重复调用不会反向恢复。公开方法保持 fire-and-forget,供 ArkUI 与 AVSession 同步调用。
+  pausePlayback(): void {
+    this.playbackDesiredPlaying = false;
+    const actionGeneration = ++this.playbackActionGeneration;
+    this.playbackActionTask = this.playbackActionTask.then((): Promise<void> => {
+      return this.pausePlaybackAsync(actionGeneration);
+    });
+  }
+
+  private async pausePlaybackAsync(actionGeneration: number): Promise<void> {
+    if (actionGeneration !== this.playbackActionGeneration) return;
+    const p = this.player;
+    if (p === null || p.state !== 'playing') {
+      this.deactivateAudioSession();
+      return;
+    }
+    try {
+      await p.pause();
+      // resume 可能在 pause 的 Promise 返回前已经排队；旧暂停动作不能撤销新的恢复会话。
+      if (actionGeneration === this.playbackActionGeneration && !this.playbackDesiredPlaying) {
+        this.deactivateAudioSession();
+      }
+    } catch (e) {
+      Log.w('Player', `暂停失败 ${(e as Error).message}`);
+    }
+  }
+
+  /// 明确恢复动作,重复调用只会确认会话仍激活,不会反向暂停。
+  resumePlayback(): void {
+    this.playbackDesiredPlaying = true;
+    const actionGeneration = ++this.playbackActionGeneration;
+    // prepare 尚未完成时只更新意图；prepared 回调会按最新意图激活会话并起播。
     if (this.loading) return;
     if (this.playbackError.length > 0) {
       this.retry();
       return;
     }
-    this.togglePlayPauseAsync();
+    this.playbackActionTask = this.playbackActionTask.then((): Promise<void> => {
+      return this.resumePlaybackAsync(actionGeneration);
+    });
   }
 
-  private async togglePlayPauseAsync(): Promise<void> {
+  private async resumePlaybackAsync(actionGeneration: number): Promise<void> {
+    if (actionGeneration !== this.playbackActionGeneration) return;
     const p = this.player;
     if (p === null) {
       const cur = this.current;
       if (cur !== null) this.retry();
       return;
     }
+    const generation = this.sourceGeneration;
     try {
-      if (this.isPlaying) {
-        await p.pause();
-      } else {
-        await p.play();
-        if (this.sourceGeneration !== this.loadGeneration) return;
-        this.applyRate(p, this.speed);
+      const sessionGeneration = await this.activateAudioSession();
+      // AudioSession 激活返回时重新确认播放器、音源和明确动作仍是发起恢复时的对象与代次。
+      if (actionGeneration !== this.playbackActionGeneration
+        || generation <= 0 || generation !== this.loadGeneration || this.sourceGeneration !== generation
+        || this.released || this.player !== p || !this.playbackDesiredPlaying
+        || sessionGeneration !== this.audioSessionGeneration || !this.audioSessionDesiredActive) return;
+      if (!this.isAudioSessionReady(sessionGeneration)) {
+        this.handleAudioSessionFailure(generation);
+        return;
       }
+      if (p.state !== 'playing') await p.play();
+      if (actionGeneration !== this.playbackActionGeneration
+        || generation !== this.loadGeneration || this.sourceGeneration !== generation
+        || this.released || this.player !== p || !this.playbackDesiredPlaying
+        || sessionGeneration !== this.audioSessionGeneration || !this.audioSessionDesiredActive) {
+        if (!this.audioSessionDesiredActive && this.player === p && p.state === 'playing') await p.pause();
+        return;
+      }
+      this.applyRate(p, this.speed);
     } catch (e) {
-      Log.w('Player', `播放/暂停失败 ${(e as Error).message}`);
+      Log.w('Player', `恢复播放失败 ${(e as Error).message}`);
       const cur = this.current;
-      if (cur !== null) this.handleLoadFailure(cur, this.sourceGeneration);
+      if (cur !== null) this.handleLoadFailure(cur, generation);
     }
   }
 
@@ -610,7 +794,11 @@ export class PlayerController {
   private async advanceRadio(): Promise<void> {
     if (this.radioAdvancing) return;
     const next = this.radioNext;
-    if (next === null) return;
+    if (next === null) {
+      this.playbackDesiredPlaying = false;
+      this.deactivateAudioSession();
+      return;
+    }
     this.radioAdvancing = true;
     Log.i('Radio', '抓下一首…');
     try {
@@ -619,7 +807,14 @@ export class PlayerController {
       else {
         Log.w('Radio', '无下一首,停台');
         this.stopRadio();
+        this.playbackDesiredPlaying = false;
+        this.deactivateAudioSession();
       }
+    } catch (e) {
+      Log.w('Radio', `抓下一首失败 ${(e as Error).message}`);
+      this.stopRadio();
+      this.playbackDesiredPlaying = false;
+      this.deactivateAudioSession();
     } finally {
       this.radioAdvancing = false;
     }
@@ -695,10 +890,8 @@ export class PlayerController {
       if (remain <= 0) {
         this.sleepRemainingMs = 0;
         const p = this.player;
-        if (p !== null) {
-          p.pause();
-          p.setVolume(1.0);
-        }
+        if (p !== null) p.setVolume(1.0);
+        this.pausePlayback();
         this.clearSleepTicker();
       } else {
         this.sleepRemainingMs = remain;
@@ -830,7 +1023,9 @@ export class PlayerController {
 
   async release(): Promise<void> {
     this.released = true;
+    this.playbackDesiredPlaying = false;
     this.loadGeneration += 1;
+    this.playbackActionGeneration += 1;
     this.sourceGeneration = 0;
     this.failedGeneration = -1;
     this.cancelLoadRetry();
@@ -839,21 +1034,29 @@ export class PlayerController {
     this.clearSleepTicker();
     this.loading = false;
     this.buffering = false;
-    await this.loadTask;
-    let p = this.player;
-    const creating = this.playerCreation;
-    if (p === null && creating !== null) p = await creating;
-    this.playerCreation = null;
-    this.player = null;
-    this.closeLocalFile();
-    if (p !== null) {
-      try {
-        this.unbindSourceEvents(p);
-        p.off('timeUpdate');
-        await p.release();
-      } catch (e) {
-        // 忽略
+    try {
+      await this.loadTask;
+      await this.playbackActionTask;
+      let p = this.player;
+      const creating = this.playerCreation;
+      if (p === null && creating !== null) p = await creating;
+      this.playerCreation = null;
+      this.player = null;
+      this.closeLocalFile();
+      if (p !== null) {
+        try {
+          this.unbindSourceEvents(p);
+          p.off('timeUpdate');
+          await p.release();
+        } catch (e) {
+          // 忽略
+        }
       }
+    } finally {
+      // 不论播放器释放是否成功,最终都要让串行状态机收敛到「无 AudioSession」。
+      this.deactivateAudioSession();
+      const task = this.audioSessionTask;
+      await task;
     }
   }
 }

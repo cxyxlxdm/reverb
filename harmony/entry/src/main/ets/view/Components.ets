@@ -48,6 +48,10 @@ export struct PodcastListItem {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
   @Prop podcast: Podcast;
+  /// 搜索预检专用；默认空串,分类榜与订阅列表完全不受影响。
+  @Prop status: string = '';
+  @Prop statusError: boolean = false;
+  @Prop tapEnabled: boolean = true;
   onTap: () => void = () => {};
 
   build() {
@@ -74,13 +78,21 @@ export struct PodcastListItem {
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.secondary)
         }
+        if (this.status.length > 0) {
+          Text(this.status)
+            .fontSize(TypeScale.caption * this.fontScale)
+            .fontColor(this.statusError ? this.scheme.error : this.scheme.primary)
+        }
       }
       .alignItems(HorizontalAlign.Start)
       .layoutWeight(1)
     }
     .width('100%')
+    .opacity(this.tapEnabled ? 1 : 0.58)
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 10, bottom: 10 })
-    .onClick(() => this.onTap())
+    .onClick(() => {
+      if (this.tapEnabled) this.onTap();
+    })
   }
 }
 

@@ -121,6 +121,22 @@
       "value": "No episodes found"
     },
     {
+      "name": "search_rss_failed",
+      "value": "Couldn’t import this RSS feed. Check that the URL is reachable and valid."
+    },
+    {
+      "name": "search_probe_checking",
+      "value": "Checking"
+    },
+    {
+      "name": "search_probe_available",
+      "value": "Available"
+    },
+    {
+      "name": "search_probe_unreachable",
+      "value": "Unavailable on the current network"
+    },
+    {
       "name": "lib_subscriptions",
       "value": "Subscribed"
     },
@@ -191,6 +207,10 @@
     {
       "name": "detail_load_failed",
       "value": "Failed to load, check your network"
+    },
+    {
+      "name": "detail_network_unreachable",
+      "value": "This feed is unavailable on the current network"
     },
     {
       "name": "offline_cached_at",
@@ -654,7 +674,7 @@
     },
     {
       "name": "about_body",
-      "value": "A lightweight podcast client. Fully client-side: no backend, no API keys, no third-party SDKs."
+      "value": "A lightweight podcast client with no developer backend or account. It uses system capabilities and first-party code, with no advertising or analytics reporting SDKs."
     },
     {
       "name": "licenses_title",
@@ -695,6 +715,18 @@
     {
       "name": "set_wifi_only_sub",
       "value": "Turn off to allow downloads on cellular"
+    },
+    {
+      "name": "download_wifi_required",
+      "value": "Not connected to Wi-Fi. Download cancelled."
+    },
+    {
+      "name": "download_no_network",
+      "value": "No network connection"
+    },
+    {
+      "name": "notification_permission_denied",
+      "value": "Notification permission was not granted. Update alerts remain off."
     },
     {
       "name": "set_clear_cache",
@@ -926,7 +958,7 @@
     },
     {
       "name": "about_p_philosophy",
-      "value": "The look draws on ink wash, celadon and beam gold; the name and icon echo \"lingering sound\" — a wave wrapping a roof beam.\n\nSourcing stays free end to end, with no login and no API key: discovery uses public directories including Apple, fyyd and gpodder, while playback always comes back to the publisher's own RSS and streams the original audio — clean rights, zero cost.\n\nPrivacy: subscriptions, history and downloads live only on your device. Nothing is uploaded or tracked."
+      "value": "The look draws on ink wash, celadon and beam gold; the name and icon echo \"lingering sound\" — a wave wrapping a roof beam.\n\nSourcing stays free end to end, with no login and no API key: discovery uses public directories including Apple, fyyd and gpodder, while playback always comes back to the publisher's own RSS and streams the original audio.\n\nPrivacy: subscriptions, history and downloads stay on your device, are not automatically uploaded to the developer, and are not used for cross-app tracking."
     },
     {
       "name": "queue_play_next",
@@ -958,7 +990,7 @@
     },
     {
       "name": "privacy_consent_body",
-      "value": "Reverb is a fully local podcast client. Before you start, here is how your data is handled.\n\nWe collect no personal information. There is no server, no account, no third-party SDKs, no analytics and no ads.\n\nYour data stays on this device. Subscriptions, history, favorites, downloads, listening time, stamps and settings are stored in the app's private directory and removed on uninstall.\n\nWhat the network is used for. To discover and play podcasts, your device contacts public directories for Apple Podcasts search (itunes.apple.com), Apple charts (rss.marketingtools.apple.com), fyyd.de and gpodder.net, plus the publishers' own RSS, audio and artwork URLs; when you tap \"Import recommended feeds\", it also downloads a subscription list from this app's website. No credentials and no user identifiers are attached; see the full policy for the complete list.\n\nPermissions. Internet, network state (to detect Wi-Fi for \"download on Wi-Fi only\"), background audio playback, and notifications (only when you enable update reminders). No location, contacts, camera, microphone, SMS, call log or calendar access is requested.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
+      "value": "Reverb processes most data on your device. It has no developer backend, account, ads, analytics, attribution, third-party login or push, crash reporting, or cross-app tracking. Subscriptions, history, favorites, downloads, listening statistics, settings, a random installation ID, and runtime logs are processed locally and are not automatically uploaded to the developer. The HarmonyOS app uses system capabilities and first-party code.\n\nWhen online, search terms, region, or category are sent to public directories such as Apple, fyyd, and gpodder. RSS, artwork, audio, and transcripts are requested directly from publishers or hosts, which exposes your IP address, User-Agent, and requested resource to them. Logs may contain show or episode identifiers and the host names of accessed services; they leave the app only when you choose to share or export them. Read the full policy for details.\n\nTapping \"Agree and continue\" means you have read and accept this policy."
     },
     {
       "name": "privacy_consent_asr",
@@ -1042,7 +1074,7 @@
     },
     {
       "name": "set_transcription_sub",
-      "value": "Swipe to the third page of the player to read along. When the publisher provides no transcript, the system speech recogniser transcribes it on this device."
+      "value": "Swipe to the third player page to read a publisher-provided transcript. The page is hidden when none is available."
     },
     {
       "name": "set_word_highlight",

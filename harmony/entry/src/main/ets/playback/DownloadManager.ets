@@ -1,7 +1,9 @@
 import fs from '@ohos.file.fs';
 import http from '@ohos.net.http';
+import connection from '@ohos.net.connection';
 import { Episode } from '../model/Models';
 import { DownloadStore } from '../store/DownloadStore';
+import { SettingsStore } from '../store/SettingsStore';
 import { Log } from '../util/Logger';
 
 /// 下载状态(纯内存态,不持久化;进程重启后由 DownloadStore 重建为已完成)。
@@ -10,6 +12,14 @@ export enum DownloadState {
   DOWNLOADING = 1,
   COMPLETED = 2,
   FAILED = 3
+}
+
+export enum DownloadResult {
+  STARTED = 0,
+  IGNORED = 1,
+  WIFI_REQUIRED = 2,
+  NO_NETWORK = 3,
+  FAILED = 4
 }
 
 export interface DownloadProgress {
@@ -36,10 +46,12 @@ export class DownloadManager {
 
   private dir = '';
   private store: DownloadStore | null = null;
+  private settings: SettingsStore | null = null;
 
-  init(filesDir: string, store: DownloadStore): void {
+  init(filesDir: string, store: DownloadStore, settings: SettingsStore): void {
     this.dir = `${filesDir}/downloads`;
     this.store = store;
+    this.settings = settings;
     try {
       if (!fs.accessSync(this.dir)) fs.mkdirSync(this.dir);
     } catch (e) {
@@ -69,12 +81,16 @@ export class DownloadManager {
   }
 
   /// 开始下载(幂等:已下载 / 正在下 / 已排队都直接返回)。
-  async download(e: Episode): Promise<void> {
-    if (this.store === null || this.dir.length === 0) return;
-    if (this.isDownloaded(e.id)) return;
+  async download(e: Episode): Promise<DownloadResult> {
+    if (this.store === null || this.dir.length === 0) return DownloadResult.IGNORED;
+    if (this.isDownloaded(e.id)) return DownloadResult.IGNORED;
     const cur = this.states[e.id];
-    if (cur !== undefined && (cur.state === DownloadState.DOWNLOADING || cur.state === DownloadState.QUEUED)) return;
-    if (e.audioUrl.length === 0) return;
+    if (cur !== undefined && (cur.state === DownloadState.DOWNLOADING || cur.state === DownloadState.QUEUED)) {
+      return DownloadResult.IGNORED;
+    }
+    if (e.audioUrl.length === 0) return DownloadResult.IGNORED;
+    const gate = await this.downloadGate();
+    if (gate !== DownloadResult.STARTED) return gate;
 
     this.setState(e.id, DownloadState.QUEUED, 0);
     const target = `${this.dir}/${DownloadManager.fileName(e.id, e.audioUrl)}`;
@@ -139,7 +155,7 @@ export class DownloadManager {
         Log.w('Download', `失败 code=${code} 写入=${written}B ${writeFailed} id=${e.id}`);
         await this.cleanupAsync(part);
         this.setState(e.id, DownloadState.FAILED, 0);
-        return;
+        return DownloadResult.FAILED;
       }
 
       // 先写 .part,成功后再 rename —— 失败不留半截可播文件
@@ -153,6 +169,7 @@ export class DownloadManager {
       this.store.add(e, target);
       this.setState(e.id, DownloadState.COMPLETED, 1);
       Log.i('Download', `完成 "${e.title}" ${Math.round(written / 1024)}KB`);
+      return DownloadResult.STARTED;
     } catch (err) {
       Log.e('Download', `失败 id=${e.id} ${(err as Error).message}`);
       if (file !== null) {
@@ -164,10 +181,26 @@ export class DownloadManager {
       }
       await this.cleanupAsync(part);
       this.setState(e.id, DownloadState.FAILED, 0);
+      return DownloadResult.FAILED;
     } finally {
       req.off('dataReceive');
       req.off('dataReceiveProgress');
       req.destroy();
+    }
+  }
+
+  private async downloadGate(): Promise<DownloadResult> {
+    try {
+      const handle = await connection.getDefaultNet();
+      const caps = await connection.getNetCapabilities(handle);
+      if (caps.bearerTypes.length === 0) return DownloadResult.NO_NETWORK;
+      const settings = this.settings;
+      if (settings === null || settings.allowCellular) return DownloadResult.STARTED;
+      return caps.bearerTypes.indexOf(connection.NetBearType.BEARER_WIFI) >= 0
+        ? DownloadResult.STARTED : DownloadResult.WIFI_REQUIRED;
+    } catch (e) {
+      Log.w('Download', `读取当前网络失败 ${(e as Error).message}`);
+      return DownloadResult.NO_NETWORK;
     }
   }
 

@@ -93,7 +93,7 @@ export class AppContainer {
       this.transcripts.transcriber = new SpeechTranscriber(ctx);
     }
     this.downloads.load();
-    this.downloadManager.init(ctx.filesDir, this.downloads);
+    this.downloadManager.init(ctx.filesDir, this.downloads, this.settings);
     this.listenStats.load();
     this.listenStats.seedFromHistory(this.history.history);
 

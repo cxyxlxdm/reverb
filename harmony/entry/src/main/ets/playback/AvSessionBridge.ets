@@ -37,14 +37,15 @@ export class AvSessionBridge {
       const s = await avSession.createAVSession(ctx, 'reverb', 'audio');
       this.session = s;
 
-      // 系统控制中心 / 锁屏 / 耳机媒体键的回调
+      // 系统控制中心 / 锁屏 / 耳机媒体键的回调。play/pause 必须是幂等的明确动作:
+      // 系统重复派发同一命令时若走 toggle,第二次会把第一次的结果反转。
       s.on('play', () => {
         Log.d('AVSession', 'play');
-        player.togglePlayPause();
+        player.resumePlayback();
       });
       s.on('pause', () => {
         Log.d('AVSession', 'pause');
-        player.togglePlayPause();
+        player.pausePlayback();
       });
       s.on('playNext', () => {
         Log.d('AVSession', 'playNext');

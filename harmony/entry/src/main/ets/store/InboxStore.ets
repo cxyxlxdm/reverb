@@ -17,7 +17,7 @@ import { Log } from '../util/Logger';
  *  3. **失败不覆盖** —— 全部源失败/超时时不要用空列表覆盖已有缓存。
  *
  * 另吸收 macOS 的 loadedSignature:订阅集未变则跳过重复全量刷新(切 tab 不再重拉)。
- * ArkTS 无协程,有界并发用 Promise 池 + 单源超时竞速实现。
+ * ArkTS 无协程,有界并发用 Promise 池实现；单源截止由 Repository 的物理硬超时保证。
  */
 @Observed
 export class InboxStore {
@@ -28,7 +28,6 @@ export class InboxStore {
   private static MAX = 100;
   private static PER_FEED_MAX = 12;      // 每源只取最新 12 集,避免大源刷屏
   private static PARALLELISM = 8;        // 有界并发
-  private static PER_FEED_TIMEOUT = 8000; // 单源超时,慢源不拖垮整体
 
   private loadedSignature = '';
   private busy = false;                  // 防重入
@@ -101,19 +100,13 @@ export class InboxStore {
     }
   }
 
-  /// 单源拉取 + 超时竞速 + 每源截断。
+  /// 单源拉取 + 每源截断。不能再用 Promise.race 假超时：race 只丢结果,底层请求仍继续占资源。
   private async loadCapped(feedUrl: string, repo: PodcastRepository): Promise<Episode[]> {
-    const timeout: Promise<Episode[]> = new Promise((resolve: (v: Episode[]) => void) => {
-      setTimeout(() => resolve([]), InboxStore.PER_FEED_TIMEOUT);
-    });
-    const work: Promise<Episode[]> = (async (): Promise<Episode[]> => {
-      const feed = await repo.feed(feedUrl);
-      if (feed === null) return [];
-      const eps = feed.episodes.filter((e: Episode) => e.audioUrl.length > 0);
-      const sorted = InboxStore.sortStable(eps);
-      return sorted.slice(0, InboxStore.PER_FEED_MAX);
-    })();
-    return Promise.race([work, timeout]);
+    const feed = await repo.feed(feedUrl);
+    if (feed === null) return [];
+    const eps = feed.episodes.filter((e: Episode) => e.audioUrl.length > 0);
+    const sorted = InboxStore.sortStable(eps);
+    return sorted.slice(0, InboxStore.PER_FEED_MAX);
   }
 
   /// 按 id 去重 + 稳定排序 + 总量截断。

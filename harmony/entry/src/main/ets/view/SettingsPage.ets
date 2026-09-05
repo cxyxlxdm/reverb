@@ -169,24 +169,24 @@ export struct SettingsPage {
             () => this.optIndex(this.skipFwdOpts, this.settings.skipForwardSec),
             (i: number) => { this.settings.setSkipForwardSec(this.skipFwdOpts[i]); this.onChanged(); })
           this.switchRow(L.s('set_wifi_only'), () => L.s('set_wifi_only_sub'),
-            !this.settings.allowCellular,
+            () => !this.settings.allowCellular,
             (on: boolean) => { this.settings.setAllowCellular(!on); })
           // 「逐字稿」总开关**只在有本机识别时才有意义**:那时它决定"任何一集都能转"。
           // 本端 LOCAL_ASR = false,第三页仅在该集有官方稿时出现 —— 没有可开关的东西,
           // 摆一个开了也不变的开关只会让人困惑(与 Android 大陆商店渠道同样不显示)。
           if (Features.LOCAL_ASR) {
             this.switchRow(L.s('set_transcription'), () => L.s('set_transcription_sub'),
-              this.settings.transcriptionEnabled,
+              () => this.settings.transcriptionEnabled,
               (on: boolean) => { this.settings.setTranscriptionEnabled(on); })
           }
           // 逐字高亮**保留**:官方的 JSON 稿一词一条、自带词级时间,那个效果是真的
           this.switchRow(L.s('set_word_highlight'), () => L.s('set_word_highlight_sub'),
-            this.settings.wordHighlight,
+            () => this.settings.wordHighlight,
             (on: boolean) => { this.settings.setWordHighlight(on); })
 
           this.sectionLabel(L.s('sec_reminder'))
           this.switchRow(L.s('set_updates'), () => L.s('set_updates_sub'),
-            this.settings.updatesEnabled,
+            () => this.settings.updatesEnabled,
             (on: boolean) => { this.toggleUpdates(on); })
           // 这里原先还有一行「立即检查更新」。删掉的理由:它做的事(遍历订阅拉 feed、
           // 有新集就发系统通知)在前台**完全被「音阁 · 最新」的下拉刷新覆盖** ——
@@ -395,10 +395,10 @@ export struct SettingsPage {
   /// 开关行(Android SettingSwitch)。原先把开关做成「关/开」两项的单选对话框 ——
   /// 两次点击才能切一个布尔值,且看不出这是开关。
   @Builder
-  switchRow(title: string, subOf: () => string, on: boolean, onChange: (v: boolean) => void) {
+  switchRow(title: string, subOf: () => string, onOf: () => boolean, onChange: (v: boolean) => void) {
     Row() {
       this.rowText(title, subOf)
-      Toggle({ type: ToggleType.Switch, isOn: on })
+      Toggle({ type: ToggleType.Switch, isOn: onOf() })
         .selectedColor(this.scheme.primary)
         .onChange((v: boolean) => { onChange(v); })
     }
@@ -629,9 +629,14 @@ export struct SettingsPage {
 
   private async toggleUpdates(on: boolean): Promise<void> {
     if (on) {
+      // 先只改内存状态,让拒绝时发生 true → false 的可观察变化并把 Toggle 拉回关闭;
+      // 若授权弹窗期间进程退出,持久化值仍保持 false。
+      this.settings.updatesEnabled = true;
       const ok = await UpdateNotifier.requestAuth(this.ctx());
       if (!ok) {
-        this.hint = L.s('backup_failed');
+        this.settings.setUpdatesEnabled(false);
+        this.hint = L.s('notification_permission_denied');
+        this.onChanged();
         return;
       }
       UpdateNotifier.schedule();

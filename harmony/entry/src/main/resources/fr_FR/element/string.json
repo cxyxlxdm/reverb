@@ -121,6 +121,22 @@
       "value": "Aucun épisode trouvé"
     },
     {
+      "name": "search_rss_failed",
+      "value": "Impossible d’importer ce flux RSS. Vérifiez que l’adresse est accessible et valide."
+    },
+    {
+      "name": "search_probe_checking",
+      "value": "Vérification…"
+    },
+    {
+      "name": "search_probe_available",
+      "value": "Disponible"
+    },
+    {
+      "name": "search_probe_unreachable",
+      "value": "Inaccessible sur le réseau actuel"
+    },
+    {
       "name": "lib_subscriptions",
       "value": "Abonnements"
     },
@@ -191,6 +207,10 @@
     {
       "name": "detail_load_failed",
       "value": "Échec du chargement, vérifiez le réseau"
+    },
+    {
+      "name": "detail_network_unreachable",
+      "value": "Cette chaîne est inaccessible sur le réseau actuel"
     },
     {
       "name": "offline_cached_at",
@@ -654,7 +674,7 @@
     },
     {
       "name": "about_body",
-      "value": "Un client de podcast léger. Entièrement côté client : pas de backend, ni clé d'API, ni SDK tiers."
+      "value": "Un client de podcasts léger, sans serveur du développeur ni compte. Il utilise les capacités système et son propre code, sans SDK publicitaire ou analytique."
     },
     {
       "name": "licenses_title",
@@ -695,6 +715,18 @@
     {
       "name": "set_wifi_only_sub",
       "value": "Désactivez pour autoriser les données mobiles"
+    },
+    {
+      "name": "download_wifi_required",
+      "value": "Aucune connexion Wi-Fi. Téléchargement annulé."
+    },
+    {
+      "name": "download_no_network",
+      "value": "Aucune connexion réseau"
+    },
+    {
+      "name": "notification_permission_denied",
+      "value": "Autorisation de notification refusée. Les alertes restent désactivées."
     },
     {
       "name": "set_clear_cache",
@@ -926,7 +958,7 @@
     },
     {
       "name": "about_p_philosophy",
-      "value": "L'esthétique puise dans le lavis d'encre, le céladon et l'or des poutres ; le nom et l'icône évoquent le « son qui persiste ».\n\nL'approvisionnement reste gratuit de bout en bout, sans compte ni clé d'API : la découverte utilise des annuaires publics comme Apple, fyyd et gpodder, tandis que la lecture revient toujours au flux RSS de l'éditeur et diffuse l'audio original — droits propres, coût nul.\n\nConfidentialité : abonnements, historique et téléchargements ne vivent que sur votre appareil. Rien n'est envoyé ni pisté."
+      "value": "L’esthétique puise dans le lavis d’encre, le céladon et l’or des poutres ; le nom et l’icône évoquent le « son qui persiste ».\n\nL’approvisionnement reste gratuit de bout en bout, sans compte ni clé d’API : la découverte utilise des annuaires publics comme Apple, fyyd et gpodder, tandis que la lecture revient toujours au flux RSS de l’éditeur.\n\nConfidentialité : abonnements, historique et téléchargements restent sur votre appareil, ne sont pas envoyés automatiquement au développeur et ne servent pas au suivi inter-applications."
     },
     {
       "name": "queue_play_next",
@@ -958,7 +990,7 @@
     },
     {
       "name": "privacy_consent_body",
-      "value": "Reverb est un client de podcasts entièrement local. Avant de commencer, voici comment vos données sont traitées.\n\nNous ne collectons aucune donnée personnelle. Pas de serveur, pas de compte, aucun SDK tiers, aucune analytique, aucune publicité.\n\nVos données restent sur cet appareil. Abonnements, historique, favoris, téléchargements, temps d'écoute, sceaux et réglages sont enregistrés dans le répertoire privé de l'application et supprimés à la désinstallation.\n\nÀ quoi sert le réseau. Pour découvrir et lire des podcasts, votre appareil contacte les annuaires publics de recherche Apple Podcasts (itunes.apple.com), les classements Apple (rss.marketingtools.apple.com), fyyd.de et gpodder.net, ainsi que les adresses RSS, audio et pochettes des éditeurs eux-mêmes ; lorsque vous touchez « Importer les abonnements recommandés », une liste d'abonnements est aussi téléchargée depuis le site de cette application. Aucun identifiant ni jeton d'authentification n'est joint ; la liste complète figure dans la politique intégrale.\n\nAutorisations. Internet, état du réseau (pour détecter le Wi-Fi et permettre « télécharger uniquement en Wi-Fi »), lecture audio en arrière-plan et notifications (uniquement si vous activez les rappels de nouveautés). Aucun accès à la localisation, aux contacts, à l'appareil photo, au micro, aux SMS, au journal d'appels ou au calendrier n'est demandé.\n\nEn touchant « Accepter et continuer », vous confirmez avoir lu et accepté cette politique."
+      "value": "Reverb traite principalement les données sur votre appareil. Il n’a ni serveur du développeur, ni compte, publicité, analytique, attribution, connexion ou notification push tierce, rapport de plantage ou suivi inter-applications. Abonnements, historique, favoris, téléchargements, statistiques d’écoute, réglages, identifiant d’installation aléatoire et journaux sont traités localement et ne sont pas envoyés automatiquement au développeur. La version HarmonyOS utilise les capacités système et son propre code.\n\nEn ligne, les termes recherchés, la région ou la catégorie sont envoyés aux annuaires publics Apple, fyyd et gpodder. RSS, pochettes, audio et transcriptions sont demandés directement aux éditeurs ou hébergeurs, qui voient donc votre adresse IP, le User-Agent et la ressource demandée. Les journaux peuvent contenir des identifiants d’émission ou d’épisode et les noms d’hôte des services consultés ; ils ne quittent l’application que si vous choisissez de les partager ou exporter. Consultez la politique complète.\n\nEn touchant « Accepter et continuer », vous confirmez avoir lu et accepté cette politique."
     },
     {
       "name": "privacy_consent_asr",
@@ -1042,7 +1074,7 @@
     },
     {
       "name": "set_transcription_sub",
-      "value": "Glissez jusqu’à la troisième page du lecteur pour lire. Si l’éditeur ne fournit pas de transcription, la reconnaissance vocale du système la génère sur cet appareil."
+      "value": "Glissez jusqu’à la troisième page pour lire la transcription fournie par l’éditeur. Sans transcription, cette page est masquée."
     },
     {
       "name": "set_word_highlight",

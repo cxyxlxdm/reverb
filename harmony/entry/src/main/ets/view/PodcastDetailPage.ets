@@ -2,14 +2,17 @@ import { Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 import { Podcast, Episode, FeedResult } from '../model/Models';
 import { AppContainer } from '../AppContainer';
+import { Http } from '../net/Http';
 import { SubscriptionStore, HistoryStore } from '../store/Stores';
 import { ListenStatsStore } from '../store/ListenStatsStore';
-import { DownloadManager } from '../playback/DownloadManager';
+import { DownloadManager, DownloadResult } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, LoadingBox, Artwork } from './Widgets';
 import { EpisodeListItem, formatListenDuration } from './Components';
 import { formatCachedAt } from '../util/DateParse';
 import { Log } from '../util/Logger';
+
+const RECENT_FEED_CACHE_MS = 60 * 1000;
 
 /// 频道详情:头部(封面/标题/作者/集数/订阅/可展开简介/付费/赞助)+ 单集列表。
 /// 对应 Android `PodcastDetailScreen.kt`。
@@ -29,6 +32,7 @@ export struct PodcastDetailPage {
   /// 据此显示「离线内容 · 上次更新 X」。刷新成功置 0。
   @State staleAt: number = 0;
   @State descExpanded: boolean = false;
+  private loadGeneration: number = 0;
   /**
    * 订阅态与下载态**直接从被观察的 store 读**,不再镜像成本地 @State。
    *
@@ -47,6 +51,10 @@ export struct PodcastDetailPage {
 
   aboutToAppear(): void {
     this.load();
+  }
+
+  aboutToDisappear(): void {
+    this.loadGeneration += 1;
   }
 
   private isSubscribed(): boolean {
@@ -72,40 +80,79 @@ export struct PodcastDetailPage {
   }
 
   private async load(): Promise<void> {
-    if (this.seed.feedUrl.length === 0) {
+    const seed = this.seed;
+    const feedUrl = seed.feedUrl;
+    const generation = ++this.loadGeneration;
+    this.loaded = null;
+    this.episodes = [];
+    this.staleAt = 0;
+    this.failed = false;
+    this.descExpanded = false;
+    if (feedUrl.length === 0) {
+      this.loading = false;
       this.failed = true;
       return;
     }
-    // 先出缓存:秒开,且断网时也有内容可看
-    const cached = this.app.repository.cachedFeed(this.seed.feedUrl);
+    // 先出缓存:秒开,且断网时也有内容可看。搜索预检刚完整解析过的结果一分钟内无需再下载一遍。
+    const cached = this.app.repository.cachedFeed(feedUrl);
+    const cachedAt = this.app.repository.feedCachedAt(feedUrl);
     if (cached !== null && cached.episodes.length > 0) {
-      this.applyFeed(cached);
-      this.staleAt = this.app.repository.feedCachedAt(this.seed.feedUrl);
+      this.applyFeed(cached, seed);
+      if (Date.now() - cachedAt < RECENT_FEED_CACHE_MS) {
+        this.loading = false;
+        this.staleAt = 0;
+        return;
+      }
+      this.staleAt = cachedAt;
     }
     this.loading = this.episodes.length === 0;
-    this.failed = false;
-    const feed: FeedResult | null = await this.app.repository.feed(this.seed.feedUrl);
-    this.loading = false;
+    let feed: FeedResult | null = null;
+    try {
+      feed = await this.app.repository.feed(feedUrl);
+    } catch (_e) {
+      Log.w('Detail', `加载异常 host=${Http.host(feedUrl)}`);
+    } finally {
+      // 页面已退出或 seed 已切换时,旧请求绝不能清掉新页面的 loading。
+      if (generation === this.loadGeneration && feedUrl === this.seed.feedUrl) this.loading = false;
+    }
+    if (generation !== this.loadGeneration || feedUrl !== this.seed.feedUrl) return;
     if (feed === null) {
       // 有缓存就继续展示缓存(仅标为陈旧),只有连缓存都没有才算失败
       this.failed = this.episodes.length === 0;
-      Log.w('Detail', `解析失败 ${this.seed.feedUrl}${this.episodes.length > 0 ? ',沿用缓存' : ''}`);
+      Log.w('Detail', `解析失败 host=${Http.host(feedUrl)}${this.episodes.length > 0 ? ',沿用缓存' : ''}`);
       return;
     }
     this.staleAt = 0;
-    this.applyFeed(feed);
+    this.applyFeed(feed, seed);
     Log.i('Detail', `"${this.display().title}" 共 ${feed.episodes.length} 集`);
   }
 
   /// 把解析结果落到页面状态。用 RSS 结果补全,但保留列表页已有的封面/标题(RSS 有时缺图)。
-  private applyFeed(feed: FeedResult): void {
+  private applyFeed(feed: FeedResult, seed: Podcast): void {
     const p = feed.podcast;
-    if (p.artworkUrl.length === 0) p.artworkUrl = this.seed.artworkUrl;
-    if (p.title.length === 0) p.title = this.seed.title;
-    if (p.author.length === 0) p.author = this.seed.author;
-    p.isPaid = this.seed.isPaid;
+    if (p.artworkUrl.length === 0) p.artworkUrl = seed.artworkUrl;
+    if (p.title.length === 0) p.title = seed.title;
+    if (p.author.length === 0) p.author = seed.author;
+    p.isPaid = seed.isPaid;
     this.loaded = p;
     this.episodes = feed.episodes;
+  }
+
+  private async downloadEpisode(e: Episode): Promise<void> {
+    const result = await this.downloadManager.download(e);
+    if (result === DownloadResult.WIFI_REQUIRED) {
+      this.showToast(L.s('download_wifi_required'));
+    } else if (result === DownloadResult.NO_NETWORK) {
+      this.showToast(L.s('download_no_network'));
+    }
+  }
+
+  private showToast(message: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: message });
+    } catch (e) {
+      Log.w('Detail', `提示失败 ${(e as Error).message}`);
+    }
   }
 
   build() {
@@ -135,7 +182,7 @@ export struct PodcastDetailPage {
           if (this.failed && this.episodes.length === 0) {
             ListItem() {
               Column({ space: 12 }) {
-                Text(L.s('detail_load_failed'))
+                Text(L.s('detail_network_unreachable'))
                   .fontSize(TypeScale.body * this.fontScale)
                   .fontColor(this.scheme.onSurfaceVariant)
                 Button(L.s('action_retry'))
@@ -161,7 +208,7 @@ export struct PodcastDetailPage {
                 played: this.history.isPlayed(e.id),
                 downloadState: this.dlState(e.id),
                 onPlay: () => this.onPlayEpisode(e, this.episodes),
-                onDownload: () => { this.downloadManager.download(e); },
+                onDownload: () => { this.downloadEpisode(e); },
                 onDeleteDownload: () => { this.downloadManager.delete(e.id); },
                 // 纯动作,不参与本页渲染,直接用容器单例即可(理由同 DiscoverPage)
                 onPlayNext: () => { this.app.player.playNext(e); },

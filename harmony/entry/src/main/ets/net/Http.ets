@@ -8,29 +8,63 @@ const CONNECT_TIMEOUT = 15000;
 const READ_TIMEOUT = 20000;
 
 export class Http {
-  /// GET 取文本。失败返回 null(不抛),由调用方走降级链。
+  /**
+   * GET 取文本。失败返回 null(不抛),由调用方走降级链。
+   *
+   * `readTimeout` 只是系统网络栈的读取超时,并不保证 Promise 一定按时结束。这里另设物理
+   * 硬超时,到点主动 destroy 请求；所有出口都经 finish,保证只结算一次且清掉 timer / 请求。
+   */
   static async text(url: string, timeoutMs: number = READ_TIMEOUT): Promise<string | null> {
     const req = http.createHttp();
-    try {
-      const resp = await req.request(url, {
-        method: http.RequestMethod.GET,
-        header: { 'User-Agent': UA },
-        connectTimeout: CONNECT_TIMEOUT,
-        readTimeout: timeoutMs,
-        expectDataType: http.HttpDataType.STRING
-      });
-      if (resp.responseCode !== 200) {
-        Log.w('Http', `http ${resp.responseCode} url=${url}`);
-        return null;
+    const host = Http.host(url);
+    const startedAt = Date.now();
+    const hardTimeout = Math.max(1, timeoutMs);
+    return await new Promise<string | null>((resolve: (value: string | null) => void) => {
+      let settled = false;
+      let timerId: number = -1;
+      const finish = (value: string | null, stage: string): void => {
+        if (settled) return;
+        settled = true;
+        if (timerId >= 0) clearTimeout(timerId);
+        try {
+          req.destroy();
+        } catch (_e) {
+          // destroy 只负责释放系统请求；即使系统已先行回收,也不能影响 Promise 收尾。
+        }
+        const elapsed = Date.now() - startedAt;
+        if (value === null) Log.w('Http', `host=${host} 阶段=${stage} 耗时=${elapsed}ms`);
+        else Log.d('Http', `host=${host} 阶段=${stage} 耗时=${elapsed}ms`);
+        resolve(value);
+      };
+
+      timerId = setTimeout(() => { finish(null, '硬超时'); }, hardTimeout);
+      try {
+        req.request(url, {
+          method: http.RequestMethod.GET,
+          header: { 'User-Agent': UA },
+          connectTimeout: Math.min(CONNECT_TIMEOUT, hardTimeout),
+          readTimeout: hardTimeout,
+          expectDataType: http.HttpDataType.STRING
+        }).then((resp: http.HttpResponse) => {
+          if (resp.responseCode !== 200) {
+            finish(null, `HTTP_${resp.responseCode}`);
+            return;
+          }
+          const body = resp.result;
+          if (typeof body !== 'string') {
+            finish(null, '响应非文本');
+            return;
+          }
+          finish(body, '完成');
+        }).catch(() => { finish(null, '请求异常'); });
+      } catch (_e) {
+        finish(null, '启动异常');
       }
-      const body = resp.result;
-      return typeof body === 'string' ? body : null;
-    } catch (e) {
-      Log.w('Http', `请求失败 url=${url} err=${(e as Error).message}`);
-      return null;
-    } finally {
-      req.destroy();
-    }
+    });
+  }
+
+  static host(url: string): string {
+    return Log.endpoint(url);
   }
 
   /// GET 取 JSON 对象。解析失败返回 null。
@@ -41,7 +75,7 @@ export class Http {
       const o: Object = JSON.parse(s);
       return o as Record<string, Object>;
     } catch (e) {
-      Log.w('Http', `JSON 解析失败 url=${url}`);
+      Log.w('Http', `JSON 解析失败 host=${Http.host(url)}`);
       return null;
     }
   }
@@ -54,7 +88,7 @@ export class Http {
       const o: Object = JSON.parse(s);
       return Array.isArray(o) ? o as Object[] : null;
     } catch (e) {
-      Log.w('Http', `JSON 数组解析失败 url=${url}`);
+      Log.w('Http', `JSON 数组解析失败 host=${Http.host(url)}`);
       return null;
     }
   }
