@@ -123,7 +123,7 @@ android {
     }
     packaging {
         resources {
-            excludes += ['/META-INF/{AL2.0,LGPL2.1}', 'META-INF/*.kotlin_module']
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}', 'META-INF/*.kotlin_module', 'DebugProbesKt.bin']
         }
         // 识别模型必须**不压缩**:压了就没法用 openFd 拿到长度、也没法直接读,
         // 而且 ggml 模型本身几乎压不动,压缩只换来每次读取的解压开销(见 WhisperEngine)。
@@ -154,7 +154,6 @@ dependencies {
 
     implementation 'androidx.media3:media3-exoplayer:1.3.1'
     implementation 'androidx.media3:media3-session:1.3.1'
-    implementation 'androidx.media3:media3-ui:1.3.1'
     implementation 'androidx.media3:media3-common:1.3.1'
 
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'

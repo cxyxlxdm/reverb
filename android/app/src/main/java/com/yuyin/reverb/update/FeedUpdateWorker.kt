@@ -25,7 +25,11 @@ class FeedUpdateWorker(
             val feed = try {
                 container.repository.feed(p.feedUrl)
             } catch (e: Exception) {
-                com.yuyin.reverb.util.Logger.e(TAG, "feed failed title='${p.title}' url=${p.feedUrl}", e)
+                com.yuyin.reverb.util.Logger.e(
+                    TAG,
+                    "feed failed endpoint=${com.yuyin.reverb.util.Logger.endpoint(p.feedUrl)}",
+                    e
+                )
                 null
             } ?: continue
             val latest = feed.episodes.firstOrNull() ?: continue

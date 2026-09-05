@@ -1,6 +1,7 @@
 package com.yuyin.reverb
 
 import android.app.Application
+import androidx.work.Configuration
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
@@ -72,7 +73,10 @@ class AppContainer(app: Application) {
     val asrEngine: com.yuyin.reverb.playback.asr.AsrEngine? by lazy { AsrFactory.create(app) }
 }
 
-class ReverbApp : Application() {
+class ReverbApp : Application(), Configuration.Provider {
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder().build()
+
     override fun attachBaseContext(base: android.content.Context) {
         super.attachBaseContext(com.yuyin.reverb.util.LocaleUtil.wrap(base))
     }

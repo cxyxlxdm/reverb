@@ -27,10 +27,16 @@ class TranscriptFetcher(private val client: OkHttpClient) {
             val text = download(url) ?: return@withContext null
             val segs = parse(text, declaredType)
             if (segs.isNullOrEmpty()) {
-                com.yuyin.reverb.util.Logger.w(TAG, "解析不出句子 type=$declaredType url=$url")
+                com.yuyin.reverb.util.Logger.w(
+                    TAG,
+                    "解析不出句子 type=$declaredType endpoint=${com.yuyin.reverb.util.Logger.endpoint(url)}"
+                )
                 null
             } else {
-                com.yuyin.reverb.util.Logger.i(TAG, "官方稿 ${segs.size} 句 url=$url")
+                com.yuyin.reverb.util.Logger.i(
+                    TAG,
+                    "官方稿 ${segs.size} 句 endpoint=${com.yuyin.reverb.util.Logger.endpoint(url)}"
+                )
                 segs
             }
         }
@@ -42,7 +48,10 @@ class TranscriptFetcher(private val client: OkHttpClient) {
             .build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) {
-                com.yuyin.reverb.util.Logger.w(TAG, "http ${resp.code} url=$url")
+                com.yuyin.reverb.util.Logger.w(
+                    TAG,
+                    "http ${resp.code} endpoint=${com.yuyin.reverb.util.Logger.endpoint(url)}"
+                )
                 null
             } else {
                 val body = resp.body ?: return@use null
@@ -50,7 +59,10 @@ class TranscriptFetcher(private val client: OkHttpClient) {
                 // 免得遇到标错 type 的音频/视频链接把几十 MB 读进内存
                 val len = body.contentLength()
                 if (len > MAX_BYTES) {
-                    com.yuyin.reverb.util.Logger.w(TAG, "稿子过大($len 字节),跳过 url=$url")
+                    com.yuyin.reverb.util.Logger.w(
+                        TAG,
+                        "稿子过大($len 字节),跳过 endpoint=${com.yuyin.reverb.util.Logger.endpoint(url)}"
+                    )
                     null
                 } else {
                     body.string()
@@ -58,7 +70,11 @@ class TranscriptFetcher(private val client: OkHttpClient) {
             }
         }
     } catch (e: Exception) {
-        com.yuyin.reverb.util.Logger.e(TAG, "下载失败 url=$url", e)
+        com.yuyin.reverb.util.Logger.e(
+            TAG,
+            "下载失败 endpoint=${com.yuyin.reverb.util.Logger.endpoint(url)}",
+            e
+        )
         null
     }
 

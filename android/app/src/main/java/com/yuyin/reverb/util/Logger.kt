@@ -1,6 +1,7 @@
 package com.yuyin.reverb.util
 
 import android.content.Context
+import android.net.Uri
 import android.util.Log
 import java.io.File
 import java.io.PrintWriter
@@ -48,26 +49,40 @@ object Logger {
     fun w(tag: String, msg: String) = write("W", tag, msg, null)
     fun e(tag: String, msg: String, throwable: Throwable? = null) = write("E", tag, msg, throwable)
 
+    fun endpoint(url: String): String = try {
+        val uri = Uri.parse(url)
+        val scheme = uri.scheme.orEmpty()
+        val host = uri.host.orEmpty()
+        if (scheme.isEmpty() || host.isEmpty()) "invalid" else "$scheme://$host"
+    } catch (e: Exception) {
+        "invalid"
+    }
+
+    private fun sanitize(text: String): String =
+        Regex("https?://[^\\s\\\"'<>]+", RegexOption.IGNORE_CASE).replace(text) { endpoint(it.value) }
+
     private fun write(level: String, tag: String, msg: String, t: Throwable?) {
         // 时间戳在提交时取,顺序更贴近真实发生时刻
         val ts = try { timeFmt.format(Date()) } catch (e: Exception) { "" }
+        val safeMsg = sanitize(msg)
+        val safeTrace = if (t === null) null else sanitize(stackTraceToString(t))
         // 先镜像到 logcat(廉价、同步)
         try {
             val cat = "$LOGCAT_TAG/$tag"
             when (level) {
-                "D" -> if (t != null) Log.d(cat, msg, t) else Log.d(cat, msg)
-                "I" -> if (t != null) Log.i(cat, msg, t) else Log.i(cat, msg)
-                "W" -> if (t != null) Log.w(cat, msg, t) else Log.w(cat, msg)
-                else -> if (t != null) Log.e(cat, msg, t) else Log.e(cat, msg)
+                "D" -> Log.d(cat, safeMsg)
+                "I" -> Log.i(cat, safeMsg)
+                "W" -> Log.w(cat, safeMsg)
+                else -> Log.e(cat, safeMsg)
             }
         } catch (e: Exception) {
             // 单测/无 android 环境时忽略
         }
         val line = buildString {
-            append(ts).append(" [").append(level).append("] [").append(tag).append("] ").append(msg)
-            if (t != null) {
+            append(ts).append(" [").append(level).append("] [").append(tag).append("] ").append(safeMsg)
+            if (safeTrace !== null) {
                 append('\n')
-                append(stackTraceToString(t))
+                append(safeTrace)
             }
             append('\n')
         }

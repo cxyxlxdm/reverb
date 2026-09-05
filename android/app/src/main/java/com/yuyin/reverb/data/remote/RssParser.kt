@@ -22,7 +22,7 @@ class RssParser(private val client: OkHttpClient) {
     private val TAG = "Rss"
 
     suspend fun fetch(feedUrl: String): FeedResult? = withContext(Dispatchers.IO) {
-        com.yuyin.reverb.util.Logger.d(TAG, "fetch url=$feedUrl")
+        com.yuyin.reverb.util.Logger.d(TAG, "fetch endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}")
         val xml = download(feedUrl) ?: return@withContext null
         parse(xml, feedUrl)
     }
@@ -33,11 +33,18 @@ class RssParser(private val client: OkHttpClient) {
             .header("User-Agent", "Reverb/1.0 (Android podcast client)")
             .build()
         client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) com.yuyin.reverb.util.Logger.w(TAG, "http ${resp.code} url=$feedUrl")
+            if (!resp.isSuccessful) com.yuyin.reverb.util.Logger.w(
+                TAG,
+                "http ${resp.code} endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}"
+            )
             if (resp.isSuccessful) resp.body?.string() else null
         }
     } catch (e: Exception) {
-        com.yuyin.reverb.util.Logger.e(TAG, "download error url=$feedUrl", e)
+        com.yuyin.reverb.util.Logger.e(
+            TAG,
+            "download error endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}",
+            e
+        )
         null
     }
 
@@ -197,10 +204,17 @@ class RssParser(private val client: OkHttpClient) {
                 fundingUrl = channelFundingUrl,
                 fundingLabel = channelFundingLabel
             )
-            com.yuyin.reverb.util.Logger.i(TAG, "parse ok title='$channelTitle' episodes=${episodes.size} url=$feedUrl")
+            com.yuyin.reverb.util.Logger.i(
+                TAG,
+                "parse ok episodes=${episodes.size} endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}"
+            )
             FeedResult(podcast, episodes)
         } catch (e: Exception) {
-            com.yuyin.reverb.util.Logger.e(TAG, "parse error url=$feedUrl", e)
+            com.yuyin.reverb.util.Logger.e(
+                TAG,
+                "parse error endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}",
+                e
+            )
             null
         }
     }

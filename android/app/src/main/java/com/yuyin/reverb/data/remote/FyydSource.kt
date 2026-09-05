@@ -19,7 +19,7 @@ class FyydSource(private val client: OkHttpClient) {
     suspend fun search(term: String, limit: Int = 30): List<Podcast> = withContext(Dispatchers.IO) {
         if (term.isBlank()) return@withContext emptyList()
         val url = "https://api.fyyd.de/0.2/search/podcast?title=${enc(term)}&count=$limit"
-        com.yuyin.reverb.util.Logger.d(TAG, "search term='$term'")
+        com.yuyin.reverb.util.Logger.d(TAG, "search")
         parse(get(url)).also { com.yuyin.reverb.util.Logger.i(TAG, "search count=${it.size}") }
     }
 
@@ -36,11 +36,18 @@ class FyydSource(private val client: OkHttpClient) {
             .header("User-Agent", "Reverb/1.0 (Android podcast client)")
             .build()
         client.newCall(req).execute().use { resp ->
-            if (!resp.isSuccessful) com.yuyin.reverb.util.Logger.w(TAG, "http ${resp.code} url=$url")
+            if (!resp.isSuccessful) com.yuyin.reverb.util.Logger.w(
+                TAG,
+                "http ${resp.code} endpoint=${com.yuyin.reverb.util.Logger.endpoint(url)}"
+            )
             if (resp.isSuccessful) resp.body?.string() else null
         }
     } catch (e: Exception) {
-        com.yuyin.reverb.util.Logger.e(TAG, "http error url=$url", e)
+        com.yuyin.reverb.util.Logger.e(
+            TAG,
+            "http error endpoint=${com.yuyin.reverb.util.Logger.endpoint(url)}",
+            e
+        )
         null
     }
 

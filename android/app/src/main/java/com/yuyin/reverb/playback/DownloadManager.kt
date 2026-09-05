@@ -80,7 +80,10 @@ object DownloadManager {
             return
         }
 
-        com.yuyin.reverb.util.Logger.i(TAG, "download start id=$id url=${episode.audioUrl}")
+        com.yuyin.reverb.util.Logger.i(
+            TAG,
+            "download start id=$id endpoint=${com.yuyin.reverb.util.Logger.endpoint(episode.audioUrl)}"
+        )
         setState(id, DownloadStatus.Queued)
         scope.launch {
             try {

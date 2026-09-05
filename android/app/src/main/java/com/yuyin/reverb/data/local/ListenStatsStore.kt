@@ -91,7 +91,7 @@ class ListenStatsStore(context: Context) {
             if (migrated) persist()
             com.yuyin.reverb.util.Logger.i(
                 "ListenStats",
-                "load ${table.size} channels device=${deviceId.take(8)} migrated=$migrated"
+                "load ${table.size} channels migrated=$migrated"
             )
         }
     }
