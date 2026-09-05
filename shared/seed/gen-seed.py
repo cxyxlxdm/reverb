@@ -12,8 +12,10 @@
 所以这份清单是「榜单快照」,不是人工挑的私货,重跑脚本即可刷新。
 
 用法:
-    python3 gen-seed.py              # 重新抓取,覆盖 seed_podcasts.json
-    python3 gen-seed.py --check      # 只校验现有清单的 feedUrl 是否仍可访问,不改文件
+    python3 gen-seed.py               # 重新抓取,覆盖 seed_podcasts.json
+    python3 gen-seed.py --check       # 只校验现有清单的 feedUrl 是否仍可访问,不改文件
+    python3 gen-seed.py --opml        # 只从现有清单生成官网用的 recommended.opml,不重新抓取
+    python3 gen-seed.py --manual-only # 只把 MANUAL_PODCASTS 合并进现有清单,不重抓榜单
 
 抓完记得跑 ./sync.sh 把清单分发到三端资源目录。
 """
@@ -90,6 +92,44 @@ GENRE_KEY.update({
     "宗教": "religion", "知识": "science", "文化": "society", "体育": "sports",
     "科技": "tech", "犯罪纪实": "truecrime", "影视": "tv",
 })
+
+# 手工精选条目:人工决策收录,不靠榜单位次。放在脚本里而不是直接改 seed_podcasts.json,
+# 因为那份文件是生成物 —— 直接改,下次重抓榜单时会被静默冲掉;这里才是唯一事实源。
+# 字段与榜单条目完全同构(两端 SeedCatalog 按字段名读取,不多不少)。
+#
+# 《八分》(2026-09 收录,只落在社会与文化榜 cn:1324):第一季**免费**全开放 ——
+# 359 集实测全部带 enclosure、无试听截断、音频直链可下(HTTP 206),通过下方 lookup
+# 的同一条付费排除线(collectionPrice=0);feed 托管在 vistopia(看理想自有域名,大陆可达),
+# 且仍在 Apple 中国区目录在线。其续作《八分半》因内容原因已从 Apple 全球目录下架、
+# feed 大陆不可达,**不收录**(排查与决策记录见 docs/ROADMAP.md 三-C)。
+MANUAL_PODCASTS = {
+    "cn:1324": [
+        {
+            "id": "1492414487",
+            "title": "梁文道·八分",
+            "author": "梁文道",
+            "artworkUrl": "https://is1-ssl.mzstatic.com/image/thumb/Podcasts113/v4/42/49/57/424957e1-4063-2049-b319-ce161e503474/mza_15175642067007032999.jpg/600x600bb.jpg",
+            "feedUrl": "https://api.vistopia.com.cn/rss/program/11.xml",
+            # cn 区 lookup 回来的 primaryGenreName 是"社会与文化",不在中文兼容表里,
+            # 榜单路径同样原样保留(与清单里既有 cn:1324 条目一致),故此处照抄
+            "genre": "社会与文化",
+        },
+    ],
+}
+MANUAL_FEEDURLS = {p["feedUrl"] for entries in MANUAL_PODCASTS.values() for p in entries}
+
+
+def merge_manual(catalog):
+    """把手工条目合并进榜单目录:按 feedUrl 去重,追加在该榜单条目之后。返回合并明细。"""
+    added = []
+    for key, entries in MANUAL_PODCASTS.items():
+        known = {e["feedUrl"] for e in catalog.get(key, [])}
+        for p in entries:
+            if p["feedUrl"] not in known:
+                catalog.setdefault(key, []).append(p)
+                added.append(f"{key}/{p['title']}")
+    return added
+
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, "seed_podcasts.json")
@@ -194,6 +234,9 @@ def build(previous):
             else:
                 print(" → 抓空,且无旧数据可留")
             time.sleep(0.3)
+    merged = merge_manual(catalog)
+    if merged:
+        print(f"  手工条目合并 {len(merged)} 条:{', '.join(merged)}")
     return catalog
 
 
@@ -306,6 +349,11 @@ def build_opml(path_out, catalog):
                 break
             if e["feedUrl"] in seen or not e["title"]:
                 continue
+            # 手工精选条目**不**流入 OPML:种子清单是自分发渠道/离线兜底的面,
+            # OPML 是安卓商店渠道渠道「导入推荐订阅」的功能面,两者收录口径从此分离,
+            # 商店渠道要不要收某档节目是单独的决策,不随种子清单自动带过去
+            if e["feedUrl"] in MANUAL_FEEDURLS:
+                continue
             seen.add(e["feedUrl"])
             picked.append(e)
             taken += 1
@@ -334,6 +382,11 @@ def build_opml(path_out, catalog):
     return len(picked)
 
 
+# 清单自述。UI 据此知道这是「内置精选」快照而不是实时榜;加入手工条目后如实标注,不能只说榜单
+NOTE = ("Apple Podcasts 榜单快照 + 少量手工精选条目,作为无网络时的兜底清单。"
+        "由 shared/seed/gen-seed.py 生成。")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="只校验现有清单的 feedUrl,不重新抓取")
@@ -341,7 +394,26 @@ def main():
                     help="只从现有清单生成官网用的 recommended.opml,不重新抓取")
     ap.add_argument("--prune", action="store_true",
                     help="校验后剔除**确认失效**(404/410)的条目;受限/无法判定的一律保留")
+    ap.add_argument("--manual-only", action="store_true",
+                    help="不重抓榜单,只把 MANUAL_PODCASTS 合并进现有清单(generatedAt 原样保留)")
     args = ap.parse_args()
+
+    if args.manual_only:
+        # 重抓榜单会刷新整份快照(榜单位次、generatedAt 全变),只想动手工条目时用这个,
+        # 避免一次小改动带出一份面目全非的 diff
+        with open(OUT, encoding="utf-8") as f:
+            doc = json.load(f)
+        added = merge_manual(doc["lists"])
+        if not added:
+            print("手工条目已全部在清单里,无事可做")
+            sys.exit(0)
+        doc["note"] = NOTE
+        with open(OUT, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False, indent=1, sort_keys=True)
+            f.write("\n")
+        print(f"✓ 合并 {len(added)} 条手工条目:{', '.join(added)}")
+        print("  接着跑 ./sync.sh 分发到各端")
+        sys.exit(0)
 
     if args.check or args.prune:
         code = check(OUT, prune=args.prune)
@@ -374,7 +446,7 @@ def main():
 
     doc = {
         # 明确标注这是快照 —— UI 上也据此显示「内置精选」而不是「每日热门」
-        "note": "Apple Podcasts 榜单快照,作为无网络时的兜底清单。由 shared/seed/gen-seed.py 生成。",
+        "note": NOTE,
         "generatedAt": time.strftime("%Y-%m-%d"),
         "lists": catalog,
     }

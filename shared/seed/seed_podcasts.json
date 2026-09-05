@@ -391,6 +391,14 @@
     "genre": "情感与人际关系",
     "id": "1620123449",
     "title": "燕外之意"
+   },
+   {
+    "artworkUrl": "https://is1-ssl.mzstatic.com/image/thumb/Podcasts113/v4/42/49/57/424957e1-4063-2049-b319-ce161e503474/mza_15175642067007032999.jpg/600x600bb.jpg",
+    "author": "梁文道",
+    "feedUrl": "https://api.vistopia.com.cn/rss/program/11.xml",
+    "genre": "社会与文化",
+    "id": "1492414487",
+    "title": "梁文道·八分"
    }
   ],
   "cn:1489": [
@@ -1170,5 +1178,5 @@
    }
   ]
  },
- "note": "Apple Podcasts 榜单快照,作为无网络时的兜底清单。由 shared/seed/gen-seed.py 生成。"
+ "note": "Apple Podcasts 榜单快照 + 少量手工精选条目,作为无网络时的兜底清单。由 shared/seed/gen-seed.py 生成。"
 }
