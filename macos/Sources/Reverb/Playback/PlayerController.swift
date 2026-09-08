@@ -293,15 +293,22 @@ final class PlayerController: ObservableObject {
         updateNavFlags()
     }
 
-    /// 取出并播放队首(退出电台,不改动既有上下文队列)。
-    private func consumeUserQueueHead(reason: String) {
-        guard !userQueue.isEmpty else { return }
-        let ep = userQueue.removeFirst()
+    /// 取出并播放指定位置的一集(退出电台,不改动既有上下文队列)。
+    private func consumeUserQueue(at index: Int, reason: String) {
+        guard userQueue.indices.contains(index) else { return }
+        let ep = userQueue.remove(at: index)
         Log.i("Queue", "consume(\(reason)) id=\(ep.id) title=\"\(ep.title)\" 剩余=\(userQueue.count)")
         loadRetries = 0
         if radioMode { stopRadio() }
         playEpisode(ep)
         updateNavFlags()
+    }
+
+    /// 点击队列单集直接跳播:从队列摘出立即播,其余顺序不动(与 Android/鸿蒙同名同义)。
+    func playFromQueue(id: String) {
+        if let i = userQueue.firstIndex(where: { $0.id == id }) {
+            consumeUserQueue(at: i, reason: "tap")
+        }
     }
 
     // MARK: - 队列导航
@@ -310,7 +317,7 @@ final class PlayerController: ObservableObject {
         loadRetries = 0
         Log.i("Player", "next radio=\(radioMode) index=\(queueIndex) radioPos=\(radioPos) userQueue=\(userQueue.count)")
         // 用户队列优先
-        if !userQueue.isEmpty { consumeUserQueueHead(reason: "next"); return }
+        if !userQueue.isEmpty { consumeUserQueue(at: 0, reason: "next"); return }
         if radioMode {
             if radioPos >= 0 && radioPos < radioHistory.count - 1 {
                 radioPos += 1; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio: true)
@@ -497,7 +504,7 @@ final class PlayerController: ObservableObject {
                     self.advanceRadio()
                 } else if !self.userQueue.isEmpty {
                     // 队列续播:取出队首继续
-                    self.consumeUserQueueHead(reason: "end")
+                    self.consumeUserQueue(at: 0, reason: "end")
                 }
             }
         }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 播放队列(up next)表单:可拖动重排、滑动删除、一键清空。
+/// 播放队列(up next)表单:点击单集直接跳播(摘出立即播)、可拖动重排、滑动删除、一键清空。
 struct QueueView: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
@@ -32,6 +32,7 @@ struct QueueView: View {
                             }
                             .padding(.vertical, 4)
                             .contentShape(Rectangle())
+                            .onTapGesture { player.playFromQueue(id: ep.id) }
                         }
                         .onMove { from, to in
                             if let f = from.first { player.moveInQueue(from: f, to: to) }
