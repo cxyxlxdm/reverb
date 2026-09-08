@@ -5,7 +5,7 @@ import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, Artwork, Glyph, Sym } from './Widgets';
 import { formatDurationSec } from './Components';
 
-/// 播放队列(up next):上移 / 下移 / 移除 / 清空。
+/// 播放队列(up next):点击单集直接跳播(摘出立即播),上移 / 下移 / 移除 / 清空。
 /// 对应 Android `QueueScreen.kt`。队列语义由 PlayerController 持有(优先于上下文队列)。
 @Component
 export struct QueuePage {
@@ -58,21 +58,27 @@ export struct QueuePage {
   @Builder
   row(e: Episode, idx: number) {
     Row({ space: 10 }) {
-      Artwork({ scheme: this.scheme, url: e.artworkUrl, dim: 46, corner: 8 })
-      Column({ space: 3 }) {
-        Text(e.title)
-          .fontSize(TypeScale.titleSmall * this.fontScale)
-          .fontColor(this.scheme.onBackground)
-          .maxLines(2)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
-        Text(`${e.podcastTitle}${formatDurationSec(e.durationSec).length > 0 ? '  ·  ' + formatDurationSec(e.durationSec) : ''}`)
-          .fontSize(TypeScale.caption * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-          .maxLines(1)
-          .textOverflow({ overflow: TextOverflow.Ellipsis })
+      // 点击区 = 封面 + 文案;操作图标与它平级而非嵌套,避免 ArkUI 嵌套 onClick 的手势歧义。
+      Row({ space: 10 }) {
+        Artwork({ scheme: this.scheme, url: e.artworkUrl, dim: 46, corner: 8 })
+        Column({ space: 3 }) {
+          Text(e.title)
+            .fontSize(TypeScale.titleSmall * this.fontScale)
+            .fontColor(this.scheme.onBackground)
+            .maxLines(2)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          Text(`${e.podcastTitle}${formatDurationSec(e.durationSec).length > 0 ? '  ·  ' + formatDurationSec(e.durationSec) : ''}`)
+            .fontSize(TypeScale.caption * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
       }
-      .alignItems(HorizontalAlign.Start)
+      .alignItems(VerticalAlign.Center)
       .layoutWeight(1)
+      .onClick(() => this.player.playFromQueue(e.id))
 
       // 上移 / 下移 / 移除。图标与 Android QueueScreen 对齐:
       // KeyboardArrowUp / KeyboardArrowDown(折角,非实心箭头)/ Close。

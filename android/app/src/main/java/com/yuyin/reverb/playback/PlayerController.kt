@@ -118,10 +118,10 @@ object PlayerController {
         updateNavFlags()
     }
 
-    /** 取出队首并播放;无则返回 false。 */
-    private fun playQueueHead(): Boolean {
-        val head = _userQueue.value.firstOrNull() ?: return false
-        _userQueue.value = _userQueue.value.drop(1)
+    /** 取出指定位置的一集并播放(队列上下文改为单曲,本集播完按剩余队列/上下文推进);索引无效返回 false。 */
+    private fun playQueueAt(index: Int): Boolean {
+        val head = _userQueue.value.getOrNull(index) ?: return false
+        _userQueue.value = _userQueue.value.filterIndexed { i, _ -> i != index }
         log.i(TAG, "play from userQueue id=${head.id} remaining=${_userQueue.value.size}")
         // 队列上下文改为单曲:清空列表队列,导航标志据剩余用户队列刷新
         queue = listOf(head)
@@ -129,6 +129,11 @@ object PlayerController {
         updateNavFlags()
         playEpisode(head, isRadio = false)
         return true
+    }
+
+    /** 点击队列单集直接跳播:从队列摘出立即播,其余顺序不动。 */
+    fun playFromQueue(episodeId: String) {
+        playQueueAt(_userQueue.value.indexOfFirst { it.id == episodeId })
     }
 
     private val _current = MutableStateFlow<Episode?>(null)
@@ -227,7 +232,7 @@ object PlayerController {
                     // 电台模式:本集播完自动抓下一首随机节目续播
                     _radioMode.value -> advanceRadio()
                     // 用户队列非空:自动接上队首,连续收听
-                    _userQueue.value.isNotEmpty() -> playQueueHead()
+                    _userQueue.value.isNotEmpty() -> playQueueAt(0)
                 }
             }
         }
@@ -269,7 +274,7 @@ object PlayerController {
                 radioPos++; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true)
             } else advanceRadio()
         } else if (_userQueue.value.isNotEmpty()) {
-            playQueueHead() // 用户队列优先:取队首播放
+            playQueueAt(0) // 用户队列优先:取队首播放
         } else if (queueIndex in 0 until (queue.size - 1)) {
             queueIndex++; updateNavFlags(); playEpisode(queue[queueIndex], isRadio = false)
         }

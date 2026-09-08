@@ -494,7 +494,7 @@ export class PlayerController {
           this.advanceRadio();
         } else if (this.userQueue.length > 0) {
           continues = true;
-          this.consumeQueueHead();
+          this.consumeQueueAt(0);
         } else if (this.queueIndex < this.queue.length - 1) {
           continues = true;
           this.next();
@@ -711,7 +711,7 @@ export class PlayerController {
       return;
     }
     if (this.userQueue.length > 0) {
-      this.consumeQueueHead();
+      this.consumeQueueAt(0);
       return;
     }
     if (this.queueIndex < this.queue.length - 1) {
@@ -836,14 +836,20 @@ export class PlayerController {
     this.updateNavFlags();
   }
 
-  private consumeQueueHead(): void {
-    if (this.userQueue.length === 0) return;
-    const head = this.userQueue[0];
-    this.userQueue = this.userQueue.slice(1);
-    this.queue = [head];
+  private consumeQueueAt(index: number): void {
+    const e = this.userQueue[index];
+    if (!e) return;
+    this.userQueue = this.userQueue.filter((x: Episode) => x.id !== e.id);
+    // 队列上下文改为单曲:本集播完按既有规则推进(剩余用户队列优先,其次上下文队列)
+    this.queue = [e];
     this.queueIndex = 0;
     this.updateNavFlags();
-    this.startEpisode(head, true);
+    this.startEpisode(e, true);
+  }
+
+  /// 点击队列中的单集直接跳播:从队列摘出立即播放,剩余顺序不动。
+  playFromQueue(id: string): void {
+    this.consumeQueueAt(this.userQueue.findIndex((x: Episode) => x.id === id));
   }
 
   private updateNavFlags(): void {

@@ -1,5 +1,6 @@
 package com.yuyin.reverb.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,7 +37,7 @@ import com.yuyin.reverb.R
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.Artwork
 
-/** 播放队列(up next):手动排的接下来播放列表,可上下移动、移除、清空。 */
+/** 播放队列(up next):手动排的接下来播放列表,点击单集直接跳播,可上下移动、移除、清空。 */
 @Composable
 fun QueueScreen(onBack: () -> Unit) {
     val queue by PlayerController.userQueue.collectAsStateWithLifecycle()
@@ -79,6 +80,8 @@ fun QueueScreen(onBack: () -> Unit) {
                 Row(
                     Modifier
                         .fillMaxWidth()
+                        // 整行可点跳播;行内 IconButton 会自行消费点击,不会冒泡到这里
+                        .clickable { PlayerController.playFromQueue(ep.id) }
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
