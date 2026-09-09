@@ -193,6 +193,7 @@ struct PlayerView: View {
                     else { player.seek(toMs: Int(dragValue)); dragging = false }
                 }
             )
+            .pointingHandCursor()
             HStack {
                 Text(timeText(dragging ? Int(dragValue) : player.positionMs))
                 Spacer()

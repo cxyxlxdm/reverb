@@ -35,6 +35,22 @@ extension View {
     @ViewBuilder func noFocusRing() -> some View {
         if #available(macOS 14.0, *) { self.focusEffectDisabled() } else { self }
     }
+
+    /// 悬停显示小手光标。SwiftUI 没有 pointer 修饰符,只能 NSCursor push/pop;
+    /// pushed 标记是防止 hover=false 先于 hover=true 到达时误 pop 别处的光标设置。
+    func pointingHandCursor() -> some View {
+        modifier(PointingHandCursor())
+    }
+}
+
+private struct PointingHandCursor: ViewModifier {
+    @State private var pushed = false
+    func body(content: Content) -> some View {
+        content.onHover { inside in
+            if inside, !pushed { NSCursor.pointingHand.push(); pushed = true }
+            else if !inside, pushed { NSCursor.pop(); pushed = false }
+        }
+    }
 }
 
 /// 统一的间距 / 版心尺度。以留白而非分隔线区隔内容。

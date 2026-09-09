@@ -17,17 +17,37 @@ struct NowPlayingBar: View {
         return min(1, max(0, Double(player.positionMs) / Double(player.durationMs)))
     }
 
+    /// 拖动/点击进度线时的临时位置(0~1)。松手才 seek,拖动中只挪线不真跳。
+    @State private var scrubbing = false
+    @State private var scrubValue = 0.0
+
     var body: some View {
         VStack(spacing: 0) {
-            // 细进度线
+            // 细进度线:点/拖即跳播。2pt 的线放在 14pt 命中区中央 —— 细线本身根本点不中,
+            // 也曾是「无法拖动播放进度」的直接原因;macOS 惯例悬停显示小手。
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     Rectangle().fill(Color.primary.opacity(0.08))
                     Rectangle().fill(accent)
-                        .frame(width: geo.size.width * progress)
+                        .frame(width: geo.size.width * (scrubbing ? scrubValue : progress))
                 }
+                .frame(height: 2)
+                .frame(maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture(minimumDistance: 0)
+                        .onChanged { g in
+                            scrubbing = true
+                            scrubValue = Self.fraction(g.location.x, geo.size.width)
+                        }
+                        .onEnded { g in
+                            scrubbing = false
+                            seek(fraction: Self.fraction(g.location.x, geo.size.width))
+                        }
+                )
             }
-            .frame(height: 2)
+            .frame(height: 14)
+            .pointingHandCursor()
 
             HStack(spacing: 12) {
                 if let ep = player.current {
@@ -103,5 +123,15 @@ struct NowPlayingBar: View {
                 .environmentObject(settings)
                 .themedSheet(settings)
         }
+    }
+
+    private static func fraction(_ x: CGFloat, _ width: CGFloat) -> Double {
+        guard width > 0 else { return 0 }
+        return min(1, max(0, Double(x / width)))
+    }
+
+    private func seek(fraction f: Double) {
+        guard player.durationMs > 0 else { return }
+        player.seek(toMs: Int(f * Double(player.durationMs)))
     }
 }
