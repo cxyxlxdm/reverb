@@ -72,6 +72,7 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 - `docs/TRANSCRIPT.md` — 逐字稿 / 语音转文字的三端实现与取舍(含鸿蒙将来换三方引擎的路子)
 - `docs/TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律
 - `docs/PRIVACY.md` — 隐私政策(与 `reverb/privacy.html` 必须同步)
+- `CHANGELOG.md` — 更新日志(面向使用者的版本变更记录)
 
 > 分发登记材料(主体信息、证书指纹、域名与账号相关)**不入版本控制** —— 属个人身份信息,
 > 只留在本地。当初为什么按合规口径移除大陆商店目录,见 `docs/HISTORY.md` 阶段五;
