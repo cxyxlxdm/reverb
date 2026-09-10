@@ -164,6 +164,14 @@ export struct EpisodeListItem {
   onEnqueue: () => void = () => {};
   onTogglePlayed: () => void = () => {};
 
+  /**
+   * 行按压态:onTouch 手动驱动,不用 stateStyles —— stateStyles 的 pressed 对
+   * 子图标上的触摸同样会亮(真机反馈:点行内「入队」键,整行高亮,看着像点了播放)。
+   * 行体亮/灭由这里的事件流控制,右侧各图标以 onTouch stopPropagation 截断冒泡;
+   * 高亮只属于「按到行本身」:点行播放、长按菜单的等待期。
+   */
+  @State pressed: boolean = false;
+
   /// 长按弹出的菜单。项与 Android `EpisodeListItem` 的 DropdownMenu 一一对应。
   @Builder
   contextMenu() {
@@ -173,7 +181,10 @@ export struct EpisodeListItem {
         .onClick(() => this.onPlayNext())
       MenuItem({ content: L.s('queue_add') })
         .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
-        .onClick(() => this.onEnqueue())
+        .onClick(() => {
+          this.onEnqueue();
+          this.showToast(L.s('queue_added'));
+        })
       if (this.showPlayedToggle) {
         MenuItem({ content: this.played ? L.s('mark_unplayed') : L.s('mark_played') })
           .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
@@ -189,6 +200,12 @@ export struct EpisodeListItem {
   /// 菜单项字体:labelLarge(14) 常规体,对齐 Material 的 DropdownMenuItem。
   private menuFont(): Font {
     return { size: TypeScale.labelLarge * this.fontScale, weight: FontWeight.Normal };
+  }
+
+  /// 入队确认的 toast。收在行组件而不是各页的 onEnqueue 回调:所有列表
+  /// (行内键 + 长按菜单)统一有反馈,调用方不必各自补。写法同 PodcastDetailPage.showToast。
+  private showToast(message: string): void {
+    this.getUIContext().getPromptAction().showToast({ message: message });
   }
 
   /**
@@ -314,15 +331,23 @@ export struct EpisodeListItem {
           // 图标只有 20,命中区外扩到 36 见方,免得点不中(行本身的 onClick 是播放,
           // 命中区重叠会被行吃掉,所以这里必须显式外扩)
           .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+          // 截断触摸冒泡:行的按压高亮只属于「按到行本身」,点图标不该点亮整行
+          .onTouch((event: TouchEvent) => event.stopPropagation())
           .onClick(() => this.onToggleFavorite())
       }
 
       // 行内「加入播放列表」(showQueueAdd 打开时):与收藏心形同位置规则、同命中区外扩。
-      // 用队列的符号(music_note_list)而不是裸加号 —— 它的动作就是「入队」,见形知义。
+      // 图标用列表+加号(add_songlist)而不是队列符号 —— 它的动作是「入队」,
+      // 与「打开队列页」的队列图标同形会误导(真机反馈)。
       if (this.showQueueAdd) {
-        Glyph({ symbol: Sym.queue, dim: 20, color: this.scheme.onSurfaceVariant })
+        Glyph({ symbol: Sym.queueAdd, dim: 20, color: this.scheme.onSurfaceVariant })
           .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
-          .onClick(() => this.onEnqueue())
+          .onTouch((event: TouchEvent) => event.stopPropagation())
+          .onClick(() => {
+            this.onEnqueue();
+            // 入队结果在别页,界面无任何变化,不提示等于没按上
+            this.showToast(L.s('queue_added'));
+          })
       }
 
       // 下载三态,与 Android `DownloadControl` 一一对应:
@@ -332,9 +357,11 @@ export struct EpisodeListItem {
         LoadingProgress().width(20).height(20).color(this.scheme.primary)
       } else if (this.downloadState === DownloadState.COMPLETED) {
         Glyph({ symbol: Sym.downloaded, dim: 20, color: this.scheme.primary })
+          .onTouch((event: TouchEvent) => event.stopPropagation())
           .onClick(() => this.onDeleteDownload())
       } else if (this.downloadState >= 0) {
         Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
+          .onTouch((event: TouchEvent) => event.stopPropagation())
           .onClick(() => this.onDownload())
       }
     }
@@ -345,11 +372,15 @@ export struct EpisodeListItem {
     /**
      * 按压态底色。长按菜单的触发时长是系统定值,等待期原本零反馈 —— 手指按住时
      * 「不知道按没按上」,观感就是「长按反馈慢」(Android 同样时长但有 ripple 垫着)。
-     * 手指一落整行亮起、松手/弹菜单即恢复,先把「按上了」说清楚。
+     *
+     * 不用 stateStyles:它的 pressed 对子图标上的触摸同样会亮(点「入队」键整行高亮,
+     * 看着像点了播放)。改由 onTouch 驱动 @State,配合右侧图标的 stopPropagation,
+     * 高亮只属于「按到行本身」。Move 也熄灭 —— 列表滚动都从 Down 开始,
+     * 不灭会让被划过的行拖一条亮块;长按期间手指不动,不受影响。
      */
-    .stateStyles({
-      pressed: { .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.10)) },
-      normal: { .backgroundColor(Color.Transparent) }
+    .backgroundColor(this.pressed ? withAlpha(this.scheme.onSurfaceVariant, 0.10) : Color.Transparent)
+    .onTouch((event: TouchEvent) => {
+      this.pressed = event.type === TouchType.Down;
     })
     /**
      * 长按菜单。两个参数都是踩出来的:
@@ -364,7 +395,7 @@ export struct EpisodeListItem {
      */
     .bindContextMenu(this.contextMenu(), ResponseType.LongPress, {
       enableArrow: false,
-      aboutToAppear: () => { TapGuard.raise(); },
+      aboutToAppear: () => { TapGuard.raise(); this.pressed = false; },
       aboutToDisappear: () => { TapGuard.lowerSoon(); }
     })
   }

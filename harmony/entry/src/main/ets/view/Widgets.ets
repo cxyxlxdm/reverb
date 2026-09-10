@@ -81,6 +81,9 @@ export class Sym {
   static readonly download: Resource = $r('sys.symbol.download');               // Rounded.Download
   static readonly downloaded: Resource = $r('sys.symbol.square_and_arrow_down_badge_checkmark'); // Rounded.DownloadDone
   static readonly queue: Resource = $r('sys.symbol.music_note_list');           // AutoMirrored.QueueMusic
+  // 「加入播放列表」用列表+加号(add_songlist),不用上面那枚 —— 详情页行内两个入口并存,
+  // 同形不同义会让人以为点它也是「打开队列」(真机反馈)。
+  static readonly queueAdd: Resource = $r('sys.symbol.add_songlist');           // AutoMirrored.PlaylistAdd
   static readonly share: Resource = $r('sys.symbol.share');                     // Rounded.Share
   static readonly playing: Resource = $r('sys.symbol.hi_waveform_2');           // Rounded.GraphicEq
   static readonly played: Resource = $r('sys.symbol.checkmark');                // Rounded.Check(裸对勾)
