@@ -39,10 +39,10 @@ android {
     // com.yuyin.reverb 留给鸿蒙端(分发平台包名创建后不可改,由来见 docs/BEIAN.md):
     //   com.yuyin.reverb.android  全部 Android 分发 —— 官网 / GitHub 自分发 + 大陆商店
     //   com.yuyin.reverb          HarmonyOS 专属
-    // 统一是产品决策(用户与品牌视角只有一个 Android 应用),代价已被明确接受:
-    //   1. 1.0.0 及以前的官网包是 com.yuyin.reverb,新包无法原地升级 —— 老用户卸载重装,数据不迁移;
-    //   2. 两渠道功能仍不同(离线转写/真实频谱只在默认渠道,见 H70),同包名意味着同设备上
-    //      商店删减版可以覆盖官网完整版 —— 装哪个由下载渠道决定,不再由包名隔离。
+    // 统一是产品决策(用户与品牌视角只有一个 Android 应用)。官网在 1.0.1 前未发布,
+    // 1.0.0 时代「默认渠道 = com.yuyin.reverb」的包只在开发期存在,没有用户需要迁移。
+    // 注意:两渠道功能仍不同(离线转写/真实频谱只在默认渠道,见 H70),同包名意味着
+    // 同设备上商店删减版可以覆盖官网完整版 —— 装哪个由下载渠道决定,不再由包名隔离。
     // namespace 仍是 com.yuyin.reverb(R 类与 manifest 包名无需变),
     // FileProvider 用的是 ${applicationId}.fileprovider 占位符,会自动跟随。
     flavorDimensions "channel"

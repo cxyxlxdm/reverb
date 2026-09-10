@@ -12,8 +12,8 @@
 #
 # 1.0.1 起两渠道统一包名 com.yuyin.reverb.android(产品决策:鸿蒙端独占
 # com.yuyin.reverb)。两渠道功能仍不同(离线转写/真实频谱/内置种子只在默认渠道,
-# 见 docs/FEATURES.md),APK 仍是两份;统一包名的代价(官网 1.0.0 老包断更、
-# 商店版可覆盖官网版)已接受,详见 app/build.gradle 注释。
+# 见 docs/FEATURES.md),APK 仍是两份;同设备上商店删减版可覆盖官网完整版,
+# 这一点已接受 —— 详见 app/build.gradle 注释。
 #
 set -euo pipefail
 
