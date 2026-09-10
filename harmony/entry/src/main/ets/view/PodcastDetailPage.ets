@@ -207,6 +207,9 @@ export struct PodcastDetailPage {
                 isPlaying: this.player.isPlaying,
                 played: this.history.isPlayed(e.id),
                 downloadState: this.dlState(e.id),
+                // 详情页以浏览选集为主,给行内「加入播放列表」按钮:长按菜单的
+                // 系统触发时长改不了,浏览场景一步入队更顺手(其余列表仍走长按菜单)
+                showQueueAdd: true,
                 onPlay: () => this.onPlayEpisode(e, this.episodes),
                 onDownload: () => { this.downloadEpisode(e); },
                 onDeleteDownload: () => { this.downloadManager.delete(e.id); },

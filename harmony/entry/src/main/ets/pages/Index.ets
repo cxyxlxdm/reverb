@@ -358,7 +358,8 @@ struct Index {
               scheme: this.scheme(),
               fontScale: this.fontScale(),
               player: this.player,
-              onExpand: () => { this.stack.pushPathByName('player', null); }
+              onExpand: () => { this.stack.pushPathByName('player', null); },
+              onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
             })
           }
         }
@@ -427,7 +428,8 @@ struct Index {
           scheme: this.scheme(),
           fontScale: this.fontScale(),
           player: this.player,
-          onExpand: () => { this.stack.pushPathByName('player', null); }
+          onExpand: () => { this.stack.pushPathByName('player', null); },
+          onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
         })
         // 仅在迷你条出现时画分隔线(与 Android 一致)
         Divider()

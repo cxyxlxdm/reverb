@@ -152,6 +152,10 @@ export struct EpisodeListItem {
   @Prop showFavorite: boolean = false;
   @Prop isFavorite: boolean = false;
   onToggleFavorite: () => void = () => {};
+  /// 行内「加入播放列表」。只在节目详情页开:浏览选集为主的页面,一步入队比长按菜单顺手
+  /// —— 长按的触发时长是系统定值(约 500ms,`bindContextMenu` 不可配),改不了;
+  /// 慢的**观感**靠下面的按压态底色缓解,而慢本身靠这个按钮绕开。
+  @Prop showQueueAdd: boolean = false;
   /// 「标记已播完」只在发现页的搜索结果里出现(与 Android 一致)。
   /// 长按菜单本身**所有单集列表都有**,故不设开关 —— 鸿蒙端此前压根没有长按手势,
   /// 外部反馈的「长按单集不能加入队列」即此。调用方必须接好 onPlayNext / onEnqueue。
@@ -313,6 +317,14 @@ export struct EpisodeListItem {
           .onClick(() => this.onToggleFavorite())
       }
 
+      // 行内「加入播放列表」(showQueueAdd 打开时):与收藏心形同位置规则、同命中区外扩。
+      // 用队列的符号(music_note_list)而不是裸加号 —— 它的动作就是「入队」,见形知义。
+      if (this.showQueueAdd) {
+        Glyph({ symbol: Sym.queue, dim: 20, color: this.scheme.onSurfaceVariant })
+          .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+          .onClick(() => this.onEnqueue())
+      }
+
       // 下载三态,与 Android `DownloadControl` 一一对应:
       // 已下载 = DownloadDone(强调色,点击删除)/ 进行中·排队 = 进度圈 / 未下载 = Download
       // 原先用「已存」「下载」文字代替 —— sys.media.* 没有这两个图标,换 Symbol 后有正主。
@@ -330,6 +342,15 @@ export struct EpisodeListItem {
     .alignItems(VerticalAlign.Center)
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 12, bottom: 12 })
     .onClick(() => this.onPlay())
+    /**
+     * 按压态底色。长按菜单的触发时长是系统定值,等待期原本零反馈 —— 手指按住时
+     * 「不知道按没按上」,观感就是「长按反馈慢」(Android 同样时长但有 ripple 垫着)。
+     * 手指一落整行亮起、松手/弹菜单即恢复,先把「按上了」说清楚。
+     */
+    .stateStyles({
+      pressed: { .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.10)) },
+      normal: { .backgroundColor(Color.Transparent) }
+    })
     /**
      * 长按菜单。两个参数都是踩出来的:
      *

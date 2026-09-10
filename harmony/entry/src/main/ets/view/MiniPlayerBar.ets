@@ -1,9 +1,10 @@
 import { Scheme, TypeScale, withAlpha } from '../theme/Theme';
 import { PlayerController } from '../playback/PlayerController';
-import { Artwork } from './Widgets';
+import { Artwork, Glyph, Sym } from './Widgets';
 
-/// 底部常驻迷你播放条:细进度线 + 封面 + 标题/频道 + 播放暂停 + 下一集。
-/// 点信息区打开全屏播放页。对应 Android `Components.kt` 的 MiniPlayer。
+/// 底部常驻迷你播放条:细进度线 + 封面 + 标题/频道 + 播放暂停 + 下一集 + 队列入口。
+/// 点信息区打开全屏播放页,点队列符号进队列页(与 macOS 底部条的列表按钮同位次
+/// —— 都在最右)。对应 Android `Components.kt` 的 MiniPlayer。
 @Component
 export struct MiniPlayerBar {
   @Prop scheme: Scheme;
@@ -11,6 +12,7 @@ export struct MiniPlayerBar {
   /// 播放状态变化(播放/暂停/换集…)要重渲;**进度不在其中**,见下面的 pct
   @ObjectLink @Watch('onPlayerChange') player: PlayerController;
   onExpand: () => void = () => {};
+  onOpenQueue: () => void = () => {};
 
   /**
    * 进度线的百分比,**取整**。
@@ -104,6 +106,10 @@ export struct MiniPlayerBar {
           .width(19).height(19)
           .fillColor(this.player.hasNext ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.35))
           .onClick(() => { if (this.player.hasNext) this.player.next(); })
+        // 队列入口:命中区同样外扩,不外扩会被左右两个大命中目标夹得点不中
+        Glyph({ symbol: Sym.queue, dim: 20, color: this.scheme.onBackground })
+          .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+          .onClick(() => this.onOpenQueue())
       }
       .width('100%')
       .padding({ left: 14, right: 16, top: 8, bottom: 8 })
