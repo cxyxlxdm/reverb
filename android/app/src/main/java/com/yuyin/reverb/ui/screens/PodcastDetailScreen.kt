@@ -119,7 +119,9 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                             played = played,
                             onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
                             onPlayNext = { PlayerController.playNext(ep) },
-                            onEnqueue = { PlayerController.enqueue(ep) }
+                            onEnqueue = { PlayerController.enqueue(ep) },
+                            // 详情页行内「加入播放列表」键(对齐鸿蒙):浏览场景一步入队
+                            showQueueAdd = true
                         )
                     }
                 }

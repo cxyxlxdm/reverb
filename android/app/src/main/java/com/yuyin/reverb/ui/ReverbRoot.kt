@@ -82,7 +82,10 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
                     Box(Modifier.weight(1f)) {
                         PodcastDetailScreen(feedUrl = feed, onBack = { rootNav.popBackStack() })
                     }
-                    MiniPlayerBar(onExpand = { rootNav.navigate("player") })
+                    MiniPlayerBar(
+                        onExpand = { rootNav.navigate("player") },
+                        onOpenQueue = { rootNav.navigate("queue") }
+                    )
                 }
             }
         }
@@ -101,7 +104,8 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
                     Box(Modifier.weight(1f)) {
                         QueueScreen(onBack = { rootNav.popBackStack() })
                     }
-                    MiniPlayerBar(onExpand = { rootNav.navigate("player") })
+                    // 已在队列页:入口键不再响应,避免向同一路由重复压栈
+                    MiniPlayerBar(onExpand = { rootNav.navigate("player") }, onOpenQueue = {})
                 }
             }
         }
@@ -160,7 +164,10 @@ private fun MainShell(rootNav: NavHostController) {
         bottomBar = {
             Column {
                 val cur = current
-                MiniPlayerBar(onExpand = { rootNav.navigate("player") })
+                MiniPlayerBar(
+                    onExpand = { rootNav.navigate("player") },
+                    onOpenQueue = { rootNav.navigate("queue") }
+                )
                 AnimatedVisibility(visible = isTopLevel) {
                     Column {
                         if (showMini && cur != null) {
@@ -218,7 +225,7 @@ private fun MainShell(rootNav: NavHostController) {
 
 /** 底部迷你播放条(有正在播放的内容才显示)。供 tab 外壳与频道详情全屏页共用。 */
 @Composable
-private fun MiniPlayerBar(onExpand: () -> Unit) {
+private fun MiniPlayerBar(onExpand: () -> Unit, onOpenQueue: () -> Unit = {}) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val buffering by PlayerController.buffering.collectAsStateWithLifecycle()
@@ -237,7 +244,8 @@ private fun MiniPlayerBar(onExpand: () -> Unit) {
                 hasNext = hasNext,
                 onToggle = { PlayerController.togglePlayPause() },
                 onNext = { PlayerController.next() },
-                onExpand = onExpand
+                onExpand = onExpand,
+                onOpenQueue = onOpenQueue
             )
         }
     }

@@ -319,6 +319,7 @@
     <string name="mark_unplayed">Marcar como no escuchado</string>
     <string name="queue_play_next">Reproducir a continuación</string>
     <string name="queue_add">Añadir a la cola</string>
+    <string name="queue_added">Añadido a la cola</string>
     <string name="queue_title">A continuación</string>
     <string name="queue_empty">Tu cola está vacía. Mantén pulsado un episodio para añadirlo aquí.</string>
     <string name="inbox_empty_no_subs">Aún no tienes suscripciones. Suscríbete en Descubrir y los nuevos episodios aparecerán aquí.</string>

@@ -319,6 +319,7 @@
     <string name="mark_unplayed">標記為未播完</string>
     <string name="queue_play_next">下一個播放</string>
     <string name="queue_add">加入佇列</string>
+    <string name="queue_added">已加入播放佇列</string>
     <string name="queue_title">播放佇列</string>
     <string name="queue_empty">佇列是空的。長按單集「加入佇列」，排著慢慢聽</string>
     <string name="inbox_empty_no_subs">還沒有訂閱。去「發現」訂閱幾檔，新一集就會匯到這裡</string>

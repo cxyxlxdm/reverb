@@ -1,5 +1,6 @@
 package com.yuyin.reverb.ui.components
 
+import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -22,6 +23,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
+import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
@@ -56,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -283,9 +287,14 @@ fun EpisodeListItem(
     played: Boolean = false,            // 已播完:标题变暗 + 打勾
     onTogglePlayed: (() -> Unit)? = null, // 长按菜单:标记已播完/未播完
     onPlayNext: (() -> Unit)? = null,     // 长按菜单:下一个播放
-    onEnqueue: (() -> Unit)? = null       // 长按菜单:加入队列
+    onEnqueue: (() -> Unit)? = null,      // 长按菜单:加入队列;showQueueAdd 时也是行内键的动作
+    /// 行内「加入播放列表」键,只在节目详情页开(对齐鸿蒙):浏览选集为主的场景,
+    /// 一步入队比长按菜单顺手。Compose 里子 IconButton 消费点击,行 ripple 不会连带亮起
+    /// —— 鸿蒙那边要靠 stopPropagation 手工截断的问题,这边的系统行为本来就是对的。
+    showQueueAdd: Boolean = false
 ) {
     var menuOpen by remember { mutableStateOf(false) }
+    val context = LocalContext.current
     /**
      * 按下点(相对整行左上角),长按菜单以它为锚点弹出。
      *
@@ -401,6 +410,21 @@ fun EpisodeListItem(
                 )
             }
         }
+        if (showQueueAdd && onEnqueue != null) {
+            // 与鸿蒙同位次(收藏心形之后、下载控件之前);图标用 PlaylistAdd(列表+加号),
+            // 不用 QueueMusic —— 那是「打开队列页」的入口,同形不同义会误导(鸿蒙真机反馈)。
+            IconButton(onClick = {
+                onEnqueue()
+                // 入队结果在别页,界面无任何变化,不提示等于没按上
+                Toast.makeText(context, R.string.queue_added, Toast.LENGTH_SHORT).show()
+            }) {
+                Icon(
+                    Icons.AutoMirrored.Rounded.PlaylistAdd,
+                    contentDescription = stringResource(R.string.queue_add),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
         if (onDownload != null || onDeleteDownload != null) {
             DownloadControl(downloadStatus, onDownload, onDeleteDownload)
         }
@@ -418,7 +442,11 @@ fun EpisodeListItem(
                 if (onEnqueue != null) {
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.queue_add)) },
-                        onClick = { menuOpen = false; onEnqueue() }
+                        onClick = {
+                            menuOpen = false
+                            onEnqueue()
+                            Toast.makeText(context, R.string.queue_added, Toast.LENGTH_SHORT).show()
+                        }
                     )
                 }
                 if (onTogglePlayed != null) {
@@ -503,7 +531,8 @@ fun MiniPlayer(
     hasNext: Boolean,
     onToggle: () -> Unit,
     onNext: () -> Unit,
-    onExpand: () -> Unit
+    onExpand: () -> Unit,
+    onOpenQueue: () -> Unit = {}
 ) {
     Surface(
         color = MaterialTheme.colorScheme.surfaceVariant,
@@ -561,6 +590,14 @@ fun MiniPlayer(
                         Icons.Rounded.SkipNext,
                         contentDescription = stringResource(R.string.a11y_next),
                         tint = if (hasNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                    )
+                }
+                // 队列入口:位次与 macOS 底部条/鸿蒙迷你条一致 —— 都在最右
+                IconButton(onClick = onOpenQueue) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.QueueMusic,
+                        contentDescription = stringResource(R.string.queue_title),
+                        tint = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }

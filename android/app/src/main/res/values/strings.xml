@@ -335,6 +335,7 @@
     <string name="mark_unplayed">标记为未播完</string>
     <string name="queue_play_next">下一个播放</string>
     <string name="queue_add">加入队列</string>
+    <string name="queue_added">已加入播放队列</string>
     <string name="queue_title">播放队列</string>
     <string name="queue_empty">队列是空的。长按单集「加入队列」，排着慢慢听</string>
     <string name="inbox_empty_no_subs">还没有订阅。去「发现」订阅几档，新一期就会汇到这里</string>
