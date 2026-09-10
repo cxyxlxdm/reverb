@@ -6,14 +6,14 @@
 #   reverb-mapping.txt   R8 混淆映射 —— **务必留档并上传**,否则崩溃栈无法还原
 #
 # 用法:
-#   ./build-release.sh                 默认渠道 → dist/reverb.apk          (com.yuyin.reverb)
-#   ./build-release.sh --store        商店渠道 → dist/reverb-store.apk   (com.yuyin.reverb.android)
+#   ./build-release.sh                 默认渠道 → dist/reverb.apk
+#   ./build-release.sh --store        商店渠道 → dist/reverb-store.apk
 #   ./build-release.sh [渠道] --bundle 同时打 AAB(Google Play 需要 AAB)
 #
-# 为什么有这个渠道:它是**大陆商店版**(各家应用市场 共用),与默认渠道功能仍不同
-# (已恢复内容目录,但不含本地语音识别、真实频谱与内置种子,见 docs/FEATURES.md),
-# 故必须是独立包名 com.yuyin.reverb.android ——
-# 否则商店更新会覆盖功能完整的自分发版。默认渠道包名不变。
+# 1.0.1 起两渠道统一包名 com.yuyin.reverb.android(产品决策:鸿蒙端独占
+# com.yuyin.reverb)。两渠道功能仍不同(离线转写/真实频谱/内置种子只在默认渠道,
+# 见 docs/FEATURES.md),APK 仍是两份;统一包名的代价(官网 1.0.0 老包断更、
+# 商店版可覆盖官网版)已接受,详见 app/build.gradle 注释。
 #
 set -euo pipefail
 
@@ -46,7 +46,7 @@ done
 if [ "$CHANNEL" = "store" ]; then
   GRADLE_FLAVOR=Store; APP_ID="com.yuyin.reverb.android"; OUT_APK=reverb-store.apk
 else
-  GRADLE_FLAVOR=Default; APP_ID="com.yuyin.reverb";        OUT_APK=reverb.apk
+  GRADLE_FLAVOR=Default; APP_ID="com.yuyin.reverb.android"; OUT_APK=reverb.apk
 fi
 
 # 默认渠道带离线语音识别,那两样东西**不入版本管理**(一个 57 MB 的模型 + 一个 .so),
@@ -110,7 +110,8 @@ else
   cp "$APK" "$DIST/$OUT_NAME"
 fi
 
-# 校验产物里的 applicationId 与渠道一致 —— 渠道搞错会传错包,而两个包长得一模一样
+# 校验产物 applicationId 是统一包名。1.0.1 起两渠道同包名,它不再能区分渠道 ——
+# 渠道是否打对要看文件名与构建日志,这里只拦「包名整体错掉」的情形
 AAPT=$(ls "$SDK"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1 || true)
 if [ -n "$AAPT" ]; then
   REAL_ID=$("$AAPT" dump packagename "$DIST/$OUT_NAME" 2>/dev/null || true)
