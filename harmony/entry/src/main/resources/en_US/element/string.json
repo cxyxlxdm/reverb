@@ -969,6 +969,10 @@
       "value": "Add to queue"
     },
     {
+      "name": "queue_added",
+      "value": "Added to queue"
+    },
+    {
       "name": "mark_played",
       "value": "Mark as played"
     },

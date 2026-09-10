@@ -969,6 +969,10 @@
       "value": "加入队列"
     },
     {
+      "name": "queue_added",
+      "value": "已加入播放队列"
+    },
+    {
       "name": "mark_played",
       "value": "标记已播完"
     },

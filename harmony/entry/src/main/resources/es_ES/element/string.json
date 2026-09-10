@@ -969,6 +969,10 @@
       "value": "Añadir a la cola"
     },
     {
+      "name": "queue_added",
+      "value": "Añadido a la cola"
+    },
+    {
       "name": "mark_played",
       "value": "Marcar como escuchado"
     },

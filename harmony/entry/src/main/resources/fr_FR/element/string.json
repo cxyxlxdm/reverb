@@ -969,6 +969,10 @@
       "value": "Ajouter à la file"
     },
     {
+      "name": "queue_added",
+      "value": "Ajouté à la file"
+    },
+    {
       "name": "mark_played",
       "value": "Marquer comme écouté"
     },
