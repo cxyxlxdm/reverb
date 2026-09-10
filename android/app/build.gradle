@@ -14,11 +14,11 @@ android {
     compileSdk 34
 
     defaultConfig {
-        applicationId "com.yuyin.reverb"
+        applicationId "com.yuyin.reverb.android"
         minSdk 26
         targetSdk 34
-        versionCode 1
-        versionName "1.0.0"
+        versionCode 2
+        versionName "1.0.1"
         vectorDrawables {
             useSupportLibrary true
         }
@@ -35,22 +35,19 @@ android {
         }
     }
 
-    // 渠道维度。两个 applicationId 各司其职,互不覆盖:
-    //   com.yuyin.reverb          默认渠道 —— 官网 / GitHub 自分发,功能完整
-    //                             (鸿蒙端用的也是这个名字,但那是另一个平台的工程)
-    //   com.yuyin.reverb.android  大陆商店 —— 各家应用市场 共用
-    //                             (内容目录恢复;离线转写/真实频谱仍按渠道移除,见 H70)
-    // .android 后缀有两个都成立的理由,缺一不可:
-    //   1. 鸿蒙包已在应用市场占用 com.yuyin.reverb,同一市场内包名不能重复;
-    //   2. 商店版与默认渠道**功能不同**,必须是两个独立可安装的应用 —— 否则商店更新
-    //      会把功能完整的自分发版覆盖成删减版。
-    // 登记对 Android 只允许填一个包名,填的就是 .android 这个(一条登记覆盖全部大陆商店)。
-    // 曾考虑把鸿蒙改名为 .harmony 好让 Android 用回无后缀的名字,**已放弃**:
-    // 分发平台的包名创建后不可改,要新建应用记录并重做全部发布资料,而 .p7b Profile 按包名
-    // 签发也得重申;而理由 2 意味着两个 Android 包名照样得并存,换名并无实质收益。
+    // 渠道维度。1.0.1 起 Android 两个渠道统一用 com.yuyin.reverb.android,
+    // com.yuyin.reverb 留给鸿蒙端(分发平台包名创建后不可改,由来见 docs/BEIAN.md):
+    //   com.yuyin.reverb.android  全部 Android 分发 —— 官网 / GitHub 自分发 + 大陆商店
+    //   com.yuyin.reverb          HarmonyOS 专属
+    // 统一是产品决策(用户与品牌视角只有一个 Android 应用),代价已被明确接受:
+    //   1. 1.0.0 及以前的官网包是 com.yuyin.reverb,新包无法原地升级 —— 老用户卸载重装,数据不迁移;
+    //   2. 两渠道功能仍不同(离线转写/真实频谱只在默认渠道,见 H70),同包名意味着同设备上
+    //      商店删减版可以覆盖官网完整版 —— 装哪个由下载渠道决定,不再由包名隔离。
+    // namespace 仍是 com.yuyin.reverb(R 类与 manifest 包名无需变),
+    // FileProvider 用的是 ${applicationId}.fileprovider 占位符,会自动跟随。
     flavorDimensions "channel"
     productFlavors {
-        // 默认渠道:com.yuyin.reverb —— 不加后缀,与既有版本一致
+        // 默认渠道:官网 / GitHub 自分发,功能完整。
         'default' {
             dimension "channel"
             // 离线语音识别只随这个渠道分发,只出 arm64 —— armeabi-v7a 的机器跑不动这个模型,
@@ -63,12 +60,10 @@ android {
             // 内容目录(分类热门榜 / 电台推荐 / 内置精选清单)。默认渠道保留完整功能。
             buildConfigField "boolean", "CATALOG", "true"
         }
-        // 应用市场:com.yuyin.reverb.android
-        // 只改 applicationId;namespace 仍是 com.yuyin.reverb(R 类与 manifest 包名无需变),
-        // FileProvider 用的是 ${applicationId}.fileprovider 占位符,会自动跟随。
+        // 大陆商店渠道:各家应用市场 共用。与默认渠道同包名、不同功能(见上),
+        // APK 仍是两份 —— 功能差异由各自的 source set 与开关决定。
         store {
             dimension "channel"
-            applicationIdSuffix ".android"
             // 应用市场把 RECORD_AUDIO 列为敏感隐私权限,需逐次举证并提供场景截图。
             // 该权限在本应用只服务于「真实频谱」这一个视觉效果(默认关闭),
             // 收益与举证成本不成比例,故商店渠道**整块去掉**:
