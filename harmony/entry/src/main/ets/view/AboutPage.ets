@@ -1,5 +1,6 @@
 import { Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
+import { appVersionName } from '../util/AppInfo';
 import { TopBar } from './Widgets';
 
 /**
@@ -30,7 +31,7 @@ export struct AboutPage {
           Text(L.s('app_slogan'))
             .fontSize(TypeScale.body * this.fontScale)
             .fontColor(this.scheme.secondary)
-          Text(L.s('about_version'))
+          Text(L.f('about_version', appVersionName()))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
           // 备案号。监管要求在应用内显著位置展示 APP备案号;号还没下来时

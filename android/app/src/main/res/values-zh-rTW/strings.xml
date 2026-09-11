@@ -254,7 +254,6 @@
     <string name="set_about">關於餘音</string>
     <string name="set_licenses">開源授權</string>
     <string name="set_version">版本</string>
-    <string name="version_name">1.0.0</string>
 
     <string name="dlg_region_title">選擇地區</string>
     <string name="dlg_theme_title">主題</string>
@@ -290,7 +289,7 @@
     <string name="backup_invalid">無法辨識的備份檔</string>
 
     <string name="about_app">餘音 · Reverb</string>
-    <string name="about_version">版本 1.0.0</string>
+    <string name="about_version">版本 %s</string>
     <string name="about_h_what">這是什麼</string>
     <string name="about_p_what">餘音是一款輕量的播客用戶端。發現好節目、訂閱收聽、離線下載、隨時續播，專注「聽」本身。</string>
     <string name="about_h_features">主要功能</string>

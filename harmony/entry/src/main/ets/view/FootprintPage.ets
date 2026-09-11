@@ -1,5 +1,6 @@
 import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
+import { appVersionName } from '../util/AppInfo';
 import { Stamp, StampStore } from '../store/StampStore';
 import { AppContainer } from '../AppContainer';
 import { TopBar, EmptyHint, Glyph, GlyphImage, Sym } from './Widgets';
@@ -104,7 +105,7 @@ export struct FootprintPage {
       .rowsGap(12)
       .width(340)
       .height(Math.ceil(this.stamps.stamps.length / 3) * 150)
-      Text(L.f('about_line', '1.0.0'))
+      Text(L.f('about_line', appVersionName()))
         .fontSize(TypeScale.caption)
         .fontColor(this.scheme.onSurfaceVariant)
     }

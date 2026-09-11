@@ -328,7 +328,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 }
             }
             SettingRow(stringResource(R.string.set_licenses), onClick = onOpenLicenses)
-            SettingRow(stringResource(R.string.set_version), value = stringResource(R.string.version_name))
+            SettingRow(stringResource(R.string.set_version), value = BuildConfig.VERSION_NAME)
             Spacer(Modifier.height(24.dp))
         }
     }

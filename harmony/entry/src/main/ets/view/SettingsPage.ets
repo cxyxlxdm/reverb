@@ -1,5 +1,6 @@
 import { Scheme, TypeScale, Metrics, withAlpha, ACCENTS, AccentPalette, Theme } from '../theme/Theme';
 import { L } from '../util/L';
+import { appVersionName } from '../util/AppInfo';
 import { Features } from '../Features';
 import { REGIONS, RegionOption, regionLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
@@ -220,7 +221,7 @@ export struct SettingsPage {
           // 隐私政策必须**在应用内随时可查**,不能只在首启弹一次(平台合规指引 7.5)
           this.actionRow(L.s('set_privacy'), () => L.s('set_privacy_sub'), () => this.openPrivacy())
           this.actionRow(L.s('set_licenses'), () => '', () => this.onOpenLicenses())
-          this.plainRow(L.s('set_version'), '1.0.0')
+          this.plainRow(L.s('set_version'), appVersionName())
 
           if (this.hint.length > 0) {
             Text(this.hint)

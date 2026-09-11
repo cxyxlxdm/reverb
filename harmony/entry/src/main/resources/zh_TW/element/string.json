@@ -934,7 +934,7 @@
     },
     {
       "name": "about_version",
-      "value": "版本 1.0.0"
+      "value": "版本 %s"
     },
     {
       "name": "about_h_what",

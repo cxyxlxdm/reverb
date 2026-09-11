@@ -254,7 +254,6 @@
     <string name="set_about">About Reverb</string>
     <string name="set_licenses">Open-source licenses</string>
     <string name="set_version">Version</string>
-    <string name="version_name">1.0.0</string>
 
     <string name="dlg_region_title">Choose region</string>
     <string name="dlg_theme_title">Theme</string>
@@ -290,7 +289,7 @@
     <string name="backup_invalid">Unrecognized backup file</string>
 
     <string name="about_app">Reverb · 余音</string>
-    <string name="about_version">Version 1.0.0</string>
+    <string name="about_version">Version %s</string>
     <string name="about_h_what">What is this</string>
     <string name="about_p_what">Reverb is a lightweight podcast client with an ink-and-wash aesthetic. Discover shows, subscribe, download for offline, and resume anytime — focused on listening.</string>
     <string name="about_h_features">Features</string>

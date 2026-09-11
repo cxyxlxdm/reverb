@@ -934,7 +934,7 @@
     },
     {
       "name": "about_version",
-      "value": "Versión 1.0.0"
+      "value": "Versión %s"
     },
     {
       "name": "about_h_what",

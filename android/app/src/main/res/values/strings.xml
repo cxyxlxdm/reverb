@@ -263,7 +263,6 @@
     <string name="set_about">关于余音</string>
     <string name="set_licenses">开源许可</string>
     <string name="set_version">版本</string>
-    <string name="version_name">1.0.0</string>
 
     <!-- 设置对话框标题 -->
     <string name="dlg_region_title">选择地区</string>
@@ -304,7 +303,7 @@
 
     <!-- 关于 -->
     <string name="about_app">余音 · Reverb</string>
-    <string name="about_version">版本 1.0.0</string>
+    <string name="about_version">版本 %s</string>
     <string name="about_h_what">这是什么</string>
     <string name="about_p_what">余音是一款轻量的播客客户端。发现好节目、订阅收听、离线下载、随时续播，专注「听」本身。</string>
     <string name="about_h_features">主要功能</string>
