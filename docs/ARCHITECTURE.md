@@ -73,6 +73,14 @@ macOS `AppEnvironment`,都是全局单例,界面直接取用。理由很实际�
 - **睡眠定时最后 8 秒线性渐弱**,不是硬停。
 - **开播淡入约 0.9 秒**,避免炸耳。
 - **上一集/下一集由「队列上下文」决定**:用户队列优先,其次是进入播放时所在的列表顺序。
+- **系统命令必须接幂等的明确动作**(鸿蒙,见 H83):AVSession 的 play/pause 回调接
+  `resumePlayback()` / `pausePlayback()`,而不是 toggle —— 系统会重复派发同一命令
+  (锁屏 / 控制中心 / 蓝牙 AVRCP 状态重同步),接 toggle 就会让「暂停被翻成播放」,
+  1.0.0 曾因此出现熄屏静置后自动开播。Android / macOS 由 Media3 与 `MPRemoteCommandCenter`
+  的显式命令天然满足,鸿蒙 1.0.1 才补齐。
+- **鸿蒙的 AudioSession 是一条异步操作链**:每次意图变化记「目标态 + 代次号」,排到队头的
+  过期任务直接跳过;播放中激活(`CONCURRENCY_PAUSE_OTHERS`)、暂停即撤销。快速暂停/继续
+  不能依赖系统接口的完成顺序 —— 旧 activate/deactivate 迟到时,新代次一定紧跟着收敛。
 
 ---
 
