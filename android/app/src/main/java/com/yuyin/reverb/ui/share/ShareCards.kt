@@ -16,6 +16,7 @@ import androidx.core.content.FileProvider
 import coil.imageLoader
 import coil.request.ImageRequest
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.data.model.Podcast
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -80,6 +81,36 @@ object ShareCards {
 
             // 底部落款
             drawCenteredText(c, "余音 · 每一段余音都值得留存", w / 2f, h - 70f, 34f, DIM, bold = false)
+            bmp
+        }
+
+    /** 频道分享卡:频道 Logo + 频道名 + App 落款,不携带可能含私有凭据的 RSS 地址。 */
+    suspend fun channelCard(context: Context, podcast: Podcast): Bitmap =
+        withContext(Dispatchers.IO) {
+            val w = 1080
+            val h = 1350
+            val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            val c = Canvas(bmp)
+            drawInkBackground(c, w, h)
+
+            val art = loadArtwork(context, podcast.artworkUrl)
+            val artSize = 620
+            val artLeft = (w - artSize) / 2f
+            val artTop = 170f
+            val artRect = RectF(artLeft, artTop, artLeft + artSize, artTop + artSize)
+            if (art != null) {
+                drawRoundedBitmap(c, art, artRect, 48f)
+            } else {
+                val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = INK2 }
+                c.drawRoundRect(artRect, 48f, 48f, p)
+                drawCenteredText(c, "余", w / 2f, artTop + artSize / 2f + 55f, 150f, CELADON, bold = true)
+            }
+
+            drawWrappedCentered(
+                c, podcast.title, w, artTop + artSize + 90f,
+                textSize = 62f, color = TEXT, bold = true, maxLines = 3, sidePad = 90
+            )
+            drawCenteredText(c, "余音 · Reverb", w / 2f, h - 78f, 38f, DIM, bold = false)
             bmp
         }
 

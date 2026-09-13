@@ -901,6 +901,14 @@
       "value": "Partager cet instant"
     },
     {
+      "name": "channel_share",
+      "value": "Partager l'émission"
+    },
+    {
+      "name": "share_failed",
+      "value": "Impossible de créer l'image à partager"
+    },
+    {
       "name": "stamp_add",
       "value": "Sceau · Empreinte d'écoute"
     },
@@ -950,7 +958,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Bibliothèque : abonnements, nouveautés, favoris, téléchargements et historique\n· Hors ligne : téléchargez des épisodes, au besoin uniquement en Wi-Fi\n· Lecture : vitesse, saut, minuteur, reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
+      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Partager une émission : créez une image avec sa pochette, son titre et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Bibliothèque : abonnements, nouveautés, favoris, téléchargements et historique\n· Hors ligne : téléchargez des épisodes, au besoin uniquement en Wi-Fi\n· Lecture : vitesse, saut, minuteur, reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
     },
     {
       "name": "about_h_philosophy",

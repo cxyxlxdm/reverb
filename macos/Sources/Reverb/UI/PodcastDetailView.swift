@@ -12,6 +12,7 @@ struct PodcastDetailView: View {
     @State private var episodes: [Episode] = []
     @State private var loaded: Podcast?
     @State private var loading = false
+    @State private var shareCardURL: URL?
     /// 非 nil 表示当前内容来自磁盘缓存、联网刷新还没成功,据此显示「离线内容」提示
     @State private var staleAt: Date?
 
@@ -67,7 +68,24 @@ struct PodcastDetailView: View {
             .padding(.bottom, Metrics.sectionSpacing)
         }
         .navigationTitle(display.title)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if let shareCardURL {
+                    ShareLink(item: shareCardURL) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .help("分享")
+                } else {
+                    Image(systemName: "square.and.arrow.up")
+                        .foregroundStyle(.tertiary)
+                        .help("分享")
+                }
+            }
+        }
         .task(id: podcast.id) { await load() }
+        .task(id: "\(display.title)|\(display.artworkUrl)|\(settings.accentIndex)") {
+            await prepareShareCard()
+        }
     }
 
     private var header: some View {
@@ -123,6 +141,15 @@ struct PodcastDetailView: View {
         }
         .buttonStyle(.borderedProminent)
         .controlSize(.large)
+    }
+
+    @MainActor
+    private func prepareShareCard() async {
+        shareCardURL = nil
+        let target = display
+        let artwork = await loadNSImage(target.artworkUrl)
+        if Task.isCancelled { return }
+        shareCardURL = renderPNG(ChannelShareCard(podcast: target, accent: accent, artwork: artwork))
     }
 
     private func load(force: Bool = false) async {

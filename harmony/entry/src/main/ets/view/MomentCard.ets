@@ -4,7 +4,7 @@ import photoAccessHelper from '@ohos.file.photoAccessHelper';
 import fileUri from '@ohos.file.fileuri';
 import type common from '@ohos.app.ability.common';
 import { Scheme, TypeScale, withAlpha } from '../theme/Theme';
-import { Episode } from '../model/Models';
+import { Episode, Podcast } from '../model/Models';
 import { Artwork } from './Widgets';
 import { formatTime } from './Components';
 import { Log } from '../util/Logger';
@@ -54,6 +54,39 @@ export struct MomentCard {
         .fontColor(this.scheme.onSurfaceVariant)
     }
     .width(320)
+    .padding(26)
+    .backgroundColor(this.scheme.surface)
+    .border({ width: 1, color: withAlpha(this.scheme.primary, 0.18) })
+    .borderRadius(20)
+    .alignItems(HorizontalAlign.Center)
+  }
+}
+
+/// 频道分享卡:频道 Logo + 频道名 + App 落款,不携带可能含私有凭据的 RSS 地址。
+@Component
+export struct ChannelShareCard {
+  @Prop scheme: Scheme;
+  @Prop fontScale: number;
+  @Prop podcast: Podcast;
+
+  build() {
+    Column({ space: 20 }) {
+      Artwork({ scheme: this.scheme, url: this.podcast.artworkUrl, dim: 190, corner: 20 })
+      Text(this.podcast.title)
+        .fontSize(22 * this.fontScale)
+        .fontWeight(FontWeight.Bold)
+        .fontColor(this.scheme.onBackground)
+        .maxLines(3)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .textAlign(TextAlign.Center)
+        .width('100%')
+      Blank()
+      Text('余音 · Reverb')
+        .fontSize(12 * this.fontScale)
+        .fontColor(this.scheme.onSurfaceVariant)
+    }
+    .width(320)
+    .height(410)
     .padding(26)
     .backgroundColor(this.scheme.surface)
     .border({ width: 1, color: withAlpha(this.scheme.primary, 0.18) })

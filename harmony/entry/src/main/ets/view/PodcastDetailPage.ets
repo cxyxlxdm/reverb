@@ -7,10 +7,13 @@ import { SubscriptionStore, HistoryStore } from '../store/Stores';
 import { ListenStatsStore } from '../store/ListenStatsStore';
 import { DownloadManager, DownloadResult } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
-import { TopBar, EmptyHint, LoadingBox, Artwork } from './Widgets';
+import { TopBar, EmptyHint, LoadingBox, Artwork, Glyph, Sym } from './Widgets';
 import { EpisodeListItem, formatListenDuration } from './Components';
 import { formatCachedAt } from '../util/DateParse';
 import { Log } from '../util/Logger';
+import { Files } from '../util/Files';
+import { ChannelShareCard, snapshotToPng } from './MomentCard';
+import type common from '@ohos.app.ability.common';
 
 const RECENT_FEED_CACHE_MS = 60 * 1000;
 
@@ -32,6 +35,7 @@ export struct PodcastDetailPage {
   /// 据此显示「离线内容 · 上次更新 X」。刷新成功置 0。
   @State staleAt: number = 0;
   @State descExpanded: boolean = false;
+  @State sharing: boolean = false;
   private loadGeneration: number = 0;
   /**
    * 订阅态与下载态**直接从被观察的 store 读**,不再镜像成本地 @State。
@@ -155,13 +159,43 @@ export struct PodcastDetailPage {
     }
   }
 
+  private async shareChannel(): Promise<void> {
+    if (this.sharing) return;
+    this.sharing = true;
+    try {
+      // 卡片常驻离屏;让出两帧,确保刚刷新的频道标题与封面已落到组件树再截图。
+      await new Promise<void>((resolve: () => void) => setTimeout(resolve, 48));
+      const ui = this.getUIContext();
+      const ctx = ui.getHostContext() as common.UIAbilityContext;
+      const png = await snapshotToPng(ui, ctx, 'reverb-channel-card', 'reverb-channel.png');
+      if (png === null || !await Files.shareImage(ctx, L.s('channel_share'), png)) {
+        this.showToast(L.s('share_failed'));
+      }
+    } finally {
+      this.sharing = false;
+    }
+  }
+
   build() {
-    Column() {
-      TopBar({
-        scheme: this.scheme, fontScale: this.fontScale,
-        title: this.display().title,
-        onBack: () => this.onBack()
-      })
+    Stack() {
+      Column() {
+        Row() {
+          TopBar({
+            scheme: this.scheme, fontScale: this.fontScale,
+            title: this.display().title,
+            onBack: () => this.onBack()
+          })
+            .layoutWeight(1)
+          Row() {
+            Glyph({ symbol: Sym.share, dim: 21,
+              color: this.sharing ? this.scheme.outline : this.scheme.primary })
+          }
+          .width(40).height(40).justifyContent(FlexAlign.Center)
+          .onClick(() => { this.shareChannel(); })
+        }
+        .width('100%')
+        .padding({ right: 8 })
+        .alignItems(VerticalAlign.Center)
 
       if (this.loading && this.episodes.length === 0) {
         LoadingBox({ scheme: this.scheme, fontScale: this.fontScale }).layoutWeight(1)
@@ -223,6 +257,16 @@ export struct PodcastDetailPage {
         .scrollBar(BarState.Off)
         .layoutWeight(1)
       }
+      }
+      .width('100%')
+      .height('100%')
+
+      // 与播放页剪藏相同:组件必须实际参与渲染才能被 componentSnapshot 捕获。
+      ChannelShareCard({
+        scheme: this.scheme, fontScale: this.fontScale, podcast: this.display()
+      })
+        .id('reverb-channel-card')
+        .position({ x: -2000, y: 0 })
     }
     .width('100%')
     .height('100%')

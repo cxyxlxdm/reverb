@@ -2,6 +2,7 @@ package com.yuyin.reverb.ui.screens
 
 import android.content.Intent
 import android.net.Uri
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
@@ -37,6 +39,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -55,20 +58,26 @@ import com.yuyin.reverb.ui.PodcastState
 import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.formatListenDuration
+import com.yuyin.reverb.ui.share.ShareCards
 import com.yuyin.reverb.ui.podcastViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
     val vm = podcastViewModel()
     LaunchedEffect(feedUrl) { vm.load(feedUrl) }
 
-    val container = (LocalContext.current.applicationContext as ReverbApp).container
+    val context = LocalContext.current
+    val container = (context.applicationContext as ReverbApp).container
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val downloadStates by DownloadManager.states.collectAsStateWithLifecycle()
     val history by container.historyStore.history.collectAsStateWithLifecycle()
     val listenStats by container.listenStatsStore.stats.collectAsStateWithLifecycle()
+    val scope = rememberCoroutineScope()
+    var sharing by remember { mutableStateOf(false) }
+    val state = vm.state
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -80,9 +89,36 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = stringResource(R.string.a11y_back))
             }
+            Spacer(Modifier.weight(1f))
+            if (state is PodcastState.Loaded) {
+                IconButton(
+                    enabled = !sharing,
+                    onClick = {
+                        sharing = true
+                        scope.launch {
+                            try {
+                                val podcast = state.podcast
+                                val bitmap = ShareCards.channelCard(context, podcast)
+                                ShareCards.share(
+                                    context,
+                                    bitmap,
+                                    "reverb-channel-${kotlin.math.abs(podcast.feedUrl.hashCode())}.png",
+                                    context.getString(R.string.channel_share)
+                                )
+                            } catch (_: Exception) {
+                                Toast.makeText(context, R.string.share_failed, Toast.LENGTH_SHORT).show()
+                            } finally {
+                                sharing = false
+                            }
+                        }
+                    }
+                ) {
+                    Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.channel_share))
+                }
+            }
         }
 
-        when (val s = vm.state) {
+        when (val s = state) {
             PodcastState.Loading -> LoadingBox()
             PodcastState.Error -> EmptyHint(stringResource(R.string.load_failed))
             is PodcastState.Loaded -> {

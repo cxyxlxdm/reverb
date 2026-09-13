@@ -901,6 +901,14 @@
       "value": "Share this moment"
     },
     {
+      "name": "channel_share",
+      "value": "Share show"
+    },
+    {
+      "name": "share_failed",
+      "value": "Couldn’t create the share image"
+    },
+    {
       "name": "stamp_add",
       "value": "Stamp · Listening mark"
     },
@@ -950,7 +958,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Discover: browse daily charts by region and category\n· Search: find shows or episodes by keyword, or paste an RSS URL\n· Radio: roam at random or follow time-of-day moods\n· Library: subscriptions, latest, favorites, downloads and history\n· Offline: download episodes, optionally Wi-Fi only\n· Playback: speed, skip, sleep timer, resume, background and lock screen controls\n· Transcript: for episodes whose publisher provides one, read along in the player\n· Show notes: swipe on the player page\n· Update reminders: get notified when a new episode lands\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
+      "value": "· Discover: browse daily charts by region and category\n· Search: find shows or episodes by keyword, or paste an RSS URL\n· Share shows: create an image with the show artwork, title and Reverb branding\n· Radio: roam at random or follow time-of-day moods\n· Library: subscriptions, latest, favorites, downloads and history\n· Offline: download episodes, optionally Wi-Fi only\n· Playback: speed, skip, sleep timer, resume, background and lock screen controls\n· Transcript: for episodes whose publisher provides one, read along in the player\n· Show notes: swipe on the player page\n· Update reminders: get notified when a new episode lands\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
     },
     {
       "name": "about_h_philosophy",

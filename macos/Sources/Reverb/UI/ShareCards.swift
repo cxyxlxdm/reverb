@@ -90,6 +90,57 @@ struct MomentCard: View {
     }
 }
 
+// MARK: - 频道分享卡片
+
+/// 频道分享卡:频道 Logo + 频道名 + App 落款,不携带可能含私有凭据的 RSS 地址。
+struct ChannelShareCard: View {
+    let podcast: Podcast
+    var accent: Color = .accentColor
+    var artwork: NSImage? = nil
+
+    var body: some View {
+        VStack(spacing: 28) {
+            artworkView
+                .frame(width: 250, height: 250)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .shadow(color: .black.opacity(0.4), radius: 18, y: 9)
+
+            Text(podcast.title)
+                .font(.system(size: 30, weight: .bold))
+                .foregroundStyle(.white)
+                .multilineTextAlignment(.center)
+                .lineLimit(3)
+
+            Spacer(minLength: 0)
+
+            Text("余音 · Reverb")
+                .font(.callout)
+                .foregroundStyle(.white.opacity(0.55))
+        }
+        .padding(36)
+        .frame(width: 420, height: 525)
+        .background(
+            LinearGradient(
+                colors: [Color(red: 0.09, green: 0.10, blue: 0.13),
+                         Color(red: 0.05, green: 0.06, blue: 0.08)],
+                startPoint: .top, endPoint: .bottom)
+        )
+    }
+
+    @ViewBuilder private var artworkView: some View {
+        if let artwork {
+            Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
+        } else {
+            ZStack {
+                Rectangle().fill(accent.opacity(0.25))
+                Text("余")
+                    .font(.system(size: 72, weight: .bold))
+                    .foregroundStyle(accent)
+            }
+        }
+    }
+}
+
 // MARK: - 听觉足迹海报
 
 /// 听觉足迹海报:标题 + 印记数量 + 印章格网(印字 + 单集标题)+ 落款。

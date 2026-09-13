@@ -15,6 +15,8 @@
     <string name="saved_ok">Guardado en la galería</string>
     <string name="saved_fail">Error al guardar</string>
     <string name="clip_share">Compartir este momento</string>
+    <string name="channel_share">Compartir programa</string>
+    <string name="share_failed">No se pudo crear la imagen para compartir</string>
     <string name="stamp_add">Sello · Marca de escucha</string>
     <string name="stamp_edit">Editar sello · Marca de escucha</string>
     <string name="stamp_title">Deja un sello</string>
@@ -293,7 +295,7 @@
     <string name="about_h_what">Qué es esto</string>
     <string name="about_p_what">Reverb es un cliente de pódcast ligero con estética de tinta china. Descubre, suscríbete, descarga sin conexión y reanuda cuando quieras — centrado en escuchar.</string>
     <string name="about_h_features">Funciones</string>
-    <string name="about_p_features">· Descubrir: listas diarias por región y categoría; reordenar y deslizar\n· Buscar: por nombre o URL RSS\n· Biblioteca: Suscripciones, Descargas e Historial\n· Sin conexión: cachear mientras escuchas, solo Wi-Fi opcional\n· Transcripción: transcribe en el dispositivo o lee la del propio editor\n· Reproducción: velocidad, saltos, temporizador, reanudar, controles en segundo plano\n· Notas del episodio: desliza en el reproductor\n· Avisos de nuevos episodios\n· Apariencia: oscuro/claro/sistema, tamaño, color, idiomas</string>
+    <string name="about_p_features">· Descubrir: listas diarias por región y categoría; reordenar y deslizar\n· Buscar: por nombre o URL RSS\n· Compartir programas: crea una imagen con portada, título y marca Reverb\n· Biblioteca: Suscripciones, Descargas e Historial\n· Sin conexión: cachear mientras escuchas, solo Wi-Fi opcional\n· Transcripción: transcribe en el dispositivo o lee la del propio editor\n· Reproducción: velocidad, saltos, temporizador, reanudar, controles en segundo plano\n· Notas del episodio: desliza en el reproductor\n· Avisos de nuevos episodios\n· Apariencia: oscuro/claro/sistema, tamaño, color, idiomas</string>
     <string name="about_h_philosophy">Diseño</string>
     <string name="about_p_philosophy">La estética se inspira en la tinta, el celadón y el oro de las vigas — el nombre y el icono evocan «un eco girando entre las vigas».\n\nLas fuentes son gratuitas, sin cuenta ni clave API: la búsqueda usa fuentes públicas y vuelve al RSS original del editor para reproducir el audio.\n\nEn privacidad, suscripciones, historial y descargas permanecen en tu dispositivo, no se suben automáticamente al desarrollador ni se usan para seguimiento entre aplicaciones.</string>
 
