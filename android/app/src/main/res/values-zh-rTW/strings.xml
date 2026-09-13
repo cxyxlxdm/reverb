@@ -74,7 +74,7 @@
     <string name="guide_card_sub">30 秒 · 內建音訊，不連網也能播</string>
     <string name="privacy_consent_title">隱私政策與資料說明</string>
     <string name="privacy_consent_catalog">節目檢索與熱門榜。本版本會存取 Apple 播客檢索（itunes.apple.com）、Apple 熱門榜（rss.marketingtools.apple.com）、fyyd.de、gpodder.net 等公開介面；這些請求不攜帶任何驗證憑證與使用者識別碼。</string>
-    <string name="privacy_consent_body">餘音以本機處理為主。沒有開發者後端、帳號、廣告、統計、歸因、第三方登入、第三方推播、當機回報或跨應用程式追蹤。訂閱、歷史、收藏、下載、收聽統計、設定、安裝隨機識別碼和執行日誌在本機處理，不會自動上傳給開發者；Android 使用 AndroidX、OkHttp、Coil 等開源基礎程式庫，但不含上述資料回報 SDK。\n\n連網時，搜尋詞、地區或分類會傳給 Apple、fyyd、gpodder 等公開目錄；RSS、封面、音訊和逐字稿直接向發布方或託管方請求，因此對方會看到 IP 位址、User-Agent 和存取資源。日誌可能包含節目或單集識別碼及所存取服務的主機名稱，只有你主動分享或匯出時才會離開應用程式。詳情請閱讀完整隱私政策。\n\n點按「同意並繼續」表示你已閱讀並接受本政策。</string>
+    <string name="privacy_consent_body">餘音以本機處理為主。沒有開發者後端、帳號、廣告、統計、歸因、第三方登入、第三方推播、當機回報或跨應用程式追蹤。訂閱、歷史、收藏、下載、收聽統計、設定、安裝隨機識別碼和執行日誌在本機處理，不會自動上傳給開發者；Android 使用 AndroidX、OkHttp、Coil 等開源基礎程式庫，但不含上述資料回報 SDK。自 1.0.2 起，若你在系統設定中開啟備份（Android 雲端備份、廠商換機遷移），作業系統會把訂閱、收藏、歷史、下載紀錄（僅連結）、印記、收聽統計與設定備份到你自己的系統雲端帳號或新裝置；音訊、逐字稿快取、排行榜快取與日誌不在其中，開關也在系統設定裡。\n\n連網時，搜尋詞、地區或分類會傳給 Apple、fyyd、gpodder 等公開目錄；RSS、封面、音訊和逐字稿直接向發布方或託管方請求，因此對方會看到 IP 位址、User-Agent 和存取資源。日誌可能包含節目或單集識別碼及所存取服務的主機名稱，只有你主動分享或匯出時才會離開應用程式。詳情請閱讀完整隱私政策。\n\n點按「同意並繼續」表示你已閱讀並接受本政策。</string>
     <string name="privacy_read_full">閱讀完整隱私政策</string>
     <string name="privacy_accept">同意並繼續</string>
     <string name="privacy_decline">不同意並退出</string>

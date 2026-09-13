@@ -189,11 +189,13 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
 
 - **完整备份 / 恢复**:订阅、收藏、听觉印记、下载(仅链接)、历史、设置,可分项勾选;**恢复为合并语义**(与现有数据合并,不覆盖清空)
 - **OPML 导入 / 导出**:订阅列表标准 OPML 互通
+- **系统级备份(1.0.2)**:向操作系统声明白名单,由系统备份到**用户自己的**云账号或换机直连——Android 为 Auto Backup(`fullBackupContent` + `dataExtractionRules`,云备份与 device-transfer 同一口径;无 GMS 机型走厂商备份通道),鸿蒙为 `BackupExtensionAbility` + `backup_config.json`(「备份和恢复」/云空间/手机克隆)。白名单 = 订阅、收藏、历史、下载记录(仅链接)、印记、收听统计 + 设置 prefs;**不含**音频、逐字稿、榜单/消息缓存与日志(25MB 配额约束)。注意:这是「备份/恢复」语义,不是跨设备实时同步;恢复为文件级覆盖,`downloads.json` 恢复后音频不在,列表不会自动出现,也不自动重下
 
 | 平台 | 差异 |
 |------|------|
-| Android | 备份 / 恢复 / 导入 / 导出经 SAF 文档选择器;恢复弹窗勾选分区 |
-| macOS | 经 `NSSavePanel` / `NSOpenPanel`;恢复 sheet 勾选要合并的分区 |
+| Android | 备份 / 恢复 / 导入 / 导出经 SAF 文档选择器;恢复弹窗勾选分区;系统级备份规则见上 |
+| HarmonyOS | 备份 / 恢复 / 导入 / 导出经系统安全组件;`BackupExtension` 声明于 module.json5,范围在 `resources/base/profile/backup_config.json` |
+| macOS | 经 `NSSavePanel` / `NSOpenPanel`;恢复 sheet 勾选要合并的分区;无系统级备份机制 |
 
 ## 十、个性化与设置
 

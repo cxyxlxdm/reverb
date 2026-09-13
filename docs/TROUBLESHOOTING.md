@@ -1903,3 +1903,36 @@ native 模块,见 TRANSCRIPT.md 的迁移路径);官方逐字稿那条路不受�
   重复派发是常态不是异常,蓝牙 AVRCP、锁屏、控制中心都会重发;③「灵异现象」先枚举全部
   能触达该行为的入口逐一排除,再对照版本差异 —— 本例 1.0.1 已修,用户报告就是修复必要性的
   独立佐证。
+
+---
+
+### H84. 从「禁止系统云备份」翻转为「精确白名单启用」:**约束没破,变的是数据去向的归属方 —— 系统备份只进用户自己的云**
+
+- **现象**:H75 时代为压安卓商店渠道的 `a.gray` 启发式误报,把 `allowBackup=false`
+  与「已关闭系统云备份」写进了包与发布文案。用户随后提出换机迁移诉求:手动导出
+  备份文件再拷到新设备太麻烦,希望绑定账号自动同步。
+- **根因**:当初禁用的是「未受控的全量自动备份」—— 默认 Auto Backup 会把
+  filesDir 整包带上,数据去向与体量都不可控。用户诉求的本质不是「上传给谁」,
+  而是「换机不丢数据」;绑定微信/Google 做账号同步会撞上「不接三方 SDK / 无账号
+  体系」两条上游约束,而**系统级备份 + 精确白名单**恰好同时满足三方:数据只进
+  用户自己的云(Google/厂商云/厂商云),应用没有任何上传代码路径,体量由
+  白名单钉死。
+- **修法**:Android `allowBackup=true` + `res/xml/backup_rules.xml`(API≤30)
+  与 `data_extraction_rules.xml`(API31+,cloud-backup 与 device-transfer 两节
+  同口径),**只写 include 不写 exclude** —— include 一旦声明即为白名单,
+  音频 downloads/、逐字稿、feed/popular/inbox 缓存、logs/、57MB whisper 模型
+  全部隐式排除,25MB 配额天然安全。鸿蒙声明 `type:"backup"` 扩展
+  (`ets/backup/BackupExtension.ets`,空实现,数据搬运全交给系统)+
+  `resources/base/profile/backup_config.json` 白名单(注意路径必须是
+  `/data/storage/el2/base/haps/entry/...` 虚拟沙箱,鸿蒙偏好文件**无 .xml
+  后缀**;`-keep-global-name` 加 `BackupExtension` 防混淆改名)。
+- **验收**:双渠道 release 解包 `aapt2 dump xmltree` 确认 manifest 与两份规则;
+  鸿蒙 hap 解包确认扩展与 metadata;真机 `bm dump` 出现 backup 扩展。遗留:
+  云端与换机恢复的全链路要等真实系统备份执行;**商店渠道 1.0.2 提交复核时必须
+  重跑安全扫描** —— H75 的误报缓解措施之一被翻转,不能想当然认为不复发。
+- **教训与可复用规律**:①写进文案的「有/没有」都是带验收义务的声明,翻转它
+  要连着验收方式一起翻(呼应硬规矩 1);②「不留上传路径」与「数据可被系统
+  备份」不矛盾,privacy 的红线是开发者不可及,不是数据永不离开设备;③两个
+  Android 备份规则文件必须同口径维护,只改一个就是给 API 分层埋雷;④隐私
+  文案与实际代码要互相印证 —— 本条顺手修正了「导出备份包含随机标识」这一
+  与手动备份实现不符的旧表述。
