@@ -36,6 +36,18 @@
         "description": "$string:module_desc",
         "type": "workScheduler",
         "exported": false
+      },
+      {
+        // 系统备份接入点(H84):让「备份和恢复」/云空间/手机克隆能拿到白名单数据。
+        // 范围在 resources/base/profile/backup_config.json,声明缺失时系统会跳过本应用。
+        "name": "BackupExtension",
+        "srcEntry": "./ets/backup/BackupExtension.ets",
+        "description": "$string:module_desc",
+        "type": "backup",
+        "exported": false,
+        "metadata": [
+          { "name": "ohos.extension.backup", "resource": "$profile:backup_config" }
+        ]
       }
     ],
     "requestPermissions": [

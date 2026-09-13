@@ -46,3 +46,4 @@
 -keep-global-name
 EntryAbility
 FeedUpdateExtension
+BackupExtension

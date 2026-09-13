@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- H84:Android 12+ 的备份/迁移规则。cloud-backup(用户云)与 device-transfer
+     (线连/克隆换机)两节口径必须完全一致,白名单同 backup_rules.xml。
+     注意:本文件对 settings 是整包备份,会带上 device_id 与隐私同意版本——
+     与手动备份(不导出 device_id)口径不同,已作为决策记录在
+     docs/TROUBLESHOOTING.md H84;恢复到多台设备会共享同一 id,对
+     「按设备取 max」的收听统计合并无损。 -->
+<data-extraction-rules>
+    <cloud-backup>
+        <include domain="file" path="subscriptions.json" />
+        <include domain="file" path="favorites.json" />
+        <include domain="file" path="history.json" />
+        <include domain="file" path="downloads.json" />
+        <include domain="file" path="stamps.json" />
+        <include domain="file" path="listen_stats.json" />
+        <include domain="sharedpref" path="reverb_settings.xml" />
+        <include domain="sharedpref" path="reverb_prefs.xml" />
+        <include domain="sharedpref" path="reverb_updates.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <include domain="file" path="subscriptions.json" />
+        <include domain="file" path="favorites.json" />
+        <include domain="file" path="history.json" />
+        <include domain="file" path="downloads.json" />
+        <include domain="file" path="stamps.json" />
+        <include domain="file" path="listen_stats.json" />
+        <include domain="sharedpref" path="reverb_settings.xml" />
+        <include domain="sharedpref" path="reverb_prefs.xml" />
+        <include domain="sharedpref" path="reverb_updates.xml" />
+    </device-transfer>
+</data-extraction-rules>

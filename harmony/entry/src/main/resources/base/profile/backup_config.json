@@ -1,0 +1,15 @@
+{
+  "allowToBackupRestore": true,
+  "includes": [
+    "/data/storage/el2/base/haps/entry/files/subscriptions.json",
+    "/data/storage/el2/base/haps/entry/files/favorites.json",
+    "/data/storage/el2/base/haps/entry/files/history.json",
+    "/data/storage/el2/base/haps/entry/files/downloads.json",
+    "/data/storage/el2/base/haps/entry/files/stamps.json",
+    "/data/storage/el2/base/haps/entry/files/listen_stats.json",
+    "/data/storage/el2/base/haps/entry/preferences/reverb_settings",
+    "/data/storage/el2/base/haps/entry/preferences/reverb_updates"
+  ],
+  "excludes": [],
+  "fullBackupOnly": false
+}
