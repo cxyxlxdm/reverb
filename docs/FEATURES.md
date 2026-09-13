@@ -243,19 +243,19 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
 ## 技术特性
 
 - **纯客户端**:零后端、零 API Key、无需登录,运行成本为 0
-- **不接三方 SDK**:分享一律走系统能力(Android `ACTION_SEND` / macOS `ShareLink`·`NSSharingService`)
+- **不接三方 SDK**:分享一律走系统能力(Android `ACTION_SEND` / macOS `ShareLink`·`NSSharingService` / 鸿蒙 ShareKit)
 - **播客源**:Apple iTunes / Charts、fyyd.de、gpodder.net、RSS 直连 / OPML,全部公开免鉴权;播放回落发布方 RSS 的 enclosure 原始直链
 - **持久化**:JSON 文件存于应用私有目录,**不引入数据库**
 
-| | Android | macOS |
-|---|---------|-------|
-| UI | Jetpack Compose + Material3,单 Activity + Navigation Compose | SwiftUI,`NavigationStack` + 标准设置场景 |
-| 播放 | Media3(ExoPlayer + `MediaSessionService`) | AVFoundation(`AVPlayer`) |
-| 网络 / 解析 | OkHttp;`org.json` + `XmlPullParser`(RSS / OPML) | `URLSession`;自研 RSS / OPML 解析 |
-| 依赖注入 | 手写 `AppContainer` | 手写 `AppEnvironment` |
-| 可视化真实频谱 | `Visualizer`(session 0)本地 FFT,权限用户自决 | 程序化水墨动效(平台限制) |
-| 打包 | `./gradlew :app:assembleDebug` → APK | SwiftPM 手动组装 `.app` → ad-hoc 签名 → 打 dmg(`./package.sh`) |
-| 国际化 | 5 种语言 + 跟随系统 | 5 种语言 + 跟随系统 |
+| | Android | macOS | HarmonyOS |
+|---|---------|-------|-----------|
+| UI | Jetpack Compose + Material3,单 Activity + Navigation Compose | SwiftUI,`NavigationStack` + 标准设置场景 | ArkTS / ArkUI,单 HAP |
+| 播放 | Media3(ExoPlayer + `MediaSessionService`) | AVFoundation(`AVPlayer`) | 系统 `AVPlayer` + AVSession |
+| 网络 / 解析 | OkHttp;`org.json` + `XmlPullParser`(RSS / OPML) | `URLSession`;自研 RSS / OPML 解析 | `@ohos.net.http` + `XmlPullParser`(RSS / OPML) |
+| 依赖注入 | 手写 `AppContainer` | 手写 `AppEnvironment` | 手写 `AppContainer.ets` |
+| 可视化真实频谱 | `Visualizer`(session 0)本地 FFT,权限用户自决 | 程序化水墨动效(平台限制) | 程序化水墨动效(平台限制) |
+| 打包 | `./gradlew :app:assembleDebug` → APK | SwiftPM 手动组装 `.app` → ad-hoc 签名 → 打 dmg(`./package.sh`) | hvigorw 构建 HAP;`build-release.sh` → 发布 App |
+| 国际化 | 5 种语言 + 跟随系统 | 5 种语言 + 跟随系统 | 5 种语言 + 跟随系统 |
 
 ## 已知 / 未做
 

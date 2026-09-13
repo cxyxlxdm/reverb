@@ -21,3 +21,4 @@ store-*.zip
 # 口径与流程的**知识**已沉淀在 docs/HISTORY.md 阶段五,不随这份文件一起丢。
 docs/BEIAN.md
 BEIAN.md
+MIGRATION.txt
