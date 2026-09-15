@@ -69,6 +69,19 @@ struct PodcastDetailView: View {
         }
         .navigationTitle(display.title)
         .toolbar {
+            // 手动刷新:macOS 没有下拉手势,与发现页一致用工具栏按钮(触控板横滑仍然可用)
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    Task { await load(force: true) }
+                } label: {
+                    if loading {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                    }
+                }
+                .help("刷新")
+            }
             ToolbarItem(placement: .primaryAction) {
                 if let shareCardURL {
                     ShareLink(item: shareCardURL) {

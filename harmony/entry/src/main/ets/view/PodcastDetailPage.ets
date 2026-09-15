@@ -36,6 +36,7 @@ export struct PodcastDetailPage {
   @State staleAt: number = 0;
   @State descExpanded: boolean = false;
   @State sharing: boolean = false;
+  @State pulling: boolean = false;   // 下拉刷新指示器(Refresh 容器)
   private loadGeneration: number = 0;
   /**
    * 订阅态与下载态**直接从被观察的 store 读**,不再镜像成本地 @State。
@@ -59,6 +60,37 @@ export struct PodcastDetailPage {
 
   aboutToDisappear(): void {
     this.loadGeneration += 1;
+  }
+
+  /// 下拉刷新:强制走网络,与 load() 的区别是**不清空已展示内容** ——
+  /// 拉刷新时页面先清空再转圈,观感是「内容闪没了」;失败时沿用现状,
+  /// 由 staleAt 标出「离线内容」。走同一把 generation 锁,页面退出后结果作废。
+  private async refresh(): Promise<void> {
+    const feedUrl = this.seed.feedUrl;
+    if (feedUrl.length === 0) {
+      this.pulling = false;
+      return;
+    }
+    const generation = ++this.loadGeneration;
+    let feed: FeedResult | null = null;
+    try {
+      feed = await this.app.repository.feed(feedUrl);
+    } catch (_e) {
+      Log.w('Detail', `刷新异常 host=${Http.host(feedUrl)}`);
+    } finally {
+      if (generation === this.loadGeneration) this.pulling = false;
+    }
+    if (generation !== this.loadGeneration || feedUrl !== this.seed.feedUrl) return;
+    if (feed === null) {
+      this.staleAt = this.app.repository.feedCachedAt(feedUrl);
+      this.failed = this.episodes.length === 0;
+      Log.w('Detail', `刷新失败 host=${Http.host(feedUrl)},沿用现有内容`);
+      return;
+    }
+    this.staleAt = 0;
+    this.failed = false;
+    this.applyFeed(feed, this.seed);
+    Log.i('Detail', `刷新 "${this.display().title}" 共 ${feed.episodes.length} 集`);
   }
 
   private isSubscribed(): boolean {
@@ -200,62 +232,69 @@ export struct PodcastDetailPage {
       if (this.loading && this.episodes.length === 0) {
         LoadingBox({ scheme: this.scheme, fontScale: this.fontScale }).layoutWeight(1)
       } else {
-        List() {
-          ListItem() {
-            this.header()
-          }
-          // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
-          if (this.staleAt > 0) {
+        // 下拉刷新:Refresh 容器包住列表。onRefreshing 走强制网络刷新(refresh),
+        // 与 load() 的「先清空再加载」不同:不清空现有内容,失败沿用现状只标离线。
+        Refresh({ refreshing: this.pulling }) {
+          List() {
             ListItem() {
-              Text(L.f('offline_cached_at', formatCachedAt(this.staleAt)))
-                .fontSize(TypeScale.caption * this.fontScale)
-                .fontColor(this.scheme.onSurfaceVariant)
-                .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 2, bottom: 6 })
+              this.header()
             }
-          }
-          if (this.failed && this.episodes.length === 0) {
-            ListItem() {
-              Column({ space: 12 }) {
-                Text(L.s('detail_network_unreachable'))
-                  .fontSize(TypeScale.body * this.fontScale)
+            // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
+            if (this.staleAt > 0) {
+              ListItem() {
+                Text(L.f('offline_cached_at', formatCachedAt(this.staleAt)))
+                  .fontSize(TypeScale.caption * this.fontScale)
                   .fontColor(this.scheme.onSurfaceVariant)
-                Button(L.s('action_retry'))
-                  .fontSize(TypeScale.label * this.fontScale)
-                  .backgroundColor(this.scheme.primary)
-                  .fontColor(this.scheme.onPrimary)
-                  .onClick(() => this.load())
+                  .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 2, bottom: 6 })
               }
-              .width('100%')
-              .padding(30)
             }
+            if (this.failed && this.episodes.length === 0) {
+              ListItem() {
+                Column({ space: 12 }) {
+                  Text(L.s('detail_network_unreachable'))
+                    .fontSize(TypeScale.body * this.fontScale)
+                    .fontColor(this.scheme.onSurfaceVariant)
+                  Button(L.s('action_retry'))
+                    .fontSize(TypeScale.label * this.fontScale)
+                    .backgroundColor(this.scheme.primary)
+                    .fontColor(this.scheme.onPrimary)
+                    .onClick(() => this.load())
+                }
+                .width('100%')
+                .padding(30)
+              }
+            }
+            ForEach(this.episodes, (e: Episode) => {
+              ListItem() {
+                EpisodeListItem({
+                  scheme: this.scheme,
+                  fontScale: this.fontScale,
+                  episode: e,
+                  // 正在播的那一集要高亮。此前漏传,于是在详情页点播后列表毫无反应,
+                  // 只能靠底部迷你条判断播的是哪条 —— Android 一直是传的。
+                  isCurrent: this.player.current !== null && this.player.current.id === e.id,
+                  isPlaying: this.player.isPlaying,
+                  played: this.history.isPlayed(e.id),
+                  downloadState: this.dlState(e.id),
+                  // 详情页以浏览选集为主,给行内「加入播放列表」按钮:长按菜单的
+                  // 系统触发时长改不了,浏览场景一步入队更顺手(其余列表仍走长按菜单)
+                  showQueueAdd: true,
+                  onPlay: () => this.onPlayEpisode(e, this.episodes),
+                  onDownload: () => { this.downloadEpisode(e); },
+                  onDeleteDownload: () => { this.downloadManager.delete(e.id); },
+                  // 纯动作,不参与本页渲染,直接用容器单例即可(理由同 DiscoverPage)
+                  onPlayNext: () => { this.app.player.playNext(e); },
+                  onEnqueue: () => { this.app.player.enqueue(e); }
+                })
+              }
+            }, (e: Episode) => e.id)
           }
-          ForEach(this.episodes, (e: Episode) => {
-            ListItem() {
-              EpisodeListItem({
-                scheme: this.scheme,
-                fontScale: this.fontScale,
-                episode: e,
-                // 正在播的那一集要高亮。此前漏传,于是在详情页点播后列表毫无反应,
-                // 只能靠底部迷你条判断播的是哪条 —— Android 一直是传的。
-                isCurrent: this.player.current !== null && this.player.current.id === e.id,
-                isPlaying: this.player.isPlaying,
-                played: this.history.isPlayed(e.id),
-                downloadState: this.dlState(e.id),
-                // 详情页以浏览选集为主,给行内「加入播放列表」按钮:长按菜单的
-                // 系统触发时长改不了,浏览场景一步入队更顺手(其余列表仍走长按菜单)
-                showQueueAdd: true,
-                onPlay: () => this.onPlayEpisode(e, this.episodes),
-                onDownload: () => { this.downloadEpisode(e); },
-                onDeleteDownload: () => { this.downloadManager.delete(e.id); },
-                // 纯动作,不参与本页渲染,直接用容器单例即可(理由同 DiscoverPage)
-                onPlayNext: () => { this.app.player.playNext(e); },
-                onEnqueue: () => { this.app.player.enqueue(e); }
-              })
-            }
-          }, (e: Episode) => e.id)
+          .scrollBar(BarState.Off)
+          .width('100%')
+          .height('100%')
         }
-        .scrollBar(BarState.Off)
         .layoutWeight(1)
+        .onRefreshing(() => { this.refresh(); })
       }
       }
       .width('100%')

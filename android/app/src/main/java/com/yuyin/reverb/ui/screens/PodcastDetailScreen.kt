@@ -5,6 +5,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -26,6 +27,9 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,6 +47,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -60,8 +65,12 @@ import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.formatListenDuration
 import com.yuyin.reverb.ui.share.ShareCards
 import com.yuyin.reverb.ui.podcastViewModel
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
     val vm = podcastViewModel()
@@ -78,6 +87,23 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     var sharing by remember { mutableStateOf(false) }
     val state = vm.state
+
+    // 下拉刷新:强制重新拉取最新单集。与发现页同款:加最短可见时长,让刷新
+    // 有可感知的过程而非一闪而过(finally 兜底,异常也收起指示器)。
+    val pullState = rememberPullToRefreshState()
+    if (pullState.isRefreshing) {
+        LaunchedEffect(true) {
+            try {
+                coroutineScope {
+                    val fetch = async { vm.refresh(feedUrl) }
+                    delay(600)
+                    fetch.await()
+                }
+            } finally {
+                pullState.endRefresh()
+            }
+        }
+    }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -118,50 +144,58 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
             }
         }
 
-        when (val s = state) {
-            PodcastState.Loading -> LoadingBox()
-            PodcastState.Error -> EmptyHint(stringResource(R.string.load_failed))
-            is PodcastState.Loaded -> {
-                val subscribed = subs.any { it.feedUrl == s.podcast.feedUrl }
-                LazyColumn(
-                    Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 24.dp)
-                ) {
-                    // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
-                    if (s.staleAt != 0L) {
-                        item { OfflineNotice(s.staleAt) }
-                    }
-                    item {
-                        val channelKey = s.podcast.feedUrl.ifBlank { s.podcast.title }
-                        val listenedMs = listenStats.firstOrNull { it.key == channelKey }?.listenedMs ?: 0L
-                        PodcastDetailHeader(
-                            podcast = s.podcast,
-                            episodeCount = s.episodes.size,
-                            listenedMs = listenedMs,
-                            subscribed = subscribed,
-                            onSubscribe = { container.subscriptionStore.toggle(s.podcast) }
-                        )
-                    }
-                    items(s.episodes) { ep ->
-                        val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
-                        EpisodeListItem(
-                            episode = ep,
-                            isCurrent = current?.id == ep.id,
-                            isPlaying = isPlaying,
-                            onPlay = { PlayerController.playOrToggle(ep, s.episodes) },
-                            downloadStatus = downloadStates[ep.id],
-                            onDownload = { DownloadManager.download(ep) },
-                            onDeleteDownload = { DownloadManager.delete(ep.id) },
-                            played = played,
-                            onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
-                            onPlayNext = { PlayerController.playNext(ep) },
-                            onEnqueue = { PlayerController.enqueue(ep) },
-                            // 详情页行内「加入播放列表」键(对齐鸿蒙):浏览场景一步入队
-                            showQueueAdd = true
-                        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .nestedScroll(pullState.nestedScrollConnection)
+        ) {
+            when (val s = state) {
+                PodcastState.Loading -> LoadingBox()
+                PodcastState.Error -> EmptyHint(stringResource(R.string.load_failed))
+                is PodcastState.Loaded -> {
+                    val subscribed = subs.any { it.feedUrl == s.podcast.feedUrl }
+                    LazyColumn(
+                        Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 24.dp)
+                    ) {
+                        // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
+                        if (s.staleAt != 0L) {
+                            item { OfflineNotice(s.staleAt) }
+                        }
+                        item {
+                            val channelKey = s.podcast.feedUrl.ifBlank { s.podcast.title }
+                            val listenedMs = listenStats.firstOrNull { it.key == channelKey }?.listenedMs ?: 0L
+                            PodcastDetailHeader(
+                                podcast = s.podcast,
+                                episodeCount = s.episodes.size,
+                                listenedMs = listenedMs,
+                                subscribed = subscribed,
+                                onSubscribe = { container.subscriptionStore.toggle(s.podcast) }
+                            )
+                        }
+                        items(s.episodes) { ep ->
+                            val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
+                            EpisodeListItem(
+                                episode = ep,
+                                isCurrent = current?.id == ep.id,
+                                isPlaying = isPlaying,
+                                onPlay = { PlayerController.playOrToggle(ep, s.episodes) },
+                                downloadStatus = downloadStates[ep.id],
+                                onDownload = { DownloadManager.download(ep) },
+                                onDeleteDownload = { DownloadManager.delete(ep.id) },
+                                played = played,
+                                onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                                onPlayNext = { PlayerController.playNext(ep) },
+                                onEnqueue = { PlayerController.enqueue(ep) },
+                                // 详情页行内「加入播放列表」键(对齐鸿蒙):浏览场景一步入队
+                                showQueueAdd = true
+                            )
+                        }
                     }
                 }
             }
+            // 跟手下拉指示器,覆盖在内容之上(与发现页同款)
+            PullToRefreshContainer(state = pullState, modifier = Modifier.align(Alignment.TopCenter))
         }
     }
 }

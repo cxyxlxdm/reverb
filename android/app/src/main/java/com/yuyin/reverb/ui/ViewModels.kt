@@ -200,13 +200,12 @@ class PodcastViewModel(private val repo: PodcastRepository) : ViewModel() {
         }
     }
 
-    /** 下拉刷新：强制重新拉取；失败保持现状（不把已有内容换成错误页）。 */
-    fun refresh(feedUrl: String) {
-        viewModelScope.launch {
-            val result = repo.feed(feedUrl)
-            if (loadedFeed != feedUrl) return@launch
-            if (result != null) state = PodcastState.Loaded(result.podcast, result.episodes)
-        }
+    /** 下拉刷新：强制重新拉取；失败保持现状（不把已有内容换成错误页）。
+     *  挂起式：调用方（详情页的拉取协程）能等到完成，指示器不会比网络先收起。 */
+    suspend fun refresh(feedUrl: String) {
+        val result = repo.feed(feedUrl)
+        if (loadedFeed != feedUrl) return
+        if (result != null) state = PodcastState.Loaded(result.podcast, result.episodes)
     }
 }
 
