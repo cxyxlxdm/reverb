@@ -39,8 +39,30 @@ struct HistoryEntry: Codable, Identifiable, Hashable {
     var positionMs: Int
     var durationMs: Int
     var updatedAt: Double     // 时间戳(秒)
-    var played: Bool = false  // 是否已播完(自然播放到结尾,或手动标记);旧数据缺省解码为 false
+    var played: Bool = false  // 是否已播完(自然播放到结尾,或手动标记)
     var id: String { episode.id }
+
+    enum CodingKeys: String, CodingKey { case episode, positionMs, durationMs, updatedAt, played }
+}
+
+// 自定义解码必须放在 extension:写在类型体内会**吞掉成员初始化器**,
+// 而 Stores.record() 等处仍在用 `HistoryEntry(episode:…:)` 逐参构造(H86)。
+extension HistoryEntry {
+    /// 见 H86:
+    /// ① Swift 合成解码里「有默认值」不等于「键可缺省」,Android 旧版导出的历史
+    ///    没有 played 键,曾让整份备份解码失败、恢复静默无效 —— 这里逐键 decodeIfPresent;
+    /// ② Android 备份的 updatedAt 是毫秒,本端口径是秒,在此统一归一(阈值 1e11,
+    ///    毫秒级时间戳远大于它,而秒级时间戳到 5138 年都够不着)。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        episode = try c.decode(Episode.self, forKey: .episode)
+        positionMs = (try? c.decode(Int.self, forKey: .positionMs)) ?? 0
+        durationMs = (try? c.decode(Int.self, forKey: .durationMs)) ?? 0
+        var ts = (try? c.decode(Double.self, forKey: .updatedAt)) ?? 0
+        if ts > 100_000_000_000 { ts /= 1000 }
+        updatedAt = ts
+        played = (try? c.decode(Bool.self, forKey: .played)) ?? false
+    }
 }
 
 /// 单个频道的累计收听时长(累计"实际播放过的内容毫秒")。

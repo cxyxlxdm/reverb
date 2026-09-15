@@ -177,9 +177,13 @@ export class HistoryStore {
     }
     for (let i = incoming.length - 1; i >= 0; i--) {
       const h = incoming[i];
+      // 时间戳口径归一(H86):本端是毫秒,macOS 端是秒 —— 1e11 以下按秒×1000
+      // (现时秒级时间戳 ~1.8e9,毫秒级 ~1.8e12,阈值两侧都有足够余量)。
+      // 不归一的话,macOS 备份恢复到本端会被整批判旧跳过,历史一条都进不来。
+      const updatedAt = h.updatedAt > 0 && h.updatedAt < 100_000_000_000 ? h.updatedAt * 1000 : h.updatedAt;
       const cur = snapshot.get(h.episode.id);
-      if (cur !== undefined && cur >= h.updatedAt) continue;
-      this.record(h.episode, h.updatedAt);
+      if (cur !== undefined && cur >= updatedAt) continue;
+      this.record(h.episode, updatedAt);
       this.updatePosition(h.episode.id, h.positionMs, h.durationMs);
       if (h.played) this.markPlayed(h.episode.id, true);
     }

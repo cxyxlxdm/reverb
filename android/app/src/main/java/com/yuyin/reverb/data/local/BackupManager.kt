@@ -54,6 +54,7 @@ object BackupManager {
                         .put("positionMs", h.positionMs)
                         .put("durationMs", h.durationMs)
                         .put("updatedAt", h.updatedAt)
+                        .put("played", h.played)
                 )
             }
             root.put("history", arr)
@@ -143,11 +144,16 @@ object BackupManager {
                 val o = arr.optJSONObject(i) ?: continue
                 val epObj = o.optJSONObject("episode") ?: continue
                 val ep = EpisodeJson.fromJson(epObj)
-                val updatedAt = o.optLong("updatedAt")
+                // 时间戳口径归一(H86):本端是毫秒,macOS 备份是秒 —— 1e11 以下按秒×1000
+                // (现时秒级时间戳 ~1.8e9,毫秒级 ~1.8e12,阈值两侧都有足够余量)
+                val raw = o.optLong("updatedAt")
+                val updatedAt = if (raw in 1 until 100_000_000_000) raw * 1000 else raw
                 val cur = existing[ep.id]
                 if (cur != null && cur.updatedAt >= updatedAt) continue // 当前记录更新,保留不覆盖
                 container.historyStore.record(ep, updatedAt)
                 container.historyStore.updatePosition(ep.id, o.optLong("positionMs"), o.optLong("durationMs"))
+                // record() 会把 played 重置为 false,备份里带 true 的要补回
+                if (o.optBoolean("played", false)) container.historyStore.markPlayed(ep.id, true)
             }
         }
         if (Section.LISTEN_STATS in include) root.optJSONArray("listenStats")?.let { arr ->

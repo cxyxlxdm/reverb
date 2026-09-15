@@ -21,15 +21,20 @@ enum BackupManager {
 
     // MARK: - 序列化载荷
 
+    /// 各字段全部可选:备份 JSON 是跨端边界,三端 settings 的 schema 各有增删
+    /// (Android 带 allowCellularDownload/updatesEnabled/categoryOrder,
+    ///  鸿蒙带 fontIndex/language/subsGrid,macOS 带 regionOverride/contextualRadio),
+    /// 且旧版导出可能缺键 —— 任何一个非可选键缺失都会让**整份备份**解码失败
+    /// (H86),恢复就静默无效。缺的键在 applySettings 里保持现值不动。
     private struct SettingsPayload: Codable {
-        var themeMode: Int
-        var accentIndex: Int
-        var fontScale: Double
-        var regionOverride: String
-        var defaultSpeed: Double
-        var skipBackSec: Int
-        var skipForwardSec: Int
-        var contextualRadio: Bool
+        var themeMode: Int?
+        var accentIndex: Int?
+        var fontScale: Double?
+        var regionOverride: String?
+        var defaultSpeed: Double?
+        var skipBackSec: Int?
+        var skipForwardSec: Int?
+        var contextualRadio: Bool?
     }
 
     private struct Payload: Codable {
@@ -122,21 +127,28 @@ enum BackupManager {
             if let existing, entry.updatedAt <= existing.updatedAt { continue }
             env.history.record(entry.episode, at: entry.updatedAt)
             env.history.updatePosition(entry.episode.id, positionMs: entry.positionMs, durationMs: entry.durationMs)
+            // record() 会把 played 重置为 false,备份里带 true 的要补回(H86)
+            if entry.played { env.history.markPlayed(entry.episode.id, true) }
         }
     }
 
     @MainActor
     private static func applySettings(_ env: AppEnvironment, _ s: SettingsPayload) {
         let st = env.settings
-        st.themeMode = s.themeMode
-        st.accentIndex = s.accentIndex
-        st.fontScale = s.fontScale
-        st.regionOverride = s.regionOverride
-        st.defaultSpeed = s.defaultSpeed
-        st.skipBackSec = s.skipBackSec
-        st.skipForwardSec = s.skipForwardSec
-        st.contextualRadio = s.contextualRadio
-        env.player.setSpeed(s.defaultSpeed)
+        if let v = s.themeMode { st.themeMode = v }
+        if let v = s.accentIndex { st.accentIndex = v }
+        if let v = s.fontScale { st.fontScale = v }
+        if let v = s.regionOverride { st.regionOverride = v }
+        if let v = s.defaultSpeed {
+            st.defaultSpeed = v
+            env.player.setSpeed(v)
+        }
+        if let v = s.skipBackSec { st.skipBackSec = v }
+        if let v = s.skipForwardSec { st.skipForwardSec = v }
+        if let v = s.contextualRadio { st.contextualRadio = v }
+        // 日志拼平写,别在插值里叠 .map(String.init):Swift 类型检查器会被嵌套可选表达式噎死(H86)
+        let restored = "theme=\(s.themeMode ?? -1) speed=\(s.defaultSpeed ?? -1) region=\(s.regionOverride ?? "-")"
+        Log.i("Backup", "恢复设置 \(restored)")
     }
 
     // MARK: - OPML

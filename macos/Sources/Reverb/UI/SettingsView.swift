@@ -38,6 +38,7 @@ private struct SettingsForm: View {
     @State private var restoreJSON = ""
     @State private var restoreSections: Set<BackupManager.Section> = []
     @State private var restoreSelection: Set<BackupManager.Section> = []
+    @State private var restoreUnreadable = false
     @State private var confirmClearDownloads = false
     @State private var confirmClearLog = false
     @State private var logSizeText = ""
@@ -208,6 +209,11 @@ private struct SettingsForm: View {
             .tint(Theme.accent(settings.accentIndex))
             .themedSheet(settings)
         }
+        .alert("无法恢复备份", isPresented: $restoreUnreadable) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text("这个文件无法识别为余音的备份,可能已损坏或来自不兼容的版本。")
+        }
     }
 
     private var usageText: String {
@@ -236,7 +242,13 @@ private struct SettingsForm: View {
         Task {
             guard let json = await readString(url) else { return }
             let sections = BackupManager.sectionsIn(json)
-            guard !sections.isEmpty else { return }
+            // 解析不出任何分区时必须给可见反馈 —— 曾经静默 return,
+            // 用户视角就是「导入了没任何效果」,连错在哪都无从查起(H86)
+            guard !sections.isEmpty else {
+                Log.e("Backup", "恢复探测失败:文件无法识别为余音备份")
+                restoreUnreadable = true
+                return
+            }
             restoreJSON = json
             restoreSections = sections
             restoreSelection = sections
@@ -339,18 +351,30 @@ private struct RestoreSheet: View {
         VStack(alignment: .leading, spacing: 0) {
             Text("恢复备份").font(.headline).padding(20)
             Divider()
-            Form {
-                Section("选择要合并的内容") {
+            // 不用 Form(.grouped):grouped 表单的行底色与文字色由系统外观驱动,
+            // 跟 themedSheet 的 preferredColorScheme 不同步 —— 深色主题下
+            // 分区行整块不可见,表头与按钮反而正常(H86)。
+            // 普通行 + 语义色,colorScheme 一变即跟随。
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("选择要合并的内容")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 20)
                     ForEach(available) { section in
                         Toggle(LocalizedStringKey(section.label), isOn: Binding(
                             get: { selection.contains(section) },
                             set: { on in
                                 if on { selection.insert(section) } else { selection.remove(section) }
                             }))
+                            // 复选框(框在文字左侧),与 Android 恢复弹窗的多选形态一致
+                            .toggleStyle(.checkbox)
+                            .padding(.horizontal, 20)
+                            .padding(.vertical, 2)
                     }
                 }
+                .padding(.vertical, 12)
             }
-            .formStyle(.grouped)
             Divider()
             HStack {
                 Spacer()
