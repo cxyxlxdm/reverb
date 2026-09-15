@@ -118,11 +118,19 @@ struct PlayerView: View {
     }
 
     private func dots(count: Int) -> some View {
-        HStack(spacing: 7) {
+        HStack(spacing: 2) {
             ForEach(0..<count, id: \.self) { i in
                 Circle()
                     .fill(i == (page ?? 0) ? accent : Color.secondary.opacity(0.35))
                     .frame(width: 7, height: 7)
+                    // 圆点此前是纯装饰:7pt 且没有点击手势,触摸板能滑、鼠标没有任何
+                    // 切换入口。包一层命中区并响应点击,点击即翻页(scrollPosition 驱动)。
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        guard (page ?? 0) != i else { return }
+                        withAnimation { page = i }
+                    }
             }
         }
     }
