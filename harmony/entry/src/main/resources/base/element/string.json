@@ -213,6 +213,10 @@
       "value": "当前网络无法访问该频道"
     },
     {
+      "name": "refresh_failed",
+      "value": "刷新失败，请检查网络"
+    },
+    {
       "name": "offline_cached_at",
       "value": "离线内容 · 上次更新 %s"
     },

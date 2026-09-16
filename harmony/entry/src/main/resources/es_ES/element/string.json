@@ -213,6 +213,10 @@
       "value": "Este canal no es accesible en la red actual"
     },
     {
+      "name": "refresh_failed",
+      "value": "No se pudo actualizar, comprueba la red"
+    },
+    {
       "name": "offline_cached_at",
       "value": "Copia sin conexión · actualizada %s"
     },

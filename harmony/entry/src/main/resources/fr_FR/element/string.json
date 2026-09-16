@@ -213,6 +213,10 @@
       "value": "Cette chaîne est inaccessible sur le réseau actuel"
     },
     {
+      "name": "refresh_failed",
+      "value": "Échec de l'actualisation, vérifiez le réseau"
+    },
+    {
       "name": "offline_cached_at",
       "value": "Copie hors ligne · mise à jour %s"
     },

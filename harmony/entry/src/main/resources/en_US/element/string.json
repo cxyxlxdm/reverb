@@ -213,6 +213,10 @@
       "value": "This feed is unavailable on the current network"
     },
     {
+      "name": "refresh_failed",
+      "value": "Refresh failed, check your network"
+    },
+    {
       "name": "offline_cached_at",
       "value": "Offline copy · updated %s"
     },

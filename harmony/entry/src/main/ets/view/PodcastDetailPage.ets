@@ -84,6 +84,9 @@ export struct PodcastDetailPage {
     if (feed === null) {
       this.staleAt = this.app.repository.feedCachedAt(feedUrl);
       this.failed = this.episodes.length === 0;
+      // 失败必须有反馈,否则用户不知道这次下拉做成了没有;成功不加提示 ——
+      // 列表内容更新本身可见(用户明确不要「已刷新」toast)
+      this.showToast(L.s('refresh_failed'));
       Log.w('Detail', `刷新失败 host=${Http.host(feedUrl)},沿用现有内容`);
       return;
     }
@@ -234,7 +237,10 @@ export struct PodcastDetailPage {
       } else {
         // 下拉刷新:Refresh 容器包住列表。onRefreshing 走强制网络刷新(refresh),
         // 与 load() 的「先清空再加载」不同:不清空现有内容,失败沿用现状只标离线。
-        Refresh({ refreshing: this.pulling }) {
+        // refreshing 必须 $$ 双向绑定:用户松手触发刷新时框架要把内部状态**写回**
+        // pulling,单向下拉后 pulling 一直是 false,finally 里的置 false 是无效赋值,
+        // 指示器就永远收不回 —— 曾因此转圈不消失。
+        Refresh({ refreshing: $$this.pulling }) {
           List() {
             ListItem() {
               this.header()

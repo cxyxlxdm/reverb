@@ -213,6 +213,10 @@
       "value": "目前網路無法存取此頻道"
     },
     {
+      "name": "refresh_failed",
+      "value": "重新整理失敗，請檢查網路"
+    },
+    {
       "name": "offline_cached_at",
       "value": "離線內容 · 上次更新 %s"
     },

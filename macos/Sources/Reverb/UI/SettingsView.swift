@@ -34,10 +34,7 @@ private struct SettingsForm: View {
     private let skipForwardOptions = [15, 30, 45, 60]
 
     @State private var showFootprint = false
-    @State private var showRestore = false
-    @State private var restoreJSON = ""
-    @State private var restoreSections: Set<BackupManager.Section> = []
-    @State private var restoreSelection: Set<BackupManager.Section> = []
+    @State private var restorePayload: RestorePayload?
     @State private var restoreUnreadable = false
     @State private var confirmClearDownloads = false
     @State private var confirmClearLog = false
@@ -197,15 +194,18 @@ private struct SettingsForm: View {
                 .environmentObject(settings)
                 .themedSheet(settings)
         }
-        .sheet(isPresented: $showRestore) {
+        // 弹窗用 item 驱动而非 isPresented + 外部状态:sections/selection 与弹出
+        // 写在同一事务时,sheet 内容闭包首开会拿到旧快照 —— 选项区整块空白,
+        // 关掉重开才正常(探针已证明同样的行在独立窗口渲染无恙)。
+        // payload 自己携带数据,内容闭包只读弹窗入参,不存在时序差。
+        .sheet(item: $restorePayload) { payload in
             RestoreSheet(
-                sections: restoreSections,
-                selection: $restoreSelection,
-                onApply: {
-                    BackupManager.apply(env, restoreJSON, restoreSelection)
-                    showRestore = false
+                sections: payload.sections,
+                onApply: { selection in
+                    BackupManager.apply(env, payload.json, selection)
+                    restorePayload = nil
                 },
-                onCancel: { showRestore = false })
+                onCancel: { restorePayload = nil })
             .tint(Theme.accent(settings.accentIndex))
             .themedSheet(settings)
         }
@@ -249,10 +249,7 @@ private struct SettingsForm: View {
                 restoreUnreadable = true
                 return
             }
-            restoreJSON = json
-            restoreSections = sections
-            restoreSelection = sections
-            showRestore = true
+            restorePayload = RestorePayload(json: json, sections: sections)
         }
     }
 
@@ -336,12 +333,29 @@ private struct SettingsForm: View {
     }
 }
 
-/// 恢复备份:勾选要合并的分区后应用。
+/// 弹窗载荷:备份 json 与探测出的分区一起随 item 传入。
+private struct RestorePayload: Identifiable {
+    let id = UUID()
+    let json: String
+    let sections: Set<BackupManager.Section>
+}
+
+/// 恢复备份:勾选要合并的分区后应用。selection 由弹窗自持,
+/// 初值在 init 里从入参同步,首帧就是完整勾选态(不依赖弹出后再补一轮状态)。
 private struct RestoreSheet: View {
     let sections: Set<BackupManager.Section>
-    @Binding var selection: Set<BackupManager.Section>
-    var onApply: () -> Void
+    @State private var selection: Set<BackupManager.Section> = []
+    var onApply: (Set<BackupManager.Section>) -> Void
     var onCancel: () -> Void
+
+    init(sections: Set<BackupManager.Section>,
+         onApply: @escaping (Set<BackupManager.Section>) -> Void,
+         onCancel: @escaping () -> Void) {
+        self.sections = sections
+        self.onApply = onApply
+        self.onCancel = onCancel
+        _selection = State(initialValue: sections)
+    }
 
     private var available: [BackupManager.Section] {
         BackupManager.Section.allCases.filter { sections.contains($0) }
@@ -349,18 +363,19 @@ private struct RestoreSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("恢复备份").font(.headline).padding(20)
+            Text("恢复备份").font(.headline).padding(24)
             Divider()
             // 不用 Form(.grouped):grouped 表单的行底色与文字色由系统外观驱动,
             // 跟 themedSheet 的 preferredColorScheme 不同步 —— 深色主题下
             // 分区行整块不可见,表头与按钮反而正常(H86)。
             // 普通行 + 语义色,colorScheme 一变即跟随。
             ScrollView {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 14) {
                     Text("选择要合并的内容")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 6)
                     ForEach(available) { section in
                         Toggle(LocalizedStringKey(section.label), isOn: Binding(
                             get: { selection.contains(section) },
@@ -369,22 +384,22 @@ private struct RestoreSheet: View {
                             }))
                             // 复选框(框在文字左侧),与 Android 恢复弹窗的多选形态一致
                             .toggleStyle(.checkbox)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 2)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 4)
                     }
                 }
-                .padding(.vertical, 12)
+                .padding(.vertical, 16)
             }
             Divider()
-            HStack {
+            HStack(spacing: 12) {
                 Spacer()
                 Button("取消", role: .cancel, action: onCancel)
-                Button("恢复", action: onApply)
+                Button("恢复") { onApply(selection) }
                     .buttonStyle(.borderedProminent)
                     .disabled(selection.isEmpty)
             }
-            .padding(20)
+            .padding(24)
         }
-        .frame(width: 400, height: 460)
+        .frame(width: 420, height: 500)
     }
 }
