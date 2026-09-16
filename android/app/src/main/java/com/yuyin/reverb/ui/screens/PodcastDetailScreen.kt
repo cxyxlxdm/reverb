@@ -3,6 +3,8 @@ package com.yuyin.reverb.ui.screens
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -26,9 +28,11 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.pulltorefresh.PullToRefreshState
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
@@ -40,6 +44,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,6 +52,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -194,8 +203,10 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                     }
                 }
             }
-            // 跟手下拉指示器,覆盖在内容之上(与发现页同款)
-            PullToRefreshContainer(state = pullState, modifier = Modifier.align(Alignment.TopCenter))
+            // 跟手下拉指示器,覆盖在内容之上。只在「拖动中或刷新中」才挂进树:
+            // material3 1.2 的容器静止态会残留一个灰圆常驻页首(发现页当年是靠
+            // clipToBounds 裁掉越界白块绕过的,详情页残留在界内裁不掉)。
+            RefreshIndicator(pullState, Modifier.align(Alignment.TopCenter))
         }
     }
 }
@@ -360,5 +371,70 @@ private fun FundingLink(label: String, onOpen: () -> Unit) {
         Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = null, modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(6.dp))
         Text(text)
+    }
+}
+
+/**
+ * 跟手下拉指示器(自绘,替代 material3 1.2 的 PullToRefreshContainer)。
+ *
+ * 容器版把 48dp 的圆**无条件常驻合成**,静止态仅靠 graphicsLayer 把圆挪到页首之上;
+ * 详情页的内容 Box 之上还有顶栏,越界部分没有边界可裁,就成了一枚常驻页首的灰圆。
+ * 这里改成「不拖不刷就不挂进树」——静止时组合树里根本没有这枚圆。
+ * verticalOffset / progress 的读取分别收在 derivedStateOf / graphicsLayer / Canvas
+ * 的延迟作用域里:拖动过程只发生平移与重绘,不重组任何 composable。
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun RefreshIndicator(state: PullToRefreshState, modifier: Modifier = Modifier) {
+    val visible by remember(state) {
+        derivedStateOf { state.verticalOffset > 0f || state.isRefreshing }
+    }
+    if (!visible) return
+
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+    val spinnerColor = MaterialTheme.colorScheme.onSurface
+    val containerSize = 48.dp
+    Box(
+        modifier
+            .size(containerSize)
+            .graphicsLayer {
+                // 与容器版同款位移公式:静止时整体悬在页首之上,下拉时滑入
+                translationY = state.verticalOffset - containerSize.toPx()
+                val p = state.progress.coerceIn(0f, 1f)
+                alpha = 0.3f + 0.7f * p
+                scaleX = 0.5f + 0.5f * p
+                scaleY = 0.5f + 0.5f * p
+            }
+            .shadow(3.dp, CircleShape)
+            .background(containerColor, CircleShape)
+    ) {
+        if (state.isRefreshing) {
+            CircularProgressIndicator(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(40.dp),
+                color = spinnerColor,
+                strokeWidth = 4.dp,
+                strokeCap = StrokeCap.Round
+            )
+        } else {
+            // 弧线读 progress 发生在绘制阶段:拖动时只重绘,不重组
+            Canvas(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(40.dp)
+            ) {
+                val p = state.progress.coerceIn(0f, 1f)
+                if (p > 0f) {
+                    drawArc(
+                        color = spinnerColor,
+                        startAngle = -90f,
+                        sweepAngle = 260f * p,
+                        useCenter = false,
+                        style = Stroke(4.dp.toPx(), cap = StrokeCap.Round)
+                    )
+                }
+            }
+        }
     }
 }

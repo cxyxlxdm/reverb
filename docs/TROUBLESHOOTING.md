@@ -98,6 +98,17 @@
 
 > 备注:A1 之外,「最新」在覆盖安装后的「长时间 loading + 闪动」由 A1(指示器解耦)+ G1(稳定排序)共同解决,非独立问题。
 
+### A4. 频道详情页下拉灰圆常驻页首:clipToBounds 治不了这处,只能「不拖不刷就不挂进树」
+
+- **现场**:频道详情页(PodcastDetailScreen)加下拉刷新后,页首常驻一枚灰圆,刷新结束也不消失。「发现」页同样的容器却没有残留,收件箱页(A1)加裁剪就能治。
+- **根因**:material3 1.2 的 `PullToRefreshContainer` 把 48dp 的指示器圆**无条件常驻合成**,静止态仅靠 `graphicsLayer.translationY = verticalOffset - 容器高度` 把圆挪到**容器顶边之上**。它没有隐藏动画(`endRefresh()` 是瞬间归零,容器里也没有任何 LaunchedEffect/Animatable,这一点是反编译 aar 确认的):
+  - 「发现」页:容器落在带 `clipToBounds` 的 Box 里,越界部分被裁 → 看不见;
+  - 详情页:内容 Box **之上还有顶栏(返回/分享按钮)**,Box 没有(也不该有)裁剪边界,越界部分直接画在顶栏区域 → **界内裁不掉**。
+- **解法**(`ui/screens/PodcastDetailScreen.kt`):自绘 `RefreshIndicator` 替换容器——挂载条件是 `verticalOffset > 0f || isRefreshing`(经 `derivedStateOf` 只在显隐翻转时重组);位移与进度弧分别收在 `graphicsLayer` / `Canvas` 的延迟读取里,**拖动全程零重组**;`endRefresh()` 归零的同一帧指示器从树里消失,残留不存在了。视觉与容器版同款:同位移公式、48dp 圆 + 4dp 圆角进度弧、刷新中切 indeterminate。
+- **教训 / 规律**:
+  1. A1 的「照抄别处 clipToBounds」在这里失效——**裁剪只治越界残留,治不了界内残留**;M3 1.2 指示器静止态真的在组合树里,「彻底不显示」的唯一办法是**不挂进树**。
+  2. 「容器静止时藏在边界外」这类实现,依赖调用方提供一个**能裁剪的边界**;嵌进顶栏+内容的页面结构时,这个隐含前提不成立。查这类"官方组件显然有 bug"的问题,反编译 aar 看实现(`javap` 即可)比猜快得多——15 分钟就确认了无条件合成与无隐藏动画两个关键事实。
+
 ---
 
 ## macOS
