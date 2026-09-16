@@ -62,7 +62,8 @@ export struct MomentCard {
   }
 }
 
-/// 频道分享卡:频道 Logo + 频道名 + App 落款,不携带可能含私有凭据的 RSS 地址。
+/// 频道分享卡:频道 Logo + 频道名 + 简介(最多四行,超出省略)+ App 落款,
+/// 不携带可能含私有凭据的 RSS 地址。
 @Component
 export struct ChannelShareCard {
   @Prop scheme: Scheme;
@@ -80,13 +81,24 @@ export struct ChannelShareCard {
         .textOverflow({ overflow: TextOverflow.Ellipsis })
         .textAlign(TextAlign.Center)
         .width('100%')
+      if (this.podcast.description.length > 0) {
+        Text(this.podcast.description)
+          .fontSize(13 * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .lineHeight(19)
+          .maxLines(4)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .textAlign(TextAlign.Center)
+          .width('100%')
+      }
       Blank()
       Text('余音 · Reverb')
         .fontSize(12 * this.fontScale)
         .fontColor(this.scheme.onSurfaceVariant)
     }
     .width(320)
-    .height(410)
+    // 简介最多四行(4×19)+标题三行的最坏情形装不下 410,放宽到 500;短内容由 Blank 撑开
+    .height(500)
     .padding(26)
     .backgroundColor(this.scheme.surface)
     .border({ width: 1, color: withAlpha(this.scheme.primary, 0.18) })

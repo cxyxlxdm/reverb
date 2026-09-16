@@ -84,11 +84,12 @@ object ShareCards {
             bmp
         }
 
-    /** 频道分享卡:频道 Logo + 频道名 + App 落款,不携带可能含私有凭据的 RSS 地址。 */
+    /** 频道分享卡:频道 Logo + 频道名 + 简介(最多四行,超出省略)+ App 落款,不携带可能含私有凭据的 RSS 地址。 */
     suspend fun channelCard(context: Context, podcast: Podcast): Bitmap =
         withContext(Dispatchers.IO) {
             val w = 1080
-            val h = 1350
+            // 加高到 1500:标题三行 + 简介四行的最坏情形在 1350 里会压到底部落款
+            val h = 1500
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val c = Canvas(bmp)
             drawInkBackground(c, w, h)
@@ -106,10 +107,17 @@ object ShareCards {
                 drawCenteredText(c, "余", w / 2f, artTop + artSize / 2f + 55f, 150f, CELADON, bold = true)
             }
 
-            drawWrappedCentered(
+            var y = drawWrappedCentered(
                 c, podcast.title, w, artTop + artSize + 90f,
                 textSize = 62f, color = TEXT, bold = true, maxLines = 3, sidePad = 90
             )
+            if (podcast.description.isNotBlank()) {
+                y += 34f
+                y = drawWrappedCentered(
+                    c, podcast.description, w, y,
+                    textSize = 36f, color = DIM, bold = false, maxLines = 4, sidePad = 110
+                )
+            }
             drawCenteredText(c, "余音 · Reverb", w / 2f, h - 78f, 38f, DIM, bold = false)
             bmp
         }

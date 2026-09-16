@@ -92,11 +92,14 @@ struct MomentCard: View {
 
 // MARK: - 频道分享卡片
 
-/// 频道分享卡:频道 Logo + 频道名 + App 落款,不携带可能含私有凭据的 RSS 地址。
+/// 频道分享卡:频道 Logo + 频道名 + 简介(最多四行,超出省略)+ App 落款,不携带可能含私有凭据的 RSS 地址。
 struct ChannelShareCard: View {
     let podcast: Podcast
     var accent: Color = .accentColor
     var artwork: NSImage? = nil
+
+    /// 与详情页同一显示口径:存储的是 RSS 原文,渲染前统一去标签(见 PodcastDetailView)
+    private var plainDesc: String { Fmt.plainText(podcast.description) }
 
     var body: some View {
         VStack(spacing: 28) {
@@ -111,6 +114,14 @@ struct ChannelShareCard: View {
                 .multilineTextAlignment(.center)
                 .lineLimit(3)
 
+            if !plainDesc.isEmpty {
+                Text(plainDesc)
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white.opacity(0.6))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+            }
+
             Spacer(minLength: 0)
 
             Text("余音 · Reverb")
@@ -118,7 +129,8 @@ struct ChannelShareCard: View {
                 .foregroundStyle(.white.opacity(0.55))
         }
         .padding(36)
-        .frame(width: 420, height: 525)
+        // 简介最多四行 + 标题三行的最坏情形装不下 525;短内容由 Spacer 撑开
+        .frame(width: 420, height: 640)
         .background(
             LinearGradient(
                 colors: [Color(red: 0.09, green: 0.10, blue: 0.13),
