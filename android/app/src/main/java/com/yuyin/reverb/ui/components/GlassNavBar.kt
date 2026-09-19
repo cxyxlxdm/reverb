@@ -153,7 +153,15 @@ fun GlassNavBar(
         dragging = false
         nearIdx = -1
         previewIdx = -1
-        val target = tabAt(dragStartX + dragAccum)
+        // 拖拽路径接管了 interacting 的生命周期(见 onDragStart),这里负责熄灭:
+        // 横拖接管手势后 tap 探测的 tryAwaitRelease 会以取消收场,但那条路径
+        // 不清 interacting(见 onPress),否则拖拽全程放大效果被中途掐灭
+        interacting = false
+        // 槽位判定必须用胶囊**中心**:pillX 系列都是左缘坐标,直接拿去查槽,
+        // 左缘到中心差半个胶囊宽 —— 发现→音阁要拖满行程的 69% 才判过半、
+        // 音阁→发现 31% 就判过半,两个方向松手阈值不对称(H94:向右拖过半
+        // 松手不切、向左拖过半却切)。中心过中线 = 恰好行程过半,两向对称。
+        val target = tabAt(dragStartX + dragAccum + pillW / 2)
         scope.launch {
             pillX.snapTo(dragStartX + dragAccum)
             if (commit && target != currentSelected) {
@@ -193,6 +201,9 @@ fun GlassNavBar(
                                 previewJob?.cancel()
                                 previewJob = null
                                 dragging = true
+                                // 拖拽期间途经 tab 也要放大(鸿蒙 onTouch Down/Up 的语义):
+                                // interacting 由这里点亮、settle 里熄灭,tap 路径取消时不再代管
+                                interacting = true
                                 dragAccum = 0f
                                 dragStartX = pillX.value
                             }
@@ -206,7 +217,9 @@ fun GlassNavBar(
                                 val lo = pillXFor(0)
                                 val hi = pillXFor(tabs.size - 1)
                                 dragAccum = dragAccum.coerceIn(lo - dragStartX, hi - dragStartX)
-                                nearIdx = tabAt(dragStartX + dragAccum)
+                                // 用胶囊中心查槽(理由见 settle),途经 tab 的高亮/放大才与
+                                // 松手提交的判定一致
+                                nearIdx = tabAt(dragStartX + dragAccum + pillW / 2)
                             }
                         }
                     )
@@ -225,7 +238,9 @@ fun GlassNavBar(
                                 }
                             }
                             val released = tryAwaitRelease()
-                            interacting = false
+                            // 只在非拖拽态熄灭:横拖接管时 dragging=true,interacting
+                            // 归拖拽路径(settle)管,这里清了会把拖拽全程的放大掐灭
+                            if (!dragging) interacting = false
                             if (released && !dragging) {
                                 val commitIdx = if (previewIdx >= 0) previewIdx else idx
                                 previewIdx = -1
