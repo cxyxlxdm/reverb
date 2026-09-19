@@ -497,12 +497,19 @@ export struct ChipsRow {
     this.scroller.scrollTo({ xOffset: Math.max(0, x - 80), yOffset: 0, animation: { duration: 260, curve: Curve.EaseOut } });
   }
 
-  /// @Watch 进来的桥:回调时机上 selected 已是新值,读它再进弹簧
+  /// @Watch 进来的桥:回调时机上 selected 已是新值,读它再进弹簧。
+  /// reveal 也必须挂在这里 —— 内层 Row 的 onAreaChange 只在首次布局/面积变化
+  /// 时触发,横滑换页只更新 selected、条身没有面积变化,onAreaChange 永远
+  /// 不会再触发;只靠它兜底,选中 chip 滑到屏幕外后条身就不滚、高亮不可见
+  /// (H93,与 Android 玻璃条换页不同步是同一症状)。reveal 自带 scrolledTo
+  /// 幂等阀,重复触发无害。
   private onSelectedChange(): void {
+    this.revealSelected();
     this.springTo(this.selected);
   }
 
-  /// 弹簧滑到第 i 个 chip 下(参数与 GlassTabBar 药丸一致,两端手感统一)。
+  /// 弹簧滑到第 i 个 chip 下(弹簧参数与底部药丸不同,见 animateTo 处注释:
+  /// 分类条chip 间距大、又有 Swiper 落位动画作参照,收尾要更从容)。
   /// chip 宽随字数可变,必须用实测值对位;首帧没量到就不动,量到后自然补上。
   ///
   /// 手势联动期间胶囊的绘制值是插值而不是 capX:先无动画把 capX 钉到实际绘制
@@ -522,7 +529,11 @@ export struct ChipsRow {
         this.capW = fw + (gw - fw) * p;
       }
     }
-    this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.75) }, () => {
+    // 收尾弹簧必须比 Swiper 落位动画(~400ms)更从容:response 0.3 时胶囊
+    // 150ms 左右就冲到终点,页面还在路上,观感是「瞬间切过去、很急迫」
+    // (用户对照 Android 的 1:1 跟页平移给的反馈)。0.45/0.95 ≈ 450ms 滑行、
+    // 几乎无回弹,与落位同时到位,读起来就是「跟着页面滑过去」。
+    this.getUIContext().animateTo({ curve: curves.springMotion(0.45, 0.95) }, () => {
       this.capX = tx;
       this.capW = tw;
     });
