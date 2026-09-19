@@ -115,34 +115,37 @@ export struct ScreenHeader {
 
   build() {
     Column() {
+      // 动作键只与标题行对中:副标题若参与 Row 的垂直居中,有无副标题的两页
+      // (发现/音阁)动作键会差出半个副标题的高度,随机电台与设置按钮就不在
+      // 同一条水平线上了(与 Android ScreenHeader 同一修法)。
       Row() {
-        Column() {
-          Text(this.title)
-            .fontSize(TypeScale.headlineMedium * this.fontScale)
-            .fontWeight(FontWeight.Bold)
-            .fontColor(this.scheme.onBackground)
-          if (this.subtitle.length > 0) {
-            Text(this.subtitle)
-              .fontSize(TypeScale.label * this.fontScale)
-              .fontColor(this.scheme.onSurfaceVariant)
-              .margin({ top: 2 })
-          }
-        }
-        .alignItems(HorizontalAlign.Start)
-        .layoutWeight(1)
+        Text(this.title)
+          .fontSize(TypeScale.headlineMedium * this.fontScale)
+          .fontWeight(FontWeight.Bold)
+          .fontColor(this.scheme.onBackground)
+          .layoutWeight(1)
 
         this.action()
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      // 40×3 圆角细线,用「梁金」次强调色
+      // 40×3 圆角细线,用「梁金」次强调色。金线紧跟标题行、标语降为线下方
+      // 说明文字(与 Android 同步换位):原来 标题→标语→金线 的顺序让有标语
+      // 的页面金线位置与音阁页错开,两页不对齐。
       Row()
         .width(40)
         .height(3)
         .backgroundColor(this.scheme.secondary)
         .borderRadius(2)
-        .margin({ top: 10 })
+        .margin({ top: 4 })
+
+      if (this.subtitle.length > 0) {
+        Text(this.subtitle)
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .margin({ top: 10 })
+      }
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')

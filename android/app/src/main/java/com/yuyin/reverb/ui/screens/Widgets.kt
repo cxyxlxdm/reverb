@@ -126,15 +126,10 @@ fun ScreenHeader(title: String, subtitle: String? = null, action: (@Composable (
             )
             if (action != null) action()
         }
-        if (!subtitle.isNullOrBlank()) {
-            Spacer(Modifier.height(4.dp))
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.secondary
-            )
-        }
-        Spacer(Modifier.height(12.dp))
+        // 金线紧跟标题行(两页都在标题下 4dp):原来顺序是 标题→标语→金线,
+        // 有标语的页面金线被顶到标语下面,与音阁页(无标语)不在同一节奏上;
+        // 换成 标题→金线→标语 后两页金线同位,标语降为金线下方的说明文字。
+        Spacer(Modifier.height(4.dp))
         Box(
             Modifier
                 .width(40.dp)
@@ -142,5 +137,13 @@ fun ScreenHeader(title: String, subtitle: String? = null, action: (@Composable (
                 .clip(RoundedCornerShape(2.dp))
                 .background(MaterialTheme.colorScheme.secondary)
         )
+        if (!subtitle.isNullOrBlank()) {
+            Spacer(Modifier.height(12.dp))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+        }
     }
 }
