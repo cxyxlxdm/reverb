@@ -1,4 +1,5 @@
 import { Scheme, TypeScale, Tracking, LineHeight, withAlpha, Metrics } from '../theme/Theme';
+import { curves } from '@kit.ArkUI';
 import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
 import { Artwork, SquareArtwork, Glyph, Sym } from './Widgets';
@@ -401,18 +402,80 @@ export struct EpisodeListItem {
   }
 }
 
-/// 横向分类 chips(与内容分页双向联动)。
+/// 玻璃分段条(ChipsRow)的高度。页面据此在滚动容器顶部留出同等余量
+/// (List 用 contentStartOffset、宫格用占位 GridItem):首项静止时停在条下方,
+/// 上滚时内容从条下经过 —— 悬浮玻璃后面得有东西经过,模糊才看得出来。
+export const CHIPS_STRIP_H = 44;
+
+/**
+ * 顶部分类条与 Swiper 的手势联动总线:页面在 onGestureSwipe 每帧灌入进度,
+ * 胶囊按帧插值绘制(1:1 跟手,与底部栏同手感);松手时行/胶囊各自收尾。
+ * 全程不走状态观察 —— 每帧只经回调重建胶囊这一个组件(H64 最小重建面)。
+ */
+export class ChipsSwipeSync {
+  /** 插值两端与进度:胶囊位置 = lerp(chipX[from], chipX[to], progress) */
+  from: number = 0;
+  to: number = -1;
+  progress: number = 0;
+  /** 手势帧进行中;end() 先派发结束回调、后清位,收尾方还能读到最后一帧插值 */
+  active: boolean = false;
+  private frameSink: ((f: number, t: number, p: number) => void) | null = null;
+  private endSinks: ((target: number) => void)[] = [];
+
+  onFrame(sink: (f: number, t: number, p: number) => void): void {
+    this.frameSink = sink;
+  }
+
+  /// 注册顺序即语义:行先注册(先弹簧,钉位依赖 active 仍为 true),胶囊后注册。
+  addEndSink(sink: (target: number) => void): void {
+    this.endSinks.push(sink);
+  }
+
+  report(from: number, to: number, p: number): void {
+    this.from = from;
+    this.to = to;
+    this.progress = p;
+    this.active = true;
+    this.frameSink?.(from, to, p);
+  }
+
+  /// 手势收束(提交或回落)。target = 结束后胶囊应停的选中项。
+  end(target: number): void {
+    this.endSinks.forEach((fn: (target: number) => void) => fn(target));
+    this.active = false;
+    this.to = -1;
+  }
+}
+
+/// 横向分类 chips(与内容分页双向联动)。本体是玻璃条:实时模糊 + 半透明染色,
+/// 与底部 GlassTabBar 同一套参数;调用方负责把它悬浮在滚动内容上方。
 @Component
 export struct ChipsRow {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
   @Prop labels: string[];
-  @Prop selected: number;
+  /// @Watch 的回调参数是**属性名字符串**,不是新值 —— 直接把 springTo 挂上来会收到
+  /// "selected",chipX["selected"] 取不到、提前 return,点击切页时胶囊就永远不动
+  /// (踩过:拖动走 endSink、量测走 idx,传的都是真数字,唯独点击这条路径坏)。
+  @Prop @Watch('onSelectedChange') selected: number;
+  /// 与页面的 Swiper 手势联动总线(页面持有并灌帧);不传则无联动,纯弹簧
+  sync: ChipsSwipeSync = new ChipsSwipeSync();
   onSelect: (i: number) => void = () => {};
 
   private scroller: Scroller = new Scroller();
   /// 上一次已滚动到的选中项,避免每次重渲都重复下发滚动指令
   private scrolledTo: number = -1;
+  /// 各 chip 的实测位置/宽度(Scroll 内容坐标系,由各 chip 的 onAreaChange 回填),胶囊对位用
+  private chipX: number[] = [];
+  private chipW: number[] = [];
+  /** 透明胶囊当前位置与宽度;首帧没量到选中 chip 之前先藏着 */
+  @State capX: number = 0;
+  @State capW: number = 0;
+
+  aboutToAppear(): void {
+    // 行先于胶囊(子组件)注册收尾回调:springTo 的钉位依赖 active 仍为 true
+    this.sync.addEndSink((t: number) => { this.springTo(t); });
+  }
 
   /**
    * 选中项变化时把它滚进可视区。
@@ -422,39 +485,171 @@ export struct ChipsRow {
   private revealSelected(): void {
     if (this.selected === this.scrolledTo) return;
     this.scrolledTo = this.selected;
-    // 估算:每个 chip 约 (字数×字号 + 左右各 14 内边距 + 8 间距),够用即可 ——
-    // 目的只是把选中项带进视野,不追求精确居中。
-    let x = 0;
-    for (let i = 0; i < this.selected && i < this.labels.length; i++) {
-      x += this.labels[i].length * TypeScale.label * this.fontScale * 0.6 + 36;
+    // 优先用实测位置;首帧还没量到时退回估算(每 chip ≈ 字数×字号 + 左右 14 内边距 +
+    // 8 间距) —— 目的只是把选中项带进视野,不追求精确居中。
+    let x = this.chipX[this.selected] ?? -1;
+    if (x < 0) {
+      x = 0;
+      for (let i = 0; i < this.selected && i < this.labels.length; i++) {
+        x += this.labels[i].length * TypeScale.label * this.fontScale * 0.6 + 36;
+      }
     }
     this.scroller.scrollTo({ xOffset: Math.max(0, x - 80), yOffset: 0, animation: { duration: 260, curve: Curve.EaseOut } });
   }
 
-  build() {
-    Scroll(this.scroller) {
-      Row({ space: 8 }) {
-        ForEach(this.labels, (label: string, idx: number) => {
-          Text(label)
-            // chip 文字取 labelLarge(14),与 Android 的 Material FilterChip 同档
-            .fontSize(TypeScale.labelLarge * this.fontScale)
-            .fontColor(this.selected === idx ? this.scheme.onPrimary : this.scheme.onSurfaceVariant)
-            .backgroundColor(this.selected === idx ? this.scheme.primary : withAlpha(this.scheme.onSurfaceVariant, 0.10))
-            .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-            .borderRadius(16)
-            // 高亮做淡入淡出,不要硬切。原先 backgroundColor/fontColor 是直接按三元赋值,
-            // 状态一变颜色瞬间跳过去,配上页面的滑动动画就显得生硬。
-            .animation({ duration: 200, curve: Curve.EaseOut })
-            .onClick(() => this.onSelect(idx))
-        }, (label: string, idx: number) => `${idx}-${label}`)
+  /// @Watch 进来的桥:回调时机上 selected 已是新值,读它再进弹簧
+  private onSelectedChange(): void {
+    this.springTo(this.selected);
+  }
+
+  /// 弹簧滑到第 i 个 chip 下(参数与 GlassTabBar 药丸一致,两端手感统一)。
+  /// chip 宽随字数可变,必须用实测值对位;首帧没量到就不动,量到后自然补上。
+  ///
+  /// 手势联动期间胶囊的绘制值是插值而不是 capX:先无动画把 capX 钉到实际绘制
+  /// 位置再弹簧,否则弹簧从旧选中位起跳,视觉上先跳回再弹出去。
+  private springTo(i: number): void {
+    const tx = this.chipX[i] ?? -1;
+    const tw = this.chipW[i] ?? -1;
+    if (tx < 0 || tw <= 0) return;
+    if (this.sync.active && this.sync.to >= 0) {
+      const p = this.sync.progress;
+      const fx = this.chipX[this.sync.from] ?? -1;
+      const fw = this.chipW[this.sync.from] ?? -1;
+      const gx = this.chipX[this.sync.to] ?? -1;
+      const gw = this.chipW[this.sync.to] ?? -1;
+      if (fx >= 0 && fw > 0 && gx >= 0 && gw > 0) {
+        this.capX = fx + (gx - fx) * p;
+        this.capW = fw + (gw - fw) * p;
       }
-      .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding })
-      .onAreaChange(() => { this.revealSelected(); })
     }
-    .scrollable(ScrollDirection.Horizontal)
-    .scrollBar(BarState.Off)
+    this.getUIContext().animateTo({ curve: curves.springMotion(0.3, 0.75) }, () => {
+      this.capX = tx;
+      this.capW = tw;
+    });
+  }
+
+  build() {
+    /**
+     * 外层 Row 负责两侧各收进 12:玻璃胶囊必须「浮」起来(两侧有可见的缝 + 发丝描边)
+     * 才有玻璃的形 —— 通栏贴边时条与页面背景融为一体,静止时玻璃等于隐形,
+     * 看起来就是「没生效」;只有内容滚过条下时才糊得出来。
+     * 不能直接给 width('100%') 的 Scroll 加横向 margin:百分比先按父内容宽算出 100%,
+     * margin 再往外扩,右缘会溢出(与 searchBar 同款坑,见 DiscoverPage 注释)。
+     */
+    Row() {
+      Scroll(this.scroller) {
+        Stack({ alignContent: Alignment.Start }) {
+          /**
+           * 透明胶囊(与 GlassTabBar 同款语言):罩住选中 chip 的半透明衬底 + 发丝描边。
+           * 独立成子组件:Swiper 手势期间每帧只重建这一颗胶囊,不牵动整条 ChipsRow。
+           */
+          ChipsCapsule({
+            scheme: this.scheme,
+            capX: this.capX,
+            capW: this.capW,
+            chipX: this.chipX,
+            chipW: this.chipW,
+            sync: this.sync
+          })
+
+          Row({ space: 8 }) {
+            ForEach(this.labels, (label: string, idx: number) => {
+              Text(label)
+                // chip 文字取 labelLarge(14),与 Android 的 Material FilterChip 同档
+                .fontSize(TypeScale.labelLarge * this.fontScale)
+                // 选中态的底色交给胶囊,chip 自己只换文字色;未选中保持灰底
+                .fontColor(this.selected === idx ? this.scheme.primary : this.scheme.onSurfaceVariant)
+                .backgroundColor(this.selected === idx ? Color.Transparent : withAlpha(this.scheme.onSurfaceVariant, 0.10))
+                .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+                .borderRadius(16)
+                // 高亮做淡入淡出,不要硬切。原先 backgroundColor/fontColor 是直接按三元赋值,
+                // 状态一变颜色瞬间跳过去,配上页面的滑动动画就显得生硬。
+                .animation({ duration: 200, curve: Curve.EaseOut })
+                .onClick(() => this.onSelect(idx))
+                .onAreaChange((_o: Area, n: Area) => {
+                  // Area.position 是相对父组件的局部坐标(d.ts 标注 "local position"):
+                  // 内层 Row 在 Stack 原点,胶囊与 chip 共用同一坐标系,x 直接当 translate 用
+                  this.chipX[idx] = Number(n.position.x);
+                  this.chipW[idx] = Number(n.width);
+                  if (idx === this.selected) this.springTo(idx);
+                })
+            }, (label: string, idx: number) => `${idx}-${label}`)
+          }
+          .padding({ left: 8, right: 8 })
+          .onAreaChange(() => { this.revealSelected(); })
+        }
+      }
+      .scrollable(ScrollDirection.Horizontal)
+      .scrollBar(BarState.Off)
+      .width('100%')
+      .height(CHIPS_STRIP_H)
+      .borderRadius(21)
+      // 玻璃本体:参数与 GlassTabBar 一致(见彼处注释),两端观感统一
+      .backgroundEffect({
+        radius: 40,
+        saturation: 1.3,
+        brightness: 1.0,
+        color: withAlpha(this.scheme.surface, 0.6)
+      })
+      .border({ width: 0.8, color: withAlpha(this.scheme.outline, 0.45) })
+      .align(Alignment.Start)
+    }
     .width('100%')
-    .height(44)
-    .align(Alignment.Start)
+    .height(CHIPS_STRIP_H)
+    .padding({ left: 12, right: 12 })
+  }
+}
+
+/**
+ * 分类条的透明胶囊渲染器,独立成组件的目的是把 Swiper 手势期间的每帧重建
+ * 压到最小面:帧数据经 ChipsSwipeSync 回调推进(@State 仅胶囊自身),
+ * 整条 ChipsRow 与所有 chip 不参与。
+ *
+ * 两种绘制态:手势中(live)按 from→to 插值 1:1 跟手;否则画弹簧静止位
+ * capX/capW(由 ChipsRow 的 springTo 驱动,收尾回调先把 live 摘掉再弹簧,
+ * 因此弹簧中途切回静止位时画的是动画中的当前值,不跳变)。
+ */
+@Component
+struct ChipsCapsule {
+  @Prop scheme: Scheme;
+  @Prop capX: number = 0;
+  @Prop capW: number = 0;
+  /** 手势插值绘制态:live=true 期间画 ix/iw */
+  @State live: boolean = false;
+  @State ix: number = 0;
+  @State iw: number = 0;
+  /** 各 chip 实测位置/宽度 —— 与 ChipsRow 共享同一数组引用,读时即最新值 */
+  chipX: number[] = [];
+  chipW: number[] = [];
+  private sync: ChipsSwipeSync = new ChipsSwipeSync();
+
+  private frameSink = (f: number, t: number, p: number): void => {
+    const fx = this.chipX[f] ?? -1;
+    const tx = this.chipX[t] ?? -1;
+    const fw = this.chipW[f] ?? -1;
+    const tw = this.chipW[t] ?? -1;
+    if (fx < 0 || tx < 0 || fw <= 0 || tw <= 0) return;
+    this.ix = fx + (tx - fx) * p;
+    this.iw = fw + (tw - fw) * p;
+    this.live = true;
+  };
+
+  aboutToAppear(): void {
+    this.sync.onFrame(this.frameSink);
+    // 后于行注册(行的 aboutToAppear 先跑):收尾时行先弹簧、这里再摘插值态
+    this.sync.addEndSink((_t: number): void => { this.live = false; });
+  }
+
+  build() {
+    Row()
+      .width(this.live ? this.iw : this.capW)
+      .height(34)
+      .borderRadius(17)
+      // 染色比底部药丸(0.15)深:胶囊滑到两颗 chip 之间的空档时,底下只有玻璃条 +
+      // 米色页面,0.15 几乎隐形(实测拖到中途截图基本看不见),加深才能读出"在移动"
+      .backgroundColor(withAlpha(this.scheme.primary, 0.26))
+      .border({ width: 0.8, color: withAlpha(this.scheme.primary, 0.30) })
+      .translate({ x: this.live ? this.ix : this.capX })
+      .visibility((this.live || this.capW > 0) ? Visibility.Visible : Visibility.None)
   }
 }

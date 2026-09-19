@@ -9,7 +9,7 @@ import { DownloadStore } from '../store/DownloadStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym } from './Widgets';
-import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow } from './Components';
+import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_STRIP_H, ChipsSwipeSync } from './Components';
 import { Log } from '../util/Logger';
 
 /// 音阁:订阅 / 最新 / 收藏 / 历史 四分段(下载段留后续轮次)。
@@ -18,6 +18,9 @@ import { Log } from '../util/Logger';
 export struct LibraryPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
+  /// 玻璃 tab 栏悬浮后,滚动内容需让出的底部空间(手势条+栏+迷你条,Index 算好传入)。
+  /// 只用于各 List 的 contentEndOffset / 宫格的尾部占位行。
+  @Prop bottomPad: number = 0;
   @ObjectLink player: PlayerController;
   /**
    * 本页渲染用到的 store 一律经 `@ObjectLink` 接收(各 store 均已 `@Observed`,
@@ -49,6 +52,8 @@ export struct LibraryPage {
    * 只影响 chips 的显示。
    */
   @State chipSel: number = 0;
+  /// 顶部分类条胶囊与 Swiper 的手势联动总线(每帧只重建胶囊,见 Components 注释)
+  private chipSync: ChipsSwipeSync = new ChipsSwipeSync();
   /// Swiper 实测宽度,用来判断拖动是否过半
   @State pageW: number = 0;
 
@@ -79,56 +84,92 @@ export struct LibraryPage {
         action: () => { this.headerActions() }
       })
 
-      // 分段 chips(订阅段右侧浮动"行/宫格"切换、历史段浮动"清空")
-      Stack({ alignContent: Alignment.End }) {
-        ChipsRow({
-          scheme: this.scheme,
-          fontScale: this.fontScale,
-          labels: this.segments(),
-          selected: this.chipSel,
-          onSelect: (i: number) => { this.seg = i; this.chipSel = i; }
+      // 玻璃分段条悬浮在内容上,内容从条下滚过(与底部玻璃栏同思路)。
+      // 右侧浮动按钮一并收进条内:chips 会从按钮底下经过,按钮自己也上玻璃
+      // (玻璃叠玻璃)才有遮蔽力;原先的实色背景在玻璃条上是一块补丁。
+      Stack({ alignContent: Alignment.Top }) {
+        Swiper() {
+          this.subscriptionsSection()
+          this.inboxSection()
+          this.favoritesSection()
+          this.downloadsSection()
+          this.historySection()
+        }
+        .index(this.seg)
+        .loop(false)
+        .indicator(false)
+        .cachedCount(1)
+        .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
+        // chips 高亮**跟着手指走**:拖动位移过半即切换,与 Compose 的
+        // pagerState.currentPage(过半更新)手感一致。只改 chipSel,不碰 seg —— 见 chipSel 注释。
+        .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
+          this.chipSel = this.dragTarget(index, e.currentOffset);
+          // 胶囊 1:1 联动:插值目标取拖动方向的相邻页(拖 30% 走 30% 路程),
+          // 与过半预切的 dragTarget 无关;边缘橡皮筋(相邻页不存在)不报,胶囊原地。
+          // currentOffset 实测是**当前页相对其锚点的带符号位移**:向左滑(去下一页,
+          // 序号+1)为负、向右滑为正 —— 与 dragTarget 的方向约定一致
+          // (offset < 0 ? index+1 : index-1);方向写反会被 to<0 边缘保护吞掉(踩过)。
+          if (this.pageW <= 0) return;
+          const to = index + (e.currentOffset < 0 ? 1 : -1);
+          if (to < 0 || to >= this.segments().length) return;
+          this.chipSync.report(index, to,
+            Math.min(1, Math.abs(e.currentOffset) / this.pageW));
         })
-        if (this.seg === 0 && this.subscriptions.subscriptions.length > 0) {
-          // 与 Android 一致:图标按钮,且**图标表示切换后的目标布局**(当前是宫格就显示"列表")
-          Glyph({
-            symbol: this.settings.subsGrid ? Sym.list : Sym.grid,
-            dim: 20, color: this.scheme.onSurfaceVariant
+        // 松手后动画开始就定下目标页(`onChange` 要等动画**结束**才回调,那样 chips 慢一拍)
+        .onAnimationStart((_i: number, target: number) => {
+          this.chipSel = target;
+          // 动画一开始就收束胶囊(提交随落位弹簧、回落原地弹回),不等 onAnimationEnd
+          this.chipSync.end(target);
+        })
+        .onAnimationEnd((_i: number, _e: SwiperAnimationEvent) => {
+          // 兜底:回落若不触发 onAnimationStart,靠这里把胶囊从插值位收回来(幂等)
+          this.chipSync.end(this.chipSel);
+        })
+        .onChange((i: number) => { this.seg = i; this.chipSel = i; })
+        .width('100%')
+        .height('100%')
+
+        Stack({ alignContent: Alignment.End }) {
+          ChipsRow({
+            scheme: this.scheme,
+            fontScale: this.fontScale,
+            labels: this.segments(),
+            selected: this.chipSel,
+            sync: this.chipSync,
+            onSelect: (i: number) => { this.seg = i; this.chipSel = i; }
           })
-            .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
-            .backgroundColor(this.scheme.background)
-            .onClick(() => { this.settings.setSubsGrid(!this.settings.subsGrid); })
+          if (this.seg === 0 && this.subscriptions.subscriptions.length > 0) {
+            // 与 Android 一致:图标按钮,且**图标表示切换后的目标布局**(当前是宫格就显示"列表")
+            Glyph({
+              symbol: this.settings.subsGrid ? Sym.list : Sym.grid,
+              dim: 20, color: this.scheme.onSurfaceVariant
+            })
+              .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
+              .backgroundEffect({
+                radius: 40,
+                saturation: 1.3,
+                brightness: 1.0,
+                color: withAlpha(this.scheme.surface, 0.6)
+              })
+              .onClick(() => { this.settings.setSubsGrid(!this.settings.subsGrid); })
+          }
+          if (this.seg === 4 && this.history.history.length > 0) {
+            Text(L.s('action_clear'))
+              .fontSize(TypeScale.caption * this.fontScale)
+              .fontColor(this.scheme.primary)
+              .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
+              .backgroundEffect({
+                radius: 40,
+                saturation: 1.3,
+                brightness: 1.0,
+                color: withAlpha(this.scheme.surface, 0.6)
+              })
+              .onClick(() => { this.history.clear(); })
+          }
         }
-        if (this.seg === 4 && this.history.history.length > 0) {
-          Text(L.s('action_clear'))
-            .fontSize(TypeScale.caption * this.fontScale)
-            .fontColor(this.scheme.primary)
-            .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
-            .backgroundColor(this.scheme.background)
-            .onClick(() => { this.history.clear(); })
-        }
+        .width('100%')
       }
       .width('100%')
-
-      Swiper() {
-        this.subscriptionsSection()
-        this.inboxSection()
-        this.favoritesSection()
-        this.downloadsSection()
-        this.historySection()
-      }
-      .index(this.seg)
-      .loop(false)
-      .indicator(false)
-      .cachedCount(1)
-      .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
-      // chips 高亮**跟着手指走**:拖动位移过半即切换,与 Compose 的
-      // pagerState.currentPage(过半更新)手感一致。只改 chipSel,不碰 seg —— 见 chipSel 注释。
-      .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
-        this.chipSel = this.dragTarget(index, e.currentOffset);
-      })
-      // 松手后动画开始就定下目标页(`onChange` 要等动画**结束**才回调,那样 chips 慢一拍)
-      .onAnimationStart((_i: number, target: number) => { this.chipSel = target; })
-      .onChange((i: number) => { this.seg = i; this.chipSel = i; })
       .layoutWeight(1)
     }
     .width('100%')
@@ -173,6 +214,8 @@ export struct LibraryPage {
         // 给死高度,而那个 230 是按两列卡高估的常数:改列数、改字号、改字号倍率都会让它算错
         // (算小了滚不到底,算大了底部拖出一片空白)。直接用 Grid 自己滚,这笔账就不用算。
         Grid() {
+          // 顶部占位行:给玻璃分段条让出余量(宫格用不了 List 的 contentStartOffset)
+          GridItem() { Row().width('100%').height(CHIPS_STRIP_H) }
           ForEach(this.subscriptions.subscriptions, (p: Podcast) => {
             GridItem() {
               PodcastGridItem({
@@ -181,6 +224,11 @@ export struct LibraryPage {
               })
             }
           }, (p: Podcast) => p.feedUrl)
+          // 尾部占位行:给玻璃栏底下留滚动余量(宫格用不了 List 的 contentEndOffset)。
+          // 三列格中单个 GridItem 只占一格,但该行行高由它决定,整行皆空,等效通栏留白。
+          if (this.bottomPad > 0) {
+            GridItem() { Row().width('100%').height(this.bottomPad) }
+          }
         }
         .columnsTemplate('1fr 1fr 1fr')
         .columnsGap(Metrics.gridSpacing)
@@ -189,10 +237,16 @@ export struct LibraryPage {
         // 列表分支之所以没暴露这个问题,是因为它靠每个 PodcastListItem 自带的 `top: 10` 撑开;
         // 宫格里没有那层内边距,不给就是零。10 + chips 行自身下方约 7 的余量 ≈ Android 实测的 16.5dp。
         .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 10, bottom: 20 })
+        // Grid 没有 contentEndOffset(List 专属 API):滚动余量靠上面的尾部占位 GridItem
         .scrollBar(BarState.Off)
         .width('100%').height('100%')
       } else {
         List() {
+          // 顶部占位:给玻璃分段条让出高度(contentStartOffset 实测是初始滚动位语义,
+          // 列表重建后首项会被顶到条背后;占位 ListItem 是纯布局,保证首项停在条下方)
+          ListItem() {
+            Row().width('100%').height(CHIPS_STRIP_H)
+          }
           ForEach(this.subscriptions.subscriptions, (p: Podcast) => {
             ListItem() {
               PodcastListItem({
@@ -203,6 +257,7 @@ export struct LibraryPage {
           }, (p: Podcast) => p.feedUrl)
         }
         .scrollBar(BarState.Off)
+        .contentEndOffset(this.bottomPad)
         .width('100%').height('100%')
       }
     }
@@ -224,6 +279,10 @@ export struct LibraryPage {
           }
         } else {
           List() {
+            // 顶部占位:理由见订阅段同名注释
+            ListItem() {
+              Row().width('100%').height(CHIPS_STRIP_H)
+            }
             ForEach(this.inbox.episodes, (e: Episode) => {
               ListItem() {
                 EpisodeListItem({
@@ -240,6 +299,7 @@ export struct LibraryPage {
             }, (e: Episode) => e.id)
           }
           .scrollBar(BarState.Off)
+          .contentEndOffset(this.bottomPad)
           .width('100%').height('100%')
         }
       }
@@ -257,6 +317,10 @@ export struct LibraryPage {
         EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_favorites') })
       } else {
         List() {
+          // 顶部占位:理由见订阅段同名注释
+          ListItem() {
+            Row().width('100%').height(CHIPS_STRIP_H)
+          }
           ForEach(this.favorites.favorites, (e: Episode) => {
             ListItem() {
               EpisodeListItem({
@@ -276,6 +340,7 @@ export struct LibraryPage {
           }, (e: Episode) => e.id)
         }
         .scrollBar(BarState.Off)
+        .contentEndOffset(this.bottomPad)
         .width('100%').height('100%')
       }
     }
@@ -290,6 +355,10 @@ export struct LibraryPage {
         EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_downloads') })
       } else {
         List() {
+          // 顶部占位:理由见订阅段同名注释
+          ListItem() {
+            Row().width('100%').height(CHIPS_STRIP_H)
+          }
           ForEach(this.downloads.downloads, (d: DownloadRow) => {
             ListItem() {
               EpisodeListItem({
@@ -308,6 +377,7 @@ export struct LibraryPage {
           }, (d: DownloadRow) => d.episode.id)
         }
         .scrollBar(BarState.Off)
+        .contentEndOffset(this.bottomPad)
         .width('100%').height('100%')
       }
     }
@@ -326,6 +396,10 @@ export struct LibraryPage {
         EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_history') })
       } else {
         List() {
+          // 顶部占位:理由见订阅段同名注释
+          ListItem() {
+            Row().width('100%').height(CHIPS_STRIP_H)
+          }
           ForEach(this.history.history, (h: HistoryRow) => {
             ListItem() {
               EpisodeListItem({
@@ -342,6 +416,7 @@ export struct LibraryPage {
           }, (h: HistoryRow) => h.episode.id)
         }
         .scrollBar(BarState.Off)
+        .contentEndOffset(this.bottomPad)
         .width('100%').height('100%')
       }
     }

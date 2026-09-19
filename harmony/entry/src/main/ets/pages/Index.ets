@@ -13,6 +13,7 @@ import { DiscoverPage } from '../view/DiscoverPage';
 import { PodcastDetailPage } from '../view/PodcastDetailPage';
 import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
+import { GlassTabBar } from '../view/GlassTabBar';
 import { LibraryPage } from '../view/LibraryPage';
 import { SettingsPage } from '../view/SettingsPage';
 import { PrivacyConsentPage } from '../view/PrivacyConsentPage';
@@ -371,161 +372,104 @@ struct Index {
     }
   }
 
+  /// 页面滚动内容需为玻璃悬浮层让出的底部空间:
+  /// 手势条 bottomInset + tab 栏 56 + 迷你条(2 细线 + 42 封面 + 上下 8 = 60)+ 分隔线 0.5。
+  /// 迷你条的出现/消失经 onStateChanged → tick 触发重渲,这里随之重算并经 @Prop 传下去。
+  private underBarPad(): number {
+    const mini = this.player.current !== null ? 60.5 : 0;
+    return this.bottomInset + 56 + mini;
+  }
+
   @Builder
   shell() {
-    Column() {
-      Tabs({ barPosition: BarPosition.End, index: this.tab }) {
-        TabContent() {
-          DiscoverPage({
-            scheme: this.scheme(),
-            fontScale: this.fontScale(),
-            settings: this.settings,
-            history: this.history,
-            subscriptions: this.subscriptions,
-            radio: this.radio,
-            // `CATALOG=false` 的降级渠道下,有订阅的人首屏主体就是「最新」+ 播放态高亮(见 subscribeStarter)
-            inbox: this.inbox,
-            player: this.player,
-            onOpenPodcast: (p: Podcast) => this.openPodcast(p),
-            onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
-          })
+    // Stack 叠层:内容在下、撑满全屏(**延伸到玻璃栏与手势条底下**),迷你条 +
+    // 玻璃 tab 栏悬浮在上。旧结构是「Tabs → 迷你条 → 栏」纵向排开互不重叠;
+    // 改玻璃栏后必须让内容从栏下滚过,模糊才有东西可糊。
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column() {
+        Tabs({ barPosition: BarPosition.End, index: this.tab }) {
+          TabContent() {
+            DiscoverPage({
+              scheme: this.scheme(),
+              fontScale: this.fontScale(),
+              settings: this.settings,
+              history: this.history,
+              subscriptions: this.subscriptions,
+              radio: this.radio,
+              // `CATALOG=false` 的降级渠道下,有订阅的人首屏主体就是「最新」+ 播放态高亮(见 subscribeStarter)
+              inbox: this.inbox,
+              player: this.player,
+              bottomPad: this.underBarPad(),
+              onOpenPodcast: (p: Podcast) => this.openPodcast(p),
+              onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
+            })
+          }
+
+
+          TabContent() {
+            LibraryPage({
+              scheme: this.scheme(),
+              fontScale: this.fontScale(),
+              player: this.player,
+              settings: this.settings,
+              subscriptions: this.subscriptions,
+              inbox: this.inbox,
+              favorites: this.favorites,
+              downloads: this.downloads,
+              history: this.history,
+              downloadManager: this.downloadManager,
+              bottomPad: this.underBarPad(),
+              onOpenPodcast: (p: Podcast) => this.openPodcast(p),
+              onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q),
+              onOpenSettings: () => { this.stack.pushPathByName('settings', null); },
+              onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); }
+            })
+          }
+
         }
-
-
-        TabContent() {
-          LibraryPage({
-            scheme: this.scheme(),
-            fontScale: this.fontScale(),
-            player: this.player,
-            settings: this.settings,
-            subscriptions: this.subscriptions,
-            inbox: this.inbox,
-            favorites: this.favorites,
-            downloads: this.downloads,
-            history: this.history,
-            downloadManager: this.downloadManager,
-            onOpenPodcast: (p: Podcast) => this.openPodcast(p),
-            onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q),
-            onOpenSettings: () => { this.stack.pushPathByName('settings', null); },
-            onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); }
-          })
-        }
-
+        // 依旧隐掉 Tabs 自带 bar(barHeight(0)),底部栏用 GlassTabBar。
+        // 迷你条在栏**上方**的顺序与 Android 一致 —— 两者同处悬浮层,顺序天然成立。
+        .barHeight(0)
+        .barMode(BarMode.Fixed)
+        .scrollable(false)
+        .onChange((i: number) => { this.tab = i; })
+        .width('100%')
+        .height('100%')
       }
-      // 隐掉 Tabs 自带的 bar,底部栏自绘。
-      // 为什么:迷你播放条必须在 tab 栏**上方**(与 Android 的 bottomBar 顺序一致:
-      // 迷你条 → 分隔线 → NavigationBar)。而 Tabs 自带的 bar 属于 Tabs 组件自身、
-      // 固定在它的底边,任何作为 Tabs **兄弟节点**排在其后的东西都只能落到 tab 栏下面 ——
-      // 原先迷你条就是这么跑到 tab 下面去的。
-      .barHeight(0)
-      .barMode(BarMode.Fixed)
-      .scrollable(false)
-      .onChange((i: number) => { this.tab = i; })
-      .layoutWeight(1)
+      .width('100%')
+      .height('100%')
+      .padding({ top: this.topInset })
 
-      if (this.player.current !== null) {
-        MiniPlayerBar({
+      Column() {
+        if (this.player.current !== null) {
+          MiniPlayerBar({
+            scheme: this.scheme(),
+            fontScale: this.fontScale(),
+            player: this.player,
+            onExpand: () => { this.stack.pushPathByName('player', null); },
+            onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
+          })
+          // 仅在迷你条出现时画分隔线(与 Android 一致)
+          Divider()
+            .strokeWidth(0.5)
+            .color(withAlpha(this.scheme().outline, 0.6))
+        }
+        GlassTabBar({
           scheme: this.scheme(),
           fontScale: this.fontScale(),
-          player: this.player,
-          onExpand: () => { this.stack.pushPathByName('player', null); },
-          onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
+          tab: this.tab,
+          inset: this.bottomInset,
+          items: [
+            { label: $r('app.string.nav_discover'), icon: $r('app.media.ic_tab_discover') },
+            { label: $r('app.string.nav_library'), icon: $r('app.media.ic_tab_library') }
+          ],
+          onSelect: (i: number) => { this.tab = i; }
         })
-        // 仅在迷你条出现时画分隔线(与 Android 一致)
-        Divider()
-          .strokeWidth(0.5)
-          .color(withAlpha(this.scheme().outline, 0.6))
       }
-
-      this.bottomBar()
+      .width('100%')
     }
     .width('100%')
     .height('100%')
-    .padding({ top: this.topInset, bottom: this.bottomInset })
     .backgroundColor(this.scheme().background)
   }
-
-  /// 自绘底部 tab 栏(替代 Tabs 自带 bar,理由见 shell() 注释)。
-  @Builder
-  bottomBar() {
-    Row() {
-      // 图标用**与 Android 完全相同的两枚 Material Rounded 矢量**(见 tabBarItem 注释)
-      this.tabBarItem($r('app.string.nav_discover'), $r('app.media.ic_tab_discover'), 0)
-      this.tabBarItem($r('app.string.nav_library'), $r('app.media.ic_tab_library'), 1)
-    }
-    .width('100%')
-    /**
-     * 64 —— 落在鸿蒙规范值(56)与 Material NavigationBar(80)之间,两头都试过:
-     *  - **80 太笨重**:那是 Material 给 Android 的规范;而本机逻辑宽度约 376vp、
-     *    Android 那台 427dp,**同一个绝对值在鸿蒙上占屏比例大 14%**,照抄像素必然显大。
-     *  - **56 又挤不开**:药丸只能给到 48×26,图标四周、药丸与文字、药丸与栏上沿
-     *    三处留白都不够,而这三处留白正是 Android 那枚药丸好看的原因。
-     *
-     * 64 的内部分配:约 7 上边距 + 30 药丸 + 4 间隙 + 15 文字 + 约 8 下边距。
-     *
-     * 判据分两类,别混:**字号**按绝对物理尺寸对齐(16sp 的字两端就该一样大,是可读性常量);
-     * **外壳尺寸**(栏高/图标/内边距)不照抄像素,按平台规范 + 实机观感取值。
-     */
-    .height(64)
-    .backgroundColor(this.scheme().surface)
-  }
-
-  /// 底部 tab 项。图标与 Android 对齐:发现 = Explore(罗盘/发现),音阁 = LibraryMusic(音乐列表)。
-  /// 原先误用了放大镜与相册 —— `sys.media.*` 里没有这两个形状,只能拿近似的凑;
-  /// 换成 Symbol 字体后有正主(见 Sym)。
-  @Builder
-  tabBarItem(label: Resource, icon: Resource, index: number) {
-    Column({ space: 4 }) {
-      /**
-       * 选中项衬一枚药丸底。**64×30,图标 20** —— 三处留白是这枚药丸好看的关键,
-       * 也正是先前 48×26 缺的:
-       *   图标到药丸左右   (64-20)/2 = 22
-       *   图标到药丸上下   (30-20)/2 = 5
-       *   药丸到下方文字   4
-       *   药丸到栏上沿     约 7(由 64 栏高居中得出)
-       * 宽度取满 64:窄药丸裹着图标像个按钮,宽一些才像"这一栏被选中了"。
-       *
-       * **图标是从 Android 搬过来的同两枚 Material Rounded 矢量**
-       * (`Icons.Rounded.Explore` / `Icons.Rounded.LibraryMusic`,Apache-2.0),
-       * 以 SVG 放在 `resources/base/media/ic_tab_*.svg`,用 `Image + fillColor` 染色。
-       *
-       * 为什么不继续用 Symbol 字体:两端底部 tab 是**并排截图最先被看到的地方**,
-       * 而 Symbol 里没有形状对得上的对等件 —— `discover` 是个细描边大圆环、
-       * `music_note_list` 是三横线加符号,与 Material 的罗盘/唱片盒差得远,
-       * 发布截图放在一起就是两个应用。图标形状属于品牌一致性,不属于"平台惯例"那一类,
-       * 所以这里取一致而不取各自平台形态。
-       *
-       * 也因此**不再做"选中实心 / 未选中描边"的切换** —— Android 侧两个状态用的是同一枚图标,
-       * 靠药丸底与颜色表示选中,鸿蒙照此对齐。
-       *
-       * 尺寸 22 而非 Android 的 24:22 是先前用 Symbol 时调好的观感值,换成同一批矢量后
-       * 22 与 Android 的 24 视觉相当(本机逻辑宽度更窄,见 bottomBar 注释)。
-       *
-       * 药丸本身值得有:原先只靠图标与文字变色表示选中,"当前在哪一栏"太弱。
-       */
-      Stack() {
-        if (this.tab === index) {
-          Row()
-            .width(64).height(30)
-            .borderRadius(15)
-            .backgroundColor(withAlpha(this.scheme().primary, 0.18))
-        }
-        // 用 Image 而非 SymbolGlyph:这两枚是从 Material 取来的 SVG(见下方注释)。
-        // SVG 走 fillColor 染色,与 Symbol 的 fontColor 等效。
-        Image(icon)
-          .width(22).height(22)
-          .fillColor(this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant)
-      }
-      .width(64).height(30)
-      Text(label)
-        .fontSize(TypeScale.caption * this.fontScale())
-        .letterSpacing(Tracking.caption)
-        .fontColor(this.tab === index ? this.scheme().primary : this.scheme().onSurfaceVariant)
-    }
-    .layoutWeight(1)
-    .height('100%')
-    .justifyContent(FlexAlign.Center)
-    .onClick(() => { this.tab = index; })
-  }
-
 }

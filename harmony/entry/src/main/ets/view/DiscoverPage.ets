@@ -8,7 +8,7 @@ import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/G
 import { AppContainer } from '../AppContainer';
 import { FeedProbeState } from '../net/PodcastRepository';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
-import { PodcastListItem, EpisodeListItem, ChipsRow } from './Components';
+import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_STRIP_H, ChipsSwipeSync } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
 import { PlayerController } from '../playback/PlayerController';
 import { SettingsStore } from '../store/SettingsStore';
@@ -22,6 +22,10 @@ import { Log } from '../util/Logger';
 export struct DiscoverPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
+  /// 玻璃 tab 栏悬浮后,滚动内容需让出的底部空间(手势条+栏+迷你条,Index 算好传入)。
+  /// 只用于各 List 的 contentEndOffset —— 最后一项要能滚出栏底、取得到,内容又要
+  /// 从栏下经过玻璃才糊得出来。
+  @Prop bottomPad: number = 0;
   /// 见 LibraryPage 同名注释:驱动界面的 store 必须被观察,不能 `this.app.xxx` 直读。
   /// 电台按钮(图标/激活态/准备中)与「继续收听」都依赖它们。
   @ObjectLink settings: SettingsStore;
@@ -43,6 +47,8 @@ export struct DiscoverPage {
   @State catIndex: number = 0;
   /// chips 高亮专用索引,与驱动 Swiper `.index()` 的 catIndex 分开(理由见 LibraryPage 同名注释)
   @State chipSel: number = 0;
+  /// 顶部分类条胶囊与 Swiper 的手势联动总线(每帧只重建胶囊,见 Components 注释)
+  private chipSync: ChipsSwipeSync = new ChipsSwipeSync();
   /// Swiper 实测宽度,用于判断拖动是否过半
   @State pageW: number = 0;
   @State lists: Podcast[][] = [];          // 每个分类一份榜单
@@ -312,39 +318,68 @@ export struct DiscoverPage {
         // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
         this.subscribeStarter()
       } else {
-        ChipsRow({
-          scheme: this.scheme,
-          fontScale: this.fontScale,
-          labels: DISCOVER_CATEGORIES.map((c: DiscoverCategory) => categoryLabel(c)),
-          selected: this.chipSel,
-          onSelect: (i: number) => {
+        // 玻璃分段条悬浮在内容上,内容从条下滚过(与底部玻璃栏同思路);
+        // 榜单 List 用 contentStartOffset(CHIPS_STRIP_H) 留出顶部余量。
+        Stack({ alignContent: Alignment.Top }) {
+          Swiper() {
+            ForEach(DISCOVER_CATEGORIES, (cat: DiscoverCategory, idx: number) => {
+              this.categoryPage(idx)
+            }, (cat: DiscoverCategory) => cat.key)
+          }
+          .index(this.catIndex)
+          .loop(false)
+          .indicator(false)
+          .cachedCount(1)
+          .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
+          // chips 高亮跟着手指走(位移过半即切),只改 chipSel、不碰 catIndex —— 详见 LibraryPage 注释
+          .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
+            this.chipSel = this.dragTarget(index, e.currentOffset);
+            // 胶囊 1:1 联动:插值目标取拖动方向的相邻页,与过半预切的 dragTarget 无关 ——
+            // 拖 30% 就该走 30% 路程;边缘橡皮筋(相邻页不存在)不报,胶囊原地不动。
+            // currentOffset 实测是**当前页相对其锚点的带符号位移**:向左滑(去下一页,
+            // 序号+1)为负、向右滑为正 —— 与既有 dragTarget 的方向约定一致
+            // (offset < 0 ? index+1 : index-1)。若按"负=往前一页"理解,0→1 的拖动
+            // 会被 to<0 的边缘保护整个吞掉,胶囊纹丝不动(踩过)。
+            if (this.pageW <= 0) return;
+            const to = index + (e.currentOffset < 0 ? 1 : -1);
+            if (to < 0 || to >= DISCOVER_CATEGORIES.length) return;
+            this.chipSync.report(index, to,
+              Math.min(1, Math.abs(e.currentOffset) / this.pageW));
+          })
+          .onAnimationStart((_i: number, target: number) => {
+            this.chipSel = target;
+            // 动画一开始就收束胶囊:提交时随落位弹簧过去,回落时原地弹回 ——
+            // 都不等 onAnimationEnd,否则手势帧已停,胶囊会僵在插值位直到动画结束
+            this.chipSync.end(target);
+          })
+          .onAnimationEnd((_i: number, _e: SwiperAnimationEvent) => {
+            // 兜底:回落若不触发 onAnimationStart,靠这里把胶囊从插值位收回来(幂等)
+            this.chipSync.end(this.chipSel);
+          })
+          // 榜单加载**只在落位后**做:放到 gestureSwipe/animationStart 会让快速连滑时
+          // 每划过一页都发一次网络请求。
+          .onChange((i: number) => {
             this.catIndex = i;
             this.chipSel = i;
             if (this.lists[i].length === 0) this.loadCategory(i, false);
-          }
-        })
-        Swiper() {
-          ForEach(DISCOVER_CATEGORIES, (cat: DiscoverCategory, idx: number) => {
-            this.categoryPage(idx)
-          }, (cat: DiscoverCategory) => cat.key)
+          })
+          .width('100%')
+          .height('100%')
+
+          ChipsRow({
+            scheme: this.scheme,
+            fontScale: this.fontScale,
+            labels: DISCOVER_CATEGORIES.map((c: DiscoverCategory) => categoryLabel(c)),
+            selected: this.chipSel,
+            sync: this.chipSync,
+            onSelect: (i: number) => {
+              this.catIndex = i;
+              this.chipSel = i;
+              if (this.lists[i].length === 0) this.loadCategory(i, false);
+            }
+          })
         }
-        .index(this.catIndex)
-        .loop(false)
-        .indicator(false)
-        .cachedCount(1)
-        .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
-        // chips 高亮跟着手指走(位移过半即切),只改 chipSel、不碰 catIndex —— 详见 LibraryPage 注释
-        .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
-          this.chipSel = this.dragTarget(index, e.currentOffset);
-        })
-        .onAnimationStart((_i: number, target: number) => { this.chipSel = target; })
-        // 榜单加载**只在落位后**做:放到 gestureSwipe/animationStart 会让快速连滑时
-        // 每划过一页都发一次网络请求。
-        .onChange((i: number) => {
-          this.catIndex = i;
-          this.chipSel = i;
-          if (this.lists[i].length === 0) this.loadCategory(i, false);
-        })
+        .width('100%')
         .layoutWeight(1)
       }
     }
@@ -489,6 +524,7 @@ export struct DiscoverPage {
       }
     }
     .scrollBar(BarState.Off)
+    .contentEndOffset(this.bottomPad)
     .width('100%')
     .layoutWeight(1)
   }
@@ -546,6 +582,7 @@ export struct DiscoverPage {
         }
       }
       .scrollBar(BarState.Off)
+      .contentEndOffset(this.bottomPad)
       .width('100%').height('100%')
     }
     .onRefreshing(() => { this.refreshInbox(true); })
@@ -670,6 +707,12 @@ export struct DiscoverPage {
           EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('discover_empty') })
         } else {
           List() {
+            // 顶部占位:给玻璃分段条让出高度。不用 contentStartOffset —— 实测它是
+            // 「初始滚动位」语义而不是内容留白:列表随数据到位重建后首项会被顶到条背后,
+            // 静止时只剩一条缝露在条外。占位 ListItem 是纯布局,保证首项停在条下方。
+            ListItem() {
+              Row().width('100%').height(CHIPS_STRIP_H)
+            }
             if (this.continueEntries().length > 0) {
               ListItem() {
                 this.continueStrip()
@@ -697,6 +740,7 @@ export struct DiscoverPage {
             }, (p: Podcast) => p.id)
           }
           .scrollBar(BarState.Off)
+          .contentEndOffset(this.bottomPad)
           .width('100%').height('100%')
         }
       }
@@ -857,6 +901,7 @@ export struct DiscoverPage {
             }, (p: Podcast) => p.id)
           }
           .scrollBar(BarState.Off)
+          .contentEndOffset(this.bottomPad)
           .layoutWeight(1)
         }
       } else {
@@ -888,6 +933,7 @@ export struct DiscoverPage {
             }, (e: Episode) => e.id)
           }
           .scrollBar(BarState.Off)
+          .contentEndOffset(this.bottomPad)
           .layoutWeight(1)
         }
       }
