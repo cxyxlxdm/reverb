@@ -175,7 +175,9 @@ fun GlassNavBar(
                 .fillMaxWidth()
                 .height(barH)
                 // 投影给 z 轴高度:整条栏"浮"在页面之上,而非贴底的一块平面
-                .shadow(elevation = 8.dp, shape = RoundedCornerShape(28.dp), clip = false)
+                // 阴影外形用真胶囊,理由见 Components.kt GlassChipsRow(H92):
+                // 半径小于半高的高程阴影在形状中央留接缝,透过半透明玻璃显形。
+                .shadow(elevation = 8.dp, shape = RoundedCornerShape(percent = 50), clip = false)
                 .clip(RoundedCornerShape(28.dp))
                 // 玻璃打底:半透明 surface + 发丝描边(透明度取舍见类注释)
                 .background(colorScheme.surface.copy(alpha = 0.85f))

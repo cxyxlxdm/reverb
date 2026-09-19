@@ -183,7 +183,11 @@ fun GlassChipsRow(
                 .onGloballyPositioned { boxOriginX = it.positionInWindow().x }
                 .fillMaxWidth()
                 .height(44.dp)
-                .shadow(elevation = 6.dp, shape = RoundedCornerShape(21.dp), clip = false)
+                // 阴影外形必须用真胶囊(percent=50),不能用与外观同款的 21dp:
+                // 半径小于半高时,RenderNode 高程阴影的上下两条直边投影在形状中央
+                // 留下一条未覆盖的接缝,透过 α0.85 玻璃显形为白线(H92;21dp→6px,
+                // 19dp→17px,真胶囊→≈1px)。视觉裁剪仍用 21dp,观感不变。
+                .shadow(elevation = 6.dp, shape = RoundedCornerShape(percent = 50), clip = false)
                 .clip(RoundedCornerShape(21.dp))
                 .background(colorScheme.surface.copy(alpha = 0.85f))
                 .border(0.8.dp, colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(21.dp))
