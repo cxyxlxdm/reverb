@@ -330,7 +330,7 @@ def _probe(url):
 # 判定为提供视听节目服务(需前置审批),而「用户自行添加 RSS 源」的纯工具不需要。
 # 因此清单**移出安装包、挂到官网**,App 内只保留一个「导入推荐订阅」的动作,
 # 不在应用内渲染任何可浏览的节目目录。
-OPML_OUT = os.path.join(HERE, "..", "..", "reverb", "recommended.opml")
+OPML_OUT = os.path.join(HERE, "..", "..", "site", "reverb", "recommended.opml")
 OPML_COUNT = 15          # 一次性导入的订阅数。太多会让用户的订阅页一上来就爆
 OPML_PER_GENRE = 2       # 每个分类最多取几条,保证口味有跨度
 

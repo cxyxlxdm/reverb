@@ -17,8 +17,8 @@
 | `harmony/` | HarmonyOS | ArkTS / ArkUI |
 | `macos/` | macOS | Swift / SwiftUI |
 | `shared/` | 共享物料 | 图标、种子清单、引导音频(脚本分发到各端) |
-| `reverb/` `site/` | 官网与隐私政策页 | 静态 HTML |
-| `reverb-android/` `reverb/shots/` | 发布截图 | 原始 / 发布 / 官网三套 |
+| `site/` | 个人主页 + 余音官网与隐私政策页(`site/reverb/`) | 静态 HTML |
+| `*/dist/store/` | 发布截图(不入版本管理) | 分发平台要求恰为 1080×1920;原生分辨率中间图在 `*/dist/store-masters/` |
 
 **四条不可动摇的约束**(所有设计的上游):
 
@@ -80,12 +80,29 @@ swift build -c release             # 只编译
 # 抓图:鸿蒙只能写 .jpeg,除非显式 -t png
 hdc shell snapshot_display -t png -f /data/local/tmp/x.png && hdc file recv /data/local/tmp/x.png .
 adb exec-out screencap -p > x.png
-# 生成发布图:居中垫到 9:16,底色是 App 深色背景 #141E20
-ffmpeg -i 原图.png -vf "pad=1575:2800:(ow-iw)/2:0:0x141E20" -pix_fmt rgba 发布图.png   # Android 1272×2800
-ffmpeg -i 原图.png -vf "pad=1512:2688:(ow-iw)/2:0:0x141E20" -pix_fmt rgb24 发布图.png  # 鸿蒙 1216×2688
+# 生成发布图:分发平台上传校验要求竖屏截图恰为 1080×1920 —— 原生分辨率直出会被拒收
+# (1.0.2 提交复核实测;曾以为商店接受原生长图,错了)。两步:Android 先裁状态栏
+# (该厂商定制 ROM frame 高 141px,含常驻提醒条),鸿蒙原图直出;再等比缩到高 1920、
+# 两侧补边到 1080 宽。补边色逐图取左缘均值(深色主题下都 ≈#141E20,±2 以内),
+# 与图内底色一致:不裁切 UI、不出现异色黑边。原生分辨率中间图留存
+# `*/dist/store-masters/`,重排随时可重做
+ffmpeg -i 原图.png -vf "crop=1272:2659:0:141,scale=-2:1920:flags=lanczos,pad=1080:1920:(ow-iw)/2:0:color=0x141E20" -pix_fmt rgb24 发布图.png   # Android 原图 1272×2800
+ffmpeg -i 原图.png -vf "scale=-2:1920:flags=lanczos,pad=1080:1920:(ow-iw)/2:0:color=0x141E20" -pix_fmt rgb24 发布图.png   # 鸿蒙 1216×2688
 ```
 
-鸿蒙还有一套官网图:`ffmpeg -vf scale=407:900 -q:v 4` → `reverb/shots/web/*.jpg`。
+拍摄前置条件(两条都踩过坑):
+- **深浅跟随系统**:Android 端 App 的深/浅色随系统日/夜模式,截图前必须
+  `adb shell cmd uimode night yes`,拍完恢复 `night no`;否则整套图是浅色的
+  (1.0.2 曾因此 8 张全部返工)。
+- **预览必须用副本**:`sips -Z 420 原图.png` 会原地覆写毁掉原图,预览一律
+  `cp 原图 pv && sips -Z 420 pv`(已两次毁掉整批原图)。
+
+成图落位:鸿蒙 → `harmony/dist/store/`,Android → `android/dist/store/`(dist 已被
+各端 .gitignore 忽略,截图含真实收听数据,不入库)。命名 01-start…09-settings,
+两端同名同序,便于对照;原生分辨率中间图在同级 `store-masters/`。
+
+鸿蒙还有一套官网图:`ffmpeg -vf scale=407:900 -q:v 4` → `site/reverb/shots/*.jpg`
+(同样不入库,官网部署时手工上传)。
 
 ---
 
@@ -134,7 +151,7 @@ native 库与模型是构建系统按 source set 打进包的。渠道要「没�
 | **App 内关于页**(`about_p_features` / `about_p_philosophy`) | 复核人员一定会读到;Android 需按渠道分别写 |
 | 设置项标题与副标题 | 副标题常含「为什么/代价」,行为一改就不成立 |
 | `docs/PRODUCT.md` + `docs/FEATURES.md` | 同一件事的叙述版与矩阵版,**两份都要改** |
-| 发布文案 `*/store/发布文案.txt` | 两端各一份 |
+| 发布文案(本地文件,不入库)`*/store/发布文案.txt` | 两端各一份;版本说明以 `CHANGELOG.md` 为上游 |
 | `docs/PRIVACY.md` + `reverb/privacy.html` + 同意页正文 | 涉及权限/网络/数据用途时 |
 | 发布截图 | 任何 UI/文案改动都会让它过期 |
 
@@ -244,6 +261,20 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 真相用**切片法**定(把音频截到 1.0 / 1.3 秒分别识别,看第几个字还在里面)。
 在此之前靠现象猜原因,错了两次。
 
+### 19. 应用市场相关资料不入版本控制 —— changelog 例外入库
+
+发布文案(`*/store/发布文案.txt`)、分发平台上传图标(`*/store/appicon-*.png`)、
+发布截图(`*/dist/store/`)、发布物料包及其 zip —— 与签名材料同待遇,
+**一律本地留存**(2026-09-20 起 `store/` 目录已从索引移除,忽略规则在根 `.gitignore`)。
+
+为什么统一切出去而不是逐个判断:这些物料"逐个审"迟早出错 —— 截图里是真实收听数据,
+文案和图标混着发布身份;而它们对读代码的人本来就没有价值。真正对外的信息另有出口:
+版本变更写 **`CHANGELOG.md`(入库,发版时先更新它,再同步进本地发布文案)**,
+隐私与合规写 `docs/PRIVACY.md`,迁移与本地资产清单写 `docs/LOCAL-ASSETS.md`。
+
+注意:**移出版本控制 ≠ 从历史消失**。store/ 移出前的历史里仍是图标与文案这类
+公开物料,无需重写历史 —— 需要重写历史的是口令泄露(见 14),不是运营物料。
+
 ---
 
 ## 代码风格
@@ -266,6 +297,7 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 
 - **完成一段任务就提交**,不要攒一大坨。提交信息按上面的要求写。
 - **改完能编译的要编译一遍**;改了产物要重打包并解包核对(尤其渠道相关)。
+- **发版时先更新 `CHANGELOG.md`**,再把它抄进两份本地发布文案的「版本说明」段(硬规矩 19)。
 - 报告结果要如实:失败就贴输出,跳过的步骤要说明。
   这个项目的文档里刻意保留了「已知问题」「没验过的路径」——同样的诚实标准适用于对话。
 
@@ -283,7 +315,9 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 | `docs/TROUBLESHOOTING.md` | **踩坑记录**:现象/根因/修法/可复用的规律 |
 | `docs/HISTORY.md` | 开发历程(顺序与因果,返工写得更详细) |
 | `docs/ROADMAP.md` | 进度、遗留问题、演进方向(**含「没验过的路径」清单**) |
-| ~~分发登记材料~~ | **不入版本控制**(主体信息与证书指纹属个人身份信息,只在本地);口径与理由见 `docs/HISTORY.md` 阶段五 |
+| `CHANGELOG.md` | 版本变更记录(发版时追加;本地发布文案「版本说明」的上游) |
+| `docs/LOCAL-ASSETS.md` | **本地资产与换机迁移**(哪些东西不在 git 里、新机怎么完整重建) |
+| ~~分发登记材料~~、~~`*/store/`~~ | **不入版本控制**:分发登记材料是个人身份信息;发布文案/图标/截图/kit 是运营物料(硬规矩 19)。清单与换机流程见 `docs/LOCAL-ASSETS.md` |
 | `docs/PRIVACY.md` | 隐私政策(与 `reverb/privacy.html` 必须同步) |
 
 **动手之前**:改逐字稿看 `docs/TRANSCRIPT.md`;改渠道相关看 `docs/FEATURES.md` 渠道差异一节 +

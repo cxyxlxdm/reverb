@@ -45,14 +45,31 @@
   (manifest + 两份规则各 9 项 include)、鸿蒙 hap 解包、真机 `bm dump` 注册确认
   与数据路径核对;隐私文案五语种同步且**未升 PRIVACY_VERSION**(不重弹同意页)。
 
-**出包前还差的清单**:
+**出包前还差的清单**(✅ 2026-09-20 已出包并部分验完):
 
-1. 版本号:Android versionCode 3 / versionName 1.0.2,鸿蒙 1000002 / 1.0.2
-2. 重拍两端 `02-detail` 截图(详情页新增分享图标),重建 发布物料包
-3. **release 包解包复核**:备份规则、目录接口、权限按硬规矩 1 全套 grep(H84 遗留)
-4. **商店渠道重跑安全扫描**:H75 的误报缓解措施之一(allowBackup=false)被翻转
-5. 系统设置人工触发一次云备份,确认备份产物体量与白名单相符
-6. 官网三个页面部署上线(见「二、阻塞发布的」)
+1. ✅ 版本号:Android versionCode 3 / versionName 1.0.2,鸿蒙 1000002 / 1.0.2,macOS 1.0.2(8795273)
+2. ✅ 重拍两端发布截图并重建 发布物料包(✅ 2026-09-20):液态玻璃导航(b1c8efd/b81e4b6)
+   出现在几乎每张截图里,整套重拍;01/02/03/04/06/07/08/09 共 8 张 × 两端,
+   成图落 `harmony/dist/store/` 与 `android/dist/store/`(同日根目录素材已收拢,见提交 524981c);
+   口径两次定稿:先按原生分辨率直出(Android 裁状态栏 141px → 1272×2659;鸿蒙 1216×2688),
+   随后 分发平台上传校验拒收 —— 竖屏截图必须恰为 **1080×1920**。终图改为等比缩到高 1920、
+   两侧补与图内底色一致的边(逐图取左缘均值,深色主题下 ≈#141E20),原生分辨率中间图
+   留 `*/dist/store-masters/`;全部深色 —— Android 端深浅随系统,须先 `cmd uimode night yes`;
+   06-history 因收听历史含敏感词(王志安/柴静)改为下滑两屏后的取景;
+   两份 发布物料包已按既有目录结构重建(reverb-harmony-发布物料包.zip /
+   reverb-store-发布物料包.zip,含 1.0.2 产物+图标+隐私页+文案+8 张截图)
+3. ✅ release 包解包复核(硬规矩 1 全套):商店渠道 native/模型 0、目录接口 grep 4、
+   权限无 RECORD_AUDIO;两渠道 allowBackup=true + fullBackupContent 9 项 include +
+   dataExtractionRules(云+迁移两段各 9);鸿蒙 release .app 的 modules.abc 目录接口 grep 3、
+   BackupExtension + backup_config 8 项 include、权限仅 INTERNET/GET_NETWORK_INFO/KEEP_BACKGROUND_RUNNING;
+   版本号三包核对一致。产物 SHA-256 已写入 harmony/store/发布文案.txt
+4. ⬜ **商店渠道重跑安全扫描**:H75 的误报缓解措施之一(allowBackup=false)被翻转(提交复核时人工)
+5. ✅/⬜ App 内备份恢复跨端链路已验:桌面 reverb-backup.json(订阅 31/历史 100/统计 88/设置)
+   经 hdc 推到鸿蒙 Download → 设置→恢复备份→选文件 → hilog「恢复订阅 31 条/恢复下载 1 集/
+   恢复完成 importedSettings=true」,订阅/历史/收听统计页面均实数据渲染(2026-09-20 debug hap 真机)。
+   ⬜ 剩系统云备份链路:Android 已验(LocalTransport,见上表);鸿蒙等市场包发布后走
+   (debug 包不进备份选项清单,见 harmony-cloud-backup 卡口)
+6. ⬜ 官网三个页面部署上线(见「二、阻塞发布的」)
 
 ---
 
@@ -164,6 +181,19 @@ Android 大陆商店版已于 2026-09-01 用签名 store release 重拍 `01-star
 拍摄时两端均为深色·水墨主题、商店渠道机型;Android 拍摄前把「地区」设为
 中国大陆使榜单与 1.0.0 素材同源。官网 web 图中 `01-discover` 仍为旧发现页,
 官网发布前需一并更新。
+
+1.0.2 于 2026-09-20 两端整套重拍 8 张(液态玻璃导航入镜所致,见上「出包前清单」2),
+数据用净化备份恢复(历史/时长剔除敏感频道,拍摄后原备份已恢复回设备);
+Android 素材从本版起不带状态栏(裁 141px,口径已写进 AGENTS.md「截图」)。
+本次 05-inbox 与 10-licenses、`_spare-privacy-consent` 不再随套重拍 —— 商店
+清单本就只传 8 张。官网 4 张 web 图同日全部更新:3 张(01-discover/03-player/
+09-settings)由新终图再生,10-licenses 连设备在深色下补拍 —— 官网截图已整套
+1.0.2 深色界面,部署前无截图遗留。
+
+**仓库口径变更(2026-09-20)**:应用市场相关资料(store/ 发布文案与 分发平台图标、
+截图、kit)一律退出版本控制、本地留存(硬规矩 19,清单见 `docs/LOCAL-ASSETS.md`);
+`CHANGELOG.md` 建立**入库**,此后为发布文案「版本说明」的上游。README 早已引用
+CHANGELOG 而文件此前并不存在,本次一并补上。
 
 两端隐私页都通过临时提高 `PRIVACY_VERSION` 后覆盖安装触发;拍完均已恢复为 1、
 重新安装正常包,未清应用数据,正常启动不再弹同意页。

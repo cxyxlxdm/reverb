@@ -71,12 +71,14 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 - `docs/ROADMAP.md` — **进度、遗留问题与演进方向**(三端各到什么程度、哪些路径还没验过、以后可能往哪走)
 - `docs/TRANSCRIPT.md` — 逐字稿 / 语音转文字的三端实现与取舍(含鸿蒙将来换三方引擎的路子)
 - `docs/TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律
-- `docs/PRIVACY.md` — 隐私政策(与 `reverb/privacy.html` 必须同步)
+- `docs/PRIVACY.md` — 隐私政策(与 `site/reverb/privacy.html` 必须同步)
 - `CHANGELOG.md` — 更新日志(面向使用者的版本变更记录)
+- `docs/LOCAL-ASSETS.md` — **本地资产与换机迁移**(哪些东西不在 git 里、换一台电脑怎么完整重建)
 
-> 分发登记材料(主体信息、证书指纹、域名与账号相关)**不入版本控制** —— 属个人身份信息,
-> 只留在本地。当初为什么按合规口径移除大陆商店目录,见 `docs/HISTORY.md` 阶段五;
-> 后来首版恢复目录的决策见 H70 与 `docs/FEATURES.md`「渠道差异」。
+> 分发登记材料与**应用市场相关资料**(发布文案、分发平台图标、发布截图、发布物料包)
+> **不入版本控制**,只留在本地 —— 后者见 2026-09-20 定的硬规矩 19。
+> 清单与换机流程见 `docs/LOCAL-ASSETS.md`;合规口径见 `docs/HISTORY.md` 阶段五;
+> 首版恢复目录的决策见 H70 与 `docs/FEATURES.md`「渠道差异」。
 - `AGENTS.md` — **在本仓库工作的约定**(构建命令、18 条硬规矩、代码与提交风格);`CLAUDE.md` 是指向它的薄指针
 
 > `docs/PRODUCT.md` 与 `docs/FEATURES.md` 是同一件事的两种粒度:前者叙述、后者矩阵。
