@@ -11,9 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -45,13 +43,15 @@ import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
-import com.yuyin.reverb.ui.components.PillChip
 import com.yuyin.reverb.data.model.DownloadStatus
 import com.yuyin.reverb.data.model.DownloadedEpisode
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.GLASS_CHIPS_TOP_PAD
+import com.yuyin.reverb.ui.components.GlassChipsRow
+import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.PodcastGridItem
 import com.yuyin.reverb.ui.components.PodcastListItem
 import kotlinx.coroutines.launch
@@ -90,26 +90,36 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
             }
         )
 
-        // 分段切换栏。清空历史按钮浮在同一行右侧（zIndex 更高、不占 chips 流式布局），
-        // 这样以后要在右侧再加按钮也不会影响左侧 chips 排布。
-        Box(Modifier.fillMaxWidth()) {
-            LazyRow(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp)) {
-                itemsIndexed(sections) { i, s ->
-                    PillChip(
-                        selected = section == i,
-                        text = s,
-                        onClick = { scope.launch { pagerState.animateScrollToPage(i) } },
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
+        // 分段玻璃条悬浮在 pager 之上(内容从条下滚过),胶囊随拖动 1:1 平移。
+        // 清空历史/排列切换按钮浮在条的右端(不占 chips 流式布局),条的半透明
+        // 表面就是它们的衬底 —— 原先自带的 background 填块去掉了。
+        Box(Modifier.fillMaxWidth().weight(1f)) {
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize()
+            ) { page ->
+                when (page) {
+                    0 -> SubscriptionsSection(subsGrid, onOpen)
+                    1 -> InboxBody(topPad = GLASS_CHIPS_TOP_PAD)
+                    2 -> FavoritesSection()
+                    3 -> DownloadsSection()
+                    else -> HistorySection(history)
                 }
             }
+            GlassChipsRow(
+                modifier = Modifier.align(Alignment.TopCenter),
+                labels = sections,
+                selected = section,
+                progress = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+                onSelect = { i -> scope.launch { pagerState.animateScrollToPage(i) } }
+            )
             if (section == 4 && history.isNotEmpty()) {
                 TextButton(
                     onClick = { container.historyStore.clear() },
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
+                        .align(Alignment.TopEnd)
+                        .padding(top = 5.dp, end = 20.dp)
                         .zIndex(1f)
-                        .background(MaterialTheme.colorScheme.background)
                 ) { Text(stringResource(R.string.action_clear_confirm)) }
             }
             // 订阅分段:右侧「行 / 宫格」排列切换。图标显示切换后的目标布局。
@@ -117,9 +127,9 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                 IconButton(
                     onClick = { container.settingsStore.setSubsGrid(!subsGrid) },
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
+                        .align(Alignment.TopEnd)
+                        .padding(top = 5.dp, end = 8.dp)
                         .zIndex(1f)
-                        .background(MaterialTheme.colorScheme.background)
                 ) {
                     Icon(
                         if (subsGrid) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.GridView,
@@ -127,19 +137,6 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-            }
-        }
-
-        HorizontalPager(
-            state = pagerState,
-            modifier = Modifier.fillMaxWidth().weight(1f)
-        ) { page ->
-            when (page) {
-                0 -> SubscriptionsSection(subsGrid, onOpen)
-                1 -> InboxBody()
-                2 -> FavoritesSection()
-                3 -> DownloadsSection()
-                else -> HistorySection(history)
             }
         }
     }
@@ -160,7 +157,11 @@ private fun SubscriptionsSection(gridLayout: Boolean, onOpen: (Podcast) -> Unit)
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 104.dp),
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 24.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp, end = 16.dp,
+                top = 4.dp + GLASS_CHIPS_TOP_PAD,
+                bottom = 24.dp + LocalGlassBottomPad.current
+            ),
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -169,7 +170,10 @@ private fun SubscriptionsSection(gridLayout: Boolean, onOpen: (Podcast) -> Unit)
     } else {
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp)
+            contentPadding = PaddingValues(
+                top = GLASS_CHIPS_TOP_PAD,
+                bottom = 24.dp + LocalGlassBottomPad.current
+            )
         ) {
             items(subs, key = { it.id }) { p -> PodcastListItem(p) { onOpen(p) } }
         }
@@ -191,7 +195,10 @@ private fun FavoritesSection() {
     }
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(
+            top = GLASS_CHIPS_TOP_PAD,
+            bottom = 24.dp + LocalGlassBottomPad.current
+        )
     ) {
         items(favorites, key = { it.id }) { ep ->
             val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
@@ -228,7 +235,10 @@ private fun DownloadsSection() {
     }
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(
+            top = GLASS_CHIPS_TOP_PAD,
+            bottom = 24.dp + LocalGlassBottomPad.current
+        )
     ) {
         items(downloads) { d ->
             val played = history.firstOrNull { it.episode.id == d.episode.id }?.played ?: false
@@ -279,7 +289,10 @@ private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntr
     }
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(
+            top = GLASS_CHIPS_TOP_PAD,
+            bottom = 24.dp + LocalGlassBottomPad.current
+        )
     ) {
         items(history) { h ->
             EpisodeListItem(

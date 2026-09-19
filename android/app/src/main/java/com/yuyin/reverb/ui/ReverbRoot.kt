@@ -7,27 +7,29 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.LibraryMusic
-import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.yuyin.reverb.R
@@ -38,6 +40,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.ui.components.GlassNavBar
+import com.yuyin.reverb.ui.components.GlassTabSpec
+import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.MiniPlayer
 import com.yuyin.reverb.ui.screens.AboutScreen
 import com.yuyin.reverb.ui.screens.DiscoverScreen
@@ -145,8 +150,6 @@ private fun FullScreen(content: @Composable () -> Unit) {
 private fun MainShell(rootNav: NavHostController) {
     val tabNav = rememberNavController()
 
-    val current by PlayerController.current.collectAsStateWithLifecycle()
-
     val backStackEntry by tabNav.currentBackStackEntryAsState()
     val route = backStackEntry?.destination?.route
 
@@ -157,66 +160,64 @@ private fun MainShell(rootNav: NavHostController) {
     // route 在 tab 切换瞬间可能短暂为 null,若据此判定会让底部栏动画进出、内容上下跳动;
     // 故 null 一律视作顶层(两个 tab 都带底部栏),消除切 tab 时偶发的上下闪动。
     val isTopLevel = route == null || tabs.any { it.route == route }
-    val showMini = current != null
+    val rawIdx = tabs.indexOfFirst { it.route == route }
+    // 选中 tab:route 瞬时为 null 时沿用上一次的,药丸别被抖回第一格
+    var lastTab by remember { mutableIntStateOf(0) }
+    LaunchedEffect(rawIdx) { if (rawIdx >= 0) lastTab = rawIdx }
+    val selectedTab = if (rawIdx >= 0) rawIdx else lastTab
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            Column {
-                val cur = current
-                MiniPlayerBar(
-                    onExpand = { rootNav.navigate("player") },
-                    onOpenQueue = { rootNav.navigate("queue") }
-                )
-                AnimatedVisibility(visible = isTopLevel) {
-                    Column {
-                        if (showMini && cur != null) {
-                            HorizontalDivider(
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
-                            )
-                        }
-                        NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-                            tabs.forEach { d ->
-                                NavigationBarItem(
-                                    selected = route == d.route,
-                                    onClick = {
-                                        if (route != d.route) {
-                                            tabNav.navigate(d.route) {
-                                                launchSingleTop = true
-                                                restoreState = true
-                                                popUpTo(tabNav.graph.startDestinationId) { saveState = true }
-                                            }
-                                        }
-                                    },
-                                    icon = { Icon(d.icon, contentDescription = d.label) },
-                                    label = { Text(d.label) },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                                        indicatorColor = MaterialTheme.colorScheme.surfaceVariant
-                                    )
-                                )
-                            }
-                        }
-                    }
+    /**
+     * 底部悬浮玻璃栏(与鸿蒙 GlassTabBar 同款,装机验收基准)。原来是一块贴底的
+     * Material NavigationBar —— 玻璃要"浮"起来,内容必须能从栏下滚过,所以整块
+     * 改成叠层:NavHost 铺满,列表用 [LocalGlassBottomPad] 让出底部余量,
+     * 栏与迷你播放条悬浮在内容之上。
+     */
+    var overlayPx by remember { mutableIntStateOf(0) }
+    val density = LocalDensity.current
+    val bottomPad = remember(overlayPx) { with(density) { overlayPx.toFloat().toDp() } + 8.dp }
+
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        CompositionLocalProvider(LocalGlassBottomPad provides bottomPad) {
+            NavHost(
+                navController = tabNav,
+                startDestination = "discover",
+                modifier = Modifier.fillMaxSize()
+            ) {
+                composable("discover") {
+                    DiscoverScreen(onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") })
+                }
+                composable("library") {
+                    LibraryScreen(
+                        onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
+                        onOpenSettings = { rootNav.navigate("settings") },
+                        onOpenListenStats = { rootNav.navigate("listen_stats") }
+                    )
                 }
             }
         }
-    ) { padding ->
-        NavHost(
-            navController = tabNav,
-            startDestination = "discover",
-            modifier = Modifier.padding(padding)
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .onSizeChanged { overlayPx = it.height },
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            composable("discover") {
-                DiscoverScreen(onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") })
-            }
-            composable("library") {
-                LibraryScreen(
-                    onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
-                    onOpenSettings = { rootNav.navigate("settings") },
-                    onOpenListenStats = { rootNav.navigate("listen_stats") }
+            MiniPlayerBar(
+                onExpand = { rootNav.navigate("player") },
+                onOpenQueue = { rootNav.navigate("queue") }
+            )
+            AnimatedVisibility(visible = isTopLevel) {
+                GlassNavBar(
+                    tabs = tabs.map { GlassTabSpec(it.label, it.icon) },
+                    selected = selectedTab,
+                    onSelect = { i ->
+                        tabNav.navigate(tabs[i].route) {
+                            launchSingleTop = true
+                            restoreState = true
+                            popUpTo(tabNav.graph.startDestinationId) { saveState = true }
+                        }
+                    }
                 )
             }
         }

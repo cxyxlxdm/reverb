@@ -1,17 +1,23 @@
 package com.yuyin.reverb.ui.components
 
 import android.widget.Toast
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,6 +26,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,23 +54,31 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.lerp
 import com.yuyin.reverb.R
 import coil.compose.AsyncImage
 import com.yuyin.reverb.data.local.InboxStore
@@ -108,6 +123,141 @@ fun PillChip(
             selectedContainerColor = MaterialTheme.colorScheme.primary,
             selectedLabelColor = MaterialTheme.colorScheme.onPrimary
         )
+    )
+}
+
+/** 分类玻璃条的让位总高(条 44dp + 与内容的 8dp 间距):pager 段的列表顶部要滚出这么多。 */
+val GLASS_CHIPS_TOP_PAD = 52.dp
+
+/**
+ * 悬浮玻璃栏占掉的纵向空间:各页列表的底部 contentPadding 要额外加上的量,
+ * 由 MainShell 量出注入。玻璃栏是叠层悬浮的,列表视口必须延伸到栏下
+ * (内容从玻璃下滚过才有"透"可言),末项又要能滚出栏上方 —— 全靠这个让位。
+ */
+val LocalGlassBottomPad = staticCompositionLocalOf { 0.dp }
+
+/**
+ * 分类玻璃条:悬浮胶囊条 + 一颗透明胶囊指示器,**随内容 Pager 的拖动 1:1 平移**。
+ * 与鸿蒙端 ChipsRow/ChipsCapsule 同一套设计(装机验收基准),但实现简单得多:
+ * Compose 的 PagerState 原生给出连续页位置(currentPage + currentPageOffsetFraction),
+ * 不需要鸿蒙那种手写回调总线 —— 这也是 H88/H89 两坑存在的根因(Swiper 不暴露进度)。
+ *
+ * @param progress 连续页位置,如 `{ pagerState.currentPage + pagerState.currentPageOffsetFraction }`。
+ *   以 lambda 传入:拖拽期逐帧读它的状态,**只有胶囊这一颗小组件逐帧重建**,
+ *   chips 行与调用方(整页)不参与 —— 同鸿蒙 H64 的最小重建面原则。
+ * @param selected 高亮项(调用方传 pagerState.currentPage 即可,过半自动预切,
+ *   与鸿蒙 dragTarget 语义一致;只在翻页瞬间离散变化,不会拖累整页重建)。
+ */
+@Composable
+fun GlassChipsRow(
+    labels: List<String>,
+    selected: Int,
+    progress: () -> Float,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    trailing: (@Composable RowScope.() -> Unit)? = null
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val scroll = rememberScrollState()
+    val density = LocalDensity.current
+    // 各 chip 在滚动内容坐标系里的 x/宽(非 lazy Row:分类 ≤19 个,全量摆的开销可忽略,
+    // 换 LazyRow 的话胶囊就得跟着滚动补偿逐项组合,得不偿失)
+    val metrics = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
+
+    // 横滑切到屏幕外的分类时,把选中 chip 滚进可视区(对齐鸿蒙 revealSelected:x - 80)
+    LaunchedEffect(selected, labels.size) {
+        val m = metrics[selected] ?: return@LaunchedEffect
+        val revealPad = with(density) { 80.dp.toPx() }
+        val target = (m.first - revealPad).roundToInt()
+        if (target > 0 && scroll.value < target) scroll.animateScrollTo(target)
+    }
+
+    Box(modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .shadow(elevation = 6.dp, shape = RoundedCornerShape(21.dp), clip = false)
+                .clip(RoundedCornerShape(21.dp))
+                .background(colorScheme.surface.copy(alpha = 0.85f))
+                .border(0.8.dp, colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(21.dp))
+        ) {
+            ChipsCapsule(metrics = metrics, count = labels.size, progress = progress, scroll = scroll)
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scroll)
+                    .padding(horizontal = 8.dp, vertical = 5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                labels.forEachIndexed { i, label ->
+                    val sel = i == selected
+                    // 选中态的底色交给胶囊,chip 自己只换文字色;颜色切换做 200ms 淡入淡出
+                    val bg by animateColorAsState(
+                        targetValue = if (sel) Color.Transparent else colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
+                        animationSpec = tween(200, easing = FastOutSlowInEasing),
+                        label = "chipBg$i"
+                    )
+                    val fg by animateColorAsState(
+                        targetValue = if (sel) colorScheme.primary else colorScheme.onSurfaceVariant,
+                        animationSpec = tween(200, easing = FastOutSlowInEasing),
+                        label = "chipFg$i"
+                    )
+                    Box(
+                        Modifier
+                            .onGloballyPositioned { c ->
+                                // positionInParent 是相对内容 Row 的坐标:与滚动量同坐标系,
+                                // 胶囊侧再减 scroll.value 即得视口坐标(见 ChipsCapsule)
+                                metrics[i] = c.positionInParent().x to c.size.width.toFloat()
+                            }
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(bg)
+                            .clickable { onSelect(i) }
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                    ) {
+                        Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
+                    }
+                    Spacer(Modifier.width(8.dp))
+                }
+                trailing?.invoke(this)
+            }
+        }
+    }
+}
+
+/**
+ * 玻璃条里的透明胶囊指示器。两种驱动其实是同一条数据:Pager 的连续页位置
+ * progress ∈ [0, n-1],整数部分与分数部分分别决定插值对与进度 —— 拖拽跟手与
+ * 点击滑移自然统一,不需要鸿蒙端「live 插值 / spring 收尾」两套绘制态。
+ * 胶囊滑到两颗 chip 之间的空档时底下只有玻璃 + 页面底色,染色 0.26/描边 0.30
+ * 才读得出"在移动"(鸿蒙端实测调出的值,直接沿用)。
+ */
+@Composable
+private fun ChipsCapsule(
+    metrics: Map<Int, Pair<Float, Float>>,
+    count: Int,
+    progress: () -> Float,
+    scroll: ScrollState
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val density = LocalDensity.current
+    val p = progress().coerceIn(0f, (count - 1).coerceAtLeast(0).toFloat())
+    val base = p.toInt()
+    val frac = p - base
+    val next = (base + 1).coerceAtMost((count - 1).coerceAtLeast(0))
+    val a = metrics[base]
+    val b = metrics[next]
+    val x = if (a != null && b != null) lerp(a.first, b.first, frac) - scroll.value else null
+    val w = if (a != null && b != null) lerp(a.second, b.second, frac) else null
+    Box(
+        Modifier
+            .offset {
+                IntOffset((x ?: 0f).roundToInt(), 5.dp.roundToPx())
+            }
+            .width(if (w != null && w > 0f) with(density) { w.toDp() } else 0.dp)
+            .height(34.dp)
+            .background(colorScheme.primary.copy(alpha = 0.26f), RoundedCornerShape(17.dp))
+            .border(0.8.dp, colorScheme.primary.copy(alpha = 0.30f), RoundedCornerShape(17.dp))
     )
 }
 

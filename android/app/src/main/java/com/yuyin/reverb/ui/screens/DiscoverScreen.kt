@@ -20,10 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -107,6 +104,9 @@ import com.yuyin.reverb.ui.REGION_OPTIONS
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.playback.RadioStation
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.GLASS_CHIPS_TOP_PAD
+import com.yuyin.reverb.ui.components.GlassChipsRow
+import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.PillChip
 import com.yuyin.reverb.ui.components.PodcastListItem
 import com.yuyin.reverb.ui.discoverViewModel
@@ -138,7 +138,6 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
     var showReorder by remember { mutableStateOf(false) }
     val browsing = vm.state is DiscoverState.Idle
     val pagerState = rememberPagerState(pageCount = { categories.size })
-    val chipsState = rememberLazyListState()
 
     // 继续收听:进度在 10s..95% 之间且未播完的历史条目,最新在前,最多 15 条
     val history by container.historyStore.history.collectAsStateWithLifecycle()
@@ -243,33 +242,39 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             )
         } else if (browsing) {
             val selectedIndex = pagerState.currentPage.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
-            // 分类 chips 紧贴搜索框(靠顶),不被继续收听横条挤到屏幕中部
-            // 横滑切到屏幕外的分类时，自动把选中标签滚动进可视区
-            LaunchedEffect(selectedIndex) {
-                chipsState.animateScrollToItem(selectedIndex)
-            }
-            // 分类 chips（当前页高亮）+ 排序入口
-            CategoryChipsRow(
-                state = chipsState,
-                categories = categories,
-                selectedIndex = selectedIndex,
-                onSelect = { i -> scope.launch { pagerState.animateScrollToPage(i) } },
-                onEdit = { showReorder = true }
-            )
-            // 横滑左右切换分类:列表占满剩余空间,继续收听横条作为列表首项一起滚动
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-            ) { page ->
-                CategoryPage(
-                    vm = vm,
-                    category = categories[page],
-                    region = region,
-                    onOpen = onOpen,
-                    continueEntries = inProgress,
-                    showGuide = firstRun
+            // 分类玻璃条悬浮在 pager 之上(内容从条下滚过,玻璃才有得"透");胶囊随拖动
+            // 1:1 平移、选中项滚进可视区都收在 GlassChipsRow 内部 —— 外部不再需要
+            // chipsState 与 reveal 的 LaunchedEffect
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize()
+                ) { page ->
+                    CategoryPage(
+                        vm = vm,
+                        category = categories[page],
+                        region = region,
+                        onOpen = onOpen,
+                        continueEntries = inProgress,
+                        showGuide = firstRun,
+                        topPad = GLASS_CHIPS_TOP_PAD
+                    )
+                }
+                GlassChipsRow(
+                    modifier = Modifier.align(Alignment.TopCenter),
+                    labels = categories.map { stringResource(it.labelRes) },
+                    selected = selectedIndex,
+                    progress = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
+                    onSelect = { i -> scope.launch { pagerState.animateScrollToPage(i) } },
+                    trailing = {
+                        IconButton(onClick = { showReorder = true }) {
+                            Icon(
+                                Icons.Rounded.Tune,
+                                contentDescription = stringResource(R.string.reorder_title),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 )
             }
         } else {
@@ -352,7 +357,9 @@ private fun CategoryPage(
     region: String,
     onOpen: (Podcast) -> Unit,
     continueEntries: List<HistoryEntry> = emptyList(),
-    showGuide: Boolean = false
+    showGuide: Boolean = false,
+    // 悬浮分类玻璃条占掉的高度:列表要能从条下滚过,首项又要从条下露出,全靠这个让位
+    topPad: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Unspecified
 ) {
     // 先展示缓存（无缓存则用随包内置清单），秒开；再后台刷新，数据回来替换。地区变化时按新地区重载。
     var list by remember(category.key, region) { mutableStateOf(vm.cachedCategory(category, region)) }
@@ -398,6 +405,7 @@ private fun CategoryPage(
                 ),
                 podcasts = list,
                 onOpen = onOpen,
+                topPad = topPad,
                 topContent = when {
                     continueEntries.isNotEmpty() -> { { ContinueListeningStrip(continueEntries) } }
                     showGuide -> { { GuideCard() } }
@@ -407,41 +415,12 @@ private fun CategoryPage(
             loading -> LoadingBox()
             else -> EmptyHint(stringResource(R.string.discover_empty_category, stringResource(category.labelRes)))
         }
-        // 跟手下拉指示器；静止态越界部分被 clipToBounds 裁掉，不残留
-        PullToRefreshContainer(state = pullState, modifier = Modifier.align(Alignment.TopCenter))
-    }
-}
-
-@Composable
-private fun CategoryChipsRow(
-    state: LazyListState,
-    categories: List<Category>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
-    onEdit: () -> Unit
-) {
-    LazyRow(
-        state = state,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        itemsIndexed(categories) { i, cat ->
-            PillChip(
-                selected = i == selectedIndex,
-                text = stringResource(cat.labelRes),
-                onClick = { onSelect(i) },
-                modifier = Modifier.padding(end = 8.dp)
-            )
-        }
-        item {
-            IconButton(onClick = onEdit) {
-                Icon(
-                    Icons.Rounded.Tune,
-                    contentDescription = stringResource(R.string.reorder_title),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+        // 跟手下拉指示器;静止态越界部分被 clipToBounds 裁掉,不残留。
+        // 下移躲开悬浮的玻璃分类条,否则转圈被玻璃罩着看不清。
+        PullToRefreshContainer(
+            state = pullState,
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = topPad)
+        )
     }
 }
 
@@ -565,7 +544,7 @@ private fun StarterOnboarding(
 
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(bottom = 24.dp + LocalGlassBottomPad.current)
     ) {
         item {
             Column(Modifier.padding(horizontal = 20.dp, vertical = 8.dp)) {
@@ -666,7 +645,7 @@ private fun HomeFeed(continueEntries: List<HistoryEntry>) {
     ) {
         LazyColumn(
             Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp)
+            contentPadding = PaddingValues(bottom = 24.dp + LocalGlassBottomPad.current)
         ) {
             if (continueEntries.isNotEmpty()) item { ContinueListeningStrip(continueEntries) }
             item {
@@ -899,7 +878,7 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
             } else {
                 LazyColumn(
                     Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 24.dp)
+                    contentPadding = PaddingValues(bottom = 24.dp + LocalGlassBottomPad.current)
                 ) {
                     items(s.episodes) { ep ->
                         val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
@@ -941,11 +920,16 @@ private fun PodcastResultList(
     header: String,
     podcasts: List<Podcast>,
     onOpen: (Podcast) -> Unit,
-    topContent: (@Composable () -> Unit)? = null // 列表首项(如“继续收听”横条),随列表一起滚动
+    topContent: (@Composable () -> Unit)? = null, // 列表首项(如“继续收听”横条),随列表一起滚动
+    // 悬浮分类玻璃条的让位:列表视口从条下开始,首项要滚出条上方
+    topPad: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp(0f)
 ) {
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = 24.dp)
+        contentPadding = PaddingValues(
+            top = topPad,
+            bottom = 24.dp + LocalGlassBottomPad.current
+        )
     ) {
         if (topContent != null) {
             item { topContent() }
