@@ -2101,3 +2101,45 @@ native 模块,见 TRANSCRIPT.md 的迁移路径);官方逐字稿那条路不受�
   State 拆成 PullToRefreshBox),搜到的 1.3 解法不能照搬到 1.2;
   ③悬浮玻璃栏这类半透明覆盖层会把「内容层的小瑕疵」半透出来,
   验收要点因此变多 —— 任何新增的常驻绘制都要在玻璃下看一眼。
+
+### H91. 玻璃移植装机验收的六处修正:**两处坐标/归属语义坑 + 四处间距几何**
+用户上手验出六个问题,按发现顺序:①胶囊偏左;②点已选中的发现 tab 跳音阁;
+③标题栏顶进状态栏;④音阁排列按钮偏下;⑤频道页顶距过大;⑥换页后选中 chip
+留在屏幕外。前两个是「语义想当然」,后四个是纯几何,一并记录。
+- **①胶囊偏左**:chip 用 `positionInParent()` 量测,那是**叶子布局坐标,
+  不含父节点 modifier 链上的 padding**(Row 有 horizontal=8dp 内边距)。
+  胶囊拿它减 scroll 去对齐玻璃条(视口)坐标,恒差一个 padding。修法:改用
+  **窗口坐标差**(chip.positionInWindow - 玻璃条原点.positionInWindow)+ 补回
+  scroll.value,得到「含 padding、滚动无关」的内容坐标 —— 窗口坐标天然实时
+  随滚动刷新,连补偿逻辑都省了。
+- **②点已选中的 tab 跳到隔壁**:`tabAt = (x + halfW/2)/halfW` 算的是
+  「离 halfW 整数倍最近」,但两个 tab 的中心在**半个** halfW 处 —— 发现 tab
+  的右半边全部被判成音阁:按下预览跳走、松手提交切页;而且连点两次会第二次
+  才生效(第一次判成"已选中"被 no-op)。修法:均分槽位用 `floor(x/halfW)`。
+- **③④⑤⑥**:MainShell 是 edge-to-edge 的,状态栏让位只有详情页的
+  FullScreen 做了,tab 外壳漏了 → 补 `statusBarsPadding()`(③);
+  音阁排列按钮(48dp)比玻璃条(44dp)高,top=5dp 起排中心差 7dp,负 offset
+  才能真正对中(④);频道页返回行 24dp 顶距叠在 systemBarsPadding 上,
+  对齐播放页的 12dp(⑤);分类条 reveal 原先只防「向后滚」
+  (`scroll.value < target` 才滚),换到屏幕左侧的分类永远滚不回来,
+  改为双向 `animateScrollTo((m.first - revealPad).coerceAtLeast(0))`(⑥)。
+  ③第一版还连犯两错(用户复验抓出):**background 写在 statusBarsPadding
+  之后**,状态栏区域露黑底、沉浸式失效 —— 让位 modifier 必须垫在 background
+  之内(`background().statusBarsPadding()`);ScreenHeader 顶距 28dp 矫枉过正,
+  收成 12dp。**两页标题动作键不同高**:动作键在含副标题的左列里垂直居中,
+  有无副标题的页面差出半个副标题 —— 副标题移出居中行、动作键只对齐标题行;
+  顺手踩了 `weight(fill=false)` 的坑:全 fill=false 的加权行会退成包裹宽度,
+  动作键悬在半路,标题要 `weight(1f)`(fill 默认 true)撑满才行。
+- **验收**:某国产厂商 真机逐项复测 —— 胶囊在 scroll=0 与滚动后均与 chip 对中;
+  点发现右半边不再跳音阁;状态栏透明、标题离状态栏一指宽;dumpLayout 量得
+  发现页随机电台与音阁页设置键 bounds 逐像素一致([1129,213][1200,284]);
+  频道页顶距与播放页一致;从远处分类一路滑回文化,chip 行全程跟随滚回。
+- **教训与可复用规律**:①`positionInParent()` 不含父节点自身 modifier 的
+  padding —— 要「相对某个可见容器」的坐标,用 `positionInWindow()` 差值,
+  不要手补常量;②「最近邻」公式先画数轴再写:中心锚点在半格处时,+half/2
+  会把边界判反;③凡是「浮层叠在系统栏上」的布局,让位只做一次、做在最外层,
+  且 background 必须在 inset modifier **之前**(否则让位区露底色,沉浸式失效),
+  内层各页自查有没有再叠一层;④「标题 + 动作键」的头部,动作键的垂直参照物
+  必须是与副标题无关的行(标题行),否则有无副标题的页面必然错位;
+  ⑤验收移动端交互,用 dumpLayout 拿真实槽位边界再点 —— 槽位的几何直觉
+  ( label 居中 ≠ 槽位对半)经常是错的。

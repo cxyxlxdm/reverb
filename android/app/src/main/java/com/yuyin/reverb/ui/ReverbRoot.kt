@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Explore
@@ -176,7 +177,12 @@ private fun MainShell(rootNav: NavHostController) {
     val density = LocalDensity.current
     val bottomPad = remember(overlayPx) { with(density) { overlayPx.toFloat().toDp() } + 8.dp }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    // 状态栏让位:App 是 edge-to-edge 的(setDecorFitsSystemWindows=false),tab 外壳
+    // 不让位的话 ScreenHeader 的顶距直接顶进状态栏。**background 必须在
+    // statusBarsPadding 之前** —— 反过来背景只铺到状态栏以下,通知栏区域露黑底,
+    // 沉浸式就没了(第一版修法犯过)。只垫 status bar,底部由悬浮栏自带的
+    // navigationBarsPadding 管。
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         CompositionLocalProvider(LocalGlassBottomPad provides bottomPad) {
             NavHost(
                 navController = tabNav,

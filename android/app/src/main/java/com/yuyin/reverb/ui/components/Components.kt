@@ -71,7 +71,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
@@ -164,17 +164,23 @@ fun GlassChipsRow(
     // 换 LazyRow 的话胶囊就得跟着滚动补偿逐项组合,得不偿失)
     val metrics = remember { mutableStateMapOf<Int, Pair<Float, Float>>() }
 
-    // 横滑切到屏幕外的分类时,把选中 chip 滚进可视区(对齐鸿蒙 revealSelected:x - 80)
+    // 横滑切到屏幕外的分类时,把选中 chip 滚进可视区(对齐鸿蒙 revealSelected:x - 80)。
+    // 两个方向都要滚:向右换页滚进来,向左换页也滚回来 —— 只防「向后滚」的话,
+    // 换到屏幕左侧的分类时 chip 永远停在屏幕外(H90 用户反馈)。
     LaunchedEffect(selected, labels.size) {
         val m = metrics[selected] ?: return@LaunchedEffect
         val revealPad = with(density) { 80.dp.toPx() }
-        val target = (m.first - revealPad).roundToInt()
-        if (target > 0 && scroll.value < target) scroll.animateScrollTo(target)
+        val target = (m.first - revealPad).roundToInt().coerceAtLeast(0)
+        if (target != scroll.value) scroll.animateScrollTo(target)
     }
+
+    // 玻璃条原点(窗口坐标):chip 量测要以它为基准,见下
+    var boxOriginX by remember { mutableStateOf(0f) }
 
     Box(modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
         Box(
             Modifier
+                .onGloballyPositioned { boxOriginX = it.positionInWindow().x }
                 .fillMaxWidth()
                 .height(44.dp)
                 .shadow(elevation = 6.dp, shape = RoundedCornerShape(21.dp), clip = false)
@@ -206,9 +212,13 @@ fun GlassChipsRow(
                     Box(
                         Modifier
                             .onGloballyPositioned { c ->
-                                // positionInParent 是相对内容 Row 的坐标:与滚动量同坐标系,
-                                // 胶囊侧再减 scroll.value 即得视口坐标(见 ChipsCapsule)
-                                metrics[i] = c.positionInParent().x to c.size.width.toFloat()
+                                // 用窗口坐标差换算成「玻璃条内容坐标」:positionInParent
+                                // 是叶子布局坐标,不含 Row 自己的 padding(h=8dp),直接拿去
+                                // 减 scroll 会让胶囊恒偏左一个 padding。窗口差天然带上
+                                // padding、随滚动实时更新,补回 scroll.value 即成滚动
+                                // 无关的内容坐标(见 ChipsCapsule 的减法)。
+                                metrics[i] = c.positionInWindow().x - boxOriginX + scroll.value to
+                                    c.size.width.toFloat()
                             }
                             .clip(RoundedCornerShape(16.dp))
                             .background(bg)

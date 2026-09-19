@@ -110,7 +110,10 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 4.dp, top = 24.dp, end = 12.dp),
+                // 外层 FullScreen 已做 systemBarsPadding,这里只补 12dp 呼吸感 ——
+                // 与播放页同值(播放页这个间距用户看着舒服);原先 24dp 叠加在
+                // 状态栏让位之上,返回键离通知栏明显过远(H90 用户反馈)。
+                .padding(start = 4.dp, top = 12.dp, end = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {

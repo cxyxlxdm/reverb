@@ -118,7 +118,11 @@ fun GlassNavBar(
     fun pillXFor(idx: Int): Float = idx * halfW() + (halfW() - pillW) / 2f
     fun tabAt(x: Float): Int {
         if (halfW() <= 0f) return 0
-        return ((x + halfW() / 2f) / halfW()).toInt().coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
+        // 均分槽位直接 floor:x 落在哪个槽就是哪个 tab。原先的 (x + halfW/2)/halfW
+        // 算的是「离 halfW 的整数倍最近」,而槽中心在半个 halfW 处 —— 结果是发现
+        // tab 自己的右半边全部被判成音阁:点已选中的发现,药丸预览跳去音阁、松手
+        // 连页面也切过去(H90 用户反馈)。
+        return (x / halfW()).toInt().coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
     }
 
     // 选中项变化(含首次量宽)→ 药丸弹簧吸过去。拖拽期间不插手,松手路径自己收。

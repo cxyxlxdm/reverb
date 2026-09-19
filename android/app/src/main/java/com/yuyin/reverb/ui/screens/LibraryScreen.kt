@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -116,9 +117,11 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
             if (section == 4 && history.isNotEmpty()) {
                 TextButton(
                     onClick = { container.historyStore.clear() },
+                    // 与 44dp 玻璃条对中:TextButton 高 40dp,top 补 (44-40)/2=2dp。
+                    // 原先 top=5dp 让整体偏下(H90 用户反馈「置底」)。
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(top = 5.dp, end = 20.dp)
+                        .padding(top = 2.dp, end = 20.dp)
                         .zIndex(1f)
                 ) { Text(stringResource(R.string.action_clear_confirm)) }
             }
@@ -126,9 +129,11 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
             if (section == 0) {
                 IconButton(
                     onClick = { container.settingsStore.setSubsGrid(!subsGrid) },
+                    // IconButton 高 48dp 比条高,负 offset 才能真正对中:(44-48)/2=-2dp
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .padding(top = 5.dp, end = 8.dp)
+                        .offset(y = (-2).dp)
+                        .padding(end = 8.dp)
                         .zIndex(1f)
                 ) {
                     Icon(

@@ -110,26 +110,29 @@ fun ScreenHeader(title: String, subtitle: String? = null, action: (@Composable (
     Column(
         Modifier
             .fillMaxWidth()
-            .padding(start = 20.dp, end = 12.dp, top = 28.dp, bottom = 8.dp)
+            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 8.dp)
     ) {
+        // 动作键只与标题行对中 —— 副标题若参与居中,有无副标题的两页(发现/音阁)
+        // 动作键会差出一个副标题的高度,随机电台与设置按钮就不在同一条水平线上了。
+        // 标题 weight(1f) 把行撑满、动作键自然贴右缘;不能用 fill=false + Spacer,
+        // 那会让整行退成包裹宽度(Row 不再填满,动作键悬在半路)。
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
-                if (!subtitle.isNullOrBlank()) {
-                    Spacer(Modifier.height(4.dp))
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.secondary
-                    )
-                }
-            }
+            Text(
+                title,
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onBackground,
+                modifier = Modifier.weight(1f)
+            )
             if (action != null) action()
+        }
+        if (!subtitle.isNullOrBlank()) {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
         }
         Spacer(Modifier.height(12.dp))
         Box(
