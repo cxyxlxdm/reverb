@@ -106,9 +106,13 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
             firstLoading -> LoadingBox() // 有订阅但缓存为空:首刷进行中(有界,结束即收起)
             else -> EmptyHint(stringResource(R.string.inbox_empty_no_updates)) // 刷新完仍无内容
         }
-        PullToRefreshContainer(
-            state = pullState,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = topPad)
-        )
+        // 同 CategoryPage:指示器下移躲开玻璃分类条,且不拉不转时不组合,
+        // 免得 m3 1.2 静止态的圆从玻璃条下缘半露出来。
+        if (pullState.isRefreshing || pullState.verticalOffset > 0f) {
+            PullToRefreshContainer(
+                state = pullState,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = topPad)
+            )
+        }
     }
 }

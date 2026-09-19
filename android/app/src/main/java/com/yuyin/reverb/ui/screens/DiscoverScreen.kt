@@ -415,12 +415,15 @@ private fun CategoryPage(
             loading -> LoadingBox()
             else -> EmptyHint(stringResource(R.string.discover_empty_category, stringResource(category.labelRes)))
         }
-        // 跟手下拉指示器;静止态越界部分被 clipToBounds 裁掉,不残留。
-        // 下移躲开悬浮的玻璃分类条,否则转圈被玻璃罩着看不清。
-        PullToRefreshContainer(
-            state = pullState,
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = topPad)
-        )
+        // 跟手下拉指示器;下移躲开悬浮的玻璃分类条,否则转圈被玻璃罩着看不清。
+        // m3 1.2 的指示器静止态会留下一个半露的圆(恰从玻璃条下缘透出),所以
+        // 不拉不转时干脆不参与组合 —— verticalOffset>0 即正在下拉。
+        if (pullState.isRefreshing || pullState.verticalOffset > 0f) {
+            PullToRefreshContainer(
+                state = pullState,
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = topPad)
+            )
+        }
     }
 }
 
