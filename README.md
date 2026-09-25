@@ -95,7 +95,7 @@ cd android
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)
 ./tools/build-asr.sh                # 备齐离线识别的 .so 与模型(不入版本管理,缺了打包会报错)
 ./build-release.sh                  # 自分发渠道  → dist/reverb.apk(≈64 MB,含语音模型)
-./build-release.sh --store         # 大陆商店渠道 → dist/reverb-store.apk(≈3.9 MB)
+./build-release.sh --store          # 大陆商店渠道 → dist/reverb-store.apk(≈3.9 MB)
 ./gradlew :app:assembleDebug        # 只要一个能装的 debug 包
 ```
 

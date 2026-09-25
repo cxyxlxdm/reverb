@@ -7,7 +7,7 @@
 #
 # 用法:
 #   ./build-release.sh                 默认渠道 → dist/reverb.apk
-#   ./build-release.sh --store        商店渠道 → dist/reverb-store.apk
+#   ./build-release.sh --store         商店渠道 → dist/reverb-store.apk
 #   ./build-release.sh [渠道] --bundle 同时打 AAB(Google Play 需要 AAB)
 #
 # 1.0.1 起两渠道统一包名 com.yuyin.reverb.android(产品决策:鸿蒙端独占
@@ -38,7 +38,7 @@ CHANNEL=default
 BUNDLE=0
 for a in "$@"; do
   case "$a" in
-    --store) CHANNEL=store ;;
+    --store)  CHANNEL=store ;;
     --bundle) BUNDLE=1 ;;
     *) echo "✗ 未知参数:$a"; exit 1 ;;
   esac

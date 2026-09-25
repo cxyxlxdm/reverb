@@ -38,7 +38,7 @@ Android 有**两个渠道**(`default` 自分发 / `store` 大陆商店),功能�
 ```bash
 cd android
 ./build-release.sh                 # 自分发渠道  → dist/reverb.apk(≈64 MB,含语音模型)
-./build-release.sh --store        # 大陆商店渠道 → dist/reverb-store.apk(≈3.9 MB)
+./build-release.sh --store         # 大陆商店渠道 → dist/reverb-store.apk(≈3.9 MB)
 # 只想过编译(快):
 ./gradlew :app:compileDefaultReleaseKotlin :app:compileStoreReleaseKotlin -q
 # 备齐离线识别的两样产物(不入版本管理,缺了打包会报错退出):

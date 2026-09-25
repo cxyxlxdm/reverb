@@ -179,7 +179,7 @@ popular_cache.json  transcripts/<单集>.<语言>.json
 app/src/main/     共享代码与两个渠道共用的目录隐私说明
 app/src/default/  自分发渠道:AsrFactory(返回 WhisperEngine)、jniLibs/*.so、assets/模型、
                   AndroidManifest 里的 RECORD_AUDIO、ASR / 麦克风相关文案
-app/src/store/   商店渠道:AsrFactory(返回 null)、无 native / 模型 / RECORD_AUDIO、
+app/src/store/    商店渠道:AsrFactory(返回 null)、无 native / 模型 / RECORD_AUDIO、
                   无本机转写与真实频谱的渠道文案
 ```
 

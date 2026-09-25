@@ -42,7 +42,9 @@ Android versionCode 2 · HarmonyOS versionCode 1000001 · macOS 1.0.1
 - 界面与稳定性细节修复
 
 ### 工程要点
-- Android 换签后需在受影响渠道重新走平台安全扫描(误报背景见 docs/TROUBLESHOOTING.md H75)
+- Android 换签后需在受影响渠道重新走平台安全扫描(误报背景见 docs/TROUBLESHOOTING.md H75)。
+  本次换签之所以可行,是因为 1.0.0 当时**尚未到达任何用户**;签名一经分发即**永久锁定**,
+  同包名换签名会让已装用户无法覆盖升级(见 H82 的「前提」)—— 这条路不会再有第二次。
 
 ---
 

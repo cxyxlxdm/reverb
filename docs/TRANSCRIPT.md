@@ -68,7 +68,7 @@ app/src/default/ …/asr/AsrFactory.kt     返回 WhisperEngine,HAS_ENGINE = tru
 app/src/default/ …/asr/WhisperEngine.kt  引擎实现
 app/src/default/jniLibs/arm64-v8a/       libreverb_asr.so   ← 不入库
 app/src/default/assets/whisper-model.bin ggml-base-q5_1     ← 不入库
-app/src/store/  …/asr/AsrFactory.kt     返回 null,HAS_ENGINE = false
+app/src/store/   …/asr/AsrFactory.kt     返回 null,HAS_ENGINE = false
 ```
 
 `AsrFactory.HAS_ENGINE` 是 per-flavor 的 `const val`,**不需要额外的 buildConfigField** ——
