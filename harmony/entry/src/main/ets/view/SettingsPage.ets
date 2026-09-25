@@ -218,7 +218,7 @@ export struct SettingsPage {
 
           this.sectionLabel(L.s('sec_about'))
           this.actionRow(L.s('set_about'), () => '', () => this.onOpenAbout())
-          // 隐私政策必须**在应用内随时可查**,不能只在首启弹一次(平台合规指引 7.5)
+          // 隐私政策必须**在应用内随时可查**,不能只在首启弹一次(平台合规指引)
           this.actionRow(L.s('set_privacy'), () => L.s('set_privacy_sub'), () => this.openPrivacy())
           this.actionRow(L.s('set_licenses'), () => '', () => this.onOpenLicenses())
           this.plainRow(L.s('set_version'), appVersionName())

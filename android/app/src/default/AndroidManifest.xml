@@ -4,7 +4,7 @@
   Visualizer(session 0) 读的是**本机播放输出的混音**,Android 平台要求该能力
   必须持 RECORD_AUDIO;应用不采集麦克风、不落盘、不上传。默认关闭,用户主动开启才申请。
 
-  商店渠道不含本文件 —— 该市场把录音列为敏感隐私权限、需逐次举证,
+  商店渠道不含本文件 —— 个别市场把录音列为敏感隐私权限、需逐次举证,
   故那个渠道整块去掉了该功能(见 app/build.gradle 的 store flavor 注释)。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">

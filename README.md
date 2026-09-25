@@ -75,10 +75,10 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 - `CHANGELOG.md` — 更新日志(面向使用者的版本变更记录)
 - `docs/LOCAL-ASSETS.md` — **本地资产与换机迁移**(哪些东西不在 git 里、换一台电脑怎么完整重建)
 
-> 分发登记材料与**应用市场相关资料**(发布文案、分发平台图标、发布截图、发布物料包)
-> **不入版本控制**,只留在本地 —— 后者见 2026-09-20 定的硬规矩 19。
-> 清单与换机流程见 `docs/LOCAL-ASSETS.md`;合规口径见 `docs/HISTORY.md` 阶段五;
-> 首版恢复目录的决策见 H70 与 `docs/FEATURES.md`「渠道差异」。
+> 分发登记材料与**发布运营物料**(发布文案、上传图标、商店截图、物料包)
+> **不入版本控制**,只留在本地(硬规矩 19)。
+> 清单与换机流程见 `docs/LOCAL-ASSETS.md`;渠道合规口径见 `docs/FEATURES.md`「渠道差异」
+> 与 H70。
 - `AGENTS.md` — **在本仓库工作的约定**(构建命令、18 条硬规矩、代码与提交风格);`CLAUDE.md` 是指向它的薄指针
 
 > `docs/PRODUCT.md` 与 `docs/FEATURES.md` 是同一件事的两种粒度:前者叙述、后者矩阵。
@@ -86,7 +86,7 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 
 ## 构建
 
-完整命令（含渠道解包核对、ASR 产物、截图生成）见 `AGENTS.md`「常用命令」。
+完整命令（含渠道解包核对、ASR 产物）见 `AGENTS.md`「常用命令」。
 
 **Android** —— JDK 17 + Android SDK（platform 34, build-tools 34）
 

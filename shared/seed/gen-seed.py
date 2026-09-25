@@ -350,7 +350,7 @@ def build_opml(path_out, catalog):
             if e["feedUrl"] in seen or not e["title"]:
                 continue
             # 手工精选条目**不**流入 OPML:种子清单是自分发渠道/离线兜底的面,
-            # OPML 是安卓商店渠道渠道「导入推荐订阅」的功能面,两者收录口径从此分离,
+            # OPML 是大陆商店渠道「导入推荐订阅」的功能面,两者收录口径从此分离,
             # 商店渠道要不要收某档节目是单独的决策,不随种子清单自动带过去
             if e["feedUrl"] in MANUAL_FEEDURLS:
                 continue

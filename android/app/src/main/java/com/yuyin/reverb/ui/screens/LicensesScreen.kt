@@ -67,7 +67,7 @@ fun LicensesScreen(onBack: () -> Unit) {
             Text(
                 // 这段引言也要按渠道分支 —— 商店渠道里写「以下为公开的播客目录/检索接口」
                 // 就是文不对题:下面列的是 RSS 地址与官网 OPML,压根没有目录接口。
-                // 发布截图里这一页会被复核人员逐字看。鸿蒙侧同一处同一改法。
+                // 发布截图里这一页会被逐字核对。鸿蒙侧同一处同一改法。
                 stringResource(
                     if (com.yuyin.reverb.BuildConfig.CATALOG) R.string.licenses_sources_note_catalog
                     else R.string.licenses_sources_note

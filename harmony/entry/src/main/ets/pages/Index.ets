@@ -179,7 +179,7 @@ struct Index {
 
   build() {
     // 未同意隐私政策时**整棵界面树只有同意页** —— 发现页一进来就会拉榜单,
-    // 只要它没被渲染,同意前就一个网络请求都不会发生(平台合规指引 7.5)。
+    // 只要它没被渲染,同意前就一个网络请求都不会发生(平台合规指引)。
     if (!this.settings.privacyAccepted) {
       PrivacyConsentPage({
         scheme: this.scheme(),

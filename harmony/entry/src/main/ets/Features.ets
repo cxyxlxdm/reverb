@@ -13,7 +13,7 @@ export class Features {
    * 而「用户自行添加 RSS 源」的纯工具不需要。
    *
    * 只剩官网 15 条推荐订阅 + 手填 RSS 的版本对普通用户基本不可用,因此首版决定先按
-   * 完整功能提交平台复核,若平台复核确实不通过再降级(见 H70)。rawfile 仍不打包种子清单,
+   * 完整功能提交复核,若平台复核确实不通过再降级(见 H70)。rawfile 仍不打包种子清单,
    * 榜单与电台内容池只来自在线目录(见 shared/seed/sync.sh)。
    */
   static readonly CATALOG: boolean = true;

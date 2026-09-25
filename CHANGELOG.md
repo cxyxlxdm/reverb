@@ -3,9 +3,8 @@
 余音 · Reverb 的版本变更记录,三端(Android / HarmonyOS / macOS)共用一套版本号节奏。
 以用户可见的变化为主,每版末尾附**工程要点**(只影响开发与发布流程的部分)。
 
-**发版时的动作**:在此追加一节;同时同步两份**本地**发布文案的「版本说明」段
-(`android/store/发布文案.txt`、`harmony/store/发布文案.txt` —— 发布资料不入版本控制,
-见 AGENTS.md 硬规矩 18)。本文件是发布文案里「版本说明」的上游:先定这里,再抄出去。
+**发版时的动作**:在此追加一节。本文件是对外版本说明的**唯一上游**(硬规矩 19):
+先定这里,再同步到各分发渠道的本地发布文案(发布资料不入版本控制)。
 
 ---
 
@@ -25,7 +24,7 @@ Android versionCode 3 · HarmonyOS versionCode 1000002 · macOS 1.0.2
 
 ### 工程要点
 - 系统备份按精确白名单声明(allowBackup 翻转,H75/H84 的决策链);鸿蒙侧 BackupExtension + backup_config 同步落地
-- 发布截图口径改为原生分辨率直出、零黑边(见 AGENTS.md「截图」)
+- 发布截图统一为原生分辨率直出、零黑边
 
 ---
 
@@ -43,7 +42,7 @@ Android versionCode 2 · HarmonyOS versionCode 1000001 · macOS 1.0.1
 - 界面与稳定性细节修复
 
 ### 工程要点
-- Android 换签后需在商店渠道重新走安全扫描(误报背景见 docs/TROUBLESHOOTING.md H75)
+- Android 换签后需在受影响渠道重新走平台安全扫描(误报背景见 docs/TROUBLESHOOTING.md H75)
 
 ---
 

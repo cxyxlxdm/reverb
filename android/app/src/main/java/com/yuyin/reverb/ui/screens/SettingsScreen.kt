@@ -313,7 +313,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
 
             SectionLabel(stringResource(R.string.sec_about))
             SettingRow(stringResource(R.string.set_about), onClick = onOpenAbout)
-            // 隐私政策必须**在应用内随时可查**,不能只在首启弹一次(平台合规指引 7.5)
+            // 隐私政策必须**在应用内随时可查**,不能只在首启弹一次(平台合规指引)
             SettingRow(
                 stringResource(R.string.set_privacy),
                 stringResource(R.string.set_privacy_sub)
