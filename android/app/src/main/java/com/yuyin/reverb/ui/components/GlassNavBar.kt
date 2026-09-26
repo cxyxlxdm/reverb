@@ -38,7 +38,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -60,33 +62,41 @@ import kotlin.math.roundToInt
 data class GlassTabSpec(val label: String, val icon: ImageVector)
 
 /**
- * 底部导航:悬浮玻璃长椭圆 + **放大镜式镜片胶囊**(与鸿蒙 GlassTabBar 同一套设计)。
+ * 底部导航:悬浮玻璃长椭圆 + **镜片胶囊**(与鸿蒙 GlassTabBar 同一套设计)。
  *
- * 两层从下到上,把「玻璃罩住内容」画成光学现象而不是一个色块:
- * 1. **基础内容**:图标+文字,正常尺寸。
- * 2. **镜片**:胶囊本体裁剪,先铺一块 [LENS_PLATE_ALPHA] 的表面色玻璃板**盖住**底下的
- *    原尺寸内容(不盖会与副本叠成重影),再画按 [LENS_MAG] 绕胶囊中心放大的内容。
- *    碰到/离开图标文字时内容明显变大,像放大镜;拖动时副本再往运动的反方向退一档
- *    ([SMEAR_LAG])、横向再拉长一档([LENS_STRETCH]),就是「拖影」。
+ * 两层从下到上:
+ * 1. **基础内容**:图标+文字,正常尺寸,任何时候都不变形。
+ * 2. **镜片**:一块尺寸随按压长大的胶囊(裁剪窗口),先铺一块表面色玻璃板**盖住**底下的
+ *    原尺寸内容,再画一份同尺寸的内容副本。副本静止时与底层**逐像素对齐**,所以按下时
+ *    文字图标看不出任何变化;只有胶囊沿**压到**内容的那段时间,副本才被绕内容自身中心
+ *    横向拉长 [SMEAR_STRETCH]、并逆着拖动方向后退 [SMEAR_LAG] —— 这就是「拖影」,
+ *    离开内容即消失(强度算法见 [edgeOf])。
+ *
+ * 底板浓度必须是动态的([PLATE_GLASS] → [PLATE_OPAQUE]):静止时副本与底层重合,
+ * 玻璃浓度就够;拖影期间两层错开,不盖实会读作重影。
  *
  * 曾经还有第 3 层「折射带」(比胶囊大一圈的裁剪 + 更强的放大副本)。鸿蒙装机实测它
  * **并不折射任何东西,而是整圈提亮成一块浅色光晕** —— 带 clipShape 的子节点会被单独
- * 合成,背景模糊在那一圈被重算了一遍。删掉后光晕消失,拖影改由镜片层的「滞后 + 横向
- * 拉伸」表达。Android 这侧没有同一个 bug,但两端同一套观感是本组件的前提,故一并去掉
- * (同「盖而不是挖」那次统一)。
+ * 合成,背景模糊在那一圈被重算了一遍。删掉后光晕消失(H96)。
+ *
+ * 再之前按「放大镜」做过静态 1.35 倍放大,装机被读作「底部变形」;需求口径是
+ * **点击时文字图标不变,只有胶囊和容器放大**,静态放大整条作废(见 H97)。
  *
  * 为什么是"盖"而不是"挖":两端必须同一套做法,而鸿蒙那侧只有
  * `clipShape(shape)` / `maskShape(shape)` 的"只显示形内"语义(SDK 的 CommonMethod 里
  * 已无 MaskType.Exclude,挖不成孔),Android 单独用 `clipPath(Difference)` 挖孔会让
  * 两端观感分叉。代价是胶囊比真玻璃略实。
  *
- * 按下时**整条栏**一起放大到 [BAR_PRESS](不是只有被按的那个图标),胶囊自己再放大一档
- * 到 [PILL_PRESS];单个 tab 内容**不再**各自缩放 —— 放大这件事交给镜片层,两处同时做会过冲。
+ * 按下时**整条栏**一起放大到 [BAR_PRESS](不是只有被按的那个图标),胶囊再大一档到
+ * [PILL_PRESS]。只要 PILL_PRESS > 栏高/胶囊高,胶囊就会**长出栏外** —— 这是用户明确要的
+ * 效果,所以容器**不能有裁剪**(圆角只作为背景与描边的形状参数传给 .background/.border)。
  *
  * **性能口径**:镜片是同一份 tab 内容的重绘副本,每帧两个绘制遍,但都是小尺寸
- * 矢量内容;所有逐帧变化的量(药丸 x、动画值、拖拽累计)只在 `offset{}` /
- * `graphicsLayer{}` 的 lambda 里读,**不进组合** —— 拖动帧只更新图层矩阵,
- * 不重建 Row(同鸿蒙端 H64 的最小重建面原则)。
+ * 矢量内容;所有逐帧变化的量(药丸 x、拖拽累计、由它们算出的 smear)只在
+ * `offset{}` / `graphicsLayer{}` / `drawBehind{}` 的 lambda 里读,**不进组合** ——
+ * 拖动帧只更新图层矩阵,不重建 Row(同鸿蒙端 H64 的最小重建面原则)。
+ * 只有 `pillGrowth`(胶囊尺寸)是逐帧进组合的:它只在按下/松手的 ~200ms 弹簧期间变,
+ * 拖拽帧里恒为常量。
  *
  * **Android 没有 ArkUI backgroundEffect 那种区域级实时背景模糊**(窗口级
  * setBackgroundBlurRadius 只糊壁纸;三方 blur 库被仓库「不接三方 SDK」约束挡住),
@@ -105,39 +115,38 @@ data class GlassTabSpec(val label: String, val icon: ImageVector)
  * (stiffness = (2π/response)²)。
  */
 /**
- * 镜片倍率。上限由**内容块高度**卡死:图标 22 + 间距 2 + 文案 ≈13 = 37dp,绕栏中心
- * 放大后是 37×倍率,超过胶囊高就被胶囊沿切掉半个字 —— 鸿蒙装机实测 1.45 配 44 高的
- * 胶囊时「发现」下沿被削掉 5vp,读起来像渲染坏了。37 × 1.35 ≈ 50 = 现在的胶囊高。
+ * 拖影强度 0..1 由「胶囊沿压到内容的程度」算出(见 [edgeOf]),它同时驱动:
+ * 副本横向拉长 [SMEAR_STRETCH]、逆着运动方向后退 [SMEAR_LAG]、底板变实
+ * ([PLATE_GLASS] → [PLATE_OPAQUE])。静止时 smear=0,副本与底下的内容逐像素同尺寸
+ * 同坐标 —— 按下时文字图标**不变**,这是用户指定的口径(曾按"放大镜"做过静态 1.35 倍,
+ * 装机读作"底部变形",见 H96/H97)。
  *
- * 下面这组光学参数(倍率 / 胶囊高 / 底板 α / 拖影三件套 / 按压倍率)全部取自鸿蒙真机
- * 实测,理由与踩过的坑见 H96。Android 侧本轮**没有装机校色**,两端观感一致的前提是
- * 数值与结构同源 —— 装机若偏,以实机为准调这一组,别调结构。
- */
-private const val LENS_MAG = 1.35f
-
-/**
- * 拖拽时镜片副本的"拽动"三件套:满程 [SMEAR_FULL] 拖到顶,副本相对镜片反向退最多
- * [SMEAR_LAG],同时横向额外放大 [LENS_STRETCH]。
+ * 后退取**负方向**(副本退、镜片进)才读作被玻璃拽住;只平移不拉长会得到
+ * "整块字挪了个位子",不像折射。
  *
- * 位移必须是**负方向**(副本退、镜片进)才读作被玻璃拽住的拖影;鸿蒙首版取正号,
- * 副本跑在镜片前面,观感是"字先走、圈后到",像掉帧而不是折射。
+ * [SMEAR_LAG] 只有 6dp:副本是**整层**平移,而它要被裁进胶囊里,退得越多镜内剩得越少
+ * (鸿蒙取 15 时实测内容整块被推出镜外,镜子里只剩空玻璃)。
  */
-private val SMEAR_FULL = 34.dp
-private val SMEAR_LAG = 15.dp
-private const val LENS_STRETCH = 0.55f
+private val SMEAR_LAG = 6.dp
+private const val SMEAR_STRETCH = 0.55f
 
 /**
- * 镜片底板的表面色不透明度。鸿蒙首版取 0.82,装机实测**残留重影明显**:放大副本绕中心
- * 外扩,原尺寸的图标/文案仍留在内侧,18% 透出来正好叠在副本的空档上,读作"两层字"。
+ * 内容块的半宽:图标 22、文案两字 ≈26,取宽的那个的一半。只用来判"沿有没有压到内容"。
  */
-private const val LENS_PLATE_ALPHA = 0.93f
+private val CONTENT_HALF = 13.dp
+
+/** 底板浓度:静止是玻璃,拖影期间随 smear 变实盖住底下的原文(错开两层字会读作渲染坏) */
+private const val PLATE_GLASS = 0.62f
+private const val PLATE_OPAQUE = 0.92f
 
 /**
- * 按下时整条栏 / 胶囊的放大倍率。首版取 1.07 / 1.12,鸿蒙装机截图里**完全看不出栏在
- * 长大**(56 高的 7% 只有 4vp),而需求要的正是"长按时整个底部 tab 都放大"。
+ * 按下时整条栏 / 胶囊的放大倍率。两条都是用户指定的口径:
+ * ①整条栏一起放大(不是只有被按的图标);②胶囊要**比整条栏大一档,高到超出栏高** ——
+ * 所以 PILL_PRESS 必须大于 BAR_H/PILL_H = 56/44 ≈ 1.27,低于这个比值胶囊就永远闷在栏里。
+ * 首版取 1.07/1.12,装机截图里完全看不出栏在长大(56 的 7% 只有 4vp)。
  */
 private const val BAR_PRESS = 1.10f
-private const val PILL_PRESS = 1.15f
+private const val PILL_PRESS = 1.42f
 
 @Composable
 fun GlassNavBar(
@@ -155,13 +164,13 @@ fun GlassNavBar(
     val currentOnSelect by rememberUpdatedState(onSelect)
 
     val barH = 56.dp
-    val pillH = 50.dp
+    val pillH = 44.dp
     val pillWd = 84.dp
     val pillW = with(density) { pillWd.toPx() }
-    val smearFullPx = with(density) { SMEAR_FULL.toPx() }
+    val pillHpx = with(density) { pillH.toPx() }
+    val barHpx = with(density) { barH.toPx() }
     val smearLagPx = with(density) { SMEAR_LAG.toPx() }
-    /** 胶囊在栏内的顶边 y(栏 56 / 胶囊 50,居中) */
-    val pillTopPx = with(density) { (barH - pillH).toPx() / 2f }
+    val contentHalfPx = with(density) { CONTENT_HALF.toPx() }
     val settleSpec = spring<Float>(dampingRatio = 0.75f, stiffness = 440f)
 
     var barWpx by remember { mutableFloatStateOf(0f) }
@@ -178,9 +187,39 @@ fun GlassNavBar(
     var interacting by remember { mutableStateOf(false) }
     var placed by remember { mutableStateOf(false) }
     var previewJob by remember { mutableStateOf<Job?>(null) }
+    /** 拖影后退的方向 = 胶囊这一帧的运动方向(倒拖时影也要倒回去) */
+    var smearDir by remember { mutableFloatStateOf(1f) }
 
     fun halfW(): Float = barWpx / 2f
     fun pillXFor(idx: Int): Float = idx * halfW() + (halfW() - pillW) / 2f
+    /** 第 idx 项内容块的中心(胶囊静止时就落在这儿) */
+    fun slotCx(idx: Int): Float = idx * halfW() + halfW() / 2f
+
+    /// 药丸当前左缘 x:拖拽期 1:1 跟手,平时读弹簧值。只在绘制/布局 lambda 里调用。
+    fun pillPx(): Float = if (dragging) dragStartX + dragAccum else pillX.value
+
+    /**
+     * 胶囊沿"压到"第 idx 项内容的程度 0..1 —— 纯几何:内容与胶囊同轴(整块在镜内)
+     * → 0;胶囊走远到内容完全出沿 → 0;内容中心正好骑在沿上 → 1。
+     *
+     * 于是"触碰有影、离开影消"不需要开关,也不需要读速度:松手回弹途中沿扫过内容
+     * 会顺带来一下影,因为 pillX 本身在被弹簧逐帧驱动。
+     */
+    fun edgeOf(idx: Int): Float {
+        val d = kotlin.math.abs(pillPx() + pillW / 2f - slotCx(idx))
+        val u = ((d - (pillW / 2f - contentHalfPx)) / (contentHalfPx * 2f)).coerceIn(0f, 1f)
+        return 1f - kotlin.math.abs(2f * u - 1f)
+    }
+
+    fun smear(): Float = maxOf(edgeOf(0), edgeOf(1))
+
+    /**
+     * 拖影该绕谁拉伸:**被压住那份内容自己的中心**,不是胶囊中心。
+     * 绕胶囊中心缩放会给远离轴心的内容附加一个大位移 —— 鸿蒙装机实测把「发现」整块
+     * 甩出镜外 49vp,镜子里只剩空玻璃(见 H97)。
+     */
+    fun smearPivotCx(): Float = slotCx(if (edgeOf(0) >= edgeOf(1)) 0 else 1)
+
     fun tabAt(x: Float): Int {
         if (halfW() <= 0f) return 0
         // 均分槽位直接 floor:x 落在哪个槽就是哪个 tab。原先的 (x + halfW/2)/halfW
@@ -190,9 +229,6 @@ fun GlassNavBar(
         return (x / halfW()).toInt().coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
     }
 
-    /// 药丸当前左缘 x:拖拽期 1:1 跟手,平时读弹簧值。只在绘制/布局 lambda 里调用。
-    fun pillPx(): Float = if (dragging) dragStartX + dragAccum else pillX.value
-
     // 选中项变化(含首次量宽)→ 药丸弹簧吸过去。拖拽期间不插手,松手路径自己收。
     LaunchedEffect(barWpx, selected) {
         if (barWpx <= 0f) return@LaunchedEffect
@@ -200,25 +236,33 @@ fun GlassNavBar(
             pillX.snapTo(pillXFor(selected))
             placed = true
         } else if (!dragging) {
+            smearDir = if (pillXFor(selected) >= pillX.value) 1f else -1f
             pillX.animateTo(pillXFor(selected), settleSpec)
         }
     }
 
-    val pillScale by animateFloatAsState(
+    /**
+     * 胶囊的"长大"是**尺寸**而不是图层缩放:`graphicsLayer` 缩放会把里面的内容副本
+     * 一起放大,而需求是"按下时文字图标不变,只有胶囊和容器放大"。
+     *
+     * 这一档是逐帧读进组合的(与 pillX/拖拽量不同) —— 只在按下/松手的 ~200ms 弹簧期间
+     * 变,拖拽帧里它是常量,所以拖动帧仍然只更新图层矩阵。
+     */
+    val pillGrowth by animateFloatAsState(
         targetValue = if (interacting) PILL_PRESS else 1f,
         animationSpec = spring(dampingRatio = 0.8f, stiffness = 816f),
-        label = "pillScale"
+        label = "pillGrowth"
     )
+    val pillWdG = pillWd * pillGrowth
+    val pillHG = pillH * pillGrowth
     val barScale by animateFloatAsState(
         targetValue = if (interacting) BAR_PRESS else 1f,
         animationSpec = spring(dampingRatio = 0.8f, stiffness = 816f),
         label = "barScale"
     )
-    val pillAlpha by animateFloatAsState(
-        targetValue = if (interacting) 0.28f else 0.15f,
-        animationSpec = spring(dampingRatio = 0.8f, stiffness = 816f),
-        label = "pillAlpha"
-    )
+    /** 染色跟着倍率走:弹簧刚起步就"啪"地深一档,和正在长大的胶囊对不上 */
+    val pillAlpha: Float =
+        0.15f + ((pillGrowth - 1f) / (PILL_PRESS - 1f)).coerceIn(0f, 1f) * 0.13f
 
     /// 松手 / 被系统取消:按药丸当前位置吸附最近项。commit=false(取消)只回弹。
     fun settle(commit: Boolean) {
@@ -241,7 +285,9 @@ fun GlassNavBar(
                 // 药丸不在这里动:selected 一变,LaunchedEffect 会从当前绘制位弹簧过去
                 currentOnSelect(target)
             } else {
-                pillX.animateTo(pillXFor(currentSelected), settleSpec)
+                val home = pillXFor(currentSelected)
+                smearDir = if (home >= pillX.value) 1f else -1f
+                pillX.animateTo(home, settleSpec)
             }
         }
     }
@@ -265,9 +311,10 @@ fun GlassNavBar(
                 // 阴影外形用真胶囊,理由见 Components.kt GlassChipsRow(H92):
                 // 半径小于半高的高程阴影在形状中央留接缝,透过半透明玻璃显形。
                 .shadow(elevation = 8.dp, shape = RoundedCornerShape(percent = 50), clip = false)
-                .clip(RoundedCornerShape(28.dp))
-                // 玻璃打底:半透明 surface + 发丝描边(透明度取舍见类注释)
-                .background(colorScheme.surface.copy(alpha = 0.85f))
+                // 玻璃打底:半透明 surface + 发丝描边(透明度取舍见类注释)。
+                // **这里不能用 .clip(RoundedCornerShape)**:胶囊长大要溢出到栏高之外
+                // (PILL_PRESS > 56/44),容器一裁剪就被切平 —— 圆角只交给背景与描边的形状参数。
+                .background(colorScheme.surface.copy(alpha = 0.85f), RoundedCornerShape(28.dp))
                 .border(0.8.dp, colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(28.dp))
                 .onSizeChanged { barWpx = it.width.toFloat() }
                 // 横拖:药丸 1:1 跟手,松手按位置吸附(装机社区手感)
@@ -292,6 +339,7 @@ fun GlassNavBar(
                         onHorizontalDrag = { change, amount ->
                             if (dragging) {
                                 change.consume()
+                                if (amount != 0f) smearDir = if (amount > 0f) 1f else -1f
                                 dragAccum += amount
                                 val lo = pillXFor(0)
                                 val hi = pillXFor(tabs.size - 1)
@@ -339,20 +387,12 @@ fun GlassNavBar(
                     )
                 }
         ) {
-            // 副本要与基础内容**同尺寸同坐标**,绕胶囊中心缩放后才对得齐。栏宽只在
+            // 副本要与基础内容**同尺寸同坐标**才能逐像素重合(静止时看不出两层)。栏宽只在
             // 量测/旋屏时变(不是拖动帧),所以在这里读容器约束换一次 dp 无妨。
             val barWdp = with(density) { constraints.maxWidth.toDp() }
-            val barHdp = with(density) { constraints.maxHeight.toDp() }
-            val lensOn = placed && constraints.maxWidth > 0
+            val barHdp = barH
+            val lensOn = placed && barWpx > 0f
             val active = if (nearIdx >= 0) nearIdx else currentSelected
-            // 镜片光轴 = 胶囊中心(栏坐标 = 副本自身局部坐标)。
-            // Compose 1.6 的 TransformOrigin 只吃 0..1 的比例,故把像素中心换算成比例。
-            fun pivotFx(): Float = (pillPx() + pillW / 2f) / maxOf(constraints.maxWidth, 1)
-            fun pivotFy(): Float = 0.5f
-
-            /** 拽动量 -1..1:拖了多少(满程 SMEAR_FULL)。只在绘制 lambda 里读。 */
-            fun smearAmt(): Float =
-                if (!dragging) 0f else (dragAccum / smearFullPx).coerceIn(-1f, 1f)
 
             // 1) 基础内容(不挖孔:与鸿蒙端同一套"盖而不是挖"的做法,见类注释)
             TabItemsRow(
@@ -364,23 +404,39 @@ fun GlassNavBar(
                 modifier = Modifier.fillMaxSize()
             )
 
-            // 2) 镜片:胶囊本体裁剪 + 玻璃底色,内容按较小倍率放大(放大镜本体)
+            // 2) 镜片:长大的是**尺寸**不是图层 —— 用 graphicsLayer 缩放会把里面的内容副本
+            //    一起放大,那就违反"按下时文字图标不变"。裁剪窗口挂在本层,形变挂在副本层,
+            //    两者必须分层(同节点时裁剪窗口会跟着形变一起走,副本整块被推出镜外,H97)。
             if (lensOn) {
                 Box(
                     Modifier
                         .offset {
-                            IntOffset(pillPx().roundToInt(), pillTopPx.roundToInt())
+                            val gw = pillW * pillGrowth
+                            val gh = pillHpx * pillGrowth
+                            IntOffset(
+                                (pillPx() + pillW / 2f - gw / 2f).roundToInt(),
+                                ((barHpx - gh) / 2f).roundToInt()
+                            )
                         }
-                        .size(width = pillWd, height = pillH)
+                        .size(width = pillWdG, height = pillHG)
                         .clip(CircleShape)
-                        .graphicsLayer {
-                            scaleX = pillScale
-                            scaleY = pillScale
+                        // 底板:盖住胶囊下那一份原尺寸内容(不盖会与副本叠成重影)。
+                        // 浓度是 pillX 的函数,必须画在 draw 层 —— 放组合里读会让每个拖拽帧
+                        // 整段重组合。上面再叠一层按压染色。
+                        .drawBehind {
+                            val s = smear()
+                            val r = CornerRadius(size.minDimension / 2f)
+                            drawRoundRect(
+                                color = colorScheme.surface,
+                                cornerRadius = r,
+                                alpha = PLATE_GLASS + s * (PLATE_OPAQUE - PLATE_GLASS)
+                            )
+                            drawRoundRect(
+                                color = colorScheme.primary,
+                                cornerRadius = r,
+                                alpha = pillAlpha
+                            )
                         }
-                        // 底板:盖住胶囊下那一份原尺寸内容(不盖会与副本叠成重影),
-                        // 再加一层按压染色 —— 与鸿蒙 LensLayer 同一套"盖而不是挖"
-                        .background(colorScheme.surface.copy(alpha = LENS_PLATE_ALPHA))
-                        .background(colorScheme.primary.copy(alpha = pillAlpha))
                         .border(0.8.dp, colorScheme.primary.copy(alpha = 0.18f), CircleShape)
                 ) {
                     TabItemsRow(
@@ -392,15 +448,20 @@ fun GlassNavBar(
                         modifier = Modifier
                             .requiredSize(width = barWdp, height = barHdp)
                             .graphicsLayer {
-                                // 副本与栏内容同尺寸同坐标:先按胶囊中心放大,再平移回
-                                // 本层原点(层左上角 = 栏坐标 (left, top),故平移量取其负值)。
-                                // 拖影:副本相对镜片往运动的**反方向**退,同时横向多拉一档
-                                val s = smearAmt()
-                                translationX = -pillPx() - s * smearLagPx
-                                translationY = -(pillTopPx)
-                                scaleX = LENS_MAG + kotlin.math.abs(s) * LENS_STRETCH
-                                scaleY = LENS_MAG
-                                transformOrigin = TransformOrigin(pivotFx(), pivotFy())
+                                // 副本局部坐标数值 == 栏坐标,但本层左上角在栏坐标
+                                // (left, top),故平移量取负才与基础内容对齐。
+                                // 拖影:横向绕**被压住内容的中心**拉长,同时整层逆着拖动
+                                // 方向后退一档 —— 只平移不拉长会读作"整块字挪了位子"。
+                                val s = smear()
+                                val gw = pillW * pillGrowth
+                                val left = pillPx() + pillW / 2f - gw / 2f
+                                val top = (barHpx - pillHpx * pillGrowth) / 2f
+                                translationX = -left - smearDir * s * smearLagPx
+                                translationY = -top
+                                scaleX = 1f + s * SMEAR_STRETCH
+                                scaleY = 1f
+                                // TransformOrigin 只吃 0..1 的比例,故把像素中心换算成比例
+                                transformOrigin = TransformOrigin(smearPivotCx() / barWpx, 0.5f)
                             }
                     )
                 }
