@@ -27,3 +27,8 @@ oh-package-lock.json5
 # 一旦提交就等于把发布身份写进历史(即便之后删除,历史里依然在)。
 # 注意仓库根用的是 `git add -A`,不加这条规则一次提交就会把 p12 带进去。
 /signature/
+# DevEco / hvigor sync 每次重写的本地 IDE 与代码导航配置:内容与本机 SDK 路径绑定,
+# 对读代码的人没有价值(仓库根已全层级忽略 .hvigor/,`/.hvigor` 那条是历史遗留)。
+/.idea/
+/.clangd
+/.clang-tidy
