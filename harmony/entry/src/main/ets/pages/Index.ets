@@ -13,7 +13,7 @@ import { DiscoverPage } from '../view/DiscoverPage';
 import { PodcastDetailPage } from '../view/PodcastDetailPage';
 import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
-import { GlassTabBar } from '../view/GlassTabBar';
+import { GlassTabBar, barFootprint } from '../view/GlassTabBar';
 import { LibraryPage } from '../view/LibraryPage';
 import { SettingsPage } from '../view/SettingsPage';
 import { PrivacyConsentPage } from '../view/PrivacyConsentPage';
@@ -373,11 +373,14 @@ struct Index {
   }
 
   /// 页面滚动内容需为玻璃悬浮层让出的底部空间:
-  /// 手势条 bottomInset + tab 栏 56 + 迷你条(2 细线 + 42 封面 + 上下 8 = 60)+ 分隔线 0.5。
+  /// 栏的落点(`barFootprint` = 栏高 + 手势区的那一道留白)+ 迷你条(2 细线 + 42 封面 +
+  /// 上下 8 = 60)+ 分隔线 0.5。
   /// 迷你条的出现/消失经 onStateChanged → tick 触发重渲,这里随之重算并经 @Prop 传下去。
+  /// 式子必须与 GlassTabBar 里那个 Column 的高度同源(所以导入 `barFootprint` 而不是
+  /// 自己拼 `bottomInset + BAR_H`)—— 收小留白时最容易漏这一处,漏了列表末尾多出一条空白。
   private underBarPad(): number {
     const mini = this.player.current !== null ? 60.5 : 0;
-    return this.bottomInset + 56 + mini;
+    return barFootprint(this.bottomInset) + mini;
   }
 
   @Builder
