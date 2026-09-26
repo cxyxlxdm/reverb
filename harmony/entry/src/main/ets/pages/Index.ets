@@ -442,6 +442,12 @@ struct Index {
       .width('100%')
       .height('100%')
       .padding({ top: this.topInset })
+      /**
+       * 玻璃栏的**折射取源**:栏要折射的是"自己背后那块内容",而内容恰好就是这一层。
+       * 挂在 Column(而不是 Navigation)上 —— 悬浮的迷你条与栏都是它的兄弟节点,
+       * 截这一层天然不含栏自己,镜内不会套一份"栏的副本"。
+       */
+      .id('glassBackdrop')
 
       Column() {
         if (this.player.current !== null) {

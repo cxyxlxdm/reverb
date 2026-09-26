@@ -1,10 +1,27 @@
 import { Scheme, TypeScale, Tracking, withAlpha } from '../theme/Theme';
-import { curves } from '@kit.ArkUI';
+import { Log } from '../util/Logger';
+import { FrameCallback } from '@kit.ArkUI';
+import image from '@ohos.multimedia.image';
 
 /// tab 项规格:图标与文案。数量由父级决定(当前恒为 2)。
 export interface TabSpec {
   label: Resource;
   icon: Resource;
+}
+
+/** smoothstep:两端斜率为 0,所以环带之间的接缝在中心和镜缘都最窄。 */
+function smooth01(t: number): number {
+  return t * t * (3 - 2 * t);
+}
+
+/**
+ * 位移场的径向分布:**内圈 RIM_FLAT 之前完全不动**,之后才 smoothstep 到镜缘那一档。
+ * 直接拿 smooth01(r) 的话中心区已经开始拉扯,整颗镜子读起来是一块"均匀放大的贴片",
+ * 而不是参考片那种"厚的边、薄的芯"。
+ */
+function rimWeight(r: number): number {
+  const t: number = Math.max(0, Math.min(1, (r - RIM_FLAT) / (1 - RIM_FLAT)));
+  return smooth01(t);
 }
 
 // —— 玻璃胶囊的手感参数(装机实测值;演进与坑见 H96/H97/H98)——
@@ -44,13 +61,14 @@ const LENS_PRESS: number = 1.16;
  */
 const LENS_TINT: number = 0.14;
 /**
- * 透镜自己的折射。装机实测:半径 26 会把 16vp 的图标**整个糊没**(不是冲淡,是消失),
- * 而参考片里图标在玻璃下仍然认得出 —— 玻璃糊的是"栏下那行列表文字"这种大尺度内容,
- * 不是自己的图标。10 是"图标还在、列表字已化开"的那一档。
- * 必须明显**大于栏底的 BASE_BLUR**:透镜相对整条栏要有"额外的折射",
- * 两者一样就只剩一块提亮的白。
+ * 透镜这一档的磨砂半径。它糊的是**折射层画出来的那份内容**(折射层在玻璃之下),
+ * 所以这个数直接决定折射看不看得见:
+ * - 24(纯磨砂那版的定稿值)⇒ 搬进来的位移被糊平,折射等于白做;
+ * - 1 ⇒ 镜内清晰、镜外磨砂,接缝处像贴了一张贴纸,不像同一块玻璃;
+ * - 10 是"读得出拉扯、又不刺眼"的那一档 —— 必须明显**小于**栏底的 BASE_BLUR,
+ *   透镜相对整条栏才是"更透、更聚焦",否则只剩一块提亮的白。
  */
-const LENS_BLUR: number = 24;
+const LENS_BLUR: number = 10;
 const LENS_SAT: number = 1.6;
 const LENS_BRIGHT: number = 1.10;
 /** 边缘高光的浓度。参考片那圈亮边占了"玻璃感"读感的一半,不能省。 */
@@ -65,8 +83,9 @@ const BASE_BLUR: number = 28;
 const BASE_SAT: number = 1.35;
 const BASE_TINT: number = 0.34;
 /**
- * 两组弹簧(springMotion(response, dampingFraction):response 是**一次完整振荡的秒数**,
- * 越大越慢;damping < 1 才会过冲)。
+ * 两组弹簧(response 是**一次完整振荡的秒数**,越大越慢;damping < 1 才会过冲)。
+ * ⚠️ 语义与 `curves.springMotion(response, dampingFraction)` 一致,但这两组参数现在喂给
+ * JS 侧的 [GlassSpring] 自己积分,不再交给渲染侧 —— 原因见该类的注释。
  *
  * 生硬感的来源就是原先 0.22/0.8 与 0.3/0.75 这两档 —— response 短到看不见振荡,
  * damping 又接近临界,落位是"急刹"而不是"甩过头再回来"。
@@ -154,16 +173,114 @@ const SIDE_PAD: number = 24;
  */
 const ITEM_INSET: number = 22;
 
+// —— 折射层(实验,见 H98 之后)——
+/**
+ * 折射总开关。false 时退回 H98 定稿那版"只有 backgroundEffect 的纯磨砂"。
+ *
+ * 为什么需要开关:折射是"把镜内那块内容按位移场搬一遍",一旦位移场算错,
+ * 症状是镜内内容整体偏移/重影,和"参数调坏"完全同形 —— 必须能一键回到已知好的状态对比。
+ */
+const REFRACT: boolean = true;
+/**
+ * 折射画布比栏**上下各多出**的余量(vp)。透镜按住时鼓出栏外,画布必须比栏高,
+ * 否则超出那截被画布边界切掉。
+ */
+const CANVAS_PAD: number = 12;
+/**
+ * 径向放大环的**层数**:每一层裁一个"两圈长椭圆之间"的环带,再按该层的倍率重画整块内容。
+ * 层数就是折射曲线的采样精度 —— 连续位移场在这个 SDK 里没有(shader 挂不进声明式树,
+ * RenderNodeContainer 在本 SDK 不存在),只能用分段仿射逼近。
+ */
+const RINGS: number = 12;
+/** 镜缘那一层的**取样**倍率:>1 = 镜缘把圈外的内容压进这一圈。1.0 = 不折射。 */
+const RIM_MAG: number = 1.35;
+/** 位移场的平坦内圈半径占比:这一段以内 1:1 不动,折射全部留给外圈。 */
+const RIM_FLAT: number = 0.45;
+
+/**
+ * 阻尼振子。**为什么在 JS 里自己积分而不用 `animateTo`**:
+ * `animateTo` 只把**目标值**写进状态,中间值由渲染侧插值,JS 永远读不到"现在"是多少。
+ * 而折射层每一帧都要知道透镜现在多大、压在哪块背景上,才能把像素搬对位置 ——
+ * 用 animateTo 的症状是按下那 ~0.3 秒里折射内容已按最终尺寸画好、玻璃还没长到那儿,
+ * 镜缘外溢一圈不属于它的内容(位置弹簧同理:滑动中折射会抢在玻璃前面到位)。
+ *
+ * 参数语义与 `curves.springMotion(response, dampingFraction)` 一致,换过来观感不变。
+ */
+class GlassSpring {
+  value: number;
+  target: number;
+  private vel: number = 0;
+  private resp: number;
+  private damp: number;
+  /** 停住判据。倍率(量程 0.16)和位移(量程几百 vp)差几个数量级,不能共用一个常数。 */
+  private eps: number;
+
+  constructor(value: number, response: number, damping: number, eps: number) {
+    this.value = value;
+    this.target = value;
+    this.resp = response;
+    this.damp = damping;
+    this.eps = eps;
+  }
+
+  /// 硬落到某个值并停住 —— 1:1 跟手的那些帧不走弹簧,但要让弹簧知道现在在哪
+  snap(to: number): void {
+    this.value = to;
+    this.target = to;
+    this.vel = 0;
+  }
+
+  /// 推进 dt 秒;返回是否已经停住
+  step(dt: number): boolean {
+    if (this.value === this.target && this.vel === 0) return true;
+    const omega: number = 2 * Math.PI / this.resp;
+    const accel: number = -omega * omega * (this.value - this.target) - 2 * this.damp * omega * this.vel;
+    // 半隐式欧拉(先速度后位置)。显式版在 response 接近两帧时长时会发散。
+    this.vel += accel * dt;
+    this.value += this.vel * dt;
+    if (Math.abs(this.value - this.target) < this.eps && Math.abs(this.vel) < this.eps * 30) {
+      this.value = this.target;
+      this.vel = 0;
+      return true;
+    }
+    return false;
+  }
+}
+
+/**
+ * `postFrameCallback` 收的是一个 FrameCallback 实例,而且**本 SDK 没有 cancelFrameCallback**
+ * —— 只能靠"不再续订"停下,所以实例要做成常驻的一个,每帧逻辑转交给组件的闭包。
+ */
+class GlassTicker extends FrameCallback {
+  private fn: (frameNs: number) => void;
+
+  constructor(fn: (frameNs: number) => void) {
+    super();
+    this.fn = fn;
+  }
+
+  onFrame(frameTimeInNano: number): void {
+    this.fn(frameTimeInNano);
+  }
+
+  onIdle(timeLeftInNano: number): void {
+  }
+}
+
 /**
  * 玻璃底部 tab 栏:悬浮长椭圆 —— 左右各收 [SIDE_PAD](栏不是铺满全宽,否则胶囊放大
  * 后顶到屏幕边)+ 一层投影给出 z 轴高度,视觉上浮在底部;
  * 背景实时模糊(backgroundEffect)+ 跟手切换(PanGesture)。
  *
- * **三层结构**:
+ * **四层结构**:
  * 0. 静止底([RestPill]):**唯一常驻**的选中标记 —— 扁的浅灰圆角矩形,不鼓出栏外、不折射。
- * 1. 透镜层([LensLayer]):一颗带自身 `backgroundEffect` 的玻璃,**画在灰底之上、内容之下**。
+ * 0.5 折射层([RefractLayer]):按下才出现的一块 canvas,把栏背后那张快照按径向位移场
+ *    搬进透镜里。**画布不跟随透镜移动,移动的是画布里的内容** —— 这样拖动帧只重画 canvas,
+ *    不动布局。开关 [REFRACT] 关掉就退回"只有 backgroundEffect 的纯磨砂"那版。
+ * 1. 透镜层([LensLayer]):一颗带自身 `backgroundEffect` 的玻璃,**画在折射层之上、内容之下**。
  *    **它不是常驻件** —— 透明度直接读 `pillGrowth`,静止时是 0(等于不存在),
  *    按下才从灰底"长"出来,松手缩没。参考片的开头/结尾帧里栏上只有那块灰底。
+ *    玻璃在折射层**之上**是有意的:折射出来的内容也得再被玻璃糊一档,才和镜外的磨砂同构。
  * 2. 内容层([ContentLayer]):图标 + 文字,压在玻璃之上,**永远静止**。
  *    玻璃糊的是它**背后**的页面内容(栏下那行列表),不是自己的图标 —— z 序反过一次,
  *    结果 16vp 的图标被自己的折射糊成一团绿雾、文案直接消失(装机实测)。
@@ -255,9 +372,12 @@ export struct GlassTabBar {
    */
   @State interacting: boolean = false;
   /**
-   * 透镜当前的长大倍率(1 → LENS_PRESS),用 animateTo 驱动而不是 `.animation()`:
-   * 胶囊的**尺寸**与镜片副本的**裁剪窗口**必须同步长大,而裁剪窗口跟着 pillX 逐帧走、
-   * 不能被弹簧拖慢(H88/H91)。把倍率做成状态量,两处读同一个值,天然同步。
+   * 透镜当前的长大倍率(1 → LENS_PRESS)。
+   *
+   * 它是**状态量而不是 `.animation()`**:胶囊的尺寸、玻璃的透明度、栏的缩放、折射画布
+   * 的取样窗口四处要读同一个值才同步。区别只在"谁来填中间值"——
+   * 早先是 `animateTo`(渲染侧插值,JS 只见目标值),现在由 [GlassSpring] 逐帧写进来,
+   * 因为折射层每帧都要知道透镜**现在**多大。见该类的注释。
    */
   @State pillGrowth: number = 1;
   /** 触摸按下时预选的 tab(-1 = 无):装机社区式「按下胶囊先过去,松手页面才切」。 */
@@ -265,8 +385,207 @@ export struct GlassTabBar {
   private dragging: boolean = false;
   private startPillX: number = 0;
 
+  // —— 折射层状态 ——
+  /**
+   * 栏背后那块内容的快照。
+   *
+   * **只在按下时截一次**:拖动期间页面不会滚(手指压在栏上),所以背景是静止的,
+   * 逐帧截图既没必要、也付不起(全屏 PixelMap 一次十几 MB)。
+   */
+  private shot: image.PixelMap | null = null;
+  /** 画布上下文。坐标单位是 vp,与布局同系 —— 这是整层能对齐的前提。 */
+  private gctx: CanvasRenderingContext2D = new CanvasRenderingContext2D(new RenderingContextSettings(true));
+  /** 栏节点在**窗口**里的布局位(vp)。按下时量一次;不含 scale,所以另见 toScreenX */
+  private gx: number = 0;
+  private gy: number = 0;
+
+  // —— 弹簧(折射层要逐帧知道透镜现在的位置与大小,见 GlassSpring)——
+  /** 长大倍率。eps 按倍率量程(LENS_PRESS-1 = 0.16)收。 */
+  private growSpring: GlassSpring = new GlassSpring(1, RESP_GROWTH, DAMP_GROWTH, 0.0005);
+  /** 药丸左缘 x(vp)。 */
+  private slideSpring: GlassSpring = new GlassSpring(0, RESP_PILL, DAMP_PILL, 0.05);
+  private ticker: GlassTicker | null = null;
+  private springing: boolean = false;
+  private lastFrameNs: number = 0;
+
+  /**
+   * 整条栏的按下缩放。**从 pillGrowth 派生**,不再单独读 `interacting`:
+   * 折射层要用同一个数把背景映射回屏幕位置,而 `interacting` 是个二值开关、
+   * 中间过程 JS 拿不到 ⇒ 放大动画期间镜内内容和镜外对不上。
+   */
+  private barScale(): number {
+    return 1 + (BAR_PRESS - 1) * this.lensAlpha();
+  }
+
+  /// 起弹簧循环(幂等:已经在跑就只改目标值)
+  private startSpring(): void {
+    if (this.ticker === null) {
+      this.ticker = new GlassTicker((t: number): void => { this.tickSpring(t); });
+    }
+    if (!this.springing) {
+      this.springing = true;
+      this.lastFrameNs = 0;
+      this.getUIContext().postFrameCallback(this.ticker);
+    }
+  }
+
+  private tickSpring(frameNs: number): void {
+    let dt: number = 0;
+    if (this.lastFrameNs > 0) {
+      dt = (frameNs - this.lastFrameNs) / 1e9;
+      // 被系统打断(切后台、掉帧)之后 dt 会是一个巨大的值,不截断的话弹簧一步跨过头
+      if (dt > 0.05) dt = 0.05;
+    }
+    this.lastFrameNs = frameNs;
+    if (dt > 0) {
+      const settledA: boolean = this.growSpring.step(dt);
+      const settledB: boolean = this.slideSpring.step(dt);
+      this.pillGrowth = this.growSpring.value;
+      this.pillX = this.slideSpring.value;
+      if (settledA && settledB) {
+        this.springing = false;
+        this.lastFrameNs = 0;
+        // 缩回原位之后才丢快照:提前丢,折射会在玻璃还没缩完时"啪"地消失
+        if (!this.interacting) this.dropBackdrop();
+      }
+    }
+    if (REFRACT) this.repaint();
+    if (this.springing && this.ticker !== null) {
+      this.getUIContext().postFrameCallback(this.ticker);
+    }
+  }
+
+  /**
+   * 栏内局部坐标 → 屏幕坐标。
+   *
+   * ⚠️ 必须自己补那 1.06 倍:`getPositionToWindow()` 给的是**布局位**,不受 transform 影响,
+   * 而透镜在按住时确实被整条栏放大着 —— 不补这一步,镜内内容会比镜外**小一号**,
+   * 症状看起来像"折射方向反了"。轴心是栏的几何中心(`.scale()` 的默认轴心)。
+   */
+  private toScreenX(localX: number): number {
+    const s: number = this.barScale();
+    const c: number = this.gx + this.barW / 2;
+    return c + (this.gx + localX - c) * s;
+  }
+
+  private toScreenY(localY: number): number {
+    const s: number = this.barScale();
+    const c: number = this.gy + BAR_H / 2;
+    return c + (this.gy + localY - c) * s;
+  }
+
+  /// 截一次背景 + 量一次栏的窗口位。异步:回来再重画。
+  private grabBackdrop(): void {
+    const ui = this.getUIContext();
+    const node = ui.getFrameNodeById('glassBar');
+    if (node !== null) {
+      const p = node.getPositionToWindow();
+      this.gx = p.x;
+      this.gy = p.y;
+    }
+    ui.getComponentSnapshot().get('glassBackdrop').then((pm: image.PixelMap) => {
+      if (!this.interacting) {
+        // 快速点按:快照回来时手指已经抬起,淡出那几帧由 tickSpring 收尾,这张图没地方用了。
+        // 不立刻 release 就会一直攥着这 13 MB(下一次 drop 只认 this.shot)。
+        this.releaseShot(pm);
+        return;
+      }
+      if (this.shot !== null) {
+        // 两次按下贴得太近:上一张还在手上、这一张又回来了。旧的那份从此没人引用,
+        // 而 drop 只认 this.shot(= 新的那张),不当场放掉就是漏一份。
+        this.releaseShot(this.shot);
+      }
+      this.shot = pm;
+      this.repaint();
+    }).catch((e: Error) => {
+      // 截不到就退回纯磨砂(REFRACT 层画空),不要让一条栏把手势弄崩
+      this.shot = null;
+      Log.w('UI', `玻璃背景截图失败 ${e.message}`);
+    });
+  }
+
+  /**
+   * 重画折射层:**分段仿射逼近**连续位移场。
+   *
+   * 这个 SDK 里没有可用的 shader 挂载点(`RuntimeShader` 不存在;`RenderNode.draw` 能拿到
+   * 真 canvas,但本 SDK 没有 `RenderNodeContainer`,自定义节点挂不进声明式树),
+   * 所以折射只能用一串同心环带近似:每环裁出"两条长椭圆之间"的带子,把背景按
+   * **该环的取样倍率**重画一遍 —— 源矩形绕镜心外扩、目的矩形固定。中心倍率 1、
+   * 镜缘 [RIM_MAG],smoothstep 过渡 ⇒ 观感是"镜缘把圈外的内容挤进来,中心基本不动"。
+   *
+   * 每帧成本:RINGS 次 clip + drawImage,画布只有 326×72vp。
+   */
+  private repaint(): void {
+    if (!REFRACT) return;
+    const ctx = this.gctx;
+    ctx.clearRect(0, 0, ctx.width, ctx.height);
+    if (this.shot === null || this.barW <= 0 || this.lensAlpha() <= 0.001) return;
+    const w: number = this.pillW();
+    const h: number = this.pillH();
+    // 画布节点挂在 host-y = -CANVAS_PAD,所以栏内坐标进画布要**加**这一段
+    const x: number = this.pillLeft();
+    const y: number = this.pillTop() + CANVAS_PAD;
+    const cx: number = x + w / 2;
+    const cy: number = y + h / 2;
+    // 取源矩形左上角在**屏幕**上的位置(vp)。快照是全页,所以源坐标 = 窗口坐标,
+    // 且要跟着整条栏的按下缩放走 —— 栏被放大后,透镜真正压在哪块背景上要重算。
+    const sx: number = this.toScreenX(x);
+    const sy: number = this.toScreenY(this.pillTop());
+    // 底层:整颗先按 1:1 铺一遍。内圈本来就不动,外圈会被上面的环带逐层盖掉 ——
+    // 有了这一层,位移场里"平坦"的那一段不用再画,接缝也少一处。
+    ctx.save();
+    ctx.beginPath();
+    ctx.roundRect(x, y, w, h, h / 2);
+    ctx.clip();
+    ctx.drawImage(this.shot, sx, sy, w, h, x, y, w, h);
+    ctx.restore();
+    for (let i = 0; i < RINGS; i++) {
+      const r0: number = i / RINGS;
+      const r1: number = (i + 1) / RINGS;
+      const m: number = 1 + (RIM_MAG - 1) * rimWeight(r1);
+      if (m <= 1.0005) continue;
+      ctx.save();
+      const p = new Path2D();
+      p.roundRect(cx - w * r1 / 2, cy - h * r1 / 2, w * r1, h * r1, h * r1 / 2);
+      p.roundRect(cx - w * r0 / 2, cy - h * r0 / 2, w * r0, h * r0, h * r0 / 2);
+      ctx.clip(p, 'evenodd');
+      // 源矩形按 m 外扩、目的矩形固定不动 ⇒ 这一环读到的是镜缘**之外**的内容,压进这一圈。
+      // 反过来(目的外扩)是把镜心内容扯到缘上,那是放大镜不是透镜。
+      const sw: number = w * m;
+      const sh: number = h * m;
+      ctx.drawImage(this.shot,
+        sx - (sw - w) / 2, sy - (sh - h) / 2, sw, sh,
+        x, y, w, h);
+      ctx.restore();
+    }
+  }
+
+  /**
+   * 放掉一张快照。一次全屏 PixelMap ≈ 13 MB **原生**内存,不受 JS GC 管,
+   * 所以凡是"这张没人用了"的场合都得显式走这里,不能等回收。
+   */
+  private releaseShot(pm: image.PixelMap): void {
+    pm.release().catch((e: Error) => { Log.w('UI', `玻璃快照释放失败 ${e.message}`); });
+  }
+
+  /// 淡出走完:背景快照作废,画布清空(玻璃本来就靠 opacity 缩没)
+  private dropBackdrop(): void {
+    if (this.shot !== null) {
+      const pm = this.shot;
+      this.shot = null;
+      this.releaseShot(pm);
+    }
+    this.gctx.clearRect(0, 0, this.gctx.width, this.gctx.height);
+  }
+
   aboutToAppear(): void {
-    this.pillX = this.pillXFor(this.tab);
+    this.pillTo(this.pillXFor(this.tab));
+  }
+
+  aboutToDisappear(): void {
+    // 本 SDK 没有 cancelFrameCallback,只能靠这个标志让循环不再续订
+    this.springing = false;
+    this.dropBackdrop();
   }
 
   /// 栏的中线(= 两个槽位的分界)。两项对称,所以分界永远在 barW/2。
@@ -410,19 +729,27 @@ export struct GlassTabBar {
    *
    * ⚠️ 曾经是两条(前缘紧 + 后缘松),用两段之差表达粘滞 —— 代价是宽度跟着拖动幅度长,
    * 被否。现在粘滞全部由这条位移曲线承担。
+   *
+   * ⚠️ 再早用 `animateTo`,但那样 JS 侧只有目标值、拿不到当前值,折射画布对不上帧
+   * (见 GlassSpring)。现在两条弹簧都在 JS 里积分,每帧写回 @State 并重画 canvas。
    */
   private animatePill(x: number): void {
-    this.getUIContext().animateTo({ curve: curves.springMotion(RESP_PILL, DAMP_PILL) }, () => {
-      this.pillX = x;
-    });
+    if (this.slideSpring.target === x && !this.springing) return;
+    this.slideSpring.target = x;
+    this.startSpring();
   }
 
   /// 胶囊长大 / 缩回。倍率是状态量而不是 `.animation()`:见 pillGrowth 注释。
   private animateGrowth(target: number): void {
-    if (this.pillGrowth === target) return;
-    this.getUIContext().animateTo({ curve: curves.springMotion(RESP_GROWTH, DAMP_GROWTH) }, () => {
-      this.pillGrowth = target;
-    });
+    if (this.growSpring.target === target) return;
+    this.growSpring.target = target;
+    this.startSpring();
+  }
+
+  /// 1:1 跟手的帧:不走弹簧,但要把弹簧的当前值对齐,否则下一帧它会从老位置往回补。
+  private pillTo(x: number): void {
+    this.slideSpring.snap(x);
+    this.pillX = x;
   }
 
   /// 松手 / 被系统取消手势:按药丸当前位置吸附最近项。switchable=false(取消)只回弹。
@@ -492,6 +819,30 @@ export struct GlassTabBar {
    * 合成,栏的 backgroundEffect 在那一圈重算一遍,结果不是折射而是一圈提亮光晕。
    * borderRadius 走的是节点自身轮廓,不触发那条路径。
    */
+  /**
+   * 第 0.5 层(实验):**真折射**。一块画布,把栏背后那块内容按位移场搬进透镜里。
+   *
+   * 画布比栏上下各多出 [CANVAS_PAD](透镜鼓出栏外那截要画得下),且**不跟随透镜移动** ——
+   * 移动的是画布里的内容。这样拖动帧只重画一次 canvas,不动布局。
+   *
+   * z 序:在 [RestPill] 之上、[LensLayer] 之下 —— 玻璃那层的 `backgroundEffect`
+   * 会糊它,于是镜内读到的是"折射过 + 又糊一档"的内容,和镜外的磨砂同构。
+   */
+  @Builder
+  RefractLayer() {
+    Canvas(this.gctx)
+      .width('100%')
+      .height(BAR_H + CANVAS_PAD * 2)
+      .position({ x: 0, y: -CANVAS_PAD })
+      // 和玻璃同一条淡入淡出曲线:画布自己不会随玻璃缩没,不给它这个,
+      // 松手时会看到折射先"啪"地消失、玻璃还在缩。
+      .opacity(this.lensAlpha())
+      .onReady(() => {
+        this.repaint();
+      })
+      .hitTestBehavior(HitTestMode.None)
+  }
+
   @Builder
   LensLayer() {
     Row()
@@ -573,6 +924,9 @@ export struct GlassTabBar {
           // 首次量宽之前 pillX 还是 0,两块都会闪现在栏左端
           if (this.barW > 0) {
             this.RestPill()
+            if (REFRACT) {
+              this.RefractLayer()
+            }
             this.LensLayer()
           }
           this.ContentLayer()
@@ -583,6 +937,10 @@ export struct GlassTabBar {
           if (e.type === TouchType.Down) {
             this.interacting = true;
             this.animateGrowth(LENS_PRESS);
+            // 折射取源:按下截一次(拖动期间页面不动,不需要逐帧截)
+            if (REFRACT) {
+              this.grabBackdrop();
+            }
             // 按下即预选:胶囊先滑到手指所在的 tab,页面等松手再切(对齐装机社区)
             const idx = this.tabAtLocal(e.touches[0].x);
             if (idx !== this.tab) {
@@ -592,6 +950,8 @@ export struct GlassTabBar {
             }
           } else if (e.type === TouchType.Up) {
             this.interacting = false;
+            // 快照**不在这里放**:缩回是一次 ~0.4s 的弹簧,折射内容得活到淡出走完,
+            // 否则镜内在松手那一帧"啪"地跳回栏底磨砂。释放交给 tickSpring 的停住分支。
             this.animateGrowth(1);
             // 纯点按(未演变成拖动)在这里提交;拖动的提交走 PanGesture 的 settle。
             // Up 与 onActionEnd 的先后不定,两边都以 previewIdx/dragging 判重,提交是幂等的。
@@ -603,7 +963,7 @@ export struct GlassTabBar {
             }
           } else if (e.type === TouchType.Cancel) {
             this.interacting = false;
-            this.animateGrowth(1);
+            this.animateGrowth(1);   // 同上:淡出走完才放快照
             this.previewIdx = -1;
             if (!this.dragging) {
               this.nearIdx = -1;
@@ -612,6 +972,7 @@ export struct GlassTabBar {
           }
         })
       }
+      .id('glassBar')
       .width('100%')
       .height(BAR_H)
       .borderRadius(BAR_H / 2)
@@ -619,11 +980,12 @@ export struct GlassTabBar {
        * 按下整条栏放大(需求:长按时**整个底部 tab**都放大,不是只有被按的那个图标)。
        * 缩放的轴心取栏的几何中心,`centerY` 用默认 50% 即可 —— 下面另有的 inset 空隙
        * 在父 Column 上,不在这一层。
-       * 动画同样走弹簧(与胶囊长大同一组参数,两处一起动才对得上);写在 scale 之后、
-       * 其他属性之前,免得把 backgroundEffect 也拖进动画。
+       *
+       * ⚠️ 缩放值从 `pillGrowth` 派生([barScale]),**不再配 `.animation()`**:
+       * 渲染侧插出来的中间值 JS 读不到,折射画布拿不到"栏现在放大到几",
+       * 放大过程中镜内内容会和镜外错开一档。改成每帧由 JS 写值之后,动画自然逐帧生效。
        */
-      .scale({ x: this.interacting ? BAR_PRESS : 1.0, y: this.interacting ? BAR_PRESS : 1.0 })
-      .animation({ curve: curves.springMotion(RESP_GROWTH, DAMP_GROWTH) })
+      .scale({ x: this.barScale(), y: this.barScale() })
       /**
        * 玻璃本体:实时模糊 + 一层半透明 surface 染色。
        * 半透明度 0.6:太透则浅色文字压在亮内容上读不清,太实则玻璃感全无;
@@ -644,7 +1006,7 @@ export struct GlassTabBar {
           this.barW = w;
           // 首次测量 / 旋屏后按当前 tab 对位(aboutToAppear 时宽度还是 0,算不准)。
           if (!this.dragging) {
-            this.pillX = this.pillXFor(this.tab);
+            this.pillTo(this.pillXFor(this.tab));
           }
         }
       })
@@ -664,8 +1026,12 @@ export struct GlassTabBar {
              * 这里**只写位置**:透镜宽度不读拖动量([pillW]),所以滑动中它保持按住时那一档,
              * 不再越拖越大。粘滞感落在松手后的 animatePill 上。
              */
-            this.pillX = Math.max(lo, Math.min(hi, this.startPillX + e.offsetX));
+            this.pillTo(Math.max(lo, Math.min(hi, this.startPillX + e.offsetX)));
             this.nearIdx = this.pillX < (lo + hi) / 2 ? 0 : 1;
+            // 折射层不吃动画,只吃这个逐帧赋值 —— 所以必须在这里手动重画
+            if (REFRACT) {
+              this.repaint();
+            }
           })
           .onActionEnd(() => { this.settle(true); })
           .onActionCancel(() => { this.settle(false); })
