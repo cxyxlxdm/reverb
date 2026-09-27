@@ -8,7 +8,7 @@ import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/G
 import { AppContainer } from '../AppContainer';
 import { FeedProbeState } from '../net/PodcastRepository';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
-import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_STRIP_H, ChipsSwipeSync } from './Components';
+import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
 import { PlayerController } from '../playback/PlayerController';
 import { SettingsStore } from '../store/SettingsStore';
@@ -320,7 +320,8 @@ export struct DiscoverPage {
         this.subscribeStarter()
       } else {
         // 玻璃分段条悬浮在内容上,内容从条下滚过(与底部玻璃栏同思路);
-        // 榜单 List 用 contentStartOffset(CHIPS_STRIP_H) 留出顶部余量。
+        // 顶部余量由榜单 List 的第一个占位 ListItem 给,高度用 CHIPS_RESERVE_H
+        // (比条的盒子高,原因见 Components.ets 该常量注释)。
         Stack({ alignContent: Alignment.Top }) {
           Swiper() {
             ForEach(DISCOVER_CATEGORIES, (cat: DiscoverCategory, idx: number) => {
@@ -712,7 +713,7 @@ export struct DiscoverPage {
             // 「初始滚动位」语义而不是内容留白:列表随数据到位重建后首项会被顶到条背后,
             // 静止时只剩一条缝露在条外。占位 ListItem 是纯布局,保证首项停在条下方。
             ListItem() {
-              Row().width('100%').height(CHIPS_STRIP_H)
+              Row().width('100%').height(CHIPS_RESERVE_H)
             }
             if (this.continueEntries().length > 0) {
               ListItem() {

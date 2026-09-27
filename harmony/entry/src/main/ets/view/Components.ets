@@ -410,6 +410,17 @@ export struct EpisodeListItem {
 export const CHIPS_STRIP_H = 44;
 
 /**
+ * 页面在滚动容器顶部**该留的余量**。比条本身高 8vp —— 占位若只给 `CHIPS_STRIP_H`,
+ * 静止时首项的顶边与条的下描边**重合**(真机实测两者都在 y=681),首项只剩自己的
+ * 4vp 内边距撑着,读起来就是"标题贴着分类条"。
+ *
+ * `+ 8` 不是拍的:Android 侧同一个量写成 `GLASS_CHIPS_TOP_PAD = 52.dp`,注释是
+ * 「条 44dp + 与内容的 8dp 间距」(见 `Components.kt`)。**两端同值同义**,
+ * 小标题那 4vp 也各自留着(Android 在 `LibraryScreen` 里同样另加 4dp)。踩坑记录见 H102。
+ */
+export const CHIPS_RESERVE_H = CHIPS_STRIP_H + 8;
+
+/**
  * 顶部分类条与 Swiper 的手势联动总线:页面在 onGestureSwipe 每帧灌入进度,
  * 胶囊按帧插值绘制(1:1 跟手,与底部栏同手感);松手时行/胶囊各自收尾。
  * 全程不走状态观察 —— 每帧只经回调重建胶囊这一个组件(H64 最小重建面)。

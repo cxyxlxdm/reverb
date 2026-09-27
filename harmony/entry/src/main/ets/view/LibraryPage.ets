@@ -9,7 +9,7 @@ import { DownloadStore } from '../store/DownloadStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym } from './Widgets';
-import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_STRIP_H, ChipsSwipeSync } from './Components';
+import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync } from './Components';
 import { Log } from '../util/Logger';
 
 /// 音阁:订阅 / 最新 / 收藏 / 历史 四分段(下载段留后续轮次)。
@@ -215,7 +215,7 @@ export struct LibraryPage {
         // (算小了滚不到底,算大了底部拖出一片空白)。直接用 Grid 自己滚,这笔账就不用算。
         Grid() {
           // 顶部占位行:给玻璃分段条让出余量(宫格用不了 List 的 contentStartOffset)
-          GridItem() { Row().width('100%').height(CHIPS_STRIP_H) }
+          GridItem() { Row().width('100%').height(CHIPS_RESERVE_H) }
           ForEach(this.subscriptions.subscriptions, (p: Podcast) => {
             GridItem() {
               PodcastGridItem({
@@ -245,7 +245,7 @@ export struct LibraryPage {
           // 顶部占位:给玻璃分段条让出高度(contentStartOffset 实测是初始滚动位语义,
           // 列表重建后首项会被顶到条背后;占位 ListItem 是纯布局,保证首项停在条下方)
           ListItem() {
-            Row().width('100%').height(CHIPS_STRIP_H)
+            Row().width('100%').height(CHIPS_RESERVE_H)
           }
           ForEach(this.subscriptions.subscriptions, (p: Podcast) => {
             ListItem() {
@@ -281,7 +281,7 @@ export struct LibraryPage {
           List() {
             // 顶部占位:理由见订阅段同名注释
             ListItem() {
-              Row().width('100%').height(CHIPS_STRIP_H)
+              Row().width('100%').height(CHIPS_RESERVE_H)
             }
             ForEach(this.inbox.episodes, (e: Episode) => {
               ListItem() {
@@ -319,7 +319,7 @@ export struct LibraryPage {
         List() {
           // 顶部占位:理由见订阅段同名注释
           ListItem() {
-            Row().width('100%').height(CHIPS_STRIP_H)
+            Row().width('100%').height(CHIPS_RESERVE_H)
           }
           ForEach(this.favorites.favorites, (e: Episode) => {
             ListItem() {
@@ -357,7 +357,7 @@ export struct LibraryPage {
         List() {
           // 顶部占位:理由见订阅段同名注释
           ListItem() {
-            Row().width('100%').height(CHIPS_STRIP_H)
+            Row().width('100%').height(CHIPS_RESERVE_H)
           }
           ForEach(this.downloads.downloads, (d: DownloadRow) => {
             ListItem() {
@@ -398,7 +398,7 @@ export struct LibraryPage {
         List() {
           // 顶部占位:理由见订阅段同名注释
           ListItem() {
-            Row().width('100%').height(CHIPS_STRIP_H)
+            Row().width('100%').height(CHIPS_RESERVE_H)
           }
           ForEach(this.history.history, (h: HistoryRow) => {
             ListItem() {
