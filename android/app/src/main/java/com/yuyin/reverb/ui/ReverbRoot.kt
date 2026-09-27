@@ -205,6 +205,10 @@ private fun MainShell(rootNav: NavHostController) {
             Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
+                // 底部留白 = **整个**手势区。鸿蒙同一处是 0.62 倍(`INSET_KEEP`),
+                // 那个数是"栏底到小白条 = 小白条到屏底"这条规则在那台机上的解;
+                // 本机量出来整个 inset 已经比目标紧一点(5.4dp vs 7.1dp),照抄会把栏底压到小白条上沿。
+                // 移植时重解规则、别搬常数 —— 见 H104。
                 .navigationBarsPadding()
                 .onSizeChanged { overlayPx = it.height },
             verticalArrangement = Arrangement.spacedBy(6.dp)
