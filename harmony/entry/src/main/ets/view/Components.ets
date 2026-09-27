@@ -136,6 +136,21 @@ export struct PodcastGridItem {
   }
 }
 
+/**
+ * 长按菜单的触发阈值(毫秒)。
+ *
+ * 取 500 不是为了"更快的手感",是为了**与 Android 同值**:Compose 的
+ * `combinedClickable(onLongClick=…)` 用 `viewConfiguration.longPressTimeoutMillis`,
+ * 默认正是 500ms。鸿蒙这边原先走 `bindContextMenu(builder, ResponseType.LongPress)`,
+ * 那个重载的长按识别在框架内部、时长不可配(本文件与 DiscoverPage 原先的注释都写着
+ * "系统定值,改不了"),装机反馈就是「长按弹出菜单的触发阈值太长」。
+ *
+ * 改法:换成 `bindContextMenu(isShown, …)` 这个重载(API 12+),菜单由**自己的**
+ * `LongPressGesture` 置位弹出 ⇒ 时长归应用管。代价是要自己把菜单摆回按下点
+ * (见 `pressX` / `offset`),以及自己把 `isShown` 收回 false(见 `aboutToDisappear`)。
+ */
+export const LIST_MENU_LONG_PRESS_MS = 500;
+
 /// 单集行:封面 + 标题 + 元信息(频道名 · 日期 · 时长)+ 圆形播放键。
 /// 当前播放态用强调色标注;已播完标题变暗。
 @Component
@@ -178,6 +193,16 @@ export struct EpisodeListItem {
    * 高亮只属于「按到行本身」:点行播放、长按菜单的等待期。
    */
   @State pressed: boolean = false;
+  /**
+   * 长按菜单的显示位 + 按下点在行内的横向位置。
+   *
+   * `bindContextMenu` 走的是**状态驱动**那个重载(第一参数是 boolean),这样触发时长
+   * 才由下面的 `LongPressGesture` 说了算(见 `LIST_MENU_LONG_PRESS_MS`)。代价是它不再
+   * "自动在按下点弹出",要用 `pressX` 通过 `offset` 自己挪过去 —— 这一行是整屏宽的,
+   * 不挪的话菜单永远贴着屏幕左边弹。
+   */
+  @State menuShown: boolean = false;
+  @State pressX: number = 0;
 
   /// 长按弹出的菜单。项与 Android `EpisodeListItem` 的 DropdownMenu 一一对应。
   @Builder
@@ -390,20 +415,32 @@ export struct EpisodeListItem {
       this.pressed = event.type === TouchType.Down;
     })
     /**
-     * 长按菜单。两个参数都是踩出来的:
+     * 长按菜单。**自己识别长按 + 状态驱动弹出**,不用 `ResponseType.LongPress` 那个重载
+     * —— 它的识别时长在框架里,应用改不动(装机反馈「长按触发阈值太长」)。
      *
-     * - `enableArrow` 必须是 **false**。带箭头时 ArkUI 会把菜单**锚到组件**上
-     *   (placement 未指定就退化成组件正上方),而这一行是整屏宽的 —— 结果无论按在哪儿,
-     *   菜单都从屏幕横向正中弹出,跟手指没关系。关掉箭头才走 `ResponseType.LongPress`
-     *   的默认定位:**在按下点弹出**,贴边时自行翻转。Android 那边是同一套手感
+     * 三个参数都是踩出来的:
+     *
+     * - `enableArrow` 必须是 **false**。带箭头时 ArkUI 会把菜单**锚到组件**上,而这一行
+     *   是整屏宽的 ⇒ 无论按在哪儿,菜单都从屏幕横向正中弹出。Android 那边是同一套做法
      *   (零尺寸锚点放在按下点,见 `Components.kt` 的 pressPoint)。
+     * - `offset.x` 取按下点在行内的 x:状态驱动的重载不会自己找按下点(旧重载会),
+     *   不挪就永远贴着行左缘。贴右缘时会不会被挤出屏幕**尚未装机验证**(见 ROADMAP)。
      * - `aboutToAppear` / `aboutToDisappear` 升降「误触盾」,吃掉「点外部关菜单」
      *   那一下的穿透点击(ArkUI 会把它同时派发给下面的组件,见 TapGuard)。
+     *   `aboutToDisappear` 里还要把 `menuShown` 收回 false:状态驱动的弹出位必须与
+     *   菜单的真实生命周期同步,否则下一次置 true 不产生变化,菜单再也不弹。
      */
-    .bindContextMenu(this.contextMenu(), ResponseType.LongPress, {
+    .gesture(LongPressGesture({ duration: LIST_MENU_LONG_PRESS_MS })
+      .onAction((event: GestureEvent) => {
+        const f = event.fingerList.length > 0 ? event.fingerList[0] : null;
+        this.pressX = f === null ? 0 : f.localX;
+        this.menuShown = true;
+      }))
+    .bindContextMenu(this.menuShown, this.contextMenu(), {
       enableArrow: false,
+      offset: { x: this.pressX, y: 0 },
       aboutToAppear: () => { TapGuard.raise(); this.pressed = false; },
-      aboutToDisappear: () => { TapGuard.lowerSoon(); }
+      aboutToDisappear: () => { TapGuard.lowerSoon(); this.menuShown = false; }
     })
   }
 }
@@ -779,8 +816,13 @@ export struct ListPlayButton {
     return this.player.activeListTag === this.tag;
   }
 
+  /// 图标。**例外只有一个**:本次会话还没点过任何一颗列表按钮、而这一段又没在播 ⇒ 画暂停。
+  /// 理由见 `PlayerController.listPlayUsed`(装机反馈:默认模式是顺序、图标是播放三角,
+  /// 首点起播后仍是三角,看着像「没按上」)。暂停只出现在那一段时间里,点过一次就不再出现。
   private symbolOf(): Resource {
-    if (!this.live()) return Sym.playFill;
+    if (!this.live()) {
+      return this.player.listPlayUsed ? Sym.playFill : Sym.pauseFill;
+    }
     if (this.player.playMode === PlayMode.REPEAT) return Sym.repeat;
     if (this.player.playMode === PlayMode.SHUFFLE) return Sym.shuffle;
     return Sym.playFill;
@@ -807,5 +849,85 @@ export struct ListPlayButton {
           else this.player.playQueue(this.episodes(), 0, this.tag);
         })
     }
+  }
+}
+
+/**
+ * 一次「破坏性操作」的二次确认请求(对应 Android 的 `ConfirmDialog`)。
+ *
+ * 原来是 `SettingsPage` 的私有类。提到这里是因为用得上它的页面变成了三个:
+ * 设置页(清缓存 / 清下载 / 清历史 / 清日志)、音阁 · 下载删单集、频道主页删单集 ——
+ * 同一句话的确认框在三个地方长得不一样,是最不该出现的漂移,所以框体也一并只留一份。
+ */
+export class ConfirmSpec {
+  title: string = '';
+  message: string = '';
+  confirmLabel: string = '';
+  onConfirm: () => void = () => {};
+
+  constructor(title: string, message: string, confirmLabel: string, onConfirm: () => void) {
+    this.title = title;
+    this.message = message;
+    this.confirmLabel = confirmLabel;
+    this.onConfirm = onConfirm;
+  }
+}
+
+/**
+ * 确认框本体:整屏遮罩 + 居中卡片(标题 + 说明 + 危险色确认 + 取消)。
+ *
+ * 由父页面的 `@State spec: ConfirmSpec | null` 控制显隐 —— **调用方要写在
+ * `if (this.pending !== null)` 里**,本组件因此总是在 spec 刚从 null 变成非 null 时
+ * 新建,`spec` 走普通成员(不是 @Prop)就够新;反过来若允许 non-null→non-null 直接替换,
+ * 这里读到的会是旧值(同 H27 那一族「@Builder 值参数是一次性的」)。
+ */
+@Component
+export struct ConfirmDialog {
+  @Prop scheme: Scheme;
+  @Prop fontScale: number;
+  spec: ConfirmSpec = new ConfirmSpec('', '', '', () => {});
+  onDismiss: () => void = () => {};
+
+  build() {
+    Stack() {
+      Column()
+        .width('100%').height('100%')
+        .backgroundColor(withAlpha('#000000', 0.45))
+        .onClick(() => this.onDismiss())
+      Column() {
+        Text(this.spec.title)
+          .fontSize(TypeScale.titleMedium * this.fontScale)
+          .fontColor(this.scheme.onBackground)
+          .alignSelf(ItemAlign.Start)
+          .margin({ bottom: 12 })
+        Text(this.spec.message)
+          .fontSize(TypeScale.body * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .alignSelf(ItemAlign.Start)
+        Row({ space: 22 }) {
+          Text(L.s('action_cancel'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .onClick(() => this.onDismiss())
+          Text(this.spec.confirmLabel)
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.error)
+            .onClick(() => {
+              // 先收框再动手:确认后到结果回来之间可能有网络/IO,框还挂着像没反应
+              const run = this.spec.onConfirm;
+              this.onDismiss();
+              run();
+            })
+        }
+        .margin({ top: 22 })
+        .alignSelf(ItemAlign.End)
+      }
+      .width('78%')
+      .padding({ left: 22, right: 22, top: 22, bottom: 16 })
+      .backgroundColor(this.scheme.surface)
+      .borderRadius(18)
+    }
+    .width('100%')
+    .height('100%')
   }
 }

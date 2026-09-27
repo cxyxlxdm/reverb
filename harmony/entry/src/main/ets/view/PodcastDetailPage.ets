@@ -8,7 +8,7 @@ import { ListenStatsStore } from '../store/ListenStatsStore';
 import { DownloadManager, DownloadResult } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, LoadingBox, Artwork, Glyph, Sym } from './Widgets';
-import { EpisodeListItem, ListPlayButton, formatListenDuration } from './Components';
+import { EpisodeListItem, ListPlayButton, formatListenDuration, ConfirmDialog, ConfirmSpec } from './Components';
 import { formatCachedAt } from '../util/DateParse';
 import { Log } from '../util/Logger';
 import { Files } from '../util/Files';
@@ -34,6 +34,8 @@ export struct PodcastDetailPage {
   /// 非 0 表示当前内容来自磁盘缓存、联网刷新还没成功(值为缓存落盘时刻),
   /// 据此显示「离线内容 · 上次更新 X」。刷新成功置 0。
   @State staleAt: number = 0;
+  /// 待确认的「删除某集下载」(非 null 即弹框),理由见 askDeleteDownload
+  @State pendingDelete: ConfirmSpec | null = null;
   @State descExpanded: boolean = false;
   @State sharing: boolean = false;
   @State pulling: boolean = false;   // 下拉刷新指示器(Refresh 容器)
@@ -202,6 +204,23 @@ export struct PodcastDetailPage {
     }
   }
 
+  /**
+   * 删掉一集已下载的单集之前先确认 —— 与「音阁 · 下载」同一套框、同一句文案。
+   *
+   * 这一删不可逆:文件是花流量(有时还要等)拿到的,删了只能重下,app 里没有撤销。
+   * 原先点一下图标当场就删。注意 **Android 的频道详情页同样没有确认**(它只在
+   * `LibraryScreen.kt` 的下载段有),所以本轮两端一起补 —— `docs/FEATURES.md` 写的
+   * 「离线单集,删除有二次确认」从今天起才是两个端的实话。
+   */
+  private askDeleteDownload(ep: Episode): void {
+    this.pendingDelete = new ConfirmSpec(
+      L.s('download_delete_title'),
+      L.f('download_delete_message', ep.title),
+      L.s('action_delete'),
+      () => { this.downloadManager.delete(ep.id); }
+    );
+  }
+
   private showToast(message: string): void {
     try {
       this.getUIContext().getPromptAction().showToast({ message: message });
@@ -303,7 +322,7 @@ export struct PodcastDetailPage {
                   showQueueAdd: true,
                   onPlay: () => this.onPlayEpisode(e, this.episodes, this.listTag()),
                   onDownload: () => { this.downloadEpisode(e); },
-                  onDeleteDownload: () => { this.downloadManager.delete(e.id); },
+                  onDeleteDownload: () => { this.askDeleteDownload(e); },
                   // 纯动作,不参与本页渲染,直接用容器单例即可(理由同 DiscoverPage)
                   onPlayNext: () => { this.app.player.playNext(e); },
                   onEnqueue: () => { this.app.player.enqueue(e); }
@@ -328,6 +347,17 @@ export struct PodcastDetailPage {
       })
         .id('reverb-channel-card')
         .position({ x: -2000, y: 0 })
+
+      // 删单集下载的二次确认(见 askDeleteDownload)。挂在本页根 Stack 的**最后** ⇒
+      // 遮罩能盖住整页(包括顶栏),与 Android AlertDialog 的范围一致。
+      if (this.pendingDelete !== null) {
+        ConfirmDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          spec: this.pendingDelete,
+          onDismiss: () => { this.pendingDelete = null; }
+        })
+      }
     }
     .width('100%')
     .height('100%')

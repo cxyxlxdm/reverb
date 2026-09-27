@@ -1151,6 +1151,14 @@
     {
       "name": "play_mode_shuffle",
       "value": "Reproducción aleatoria"
+    },
+    {
+      "name": "download_delete_title",
+      "value": "Eliminar descarga"
+    },
+    {
+      "name": "download_delete_message",
+      "value": "Se eliminará el archivo sin conexión de «%1$s». No se puede deshacer."
     }
   ]
 }

@@ -9,7 +9,7 @@ import { DownloadStore } from '../store/DownloadStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym } from './Widgets';
-import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, ListPlayButton } from './Components';
+import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, ListPlayButton, ConfirmDialog, ConfirmSpec } from './Components';
 import { Log } from '../util/Logger';
 
 /// 音阁:订阅 / 最新 / 收藏 / 历史 四分段(下载段留后续轮次)。
@@ -56,6 +56,8 @@ export struct LibraryPage {
   private chipSync: ChipsSwipeSync = new ChipsSwipeSync();
   /// Swiper 实测宽度,用来判断拖动是否过半
   @State pageW: number = 0;
+  /// 待确认的「删除某集下载」(非 null 即弹框)。null 表示没在确认。
+  @State pendingDelete: ConfirmSpec | null = null;
 
   private app: AppContainer = AppContainer.get();
   private segments(): string[] { return [L.s('lib_subscriptions'), L.s('lib_inbox'), L.s('lib_favorites'), L.s('lib_downloads'), L.s('lib_history')]; }
@@ -76,74 +78,91 @@ export struct LibraryPage {
   }
 
   build() {
-    Column() {
-      ScreenHeader({
-        scheme: this.scheme,
-        fontScale: this.fontScale,
-        title: L.s('nav_library'),
-        action: () => { this.headerActions() }
-      })
-
-      // 玻璃分段条悬浮在内容上,内容从条下滚过(与底部玻璃栏同思路)。
-      // 右侧浮动按钮一并收进条内:chips 会从按钮底下经过,按钮自己也上玻璃
-      // (玻璃叠玻璃)才有遮蔽力;原先的实色背景在玻璃条上是一块补丁。
-      Stack({ alignContent: Alignment.Top }) {
-        Swiper() {
-          this.subscriptionsSection()
-          this.inboxSection()
-          this.favoritesSection()
-          this.downloadsSection()
-          this.historySection()
-        }
-        .index(this.seg)
-        .loop(false)
-        .indicator(false)
-        .cachedCount(1)
-        .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
-        // chips 高亮**跟着手指走**:拖动位移过半即切换,与 Compose 的
-        // pagerState.currentPage(过半更新)手感一致。只改 chipSel,不碰 seg —— 见 chipSel 注释。
-        .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
-          this.chipSel = this.dragTarget(index, e.currentOffset);
-          // 胶囊 1:1 联动:插值目标取拖动方向的相邻页(拖 30% 走 30% 路程),
-          // 与过半预切的 dragTarget 无关;边缘橡皮筋(相邻页不存在)不报,胶囊原地。
-          // currentOffset 实测是**当前页相对其锚点的带符号位移**:向左滑(去下一页,
-          // 序号+1)为负、向右滑为正 —— 与 dragTarget 的方向约定一致
-          // (offset < 0 ? index+1 : index-1);方向写反会被 to<0 边缘保护吞掉(踩过)。
-          if (this.pageW <= 0) return;
-          const to = index + (e.currentOffset < 0 ? 1 : -1);
-          if (to < 0 || to >= this.segments().length) return;
-          this.chipSync.report(index, to,
-            Math.min(1, Math.abs(e.currentOffset) / this.pageW));
-        })
-        // 松手后动画开始就定下目标页(`onChange` 要等动画**结束**才回调,那样 chips 慢一拍)
-        .onAnimationStart((_i: number, target: number) => {
-          this.chipSel = target;
-          // 动画一开始就收束胶囊(提交随落位弹簧、回落原地弹回),不等 onAnimationEnd
-          this.chipSync.end(target);
-        })
-        .onAnimationEnd((_i: number, _e: SwiperAnimationEvent) => {
-          // 兜底:回落若不触发 onAnimationStart,靠这里把胶囊从插值位收回来(幂等)
-          this.chipSync.end(this.chipSel);
-        })
-        .onChange((i: number) => { this.seg = i; this.chipSel = i; })
-        .width('100%')
-        .height('100%')
-
-        ChipsRow({
+    // 弹确认框时要连页头一起遮住(与 Android 的 AlertDialog 同范围),所以确认框挂在
+    // 整页的 Stack 上,而不是挂在分段条那个 Stack 里 —— 后者只覆盖内容区。
+    Stack() {
+      Column() {
+        ScreenHeader({
           scheme: this.scheme,
           fontScale: this.fontScale,
-          labels: this.segments(),
-          selected: this.chipSel,
-          sync: this.chipSync,
-          onSelect: (i: number) => { this.seg = i; this.chipSel = i; },
-          // 段尾动作交给条自己摆(条内右端 + 垂直居中)。原先这两个按钮是这里另起一个
-          // Stack 浮在条外面的:右缘按 pagePadding 16 对齐,而条的留白是 12,两者差几 vp
-          // 就对不上条的右圆顶;再各自糊一块 backgroundEffect,玻璃上叠玻璃成了补丁。
-          endAction: () => { this.barActions() }
+          title: L.s('nav_library'),
+          action: () => { this.headerActions() }
         })
+
+        // 玻璃分段条悬浮在内容上,内容从条下滚过(与底部玻璃栏同思路)。
+        // 右侧浮动按钮一并收进条内:chips 会从按钮底下经过,按钮自己也上玻璃
+        // (玻璃叠玻璃)才有遮蔽力;原先的实色背景在玻璃条上是一块补丁。
+        Stack({ alignContent: Alignment.Top }) {
+          Swiper() {
+            this.subscriptionsSection()
+            this.inboxSection()
+            this.favoritesSection()
+            this.downloadsSection()
+            this.historySection()
+          }
+          .index(this.seg)
+          .loop(false)
+          .indicator(false)
+          .cachedCount(1)
+          .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
+          // chips 高亮**跟着手指走**:拖动位移过半即切换,与 Compose 的
+          // pagerState.currentPage(过半更新)手感一致。只改 chipSel,不碰 seg —— 见 chipSel 注释。
+          .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
+            this.chipSel = this.dragTarget(index, e.currentOffset);
+            // 胶囊 1:1 联动:插值目标取拖动方向的相邻页(拖 30% 走 30% 路程),
+            // 与过半预切的 dragTarget 无关;边缘橡皮筋(相邻页不存在)不报,胶囊原地。
+            // currentOffset 实测是**当前页相对其锚点的带符号位移**:向左滑(去下一页,
+            // 序号+1)为负、向右滑为正 —— 与 dragTarget 的方向约定一致
+            // (offset < 0 ? index+1 : index-1);方向写反会被 to<0 边缘保护吞掉(踩过)。
+            if (this.pageW <= 0) return;
+            const to = index + (e.currentOffset < 0 ? 1 : -1);
+            if (to < 0 || to >= this.segments().length) return;
+            this.chipSync.report(index, to,
+              Math.min(1, Math.abs(e.currentOffset) / this.pageW));
+          })
+          // 松手后动画开始就定下目标页(`onChange` 要等动画**结束**才回调,那样 chips 慢一拍)
+          .onAnimationStart((_i: number, target: number) => {
+            this.chipSel = target;
+            // 动画一开始就收束胶囊(提交随落位弹簧、回落原地弹回),不等 onAnimationEnd
+            this.chipSync.end(target);
+          })
+          .onAnimationEnd((_i: number, _e: SwiperAnimationEvent) => {
+            // 兜底:回落若不触发 onAnimationStart,靠这里把胶囊从插值位收回来(幂等)
+            this.chipSync.end(this.chipSel);
+          })
+          .onChange((i: number) => { this.seg = i; this.chipSel = i; })
+          .width('100%')
+          .height('100%')
+
+          ChipsRow({
+            scheme: this.scheme,
+            fontScale: this.fontScale,
+            labels: this.segments(),
+            selected: this.chipSel,
+            sync: this.chipSync,
+            onSelect: (i: number) => { this.seg = i; this.chipSel = i; },
+            // 段尾动作交给条自己摆(条内右端 + 垂直居中)。原先这两个按钮是这里另起一个
+            // Stack 浮在条外面的:右缘按 pagePadding 16 对齐,而条的留白是 12,两者差几 vp
+            // 就对不上条的右圆顶;再各自糊一块 backgroundEffect,玻璃上叠玻璃成了补丁。
+            endAction: () => { this.barActions() }
+          })
+        }
+        .width('100%')
+        .layoutWeight(1)
       }
       .width('100%')
-      .layoutWeight(1)
+      .height('100%')
+
+      // 删单集下载的二次确认(见 askDeleteDownload)。null → 非 null 才新建组件,
+      // 故 ConfirmDialog 里的 spec 一定拿的是最新值。
+      if (this.pendingDelete !== null) {
+        ConfirmDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          spec: this.pendingDelete,
+          onDismiss: () => { this.pendingDelete = null; }
+        })
+      }
     }
     .width('100%')
     .height('100%')
@@ -247,8 +266,13 @@ export struct LibraryPage {
         // 给死高度,而那个 230 是按两列卡高估的常数:改列数、改字号、改字号倍率都会让它算错
         // (算小了滚不到底,算大了底部拖出一片空白)。直接用 Grid 自己滚,这笔账就不用算。
         Grid() {
-          // 顶部占位行:给玻璃分段条让出余量(宫格用不了 List 的 contentStartOffset)
-          GridItem() { Row().width('100%').height(CHIPS_RESERVE_H) }
+          // 顶部占位**一整行**:给玻璃分段条让出余量(宫格用不了 List 的 contentStartOffset)。
+          // 个数取 SUBS_GRID_COLS —— 单个 GridItem 只占一格,不占满一行就等于没让位(见该常量注释)。
+          ForEach(subsGridSpacers(), (_p: number, i: number) => {
+            GridItem() {
+              Row().width('100%').height(CHIPS_RESERVE_H)
+            }
+          }, (_p: number, i: number) => `head${i}`)
           ForEach(this.subscriptions.subscriptions, (p: Podcast) => {
             GridItem() {
               PodcastGridItem({
@@ -257,13 +281,18 @@ export struct LibraryPage {
               })
             }
           }, (p: Podcast) => p.feedUrl)
-          // 尾部占位行:给玻璃栏底下留滚动余量(宫格用不了 List 的 contentEndOffset)。
-          // 三列格中单个 GridItem 只占一格,但该行行高由它决定,整行皆空,等效通栏留白。
+          // 尾部占位**一整行**:给玻璃栏底下留滚动余量(宫格用不了 List 的 contentEndOffset)。
+          // 同理,只占一格时它和最后一行封面挤在同一行,那一行的行高被撑成 bottomPad,
+          // 末行下方拖出一大块空白。
           if (this.bottomPad > 0) {
-            GridItem() { Row().width('100%').height(this.bottomPad) }
+            ForEach(subsGridSpacers(), (_p: number, i: number) => {
+              GridItem() {
+                Row().width('100%').height(this.bottomPad)
+              }
+            }, (_p: number, i: number) => `tail${i}`)
           }
         }
-        .columnsTemplate('1fr 1fr 1fr')
+        .columnsTemplate(subsGridTemplate())
         .columnsGap(Metrics.gridSpacing)
         .rowsGap(Metrics.gridSpacing + 4)
         // **top 必须给** —— 原先只写了 left/right/bottom,于是第一行封面紧贴上方的分段 chips。
@@ -402,7 +431,7 @@ export struct LibraryPage {
                 played: this.history.isPlayed(d.episode.id),
                 downloadState: 2,
                 onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes(), 'dl'),
-                onDeleteDownload: () => { this.downloadManager.delete(d.episode.id); },
+                onDeleteDownload: () => { this.askDeleteDownload(d.episode); },
                 onPlayNext: () => { this.player.playNext(d.episode); },
                 onEnqueue: () => { this.player.enqueue(d.episode); }
               })
@@ -419,6 +448,24 @@ export struct LibraryPage {
 
   private downloadEpisodes(): Episode[] {
     return this.downloads.downloads.map((d: DownloadRow) => d.episode);
+  }
+
+  /**
+   * 删掉一集已下载的单集之前先确认。
+   *
+   * 这一删是**不可逆**的:文件是用户花流量、有时还要等一会儿才拿到的,删了只能重下,
+   * 而 app 里没有撤销。原先点一下图标当场就删了(装机反馈「删除下载前没有确认提示」)。
+   * Android 侧「音阁 · 下载」早有这个确认框(`LibraryScreen.kt` 的 pendingDelete),
+   * `docs/FEATURES.md` 也一直写着「删除有二次确认 · 两端一致」—— 鸿蒙这边是漏的那一端。
+   * 文案与 Android 同源:`download_delete_title` / `download_delete_message(集名)`。
+   */
+  private askDeleteDownload(ep: Episode): void {
+    this.pendingDelete = new ConfirmSpec(
+      L.s('download_delete_title'),
+      L.f('download_delete_message', ep.title),
+      L.s('action_delete'),
+      () => { this.downloadManager.delete(ep.id); }
+    );
   }
 
   // ── 历史 ──
@@ -469,6 +516,34 @@ export struct LibraryPage {
   private historyEpisodes(): Episode[] {
     return this.history.history.map((h: HistoryRow) => h.episode);
   }
+}
+
+/// 音阁 · 订阅宫格的列数。
+///
+/// **它同时决定了占位项的个数** —— ArkUI 的 `GridItem` 没有 span(Compose 有
+/// `GridItemSpan(maxLineSpan)`),一个占位项只吃掉**一格**。只放一格占位时,真实封面
+/// 会从第二格开始排,装机实测两个后果:①首行少一张封面、整排右移一格;
+/// ②首行顶在 Grid 的 `padding.top`(10vp)处,被上方 44vp 高的玻璃分段条盖掉半张封面
+/// (就是用户报的「宫格第一行上半部分被盖住」——占位项在它左边那一格,并没有把它顶下去)。
+/// 所以头/尾的占位必须凑满一整行:改列数就在这里改,别只改 `columnsTemplate`。
+const SUBS_GRID_COLS = 3;
+
+/// `'1fr 1fr 1fr'` —— 由 SUBS_GRID_COLS 生成,免得模板与占位个数两处各写一份。
+function subsGridTemplate(): string {
+  const parts: string[] = [];
+  for (let i = 0; i < SUBS_GRID_COLS; i++) {
+    parts.push('1fr');
+  }
+  return parts.join(' ');
+}
+
+/// 一整行的占位项(下标只用来当 ForEach 的 key)。
+function subsGridSpacers(): number[] {
+  const out: number[] = [];
+  for (let i = 0; i < SUBS_GRID_COLS; i++) {
+    out.push(i);
+  }
+  return out;
 }
 
 /// ForEach 的项类型别名(便于在 UI 里标注类型)。

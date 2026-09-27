@@ -1151,6 +1151,14 @@
     {
       "name": "play_mode_shuffle",
       "value": "随机播放"
+    },
+    {
+      "name": "download_delete_title",
+      "value": "删除下载"
+    },
+    {
+      "name": "download_delete_message",
+      "value": "将删除《%1$s》的离线文件，无法恢复。"
     }
   ]
 }

@@ -1151,6 +1151,14 @@
     {
       "name": "play_mode_shuffle",
       "value": "Shuffle this list"
+    },
+    {
+      "name": "download_delete_title",
+      "value": "Delete download"
+    },
+    {
+      "name": "download_delete_message",
+      "value": "This removes the offline file for “%1$s”. It can’t be undone."
     }
   ]
 }

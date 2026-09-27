@@ -6,6 +6,7 @@ import { REGIONS, RegionOption, regionLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
 import { SettingsStore } from '../store/SettingsStore';
 import { TopBar } from './Widgets';
+import { ConfirmDialog, ConfirmSpec } from './Components';
 import { BackupManager, ALL_SECTIONS } from '../store/BackupManager';
 import { UpdateNotifier } from '../update/UpdateNotifier';
 import { Files } from '../util/Files';
@@ -36,35 +37,25 @@ class PickerSpec {
 }
 
 /// 一次破坏性操作的二次确认请求(对应 Android ConfirmDialog)。
-class ConfirmSpec {
-  title: string = '';
-  message: string = '';
-  confirmLabel: string = '';
-  onConfirm: () => void = () => {};
-
-  constructor(title: string, message: string, confirmLabel: string, onConfirm: () => void) {
-    this.title = title;
-    this.message = message;
-    this.confirmLabel = confirmLabel;
-    this.onConfirm = onConfirm;
-  }
-
-  static cache(page: SettingsPage): ConfirmSpec {
-    return new ConfirmSpec(L.s('set_clear_cache'), L.s('confirm_clear_cache'), L.s('action_clear'),
-      () => page.doClearCache());
-  }
-  static downloads(page: SettingsPage): ConfirmSpec {
-    return new ConfirmSpec(L.s('set_clear_downloads'), L.s('confirm_clear_downloads'), L.s('action_delete'),
-      () => page.doClearDownloads());
-  }
-  static history(page: SettingsPage): ConfirmSpec {
-    return new ConfirmSpec(L.s('set_clear_history'), L.s('confirm_clear_history'), L.s('action_clear_confirm'),
-      () => page.doClearHistory());
-  }
-  static log(page: SettingsPage): ConfirmSpec {
-    return new ConfirmSpec(L.s('set_clear_log'), L.s('log_clear_confirm'), L.s('action_clear_confirm'),
-      () => page.doClearLog());
-  }
+///
+/// 类本体 `ConfirmSpec` 与框体 `ConfirmDialog` 已提到 `Components.ets` —— 用得上确认框的
+/// 页面不止这一个(还有音阁 · 下载、频道主页各删一处单集),一份框才长一个样。
+/// 这里只留「这一页要确认什么」的四份文案与动作。
+function cacheConfirm(page: SettingsPage): ConfirmSpec {
+  return new ConfirmSpec(L.s('set_clear_cache'), L.s('confirm_clear_cache'), L.s('action_clear'),
+    () => page.doClearCache());
+}
+function downloadsConfirm(page: SettingsPage): ConfirmSpec {
+  return new ConfirmSpec(L.s('set_clear_downloads'), L.s('confirm_clear_downloads'), L.s('action_delete'),
+    () => page.doClearDownloads());
+}
+function historyConfirm(page: SettingsPage): ConfirmSpec {
+  return new ConfirmSpec(L.s('set_clear_history'), L.s('confirm_clear_history'), L.s('action_clear_confirm'),
+    () => page.doClearHistory());
+}
+function logConfirm(page: SettingsPage): ConfirmSpec {
+  return new ConfirmSpec(L.s('set_clear_log'), L.s('log_clear_confirm'), L.s('action_clear_confirm'),
+    () => page.doClearLog());
 }
 
 /// 字节数 → 人类可读。与 Android `human()` 同档位(B / KB / MB 一位小数 / GB 两位)。
@@ -198,11 +189,11 @@ export struct SettingsPage {
 
           this.sectionLabel(L.s('sec_storage'))
           this.actionRow(L.s('set_clear_cache'), () => L.f('set_clear_cache_sub', this.cacheStr()),
-            () => { this.confirm = ConfirmSpec.cache(this); })
+            () => { this.confirm = cacheConfirm(this); })
           this.actionRow(L.s('set_clear_downloads'), () => L.f('set_clear_downloads_sub', this.dlStr()),
-            () => { this.confirm = ConfirmSpec.downloads(this); })
+            () => { this.confirm = downloadsConfirm(this); })
           this.actionRow(L.s('set_clear_history'), () => '',
-            () => { this.confirm = ConfirmSpec.history(this); })
+            () => { this.confirm = historyConfirm(this); })
 
           this.sectionLabel(L.s('sec_backup'))
           this.actionRow(L.s('set_export_opml'), () => L.s('set_export_opml_sub'), () => this.exportOpml())
@@ -214,7 +205,7 @@ export struct SettingsPage {
           this.actionRow(L.s('set_share_log'), () => L.s('set_share_log_sub'), () => this.shareLog())
           this.actionRow(L.s('log_export'), () => '', () => this.exportLog())
           this.actionRow(L.s('set_clear_log'), () => L.f('log_size', this.logStr()),
-            () => { this.confirm = ConfirmSpec.log(this); })
+            () => { this.confirm = logConfirm(this); })
 
           this.sectionLabel(L.s('sec_about'))
           this.actionRow(L.s('set_about'), () => '', () => this.onOpenAbout())
@@ -246,7 +237,12 @@ export struct SettingsPage {
         this.pickerDialog(this.picker)
       }
       if (this.confirm !== null) {
-        this.confirmDialog(this.confirm)
+        ConfirmDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          spec: this.confirm,
+          onDismiss: () => { this.confirm = null; }
+        })
       }
     }
     .width('100%')
@@ -420,50 +416,6 @@ export struct SettingsPage {
     .width('100%')
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 14, bottom: 14 })
     .alignItems(VerticalAlign.Center)
-  }
-
-  /// 破坏性操作的二次确认(Android ConfirmDialog):标题 + 说明 + 危险色确认 + 取消。
-  @Builder
-  confirmDialog(spec: ConfirmSpec) {
-    Stack() {
-      Column()
-        .width('100%').height('100%')
-        .backgroundColor(withAlpha('#000000', 0.45))
-        .onClick(() => { this.confirm = null; })
-      Column() {
-        Text(spec.title)
-          .fontSize(TypeScale.titleMedium * this.fontScale)
-          .fontColor(this.scheme.onBackground)
-          .alignSelf(ItemAlign.Start)
-          .margin({ bottom: 12 })
-        Text(spec.message)
-          .fontSize(TypeScale.body * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-          .alignSelf(ItemAlign.Start)
-        Row({ space: 22 }) {
-          Text(L.s('action_cancel'))
-            .fontSize(TypeScale.label * this.fontScale)
-            .fontColor(this.scheme.onSurfaceVariant)
-            .onClick(() => { this.confirm = null; })
-          Text(spec.confirmLabel)
-            .fontSize(TypeScale.label * this.fontScale)
-            .fontColor(this.scheme.error)
-            .onClick(() => {
-              const run = spec.onConfirm;
-              this.confirm = null;
-              run();
-            })
-        }
-        .margin({ top: 22 })
-        .alignSelf(ItemAlign.End)
-      }
-      .width('78%')
-      .padding({ left: 22, right: 22, top: 22, bottom: 16 })
-      .backgroundColor(this.scheme.surface)
-      .borderRadius(18)
-    }
-    .width('100%')
-    .height('100%')
   }
 
   /// 一行设置:标题 + 当前值 + 下拉菜单选择。

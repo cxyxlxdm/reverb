@@ -111,6 +111,22 @@ export class PlayerController {
    */
   playMode: PlayMode = PlayMode.SEQUENTIAL;
   activeListTag: string = '';
+  /**
+   * 本次会话里,列表播放按钮**是否已被点过一次**。
+   *
+   * 只服务一个观感问题:按钮在没起播时该画什么。画"播放"三角的话,首点之后
+   * 图标从三角变成三角 —— 用户读作「没按上」(装机反馈原话:「初始暂停,点击之后
+   * 还是不变,就让人觉着怪怪的」)。所以未起播时画**暂停**,首点起播后画模式图标,
+   * 而暂停图标此后不再出现 —— 它是「这一列还没开始过」的记号,不是"当前是暂停中"。
+   *
+   * 故意**不持久化**:下次启动 app 又回到"还没开始过"。持久化它就变成一个
+   * 用户看不见、也没有入口清除的状态,而这里的语义只是"本次使用的第一下"。
+   *
+   * 判据与 `activeListTag` 同源 —— 只有**带 tag 的起播**才算(音阁各段与频道主页,
+   * 含直接点段里的单集行);不传 tag 的入口(发现页、历史行、迷你条、「下一个播放」)
+   * 不算,因为它们根本不对应任何一颗按钮。
+   */
+  listPlayUsed: boolean = false;
   /// 随机表:按当前模式打乱后的**队列下标**序列;`shufflePos` 是表指针(不是队列下标)
   private shuffleOrder: number[] = [];
   private shufflePos = -1;
@@ -180,6 +196,7 @@ export class PlayerController {
     this.queueIndex = Math.max(0, Math.min(startIndex, list.length - 1));
     if (this.playMode === PlayMode.SHUFFLE) this.rebuildShuffleOrder(); else this.clearShuffleOrder();
     this.activeListTag = tag;
+    if (tag.length > 0) this.listPlayUsed = true;
     Log.i('Player', `playQueue count=${list.length} index=${this.queueIndex} tag='${tag}' mode=${modeName(this.playMode)}`);
     this.updateNavFlags();
     this.startEpisode(this.queue[this.queueIndex], true);

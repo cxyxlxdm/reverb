@@ -8,7 +8,7 @@ import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/G
 import { AppContainer } from '../AppContainer';
 import { FeedProbeState } from '../net/PodcastRepository';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
-import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync } from './Components';
+import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, LIST_MENU_LONG_PRESS_MS } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
 import { PlayerController } from '../playback/PlayerController';
 import { SettingsStore } from '../store/SettingsStore';
@@ -967,6 +967,12 @@ struct ContinueCard {
   /// 从这条横里去掉 —— 就是「标记已播完」,见 contextMenu 注释。
   onMarkPlayed: () => void = () => {};
 
+  /// 长按菜单的显示位 + 按下点在卡内的 x。走 `bindContextMenu(isShown, …)` 的状态驱动
+  /// 重载,触发时长才归应用管(旧重载的识别在框架内部,装机反馈「长按阈值太长」)——
+  /// 完整理由见 `Components.ets` 的 `LIST_MENU_LONG_PRESS_MS` 与 `EpisodeListItem`。
+  @State menuShown: boolean = false;
+  @State pressX: number = 0;
+
   /// 菜单项字体:labelLarge(14) 常规体。与 Components.ets 的 EpisodeListItem 同档 ——
   /// ArkUI 菜单默认字号偏大且不跟主题,全应用的菜单要长一个样。
   private menuFont(): Font {
@@ -1037,14 +1043,26 @@ struct ContinueCard {
     .width(132)
     .onClick(() => this.onPlay())
     /**
-     * 长按菜单。两个参数是从单集行那边抄来的实测结论(见 Components.ets 同名调用):
-     * `enableArrow: false` 才走"在按下点弹出",带箭头会锚到组件横向正中;
-     * `aboutToAppear/Disappear` 升降误触盾,挡掉"点外部关菜单"穿透下来的那一下。
+     * 长按菜单。**自己识别长按 + 状态驱动弹出**(与 Components.ets 的单集行同一套,
+     * 理由与参数说明见彼处):`ResponseType.LongPress` 那个重载的触发时长在框架里改不动,
+     * 装机反馈「长按弹出菜单的触发阈值太长」,换成 `bindContextMenu(isShown, …)` 之后
+     * 时长由 `LIST_MENU_LONG_PRESS_MS` 决定(取 500ms,与 Android 同值)。
+     *
+     * `enableArrow: false` 才走"贴着锚点弹",带箭头会锚到组件横向正中;
+     * `aboutToAppear/Disappear` 升降误触盾,挡掉"点外部关菜单"穿透下来的那一下;
+     * Disappear 里同时把 `menuShown` 收回 false,否则下一次置 true 不产生状态变化。
      */
-    .bindContextMenu(this.contextMenu(), ResponseType.LongPress, {
+    .gesture(LongPressGesture({ duration: LIST_MENU_LONG_PRESS_MS })
+      .onAction((event: GestureEvent) => {
+        const f = event.fingerList.length > 0 ? event.fingerList[0] : null;
+        this.pressX = f === null ? 0 : f.localX;
+        this.menuShown = true;
+      }))
+    .bindContextMenu(this.menuShown, this.contextMenu(), {
       enableArrow: false,
+      offset: { x: this.pressX, y: 0 },
       aboutToAppear: () => TapGuard.raise(),
-      aboutToDisappear: () => TapGuard.lowerSoon()
+      aboutToDisappear: () => { TapGuard.lowerSoon(); this.menuShown = false; }
     })
   }
 }
