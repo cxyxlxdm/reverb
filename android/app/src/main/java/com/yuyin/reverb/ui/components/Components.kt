@@ -149,7 +149,8 @@ val LocalGlassBottomPad = staticCompositionLocalOf { 0.dp }
  *   与鸿蒙 dragTarget 语义一致;只在翻页瞬间离散变化,不会拖累整页重建)。
  * @param trailing 跟在最后一枚 chip **后面**、会随 chips 一起横滚的补充项(如「排序」)。
  * @param endAction 钉在**条内右端**、不随 chips 滚的按钮(如「清空」「宫格切换」)。
- *   由条自己按 `CenterEnd` 摆位 ⇒ 天然垂直居中,调用方不要再补对中偏移。
+ *   由条自己摆在末尾 ⇒ 天然垂直居中、且永远贴着条的右缘,调用方不要再补对中偏移。
+ *   ⚠️ 传了不等于一定占位:lambda 里若用 `if` 判断显示与否,不显示时它会留 8dp 空档。
  *   鸿蒙 `ChipsRow` 有同名同语义的 `@BuilderParam`,改一处要两端一起改。
  */
 @Composable
@@ -183,10 +184,20 @@ fun GlassChipsRow(
     var boxOriginX by remember { mutableStateOf(0f) }
 
     Box(modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        // 条宽**由内容撑开**,上限就是父容器给的可用宽 —— 不占满整行,右侧不留空白
+        // (装机反馈:不切到「订阅 / 历史」时条的右半截是空的,不协调)。
+        //
+        // 为什么不走「先量内容宽、再 setState 改 width」那条路(鸿蒙 `ChipsRow.resizeBar()`
+        // 就是这么做的,两端同构在这里刻意不同构):
+        //   ① 量测要等两次布局,实测每次进页有 ≈50ms(6 帧)是通栏、然后当场缩一下;
+        //   ② 条一缩,钉在**父容器**右端的 endAction 就掉到条外面去了 —— 它得跟着条走。
+        // 交给布局自己算:内层 Row 不 fillMaxWidth ⇒ 条宽 = chips 段 + 按钮段;
+        // chips 段带 `weight(1f, fill = false)` ⇒ 上界是「可用宽 - 按钮宽」,
+        // 装得下就全给它、装不下才横滚。零状态、零闪动,按钮天然在条内右端。
+        // 鸿蒙那两处量测等真机对比过观感再决定要不要一起改(见 H106)。
         Box(
             Modifier
                 .onGloballyPositioned { boxOriginX = it.positionInWindow().x }
-                .fillMaxWidth()
                 .height(44.dp)
                 // 阴影外形必须用真胶囊(percent=50),不能用与外观同款的 21dp:
                 // 半径小于半高时,RenderNode 高程阴影的上下两条直边投影在形状中央
@@ -198,58 +209,58 @@ fun GlassChipsRow(
                 .border(0.8.dp, colorScheme.outline.copy(alpha = 0.45f), RoundedCornerShape(21.dp))
         ) {
             ChipsCapsule(metrics = metrics, count = labels.size, progress = progress, scroll = scroll)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(scroll)
-                    .padding(horizontal = 8.dp, vertical = 5.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                labels.forEachIndexed { i, label ->
-                    val sel = i == selected
-                    // 选中态的底色交给胶囊,chip 自己只换文字色;颜色切换做 200ms 淡入淡出
-                    val bg by animateColorAsState(
-                        targetValue = if (sel) Color.Transparent else colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
-                        animationSpec = tween(200, easing = FastOutSlowInEasing),
-                        label = "chipBg$i"
-                    )
-                    val fg by animateColorAsState(
-                        targetValue = if (sel) colorScheme.primary else colorScheme.onSurfaceVariant,
-                        animationSpec = tween(200, easing = FastOutSlowInEasing),
-                        label = "chipFg$i"
-                    )
-                    Box(
-                        Modifier
-                            .onGloballyPositioned { c ->
-                                // 用窗口坐标差换算成「玻璃条内容坐标」:positionInParent
-                                // 是叶子布局坐标,不含 Row 自己的 padding(h=8dp),直接拿去
-                                // 减 scroll 会让胶囊恒偏左一个 padding。窗口差天然带上
-                                // padding、随滚动实时更新,补回 scroll.value 即成滚动
-                                // 无关的内容坐标(见 ChipsCapsule 的减法)。
-                                metrics[i] = c.positionInWindow().x - boxOriginX + scroll.value to
-                                    c.size.width.toFloat()
-                            }
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(bg)
-                            .clickable { onSelect(i) }
-                            .padding(horizontal = 14.dp, vertical = 7.dp)
-                    ) {
-                        Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier
+                        .weight(1f, fill = false)
+                        .horizontalScroll(scroll)
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    labels.forEachIndexed { i, label ->
+                        val sel = i == selected
+                        // 选中态的底色交给胶囊,chip 自己只换文字色;颜色切换做 200ms 淡入淡出
+                        val bg by animateColorAsState(
+                            targetValue = if (sel) Color.Transparent else colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
+                            animationSpec = tween(200, easing = FastOutSlowInEasing),
+                            label = "chipBg$i"
+                        )
+                        val fg by animateColorAsState(
+                            targetValue = if (sel) colorScheme.primary else colorScheme.onSurfaceVariant,
+                            animationSpec = tween(200, easing = FastOutSlowInEasing),
+                            label = "chipFg$i"
+                        )
+                        Box(
+                            Modifier
+                                .onGloballyPositioned { c ->
+                                    // 用窗口坐标差换算成「玻璃条内容坐标」:positionInParent
+                                    // 是叶子布局坐标,不含 Row 自己的 padding(h=8dp),直接拿去
+                                    // 减 scroll 会让胶囊恒偏左一个 padding。窗口差天然带上
+                                    // padding、随滚动实时更新,补回 scroll.value 即成滚动
+                                    // 无关的内容坐标(见 ChipsCapsule 的减法)。
+                                    metrics[i] = c.positionInWindow().x - boxOriginX + scroll.value to
+                                        c.size.width.toFloat()
+                                }
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(bg)
+                                .clickable { onSelect(i) }
+                                .padding(horizontal = 14.dp, vertical = 7.dp)
+                        ) {
+                            Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
+                        }
+                        Spacer(Modifier.width(8.dp))
                     }
-                    Spacer(Modifier.width(8.dp))
+                    trailing?.invoke(this)
                 }
-                trailing?.invoke(this)
+                // 条内右端的固定按钮。之前它是**父容器**的 CenterEnd 子项 —— 条一旦收口
+                // (不再通栏)它就会掉到条外面去,所以连 8dp 端距一起搬进这条 Row 的末尾,
+                // 天然贴着条的右缘、垂直居中。
+                // ⚠️ 也不要退回调用方那套 `.align(TopEnd) + padding(top=2dp)` 的手工对中 ——
+                // 那颗按钮原先浮在条**外面**,和 chips 的基线各算各的,一端改了另一端就漂(H96 同类)。
+                if (endAction != null) {
+                    Box(Modifier.padding(end = 8.dp)) { endAction() }
+                }
             }
-        }
-        // 条内右端的固定按钮:画在玻璃之上、垂直居中。
-        // ⚠️ 不要退回调用方那套 `.align(TopEnd) + padding(top=2dp)` 的手工对中 ——
-        // 那颗按钮原先浮在条**外面**,和 chips 的基线各算各的,一端改了另一端就漂(H96 同类)。
-        if (endAction != null) {
-            Box(
-                Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 8.dp)
-            ) { endAction() }
         }
     }
 }
