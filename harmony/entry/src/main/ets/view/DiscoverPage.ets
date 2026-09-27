@@ -14,6 +14,7 @@ import { PlayerController } from '../playback/PlayerController';
 import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, HistoryStore } from '../store/Stores';
 import { InboxStore } from '../store/InboxStore';
+import { TapGuard } from '../util/TapGuard';
 import { Log } from '../util/Logger';
 
 /// 发现页:分类热门榜(缓存秒开 + 后台刷新 + 下拉刷新)+ 搜索(节目/单集双分段)
@@ -805,7 +806,7 @@ export struct DiscoverPage {
     .margin({ bottom: 4 })
   }
 
-  /// 继续收听:横滑卡片,点按续播。
+  /// 继续收听:横滑卡片,点按续播;长按出菜单(从这条横里去掉 = 标记已播完)。
   @Builder
   continueStrip() {
     Column({ space: 6 }) {
@@ -818,30 +819,17 @@ export struct DiscoverPage {
       Scroll() {
         Row({ space: 12 }) {
           ForEach(this.continueEntries(), (h: HistoryEntry) => {
-            Column({ space: 6 }) {
-              SquareArtwork({ scheme: this.scheme, url: h.episode.artworkUrl, corner: 12 })
-              Text(h.episode.title)
-                .fontSize(TypeScale.caption * this.fontScale)
-                .fontColor(this.scheme.onBackground)
-                .maxLines(2)
-                .textOverflow({ overflow: TextOverflow.Ellipsis })
-                .width('100%')
-              // 细进度条。轨道用 surfaceVariant(与 Android 的 trackColor 同),
-              // **不要用 onSurfaceVariant 加透明度** —— 那样轨道在深色底上几乎看不见,
-              // 于是刚开始听(进度 1%~15%)时整条进度条只剩左端一个绿点,像屏幕上落了灰,
-              // 读不出"这集听到哪了"。有底槽才有进度可读。
-              Stack({ alignContent: Alignment.Start }) {
-                Row().width('100%').height(3)
-                  .backgroundColor(this.scheme.surfaceVariant).borderRadius(2)
-                Row().width(`${Math.min(100, h.positionMs / h.durationMs * 100)}%`).height(3)
-                  .backgroundColor(this.scheme.primary).borderRadius(2)
-              }
-              .width('100%').height(3)
-            }
-            // 132 而非 112:与 Android 卡宽一致。112 太窄,两行标题基本只够放七八个字,
-            // 每张卡都以省略号收尾。
-            .width(132)
-            .onClick(() => this.onPlayEpisode(h.episode, this.continueEntries().map((x: HistoryEntry) => x.episode)))
+            ContinueCard({
+              scheme: this.scheme,
+              fontScale: this.fontScale,
+              episode: h.episode,
+              positionMs: h.positionMs,
+              durationMs: h.durationMs,
+              onPlay: () => this.onPlayEpisode(h.episode, this.continueEntries().map((x: HistoryEntry) => x.episode)),
+              onPlayNext: () => { this.app.player.playNext(h.episode); },
+              onEnqueue: () => { this.app.player.enqueue(h.episode); },
+              onMarkPlayed: () => { this.history.markPlayed(h.episode.id, true); }
+            })
           }, (h: HistoryEntry) => h.episode.id)
         }
         .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding })
@@ -951,5 +939,111 @@ export struct DiscoverPage {
       .padding({ left: 12, right: 12, top: 5, bottom: 5 })
       .borderRadius(14)
       .onClick(() => { this.searchTab = idx; })
+  }
+}
+
+/**
+ * 「继续收听」的一张卡:封面 + 两行标题 + 细进度条。点按续播,长按出菜单。
+ *
+ * **为什么单独成一个组件**:与 Android 的 `ContinueCard` 对齐 —— 同一张卡在两个端
+ * 有着陆在同一个粒度的节点上,菜单/按压态这类交互才不会一端改一端漏。
+ *
+ * **不像是因为"页面 @Builder 里的裸节点弹不出菜单"** —— 那个结论是我早先误判的,
+ * 撤回。当时"怎么都不弹"的真实原因有两条,都在下面这两处修掉了(取证与规律见 H100):
+ * ① 卡片里 `SquareArtwork` 的 `Image` 自带长按-拖拽识别器,按在封面上那一下被它吃掉;
+ * ② 同一节点上另挂 `.gesture(LongPressGesture())` 会抢走 `bindContextMenu` 的长按。
+ */
+@Component
+struct ContinueCard {
+  @Prop scheme: Scheme;
+  @Prop fontScale: number;
+  @Prop episode: Episode;
+  @Prop positionMs: number;
+  @Prop durationMs: number;
+  onPlay: () => void = () => {};
+  onPlayNext: () => void = () => {};
+  onEnqueue: () => void = () => {};
+  /// 从这条横里去掉 —— 就是「标记已播完」,见 contextMenu 注释。
+  onMarkPlayed: () => void = () => {};
+
+  /// 菜单项字体:labelLarge(14) 常规体。与 Components.ets 的 EpisodeListItem 同档 ——
+  /// ArkUI 菜单默认字号偏大且不跟主题,全应用的菜单要长一个样。
+  private menuFont(): Font {
+    return { size: TypeScale.labelLarge * this.fontScale, weight: FontWeight.Normal };
+  }
+
+  /**
+   * 长按菜单。**三项与 macOS 的 `EpisodeContextMenu` 一一对应**(macOS 上这张卡
+   * 早就挂了右键菜单),鸿蒙与 Android 补齐才算同构 —— 同一张卡在三个端给不同的动作,
+   * 是这张卡最容易漂的地方。
+   *
+   * 「删除」在这里的措辞就是「标记已播完」:这一条的数据源**就是历史列表**
+   * (进度 10s~95% 且未播完),所以 markPlayed 一置它当场从横条消失,而进度仍留在
+   * 音阁 · 历史里,从那里「标记未播完」即可复原(那一项是本轮补的 —— 历史页此前
+   * 没开这个开关,「可逆」就只是纸面上的,见 H101)。
+   * 为什么不叫"删除"、也不给 HistoryStore 加 remove:①"删除"字面上指向历史条目本身,
+   * 而用户要的只是"这条别再占着首屏";②真删历史三端各要加一个 API 且不可反悔,
+   * 按本仓库惯例就得配确认弹窗 —— 而 app 里没有撤销先例。用现成的可逆语义绕开这一整串。
+   */
+  @Builder
+  contextMenu() {
+    Menu() {
+      MenuItem({ content: L.s('queue_play_next') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
+        .onClick(() => this.onPlayNext())
+      MenuItem({ content: L.s('queue_add') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
+        .onClick(() => {
+          this.onEnqueue();
+          // 入队结果在别页,这里界面上没有任何变化 —— 不提示等于没按上(同 Components.ets)
+          this.getUIContext().getPromptAction().showToast({ message: L.s('queue_added') });
+        })
+      // 卡片能出现在这条横里就说明它未播完(过滤条件如此),所以只给单向的
+      // 「标记已播完」,不做行组件那个 已播/未播 来回切换。
+      MenuItem({ content: L.s('mark_played') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
+        .onClick(() => this.onMarkPlayed())
+    }
+    .backgroundColor(this.scheme.surface)
+    .radius(12)
+  }
+
+  build() {
+    Column({ space: 6 }) {
+      SquareArtwork({ scheme: this.scheme, url: this.episode.artworkUrl, corner: 12 })
+      Text(this.episode.title)
+        .fontSize(TypeScale.caption * this.fontScale)
+        .fontColor(this.scheme.onBackground)
+        .maxLines(2)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        .width('100%')
+      /**
+       * 细进度条。轨道用 surfaceVariant(与 Android 的 trackColor 同),
+       * **不要用 onSurfaceVariant 加透明度** —— 那样轨道在深色底上几乎看不见,
+       * 于是刚开始听(进度 1%~15%)时整条进度条只剩左端一个绿点,像屏幕上落了灰,
+       * 读不出"这集听到哪了"。有底槽才有进度可读。
+       */
+      Stack({ alignContent: Alignment.Start }) {
+        Row().width('100%').height(3)
+          .backgroundColor(this.scheme.surfaceVariant).borderRadius(2)
+        Row().width(`${Math.min(100, this.positionMs / this.durationMs * 100)}%`).height(3)
+          .backgroundColor(this.scheme.primary).borderRadius(2)
+      }
+      .width('100%').height(3)
+    }
+    // 132 而非 112:与 Android 卡宽一致。112 太窄,两行标题基本只够放七八个字,
+    // 每张卡都以省略号收尾。
+    .width(132)
+    .onClick(() => this.onPlay())
+    /**
+     * 长按菜单。两个参数是从单集行那边抄来的实测结论(见 Components.ets 同名调用):
+     * `enableArrow: false` 才走"在按下点弹出",带箭头会锚到组件横向正中;
+     * `aboutToAppear/Disappear` 升降误触盾,挡掉"点外部关菜单"穿透下来的那一下。
+     */
+    .bindContextMenu(this.contextMenu(), ResponseType.LongPress, {
+      enableArrow: false,
+      aboutToAppear: () => TapGuard.raise(),
+      aboutToDisappear: () => TapGuard.lowerSoon()
+    })
   }
 }

@@ -157,7 +157,9 @@ export struct EpisodeListItem {
   /// —— 长按的触发时长是系统定值(约 500ms,`bindContextMenu` 不可配),改不了;
   /// 慢的**观感**靠下面的按压态底色缓解,而慢本身靠这个按钮绕开。
   @Prop showQueueAdd: boolean = false;
-  /// 「标记已播完」只在发现页的搜索结果里出现(与 Android 一致)。
+  /// 「标记已播完 / 未播完」这一项出现在**能承担撤销的地方**:发现页的搜索结果
+  /// (与 Android 一致)和音阁 · 历史。后者是必须的 —— 发现页「继续收听」卡上那个
+  /// 「标记已播完」改的就是这张列表的 `played`,不在历史页给回程,那一步就撤不回来。
   /// 长按菜单本身**所有单集列表都有**,故不设开关 —— 鸿蒙端此前压根没有长按手势,
   /// 外部反馈的「长按单集不能加入队列」即此。调用方必须接好 onPlayNext / onEnqueue。
   @Prop showPlayedToggle: boolean = false;

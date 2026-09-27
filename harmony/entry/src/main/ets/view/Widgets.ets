@@ -277,10 +277,18 @@ export struct SquareArtwork {
         Glyph({ symbol: Sym.playing, dim: 30, color: this.scheme.primary })
       }
       if (this.url.length > 0) {
+        /**
+         * `draggable(false)` 不是防"拖出去",是**把外层卡片的长按让回来**。
+         * Image 自带一注册就是开着的长按-拖拽识别器(约 350ms 起缩略图),
+         * 它在这条命中链上比外层卡片更深,于是长按封面的那一下被它吃掉,
+         * 卡片上的 `bindContextMenu` 根本不弹 —— 而长按同一张卡的标题文字却正常。
+         * 症状是"菜单在图的区域失灵",极易误判成菜单本身的问题(见 H100)。
+         */
         Image(this.url)
           .width('100%')
           .aspectRatio(1)
           .objectFit(ImageFit.Cover)
+          .draggable(false)
       }
     }
     .width('100%')

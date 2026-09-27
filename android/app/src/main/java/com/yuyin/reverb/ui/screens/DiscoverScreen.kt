@@ -5,6 +5,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -73,9 +76,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
@@ -83,6 +88,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -794,10 +800,11 @@ private fun GuideCard() {
     }
 }
 
-/** 继续收听:未听完的历史横滑卡片。封面 + 标题(2 行) + 进度条,点按续播。 */
+/** 继续收听:未听完的历史横滑卡片。封面 + 标题(2 行) + 进度条,点按续播、长按出菜单。 */
 @Composable
 private fun ContinueListeningStrip(entries: List<HistoryEntry>) {
     if (entries.isEmpty()) return
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
     Column {
         Text(
             stringResource(R.string.continue_listening),
@@ -810,42 +817,101 @@ private fun ContinueListeningStrip(entries: List<HistoryEntry>) {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(entries, key = { it.episode.id }) { h ->
-                ContinueCard(entry = h, onClick = { PlayerController.play(h.episode) })
+                ContinueCard(
+                    entry = h,
+                    onClick = { PlayerController.play(h.episode) },
+                    onPlayNext = { PlayerController.playNext(h.episode) },
+                    onEnqueue = { PlayerController.enqueue(h.episode) },
+                    // 「删除」这一条就是标记已播完:横条的数据源**是历史列表**
+                    // (进度 10s..95% 且未播完),markPlayed 一置它当场从横条消失,
+                    // 而进度仍留在音阁 · 历史里,从那里「标记未播完」即可复原。
+                    // 所以这里不叫"删除"、也不给 HistoryStore 加 remove —— 见 ContinueCard 注释。
+                    onMarkPlayed = { container.historyStore.markPlayed(h.episode.id, true) }
+                )
             }
         }
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun ContinueCard(entry: HistoryEntry, onClick: () -> Unit) {
+private fun ContinueCard(
+    entry: HistoryEntry,
+    onClick: () -> Unit,
+    onPlayNext: () -> Unit,
+    onEnqueue: () -> Unit,
+    onMarkPlayed: () -> Unit
+) {
     val progress = if (entry.durationMs > 0)
         (entry.positionMs.toFloat() / entry.durationMs).coerceIn(0f, 1f) else 0f
-    Column(
-        Modifier
-            .width(132.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(bottom = 8.dp)
-    ) {
-        com.yuyin.reverb.ui.components.Artwork(entry.episode.artworkUrl, size = 132, corner = 12)
-        Spacer(Modifier.height(6.dp))
-        Text(
-            entry.episode.title,
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onBackground,
-            maxLines = 2,
-            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-            modifier = Modifier.padding(horizontal = 2.dp)
-        )
-        Spacer(Modifier.height(6.dp))
-        LinearProgressIndicator(
-            progress = { progress },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(3.dp),
-            color = MaterialTheme.colorScheme.primary,
-            trackColor = MaterialTheme.colorScheme.surfaceVariant
-        )
+    val context = LocalContext.current
+    var menuOpen by remember { mutableStateOf(false) }
+    /**
+     * 按下点(相对卡片左上角),菜单以它为锚点。与 `EpisodeListItem` 同一套理由:
+     * 锚点若挂在卡片外的容器上,Material 会把菜单左边缘对齐容器左边缘,
+     * 于是无论按在哪张卡,菜单都贴屏幕最左弹出,跟手指没关系。
+     */
+    var pressPoint by remember { mutableStateOf(Offset.Zero) }
+    Box {
+        Column(
+            Modifier
+                .width(132.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .pointerInput(Unit) {
+                    // Initial 阶段只「偷看」按下位置、不消费事件 —— 否则和 combinedClickable
+                    // 抢同一个指针,点击/长按都会失效。
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        pressPoint = down.position
+                    }
+                }
+                .combinedClickable(onClick = onClick, onLongClick = { menuOpen = true })
+                .padding(bottom = 8.dp)
+        ) {
+            com.yuyin.reverb.ui.components.Artwork(entry.episode.artworkUrl, size = 132, corner = 12)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                entry.episode.title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onBackground,
+                maxLines = 2,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 2.dp)
+            )
+            Spacer(Modifier.height(6.dp))
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(3.dp),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        }
+        // 零尺寸锚点:自身不占布局,只把菜单原点挪到手指按下处(贴边由 Compose 自行翻转)
+        Box(Modifier.offset { IntOffset(pressPoint.x.roundToInt(), pressPoint.y.roundToInt()) }) {
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.queue_play_next)) },
+                    onClick = { menuOpen = false; onPlayNext() }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.queue_add)) },
+                    onClick = {
+                        menuOpen = false
+                        onEnqueue()
+                        // 入队结果在别页,这里界面上没有任何变化 —— 不提示等于没按上
+                        Toast.makeText(context, R.string.queue_added, Toast.LENGTH_SHORT).show()
+                    }
+                )
+                // 卡片能出现在这条横里就说明它未播完(过滤条件如此),所以只给单向的
+                // 「标记已播完」,不做行组件那个 已播/未播 切换。
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.mark_played)) },
+                    onClick = { menuOpen = false; onMarkPlayed() }
+                )
+            }
+        }
     }
 }
 

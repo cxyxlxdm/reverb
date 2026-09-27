@@ -409,6 +409,16 @@ export struct LibraryPage {
                 isPlaying: this.player.isPlaying,
                 played: h.played,
                 onPlay: () => this.onPlayEpisode(h.episode, this.historyEpisodes()),
+                /**
+                 * 历史页**必须**给这个开关。发现页「继续收听」卡上的「标记已播完」
+                 * 就是把这里的 `played` 置真 —— 那一横条的数据源正是这份历史列表
+                 * (未播完 + 进度在 10s~95%)。不在这儿给「标记未播完」,那个动作
+                 * 就成了不可撤销的,而 app 里没有撤销机制。
+                 * 进度本身不受影响:恢复后它带着原来的位置重新回到横条。
+                 * (macOS 的单集右键菜单是无条件带这一项的,这里向它对齐。)
+                 */
+                showPlayedToggle: true,
+                onTogglePlayed: () => { this.history.markPlayed(h.episode.id, !h.played); },
                 onPlayNext: () => { this.player.playNext(h.episode); },
                 onEnqueue: () => { this.player.enqueue(h.episode); }
               })
