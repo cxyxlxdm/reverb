@@ -57,12 +57,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
+import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.PodcastState
 import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.ListPlayButton
 import com.yuyin.reverb.ui.components.formatListenDuration
 import com.yuyin.reverb.ui.share.ShareCards
 import com.yuyin.reverb.ui.podcastViewModel
@@ -162,6 +164,12 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                 PodcastState.Error -> EmptyHint(stringResource(R.string.load_failed))
                 is PodcastState.Loaded -> {
                     val subscribed = subs.any { it.feedUrl == s.podcast.feedUrl }
+                    // 听歌时长存的是这个 key(既有口径,不能改)
+                    val channelKey = s.podcast.feedUrl.ifBlank { s.podcast.title }
+                    // 这一列的身份:头部那颗播放按钮靠它判断「正在播的就是这一列」。
+                    // 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名会把另一家的按钮点亮。
+                    // 加前缀是为了**永不可能**撞上音阁那三个分段名("inbox" / "fav" / "dl")。
+                    val listTag = "podcast:$channelKey"
                     LazyColumn(
                         Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 24.dp)
@@ -171,11 +179,11 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                             item { OfflineNotice(s.staleAt) }
                         }
                         item {
-                            val channelKey = s.podcast.feedUrl.ifBlank { s.podcast.title }
                             val listenedMs = listenStats.firstOrNull { it.key == channelKey }?.listenedMs ?: 0L
                             PodcastDetailHeader(
                                 podcast = s.podcast,
-                                episodeCount = s.episodes.size,
+                                episodes = s.episodes,
+                                playListTag = listTag,
                                 listenedMs = listenedMs,
                                 subscribed = subscribed,
                                 onSubscribe = { container.subscriptionStore.toggle(s.podcast) }
@@ -187,7 +195,7 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                                 episode = ep,
                                 isCurrent = current?.id == ep.id,
                                 isPlaying = isPlaying,
-                                onPlay = { PlayerController.playOrToggle(ep, s.episodes) },
+                                onPlay = { PlayerController.playOrToggle(ep, s.episodes, listTag) },
                                 downloadStatus = downloadStates[ep.id],
                                 onDownload = { DownloadManager.download(ep) },
                                 onDeleteDownload = { DownloadManager.delete(ep.id) },
@@ -212,7 +220,9 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
 @Composable
 private fun PodcastDetailHeader(
     podcast: Podcast,
-    episodeCount: Int,
+    /** 这一列的单集 + 身份 tag:「单集数」那一行右端那颗播放按钮要用(与音阁分段条同一颗)。 */
+    episodes: List<Episode>,
+    playListTag: String,
     listenedMs: Long,
     subscribed: Boolean,
     onSubscribe: () -> Unit
@@ -289,11 +299,17 @@ private fun PodcastDetailHeader(
         }
 
         Spacer(Modifier.height(16.dp))
-        Text(
-            stringResource(R.string.episode_count, episodeCount),
-            style = MaterialTheme.typography.titleSmall,
-            color = MaterialTheme.colorScheme.onBackground
-        )
+        // 单集数这一行是这一列的标题行,所以播放按钮挂在它右端 —— 与音阁「段条右端」
+        // 同一处语义(动作属于那一段列表,不属于页面顶栏)。
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.episode_count, episodes.size),
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onBackground
+            )
+            ListPlayButton(tag = playListTag, episodes = episodes)
+        }
         if (listenedMs > 0) {
             Spacer(Modifier.height(6.dp))
             Text(

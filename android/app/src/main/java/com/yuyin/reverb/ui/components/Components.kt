@@ -38,8 +38,10 @@ import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Loop
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.FilterChip
@@ -79,12 +81,15 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.lerp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import coil.compose.AsyncImage
 import com.yuyin.reverb.data.local.InboxStore
 import com.yuyin.reverb.data.model.DownloadStatus
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.Podcast
+import com.yuyin.reverb.playback.PlayMode
+import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.theme.CeladonDim
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -707,6 +712,56 @@ private fun PlayCircle(isCurrent: Boolean, isPlaying: Boolean, onClick: () -> Un
             contentDescription = stringResource(if (isCurrent && isPlaying) R.string.a11y_pause else R.string.a11y_play),
             tint = accent,
             modifier = Modifier.size(22.dp)
+        )
+    }
+}
+
+/**
+ * 「这一段列表」的播放按钮 —— 音阁分段条右端与频道主页单集数那一行**共用同一颗**。
+ *
+ * 一颗按钮两件事是定稿设计(「点击就播放这个列表,再次可以切换播放模式」):
+ *   · 点它 = 播这一段(整列,从屏幕上第一行起播);
+ *   · **正在播这一段**时再点 = 切播放模式(顺序 → 循环 → 随机)。
+ * 分派依据是「当前队列是不是这一段」—— 起播时把列表身份当 tag 交给 `playQueue`
+ * (见 `PlayerController._activeListTag`)。
+ *
+ * 图标显示**模式本身**,所以没起播时读作「会用这个模式播」,起播后读作「正在这么播」;
+ * 正在播的那一段点亮(primary),其余留灰 —— 各处共用一个全局模式,不点亮就看不出刚才是切的哪一段。
+ *
+ * 规则:**列表没内容就不摆这颗按钮** —— 空列表上的"播放"点了什么都不会发生,是个假按钮。
+ */
+@Composable
+fun ListPlayButton(tag: String, episodes: List<Episode>, modifier: Modifier = Modifier) {
+    if (episodes.isEmpty()) return
+    // 这两个读点挂在**这颗按钮这一层**而不是整页:模式一变只需要重建这一颗 Icon,
+    // 不该把 pager 和整列列表拖下水(同 `GlassChipsRow` 的 progress 用 lambda 传的理由)。
+    val playMode by PlayerController.playMode.collectAsStateWithLifecycle()
+    val activeTag by PlayerController.activeListTag.collectAsStateWithLifecycle()
+    val isLive = activeTag == tag
+    IconButton(
+        modifier = modifier,
+        onClick = {
+            if (isLive) PlayerController.cyclePlayMode()
+            else PlayerController.playQueue(episodes, 0, tag)
+        }
+    ) {
+        Icon(
+            imageVector = when (playMode) {
+                PlayMode.SEQUENTIAL -> Icons.Rounded.PlayArrow
+                PlayMode.REPEAT -> Icons.Rounded.Loop
+                PlayMode.SHUFFLE -> Icons.Rounded.Shuffle
+            },
+            contentDescription = if (isLive) {
+                stringResource(
+                    when (playMode) {
+                        PlayMode.SEQUENTIAL -> R.string.play_mode_sequential
+                        PlayMode.REPEAT -> R.string.play_mode_repeat
+                        PlayMode.SHUFFLE -> R.string.play_mode_shuffle
+                    }
+                )
+            } else stringResource(R.string.lib_play_this_list),
+            tint = if (isLive) MaterialTheme.colorScheme.primary
+            else MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }

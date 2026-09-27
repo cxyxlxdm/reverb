@@ -331,8 +331,9 @@ object PlayerController {
     /**
      * 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。
      *
-     * @param tag 队列身份("inbox" / "fav" / "dl")。音阁分段条右端的播放按钮传它,
-     *   UI 据此判断「这颗按钮现在管的就是正在播的这一段」;普通列表项不传(空串)。
+     * @param tag 队列身份("inbox" / "fav" / "dl" / 频道主页用 "podcast:<feedUrl>")。
+     *   分段条与频道主页那两颗播放按钮传它,UI 据此判断「这颗按钮现在管的就是正在播的这一段」;
+     *   不属于任何可见列表的入口(「下一个播放」摘出来单播、迷你条)不传(空串)。
      */
     fun playQueue(episodes: List<Episode>, startIndex: Int, tag: String = "") {
         if (episodes.isEmpty()) return
@@ -474,10 +475,16 @@ object PlayerController {
         if (_current.value?.id == episode.id && controller != null) togglePlayPause() else play(episode)
     }
 
-    /** 队列版:同一集则暂停/继续,否则以该列表为队列从此集起播。 */
-    fun playOrToggle(episode: Episode, queue: List<Episode>) {
+    /**
+     * 队列版:同一集则暂停/继续,否则以该列表为队列从此集起播。
+     *
+     * @param tag 与 [playQueue] 同一个队列身份。**列表行内点起播也要传它** —— 否则从某一集
+     *   起播之后,段条/头部那颗播放按钮认不出「这颗按钮管的就是正在播的这一段」,
+     *   点它会回到「从头播这一段」而不是切播放模式(频道主页那颗按钮就是这样被点第一集弄丢的)。
+     */
+    fun playOrToggle(episode: Episode, queue: List<Episode>, tag: String = "") {
         if (_current.value?.id == episode.id && controller != null) togglePlayPause()
-        else playQueue(queue, queue.indexOfFirst { it.id == episode.id }.coerceAtLeast(0))
+        else playQueue(queue, queue.indexOfFirst { it.id == episode.id }.coerceAtLeast(0), tag)
     }
 
     // ---- 随机电台 ----

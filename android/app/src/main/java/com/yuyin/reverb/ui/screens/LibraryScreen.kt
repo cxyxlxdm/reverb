@@ -21,10 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.GridView
-import androidx.compose.material.icons.rounded.Loop
-import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,10 +47,10 @@ import com.yuyin.reverb.data.model.DownloadedEpisode
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
-import com.yuyin.reverb.playback.PlayMode
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.GLASS_CHIPS_TOP_PAD
 import com.yuyin.reverb.ui.components.GlassChipsRow
+import com.yuyin.reverb.ui.components.ListPlayButton
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.PodcastGridItem
 import com.yuyin.reverb.ui.components.PodcastListItem
@@ -133,51 +130,17 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                 // 什么都不会发生,是个假按钮。
                 endAction = {
                     // 三段单集列表(最新 / 收藏 / 下载):一颗**播放按钮**。
-                    //   · 点它 = 播这一段(整列,从屏幕上第一行起播);
-                    //   · **正在播这一段**时再点 = 切播放模式(顺序 → 循环 → 随机)。
-                    // 一颗按钮两件事是定的设计(「点击就播放这个列表,再次可以切换播放模式」),
-                    // 分派依据是「当前队列是不是这一段」—— 起播时把分段身份当 tag 交给
-                    // `playQueue`,见 `PlayerController._activeListTag`。
-                    // 图标显示**模式本身**,所以没起播时读作「会用这个模式播」,
-                    // 起播后读作「正在这么播」;正在播的那一段点亮(primary),
-                    // 另两段留灰 —— 三段共用一个模式,不点亮就看不出刚才是切的哪一段。
+                    // 交互、图标语义与「没内容不摆按钮」那条规则都收在
+                    // `Components.kt ListPlayButton`(频道主页用的是同一颗)。
+                    // 三段共用一个**全局**模式,所以正在播的那一段点亮(primary),
+                    // 另两段留灰 —— 不点亮就看不出刚才是切的哪一段。
                     if (section in 1..3) {
-                        // 这两个读点放在**这颗按钮这一层**而不是整页:模式一变只需要重建
-                        // 这一颗 Icon,不该把 pager 和五段列表拖下水(同 `GlassChipsRow` 的
-                        // progress 用 lambda 传的理由)。
-                        val playMode by PlayerController.playMode.collectAsStateWithLifecycle()
-                        val activeTag by PlayerController.activeListTag.collectAsStateWithLifecycle()
                         val (tag, list) = when (section) {
                             1 -> "inbox" to inbox
                             2 -> "fav" to favorites
                             else -> "dl" to downloads.map { it.episode }
                         }
-                        if (list.isNotEmpty()) {
-                            val isLive = activeTag == tag
-                            IconButton(onClick = {
-                                if (isLive) PlayerController.cyclePlayMode()
-                                else PlayerController.playQueue(list, 0, tag)
-                            }) {
-                                Icon(
-                                    imageVector = when (playMode) {
-                                        PlayMode.SEQUENTIAL -> Icons.Rounded.PlayArrow
-                                        PlayMode.REPEAT -> Icons.Rounded.Loop
-                                        PlayMode.SHUFFLE -> Icons.Rounded.Shuffle
-                                    },
-                                    contentDescription = if (isLive) {
-                                        stringResource(
-                                            when (playMode) {
-                                                PlayMode.SEQUENTIAL -> R.string.play_mode_sequential
-                                                PlayMode.REPEAT -> R.string.play_mode_repeat
-                                                PlayMode.SHUFFLE -> R.string.play_mode_shuffle
-                                            }
-                                        )
-                                    } else stringResource(R.string.lib_play_this_list),
-                                    tint = if (isLive) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                        }
+                        ListPlayButton(tag = tag, episodes = list)
                     }
                     if (section == 4 && history.isNotEmpty()) {
                         TextButton(
@@ -271,7 +234,7 @@ private fun FavoritesSection() {
                 isCurrent = current?.id == ep.id,
                 isPlaying = isPlaying,
                 // 队列跟着屏幕上的顺序走
-                onPlay = { PlayerController.playOrToggle(ep, favorites) },
+                onPlay = { PlayerController.playOrToggle(ep, favorites, "fav") },
                 showPodcastTitle = true,
                 isFavorite = true,
                 onToggleFavorite = { container.favoriteStore.toggle(ep) },
@@ -313,7 +276,7 @@ private fun DownloadsSection() {
                 episode = d.episode,
                 isCurrent = current?.id == d.episode.id,
                 isPlaying = isPlaying,
-                onPlay = { PlayerController.playOrToggle(d.episode, downloads.map { it.episode }) },
+                onPlay = { PlayerController.playOrToggle(d.episode, downloads.map { it.episode }, "dl") },
                 // 下载同样是跨节目混排,节目名要显示(见历史段注释)
                 showPodcastTitle = true,
                 downloadStatus = DownloadStatus.Completed,
