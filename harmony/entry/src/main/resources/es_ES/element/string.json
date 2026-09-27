@@ -1135,6 +1135,22 @@
     {
       "name": "transcript_none",
       "value": "El editor no ofrece transcripción para este episodio"
+    },
+    {
+      "name": "lib_play_this_list",
+      "value": "Reproducir esta lista"
+    },
+    {
+      "name": "play_mode_sequential",
+      "value": "Reproducción en orden"
+    },
+    {
+      "name": "play_mode_repeat",
+      "value": "Reproducción en bucle"
+    },
+    {
+      "name": "play_mode_shuffle",
+      "value": "Reproducción aleatoria"
     }
   ]
 }

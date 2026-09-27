@@ -172,9 +172,18 @@ struct Index {
     this.openPodcast(seed);
   }
 
-  private playEpisode(e: Episode, queue: Episode[]): void {
-    Log.i('UI', `播放 "${e.title}" 队列=${queue.length}`);
-    this.player.playOrToggle(e, queue);
+  /**
+   * 列表行内点某一集起播。
+   *
+   * @param tag 这一列的身份("inbox" / "fav" / "dl" / "podcast:<feedUrl>"),不属于任何
+   *   可见列表的入口传空串。**必须一路传到 `playOrToggle`** —— 少了它,从某一集起播之后
+   *   分段条/频道主页那颗播放按钮认不出「这颗按钮管的就是正在播的这一段」,
+   *   点它会回到「从头播这一段」而不是切播放模式(Android 侧同一处踩过,
+   *   见 `PlayerController.playOrToggle` 的注释)。
+   */
+  private playEpisode(e: Episode, queue: Episode[], tag: string): void {
+    Log.i('UI', `播放 "${e.title}" 队列=${queue.length} tag='${tag}'`);
+    this.player.playOrToggle(e, queue, tag);
   }
 
   build() {
@@ -351,7 +360,7 @@ struct Index {
             // 单集行的「正在播放」高亮要读播放态
             player: this.player,
             onBack: () => { this.stack.pop(); },
-            onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
+            onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
           })
             .layoutWeight(1)
           if (this.player.current !== null) {
@@ -404,7 +413,7 @@ struct Index {
               player: this.player,
               bottomPad: this.underBarPad(),
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
-              onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q)
+              onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
           }
 
@@ -423,7 +432,7 @@ struct Index {
               downloadManager: this.downloadManager,
               bottomPad: this.underBarPad(),
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
-              onPlayEpisode: (e: Episode, q: Episode[]) => this.playEpisode(e, q),
+              onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag),
               onOpenSettings: () => { this.stack.pushPathByName('settings', null); },
               onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); }
             })

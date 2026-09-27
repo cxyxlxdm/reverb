@@ -43,7 +43,7 @@ export struct DiscoverPage {
   /// 单集行要显示"正在播放"高亮,故需观察播放态(只做渲染;playNext/enqueue 那种纯写走 app.player)
   @ObjectLink player: PlayerController;
   onOpenPodcast: (p: Podcast) => void = () => {};
-  onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
+  onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
 
   @State catIndex: number = 0;
   /// chips 高亮专用索引,与驱动 Swiper `.index()` 的 catIndex 分开(理由见 LibraryPage 同名注释)
@@ -563,7 +563,7 @@ export struct DiscoverPage {
                 isCurrent: this.player.current !== null && this.player.current.id === e.id,
                 isPlaying: this.player.isPlaying,
                 played: this.history.isPlayed(e.id),
-                onPlay: () => this.onPlayEpisode(e, this.inbox.episodes),
+                onPlay: () => this.onPlayEpisode(e, this.inbox.episodes, ''),
                 onPlayNext: () => { this.app.player.playNext(e); },
                 onEnqueue: () => { this.app.player.enqueue(e); }
               })
@@ -800,7 +800,7 @@ export struct DiscoverPage {
     .backgroundColor(withAlpha(this.scheme.primary, 0.08))
     .borderRadius(12)
     .alignItems(VerticalAlign.Center)
-    .onClick(() => this.onPlayEpisode(GuideEpisode.make(), [GuideEpisode.make()]))
+    .onClick(() => this.onPlayEpisode(GuideEpisode.make(), [GuideEpisode.make()], ''))
     }
     .width('100%')
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding })
@@ -826,7 +826,7 @@ export struct DiscoverPage {
               episode: h.episode,
               positionMs: h.positionMs,
               durationMs: h.durationMs,
-              onPlay: () => this.onPlayEpisode(h.episode, this.continueEntries().map((x: HistoryEntry) => x.episode)),
+              onPlay: () => this.onPlayEpisode(h.episode, this.continueEntries().map((x: HistoryEntry) => x.episode), ''),
               onPlayNext: () => { this.app.player.playNext(h.episode); },
               onEnqueue: () => { this.app.player.enqueue(h.episode); },
               onMarkPlayed: () => { this.history.markPlayed(h.episode.id, true); }
@@ -910,7 +910,7 @@ export struct DiscoverPage {
                   isCurrent: this.player.current !== null && this.player.current.id === e.id,
                   isPlaying: this.player.isPlaying,
                   played: this.history.isPlayed(e.id),
-                  onPlay: () => this.onPlayEpisode(e, this.searchEpisodes),
+                  onPlay: () => this.onPlayEpisode(e, this.searchEpisodes, ''),
                   showPlayedToggle: true,
                   onTogglePlayed: () => { this.history.markPlayed(e.id, !this.history.isPlayed(e.id)); },
                   // 这两个只是**写**操作,不参与本页渲染,故可直接用容器里的单例;

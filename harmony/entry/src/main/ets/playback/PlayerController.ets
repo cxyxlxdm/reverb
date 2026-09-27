@@ -13,6 +13,21 @@ import { Log } from '../util/Logger';
 const PLAYER_UA = 'Reverb/1.0 (HarmonyOS podcast client)';
 
 /**
+ * 列表播放模式。与 Android `PlayerController.PlayMode` **同名同序**。
+ *
+ * 顺序 = 播到列表末尾即停;循环 = 末尾回到开头接着播;随机 = 把这个列表打乱播一遍(走完表就停)。
+ *
+ * 持久化存的是 **ordinal**(SettingsStore 的 `play_mode`),所以**新增项只能加在末尾** ——
+ * 中间插一个位置,老用户存的数就会指向另一个模式。
+ */
+export enum PlayMode { SEQUENTIAL, REPEAT, SHUFFLE }
+
+/// 播放模式的中文名(只给日志用)。界面文案走 `L.s('play_mode_*')`,见 Components.ListPlayButton。
+function modeName(m: PlayMode): string {
+  return m === PlayMode.REPEAT ? 'REPEAT' : m === PlayMode.SHUFFLE ? 'SHUFFLE' : 'SEQUENTIAL';
+}
+
+/**
  * 播放门面。与 Android `PlayerController.kt` / macOS `PlayerController.swift` 行为对齐:
  * 队列上下文(上/下一集)、倍速 6 档、睡眠定时 + 渐弱、淡入、进度续播、收听时长计数。
  *
@@ -86,6 +101,19 @@ export class PlayerController {
 
   private queue: Episode[] = [];
   private queueIndex = 0;
+  /**
+   * 列表播放模式与**正在播的那一列的身份**("inbox" / "fav" / "dl" / "podcast:<feedUrl>")。
+   *
+   * 两颗字段都放在本类上,是因为它们都由 `@ObjectLink player` 观察 —— 与 `positionMs`
+   * 不同(H64:高频量必须离开 @Observed),它们**只在用户点按钮时变**,一秒不到一次,
+   * 重建面可控。真正要控的是**观察者的数量**:所以读它们的是 `ListPlayButton`
+   * 那颗独立小组件,不是整页(同 Android 把 collect 挂在按钮一层)。
+   */
+  playMode: PlayMode = PlayMode.SEQUENTIAL;
+  activeListTag: string = '';
+  /// 随机表:按当前模式打乱后的**队列下标**序列;`shufflePos` 是表指针(不是队列下标)
+  private shuffleOrder: number[] = [];
+  private shufflePos = -1;
 
   // 电台:下一首从哪来由 RadioStation 提供,是否在台/自动续播由本类统一持有
   private radioNext: (() => Promise<Episode | null>) | null = null;
@@ -121,6 +149,10 @@ export class PlayerController {
     this.history = history;
     this.settings = settings;
     this.speed = settings.defaultSpeed;
+    // 播放模式是老用户存过的偏好,起来就恢复;存的 ordinal 越界(降级安装)按默认处理。
+    // 逐个比对而不是 `as PlayMode`:ArkTS 里 number→枚举的隐式转换不安全。
+    const saved = settings.playMode;
+    this.playMode = saved === 1 ? PlayMode.REPEAT : saved === 2 ? PlayMode.SHUFFLE : PlayMode.SEQUENTIAL;
   }
 
   bindListen(add: (e: Episode, deltaMs: number) => void, flush: () => void): void {
@@ -134,24 +166,34 @@ export class PlayerController {
     this.playQueue([e], 0);
   }
 
-  playQueue(list: Episode[], startIndex: number): void {
+  /**
+   * 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。
+   *
+   * @param tag 队列身份("inbox" / "fav" / "dl" / 频道主页用 "podcast:<feedUrl>")。
+   *   分段条与频道主页那两颗播放按钮传它,UI 据此判断「这颗按钮现在管的就是正在播的这一段」;
+   *   不属于任何可见列表的入口(「下一个播放」摘出来单播、迷你条)不传(空串)。
+   */
+  playQueue(list: Episode[], startIndex: number, tag: string = ''): void {
     if (list.length === 0) return;
     if (this.radioMode) this.stopRadio();   // 手动播放即退出电台
     this.queue = list;
     this.queueIndex = Math.max(0, Math.min(startIndex, list.length - 1));
+    if (this.playMode === PlayMode.SHUFFLE) this.rebuildShuffleOrder(); else this.clearShuffleOrder();
+    this.activeListTag = tag;
+    Log.i('Player', `playQueue count=${list.length} index=${this.queueIndex} tag='${tag}' mode=${modeName(this.playMode)}`);
     this.updateNavFlags();
     this.startEpisode(this.queue[this.queueIndex], true);
   }
 
   /// 同一集则暂停/继续,否则以该列表为队列起播。
-  playOrToggle(e: Episode, queue: Episode[]): void {
+  playOrToggle(e: Episode, queue: Episode[], tag: string = ''): void {
     if (this.current !== null && this.current.id === e.id) {
       this.togglePlayPause();
       return;
     }
     let idx = queue.findIndex((x: Episode) => x.id === e.id);
     if (idx < 0) idx = 0;
-    this.playQueue(queue.length > 0 ? queue : [e], idx);
+    this.playQueue(queue.length > 0 ? queue : [e], idx, tag);
   }
 
   private startEpisode(e: Episode, resetRetries: boolean): void {
@@ -495,7 +537,9 @@ export class PlayerController {
         } else if (this.userQueue.length > 0) {
           continues = true;
           this.consumeQueueAt(0);
-        } else if (this.queueIndex < this.queue.length - 1) {
+        } else if (this.nextQueueIndex() >= 0) {
+          // 判据必须走 nextQueueIndex() 而不是自己算 +1:循环模式永远有下一集,
+          // 随机模式看的是表指针而不是列表下标(与 Android onEnded 同口径)
           continues = true;
           this.next();
         }
@@ -699,6 +743,64 @@ export class PlayerController {
 
   // ── 队列导航 ──
 
+  /**
+   * 当前播放模式下,上下文队列里的下一集下标;没有下一集返回 -1(调用方就此停下)。
+   *
+   * ⚠️ 循环模式只在**队列多于一集**时回绕:不少入口播的是「单曲队列」
+   * (`play(episode)`、从「接下来播放」里点某一行 —— 那里 queue 被刻意换成一条),
+   * 无条件回绕会让那一集无限重播,而用户要循环的是他点播放按钮的那个列表。
+   */
+  private nextQueueIndex(): number {
+    if (this.playMode === PlayMode.REPEAT) {
+      return this.queue.length > 1 ? (this.queueIndex + 1) % this.queue.length : -1;
+    }
+    if (this.playMode === PlayMode.SHUFFLE) {
+      return this.shufflePos >= 0 && this.shufflePos < this.shuffleOrder.length - 1
+        ? this.shuffleOrder[this.shufflePos + 1] : -1;
+    }
+    return this.queueIndex >= 0 && this.queueIndex < this.queue.length - 1 ? this.queueIndex + 1 : -1;
+  }
+
+  /** 当前播放模式下,上下文队列里的上一集下标;没有返回 -1(随机沿随机表回退)。 */
+  private prevQueueIndex(): number {
+    if (this.playMode === PlayMode.SHUFFLE) {
+      return this.shufflePos > 0 ? this.shuffleOrder[this.shufflePos - 1] : -1;
+    }
+    const i = this.queueIndex - 1;
+    return i >= 0 && i < this.queue.length ? i : -1;
+  }
+
+  /** 按当前模式重洗随机表:正在播的这一集钉在第一位,其余打乱。 */
+  private rebuildShuffleOrder(): void {
+    const rest: number[] = [];
+    for (let i = 0; i < this.queue.length; i++) if (i !== this.queueIndex) rest.push(i);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const t = rest[i];
+      rest[i] = rest[j];
+      rest[j] = t;
+    }
+    this.shuffleOrder = [this.queueIndex].concat(rest);
+    this.shufflePos = 0;
+  }
+
+  /** 丢掉随机表(切出随机模式、或队列整个换掉时)。留着过期表会让下标指到别的列表。 */
+  private clearShuffleOrder(): void {
+    this.shuffleOrder = [];
+    this.shufflePos = -1;
+  }
+
+  /** 沿当前模式走到队列的下一集并播它;走到头(顺序播完 / 随机走完表 / 单曲队列)返回 false。 */
+  private advanceQueue(): boolean {
+    const ni = this.nextQueueIndex();
+    if (ni < 0) return false;
+    if (this.playMode === PlayMode.SHUFFLE) this.shufflePos++;
+    this.queueIndex = ni;
+    this.updateNavFlags();
+    this.startEpisode(this.queue[this.queueIndex], true);
+    return true;
+  }
+
   next(): void {
     if (this.radioMode) {
       if (this.radioPos >= 0 && this.radioPos < this.radioHistory.length - 1) {
@@ -714,11 +816,7 @@ export class PlayerController {
       this.consumeQueueAt(0);
       return;
     }
-    if (this.queueIndex < this.queue.length - 1) {
-      this.queueIndex += 1;
-      this.updateNavFlags();
-      this.startEpisode(this.queue[this.queueIndex], true);
-    }
+    this.advanceQueue();
   }
 
   previous(): void {
@@ -730,11 +828,37 @@ export class PlayerController {
       }
       return;
     }
-    if (this.queueIndex > 0) {
-      this.queueIndex -= 1;
-      this.updateNavFlags();
-      this.startEpisode(this.queue[this.queueIndex], true);
-    }
+    const pi = this.prevQueueIndex();
+    if (pi < 0) return;
+    if (this.playMode === PlayMode.SHUFFLE) this.shufflePos--;
+    this.queueIndex = pi;
+    this.updateNavFlags();
+    this.startEpisode(this.queue[this.queueIndex], true);
+  }
+
+  // ── 播放模式 ──
+
+  /** 顺序 → 循环 → 随机 → 顺序。分段条那颗播放按钮在「正在播这一段」时点它就走这里。 */
+  cyclePlayMode(): void {
+    // 表而不是 `playMode + 1`:ArkTS 对枚举做算术要显式转 number,而这张表顺带
+    // 就是"模式的顺序"这件事的唯一出处(图标顺序、文案顺序都按它读)。
+    const modes: PlayMode[] = [PlayMode.SEQUENTIAL, PlayMode.REPEAT, PlayMode.SHUFFLE];
+    let i = 0;
+    for (let k = 0; k < modes.length; k++) if (modes[k] === this.playMode) i = k;
+    this.setPlayMode(modes[(i + 1) % modes.length]);
+  }
+
+  /**
+   * 设定播放模式并落盘。**播放中切换当场生效**:切进随机要重洗一次表并把当前集钉在第一位
+   * (否则从顺序切进随机后「下一集」还按列表顺序走,等于没切);切出随机则丢掉表。
+   */
+  setPlayMode(mode: PlayMode): void {
+    if (mode === this.playMode) return;
+    Log.i('Player', `playMode ${modeName(this.playMode)} -> ${modeName(mode)}`);
+    this.playMode = mode;
+    if (this.settings !== null) this.settings.setPlayMode(mode);
+    if (mode === PlayMode.SHUFFLE) this.rebuildShuffleOrder(); else this.clearShuffleOrder();
+    this.updateNavFlags();
   }
 
   enqueue(e: Episode): void {
@@ -843,6 +967,11 @@ export class PlayerController {
     // 队列上下文改为单曲:本集播完按既有规则推进(剩余用户队列优先,其次上下文队列)
     this.queue = [e];
     this.queueIndex = 0;
+    if (this.playMode === PlayMode.SHUFFLE) this.rebuildShuffleOrder(); else this.clearShuffleOrder();
+    // 上下文队列换成了这一条,分段条那颗播放按钮不再「管着」正在播的列表
+    // (按钮回到「点我起播这一段」的语义,见 activeListTag)
+    this.activeListTag = '';
+    Log.i('Player', `play from userQueue id=${e.id} remaining=${this.userQueue.length}`);
     this.updateNavFlags();
     this.startEpisode(e, true);
   }
@@ -857,8 +986,10 @@ export class PlayerController {
       this.hasPrev = this.radioPos > 0;
       this.hasNext = true;   // 在台永远有下一首(现抓)
     } else {
-      this.hasPrev = this.queueIndex > 0;
-      this.hasNext = (this.queueIndex >= 0 && this.queueIndex < this.queue.length - 1) || this.userQueue.length > 0;
+      // 用户队列非空,或上下文队列在**当前播放模式**下还有后续,都算「有下一集」。
+      // 必须走 nextQueueIndex():循环模式永远有下一集,随机模式看的是表指针而不是列表下标。
+      this.hasPrev = this.prevQueueIndex() >= 0;
+      this.hasNext = this.userQueue.length > 0 || this.nextQueueIndex() >= 0;
     }
     this.notify();
   }

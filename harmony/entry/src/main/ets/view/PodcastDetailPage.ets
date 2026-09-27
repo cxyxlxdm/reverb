@@ -8,7 +8,7 @@ import { ListenStatsStore } from '../store/ListenStatsStore';
 import { DownloadManager, DownloadResult } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, LoadingBox, Artwork, Glyph, Sym } from './Widgets';
-import { EpisodeListItem, formatListenDuration } from './Components';
+import { EpisodeListItem, ListPlayButton, formatListenDuration } from './Components';
 import { formatCachedAt } from '../util/DateParse';
 import { Log } from '../util/Logger';
 import { Files } from '../util/Files';
@@ -25,7 +25,7 @@ export struct PodcastDetailPage {
   @Prop fontScale: number;
   @Prop seed: Podcast;                  // 列表点进来时已知的频道信息(先渲染,再用 RSS 补全)
   onBack: () => void = () => {};
-  onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
+  onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
 
   @State loaded: Podcast | null = null;
   @State episodes: Episode[] = [];
@@ -109,9 +109,25 @@ export struct PodcastDetailPage {
 
   /// 本频道累计收听时长(频道键:feedUrl 优先,回退频道名)。
   private listenedMs(): number {
+    return this.listenStats.listenedMsFor(this.channelKey());
+  }
+
+  /**
+   * 频道键:feedUrl 优先,回退频道名 —— 听歌时长存的就是这个键(既有口径,不能改)。
+   * 与 Android `PodcastDetailScreen` 的 `channelKey` 同式。
+   */
+  private channelKey(): string {
     const d = this.display();
-    const key = d.feedUrl.length > 0 ? d.feedUrl : d.title;
-    return this.listenStats.listenedMsFor(key);
+    return d.feedUrl.length > 0 ? d.feedUrl : d.title;
+  }
+
+  /**
+   * 这一列的身份:头部那颗播放按钮靠它判断「正在播的就是这一列」。
+   * 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名会把另一家的按钮点亮。
+   * 加前缀是为了**永不可能**撞上音阁那三个分段名("inbox" / "fav" / "dl")。
+   */
+  private listTag(): string {
+    return `podcast:${this.channelKey()}`;
   }
 
   private display(): Podcast {
@@ -285,7 +301,7 @@ export struct PodcastDetailPage {
                   // 详情页以浏览选集为主,给行内「加入播放列表」按钮:长按菜单的
                   // 系统触发时长改不了,浏览场景一步入队更顺手(其余列表仍走长按菜单)
                   showQueueAdd: true,
-                  onPlay: () => this.onPlayEpisode(e, this.episodes),
+                  onPlay: () => this.onPlayEpisode(e, this.episodes, this.listTag()),
                   onDownload: () => { this.downloadEpisode(e); },
                   onDeleteDownload: () => { this.downloadManager.delete(e.id); },
                   // 纯动作,不参与本页渲染,直接用容器单例即可(理由同 DiscoverPage)
@@ -383,10 +399,22 @@ export struct PodcastDetailPage {
           .fontColor(this.scheme.onSurfaceVariant)
       }
       if (this.episodes.length > 0) {
-        Text(L.f('episode_count', this.episodes.length))
-          .fontSize(TypeScale.titleSmall * this.fontScale)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.scheme.onBackground)
+        // 单集数这一行是这一列的标题行,所以播放按钮挂在它右端 —— 与音阁「段条右端」
+        // 同一处语义(动作属于那一段列表,不属于页面顶栏)。Android 同位置同一颗。
+        Row() {
+          Text(L.f('episode_count', this.episodes.length))
+            .fontSize(TypeScale.titleSmall * this.fontScale)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.scheme.onBackground)
+            .layoutWeight(1)
+          ListPlayButton({
+            scheme: this.scheme, player: this.player,
+            tag: this.listTag(), count: this.episodes.length,
+            episodes: (): Episode[] => this.episodes
+          })
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
       }
     }
     .alignItems(HorizontalAlign.Start)

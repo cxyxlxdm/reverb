@@ -6,6 +6,7 @@ import { Artwork, SquareArtwork, Glyph, Sym } from './Widgets';
 import { formatPubDate } from '../util/DateParse';
 import { TapGuard } from '../util/TapGuard';
 import { DownloadState } from '../playback/DownloadManager';
+import { PlayMode, PlayerController } from '../playback/PlayerController';
 
 /// 列表/网格通用条目。对应 Android `ui/components/Components.kt`。
 
@@ -743,5 +744,68 @@ struct ChipsCapsule {
       .border({ width: 0.8, color: withAlpha(this.scheme.primary, 0.30) })
       .translate({ x: this.live ? this.ix : this.capX })
       .visibility((this.live || this.capW > 0) ? Visibility.Visible : Visibility.None)
+  }
+}
+
+/**
+ * 列表播放按钮:**一颗按钮两件事** —— 点它 = 从这一列的第一行起播;
+ * 正在播这一列时再点 = 切播放模式(顺序 → 循环 → 随机)。
+ *
+ * 挂在两处:音阁「最新 / 收藏 / 下载」分段条右端(`ChipsRow.endAction`),
+ * 以及频道主页「全 N 集」那一行的右端。列身份用 `tag` 区分
+ * ("inbox" / "fav" / "dl" / "podcast:<feedUrl>"),所以三段之间、
+ * 分段与频道主页之间都不会互相点亮。
+ *
+ * 与 Android `Components.kt ListPlayButton` 同名同语义,改一处两端一起改。
+ *
+ * ⚠️ **为什么数组走 `episodes()` 而不是 @Prop**:@Prop 对数组是**深拷贝**,
+ * 而这一列可能有几百集;这颗按钮又要 `@ObjectLink player`(模式一变就得重画图标),
+ * 重建比一般组件频繁 —— 整列复制一遍是纯浪费。所以只把「有没有内容」这个整数
+ * 交给 @Prop 决定显不显示,数组本身按引用现取(Android 传 `List<Episode>` 是
+ * 按引用、不复制,这里用 lambda 拿到同等语义)。
+ */
+@Component
+export struct ListPlayButton {
+  @Prop scheme: Scheme;
+  @ObjectLink player: PlayerController;
+  @Prop tag: string = '';
+  /// 这一列的集数。为 0 时**整颗按钮不出现** —— 空列表上的"播放"点了什么都不会发生,是假按钮。
+  @Prop count: number = 0;
+  episodes: () => Episode[] = () => [];
+
+  /// 这颗按钮管的正是当前在播的那一列 ⇒ 点亮,再点切模式。
+  /// (写成方法不是 getter:ArkTS 的自定义组件里 getter 支持不稳。)
+  private live(): boolean {
+    return this.player.activeListTag === this.tag;
+  }
+
+  private symbolOf(): Resource {
+    if (!this.live()) return Sym.playFill;
+    if (this.player.playMode === PlayMode.REPEAT) return Sym.repeat;
+    if (this.player.playMode === PlayMode.SHUFFLE) return Sym.shuffle;
+    return Sym.playFill;
+  }
+
+  /// 无障碍文案 = Android 的 contentDescription。点亮时读的是"当前是什么模式",
+  /// 没点亮读的是"点它会起播这一列" —— 与另一端逐字同口径。
+  private labelOf(): string {
+    if (!this.live()) return L.s('lib_play_this_list');
+    if (this.player.playMode === PlayMode.REPEAT) return L.s('play_mode_repeat');
+    if (this.player.playMode === PlayMode.SHUFFLE) return L.s('play_mode_shuffle');
+    return L.s('play_mode_sequential');
+  }
+
+  build() {
+    if (this.count > 0) {
+      // 与分段条里另外两颗按钮(排列 / 清空)同一套内边距:左右 16 是与横滚 chips 的缝
+      // 和条右圆顶的距离,上下 12 把 20 的图标撑到 44 的条里正好垂直居中。
+      Glyph({ symbol: this.symbolOf(), dim: 20, color: this.live() ? this.scheme.primary : this.scheme.onSurfaceVariant })
+        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        .accessibilityText(this.labelOf())
+        .onClick(() => {
+          if (this.live()) this.player.cyclePlayMode();
+          else this.player.playQueue(this.episodes(), 0, this.tag);
+        })
+    }
   }
 }

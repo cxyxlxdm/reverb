@@ -9,7 +9,7 @@ import { DownloadStore } from '../store/DownloadStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym } from './Widgets';
-import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync } from './Components';
+import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, ListPlayButton } from './Components';
 import { Log } from '../util/Logger';
 
 /// 音阁:订阅 / 最新 / 收藏 / 历史 四分段(下载段留后续轮次)。
@@ -38,7 +38,7 @@ export struct LibraryPage {
   @ObjectLink history: HistoryStore;
   @ObjectLink downloadManager: DownloadManager;
   onOpenPodcast: (p: Podcast) => void = () => {};
-  onPlayEpisode: (e: Episode, queue: Episode[]) => void = () => {};
+  onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
   onOpenSettings: () => void = () => {};
   onOpenListenStats: () => void = () => {};
 
@@ -182,6 +182,31 @@ export struct LibraryPage {
         .padding({ left: 16, right: 16, top: 12, bottom: 12 })
         .onClick(() => { this.history.clear(); })
     }
+    /**
+     * 三段单集列表(最新 / 收藏 / 下载):一颗**播放按钮**。
+     * 交互、图标语义与「没内容不摆按钮」那条规则都收在 `Components.ListPlayButton`
+     * (频道主页「全 N 集」那一行右端用的是同一颗)。
+     * 三段共用一个**全局**模式,所以正在播的那一段点亮(primary),
+     * 另两段留灰 —— 不点亮就看不出刚才是切的哪一段。
+     */
+    if (this.seg === 1) {
+      ListPlayButton({
+        scheme: this.scheme, player: this.player, tag: 'inbox',
+        count: this.inbox.episodes.length, episodes: (): Episode[] => this.inbox.episodes
+      })
+    }
+    if (this.seg === 2) {
+      ListPlayButton({
+        scheme: this.scheme, player: this.player, tag: 'fav',
+        count: this.favorites.favorites.length, episodes: (): Episode[] => this.favorites.favorites
+      })
+    }
+    if (this.seg === 3) {
+      ListPlayButton({
+        scheme: this.scheme, player: this.player, tag: 'dl',
+        count: this.downloads.downloads.length, episodes: (): Episode[] => this.downloadEpisodes()
+      })
+    }
   }
 
   /// 拖动位移 → 目标页。位移过半才算切,并夹在合法范围内。
@@ -299,7 +324,7 @@ export struct LibraryPage {
                   isCurrent: this.player.current !== null && this.player.current.id === e.id,
                   isPlaying: this.player.isPlaying,
                   played: this.history.isPlayed(e.id),
-                  onPlay: () => this.onPlayEpisode(e, this.inbox.episodes),
+                  onPlay: () => this.onPlayEpisode(e, this.inbox.episodes, 'inbox'),
                   onPlayNext: () => { this.player.playNext(e); },
                   onEnqueue: () => { this.player.enqueue(e); }
                 })
@@ -337,7 +362,7 @@ export struct LibraryPage {
                 isCurrent: this.player.current !== null && this.player.current.id === e.id,
                 isPlaying: this.player.isPlaying,
                 played: this.history.isPlayed(e.id),
-                onPlay: () => this.onPlayEpisode(e, this.favorites.favorites),
+                onPlay: () => this.onPlayEpisode(e, this.favorites.favorites, 'fav'),
                 showFavorite: true,
                 isFavorite: this.favorites.isFavorite(e.id),
                 onToggleFavorite: () => { this.favorites.toggle(e); },
@@ -376,7 +401,7 @@ export struct LibraryPage {
                 isPlaying: this.player.isPlaying,
                 played: this.history.isPlayed(d.episode.id),
                 downloadState: 2,
-                onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes()),
+                onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes(), 'dl'),
                 onDeleteDownload: () => { this.downloadManager.delete(d.episode.id); },
                 onPlayNext: () => { this.player.playNext(d.episode); },
                 onEnqueue: () => { this.player.enqueue(d.episode); }
@@ -416,7 +441,7 @@ export struct LibraryPage {
                 isCurrent: this.player.current !== null && this.player.current.id === h.episode.id,
                 isPlaying: this.player.isPlaying,
                 played: h.played,
-                onPlay: () => this.onPlayEpisode(h.episode, this.historyEpisodes()),
+                onPlay: () => this.onPlayEpisode(h.episode, this.historyEpisodes(), ''),
                 /**
                  * 历史页**必须**给这个开关。发现页「继续收听」卡上的「标记已播完」
                  * 就是把这里的 `played` 置真 —— 那一横条的数据源正是这份历史列表

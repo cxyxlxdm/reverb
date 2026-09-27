@@ -33,6 +33,13 @@ export class SettingsStore {
   defaultSpeed: number = 1.0;
   skipBackSec: number = 10;
   skipForwardSec: number = 30;
+  /**
+   * 列表播放模式,存的是 `PlayMode` 的 **ordinal**(与 Android `play_mode` 同口径)。
+   *
+   * ⚠️ 因为是 ordinal,**新增模式只能加在枚举末尾** —— 往中间插一个位置,
+   * 老用户存的数就会指向另一个模式。读侧另有越界回落(降级安装时存的可能是未来值)。
+   */
+  playMode: number = 0;
   /// 订阅段是否宫格排布
   subsGrid: boolean = false;
   /// 电台模式:false 随机 / true 情境(按时段选分类)
@@ -80,6 +87,7 @@ export class SettingsStore {
     this.defaultSpeed = Prefs.getNumber('default_speed', 1.0);
     this.skipBackSec = Prefs.getNumber('skip_back', 10);
     this.skipForwardSec = Prefs.getNumber('skip_fwd', 30);
+    this.playMode = Prefs.getNumber('play_mode', 0);
     this.subsGrid = Prefs.getBool('subs_grid', false);
     this.contextualRadio = Prefs.getBool('contextual_radio', false);
     this.updatesEnabled = Prefs.getBool('updates_enabled', false);
@@ -153,6 +161,10 @@ export class SettingsStore {
   setSkipForwardSec(v: number): void {
     this.skipForwardSec = v;
     Prefs.put('skip_fwd', v);
+  }
+  setPlayMode(v: number): void {
+    this.playMode = v;
+    Prefs.put('play_mode', v);
   }
   setContextualRadio(v: boolean): void {
     this.contextualRadio = v;
