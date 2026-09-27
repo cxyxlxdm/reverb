@@ -190,7 +190,9 @@ private const val SPRING_STIFFNESS = 224f
  * 底部导航:悬浮玻璃长椭圆 —— **软体透镜模型**,与鸿蒙 `view/GlassTabBar.ets` 同一套设计。
  *
  * **三层结构**(z 序自下而上;鸿蒙在 0 和 1 之间还有一层折射,见上面「折射:尚未落地」):
- * 0. 静止底([REST_W]/[REST_H]):**唯一常驻**的选中标记 —— 扁的浅灰长椭圆,不变形、不鼓出栏外。
+ * 0. 静止底([REST_W]/[REST_H]):**唯一常驻**的选中标记 —— 扁的浅灰长椭圆。静止时不变形、
+ *    不鼓出栏外;按住时它**跟着透镜一起等比长大**(共用 [lensScaleOf]),否则半透明的玻璃
+ *    会把"小一号的灰底"透出来,读成镜内另画了一颗椭圆(见 H107)。
  * 1. 透镜:一颗玻璃,**透明度直接读 lensAlphaOf** ⇒ 静止时是 0(等于不存在),
  *    按下才从灰底"长"出来,松手缩没。带自己的厚度渐变、染色与高光边。
  * 2. 内容([TabItemsRow]):图标 + 文字,**画在玻璃之上,永远静止,只画一份**。
@@ -207,7 +209,8 @@ private const val SPRING_STIFFNESS = 224f
  * ④ 动画要 iOS 那种带轻微过冲的弹簧,不要急刹(见 [DAMP_GROWTH] / [DAMP_PILL]);
  * ⑤ **玻璃只在触碰期间存在**。常驻一颗大玻璃 = 静止画面被一颗药丸占掉,
  *    与参考片"平时安静、按住才鼓出来"完全相反;
- * ⑥ 静止底与透镜**同一个宽高比**([ASPECT]),两者只差一个整体倍数。
+ * ⑥ 静止底与透镜**同一个宽高比**([ASPECT]),而且按下时读**同一条放大曲线** ——
+ *    两者尺寸恒等、任何时候都同心同形,不会错开成两颗(见 H107)。
  *
  * 走过的八条弯路,不要再回去(完整过程见鸿蒙侧与 H96/H97/H98):
  * - 静态"放大镜"(镜内一份 1.35 倍放大副本)→ 被读作"底部变形";
@@ -283,7 +286,6 @@ fun GlassNavBar(
 
     val barHpx = with(density) { GLASS_BAR_H.toPx() }
     val restWpx = with(density) { REST_W.toPx() }
-    val restHpx = with(density) { REST_H.toPx() }
     val itemInsetPx = with(density) { ITEM_INSET.toPx() }
     val settleSpec = spring<Float>(dampingRatio = DAMP_PILL, stiffness = SPRING_STIFFNESS)
 
@@ -558,18 +560,24 @@ fun GlassNavBar(
             val active = if (nearIdx >= 0) nearIdx else currentSelected
 
             // 0) 静止底:唯一常驻的选中标记。位置钉在 pillPx(那条 1:1 跟手的边)上,
-            //    所以拖动中它跟着手指走;玻璃盖在它上面,松手后玻璃缩没,
-            //    灰底停在新的选中项 —— 交接是连续的。
+            //    所以拖动中它跟着手指走;松手后玻璃缩没,灰底停在新的选中项 —— 交接是连续的。
+            //    **尺寸和透镜共用同一条 [lensScaleOf] 曲线**:两者同中心、同 [ASPECT]
+            //    (REST_W = REST_H × ASPECT,透镜宽 = REST_W × s、高 = 宽 ÷ ASPECT = REST_H × s),
+            //    所以按住时两颗椭圆**逐帧完全重合**。之前灰底恒为 REST_W、玻璃 1.22 倍盖上去,
+            //    半透明的玻璃就把"小一号的灰底"透出来,读成透镜里另画了一颗椭圆(见 H107)。
             if (ready) {
+                val restScale = lensScaleOf(lensAlphaOf(growth.value))
                 Box(
                     Modifier
                         .offset {
+                            val w = with(density) { (REST_W * restScale).toPx() }
+                            val h = with(density) { (REST_H * restScale).toPx() }
                             IntOffset(
-                                pillPx().roundToInt(),
-                                ((barHpx - restHpx) / 2f).roundToInt()
+                                (pillPx() + (restWpx - w) / 2f).roundToInt(),
+                                ((barHpx - h) / 2f).roundToInt()
                             )
                         }
-                        .size(width = REST_W, height = REST_H)
+                        .size(width = REST_W * restScale, height = REST_H * restScale)
                         .background(
                             color = colorScheme.onSurfaceVariant.copy(alpha = REST_TINT),
                             shape = CircleShape
@@ -690,7 +698,18 @@ private fun GlassLens(
                 ),
                 shape = CircleShape
             )
-            .shadow(elevation = 4.dp, shape = CircleShape, clip = false)
+            // 投影**只要环境光那一份,不要方向光那一份**(spotColor 置透)。
+            // 默认的 shadow() 是 ambient + spot 两层:ambient 与形状同心,spot 按
+            // 「光源在上方」往下偏移 —— 偏移的那层在长椭圆上会露出一道贴着下缘的暗弧,
+            // 读起来像透镜里另画了一个小椭圆(见 H107)。spot 归零后暗边回到同心。
+            // 深色主题实测这一层只有 1/255(栏本身就是暗底),留着它主要是给浅色主题
+            // 那圈厚边;它不是"镜内椭圆"的成因,别指望调它能修好那颗椭圆。
+            .shadow(
+                elevation = 6.dp,
+                shape = CircleShape,
+                clip = false,
+                spotColor = Color.Transparent
+            )
             // 高光边:参考片那圈亮边占"玻璃感"读感的一半;深色受光量另收一档
             .border(1.dp, Color.White.copy(alpha = LENS_RIM * glassK), CircleShape)
     )
