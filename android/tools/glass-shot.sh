@@ -22,16 +22,34 @@ ADB=${ADB:-$(command -v adb || echo "/usr/local/share/android-commandlinetools/p
 [ -x "$ADB" ] || { echo "找不到 adb(设 ADB= 或 ANDROID_HOME)"; exit 1; }
 "$ADB" get-state >/dev/null 2>&1 || { echo "没有设备连着"; exit 1; }
 
+# 先亮屏并保持点亮:上一次跑这份脚本时,手机在两条 adb 命令之间**重新息屏**了,
+# 于是 dump 里没有 tab 文案、screencap 三帧全是纯黑,差分框报"没找到差异" ——
+# 症状和"透镜没长出来"一模一样。息屏必须当成夹具自身的失效来处理,不能让它混进读数。
+# 退出时把 stayon 关回去,否则手机插着电会一直亮着。
+"$ADB" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+"$ADB" shell svc power stayon true >/dev/null 2>&1 || true
+trap '"$ADB" shell svc power stayon false >/dev/null 2>&1 || true' EXIT
+
 SIZE=$("$ADB" shell wm size | tr -cd '0-9x')
 # `wm density` 有两行(Physical / Override)时取**后一行** —— Override 才是应用 dp 换算用的那个。
 DENSITY=$("$ADB" shell wm density | grep -o '[0-9]\+' | tail -1)
 W=${SIZE%x*}; H=${SIZE#*x}
-# 栏底到屏底 = 手势导航条的 inset。直接从窗口服务读(帧框是物理像素):
-#   InsetsSource id=… type=navigationBars frame=[0,2752][1272,2800]  →  48
-NAV_PX=${NAV_PX:-$("$ADB" shell dumpsys window 2>/dev/null \
-  | grep -o 'type=navigationBars frame=\[[0-9]*,[0-9]*\]\[[0-9]*,[0-9]*\]' \
-  | head -1 | grep -o '[0-9]\+' \
-  | awk 'NR==2{t=$1}NR==4{print $1-t}')}
+# ⚠️ 这里算出来的只是**兜底几何**。真正的落点在下面 `anchor_from_labels` 里按
+# uiautomator 的实测 bounds 反推 —— 因为这套 dp 数学依赖"栏底 = 屏底 - 手势条 inset",
+# 而 inset 的取法**每台机器不一样**:第一台(定制 ROM / Android 16)能在 `dumpsys window`
+# 里 grep 到 `type=navigationBars frame=[…]`,换到 Pixel 3(Android 12)那行压根不存在,
+# 于是 NAV_PX 静悄悄回落到 48,按 2160 高的屏算出的中线 y 会**落在系统导航条上**,
+# 三帧全是静止帧、差分框报"没找到差异"(H104 的老教训换了个形态:夹具自己的假设先坏)。
+NAV_ENV=${NAV_PX:-}
+# 两种写法都试:Android 16 的 dumpsys 是 `type=navigationBars frame=[…]`,
+# Android 12 只有 `type=ITYPE_NAVIGATION_BAR frame=[…]`(带 window token 的那几行)。
+nav_from_dumpsys() {
+  "$ADB" shell dumpsys window 2>/dev/null | grep -m1 -oE \
+    "type=$1 frame=\[[0-9]+,[0-9]+\]\[[0-9]+,[0-9]+\]" | grep -o '[0-9]\+' |
+    awk 'NR==2{t=$1}NR==4{print $1-t}'
+}
+NAV_PX=${NAV_PX:-$(nav_from_dumpsys navigationBars)}
+NAV_PX=${NAV_PX:-$(nav_from_dumpsys ITYPE_NAVIGATION_BAR)}
 NAV_PX=${NAV_PX:-48}
 
 # 几何全部按 dp→px 浮点算(整数截断会让按压点偏出一档;PX 在 476dpi 上是 2.975)
@@ -46,7 +64,82 @@ eval "$(awk -v w="$W" -v h="$H" -v nav="$NAV_PX" -v d="$DENSITY" 'BEGIN{
     px, bar_h, bar_bottom, slot0, slot1, bar_bottom - bar_h/2
 }')"
 echo "屏幕 $SIZE 密度 $DENSITY(${PX}px/dp) 手势条 ${NAV_PX}px"
-echo "栏高 ${BAR_H}px 底边 y=$BAR_BOTTOM;左格中心 ($X0,$MIDY) 右格中心 ($X1,$MIDY)"
+echo "兜底几何:栏高 ${BAR_H}px 底边 y=$BAR_BOTTOM;左格中心 ($X0,$MIDY) 右格中心 ($X1,$MIDY)"
+
+# 把落点改成**量出来的**:tab 的文案节点 bounds 是布局实测值,与 ROM 的 inset 取法无关。
+# 内容块 = 图标 19dp + 间距 2dp + 文案(文案 bounds 就是它自己),整块在 48dp 的栏里居中,
+# 所以 块中线 = (文案下沿 + (文案上沿 - 21dp)) / 2 就是栏中线,栏底 = 中线 + 24dp。
+#
+# 两个坑(都在这份脚本上真机踩过一次,别再犯):
+#   1. **不能把 dump 用管道喂给 python** —— 脚本本身是从 `<<'PY'` 来的 heredoc 读进 stdin 的,
+#      管道会被 heredoc 覆盖,于是 python 读到空文件,函数静悄悄返回空,
+#      日志只剩那句"取不到 bounds"(和上面 NAV_PX 的回落是同一类失效:安静的错)。
+#   2. 页面上**还有别的节点叫「音阁」**(音阁页的大标题,bounds 在顶部)。
+#      只取屏幕下沿 15% 以内的文案,并要求两个文案的 y 基本同高。
+#   3. **息屏 / 刚从 Doze 醒来的过渡态里 dump 是空的**,同时 `input` 会抛
+#      SecurityException: Injecting to another application requires INJECT_EVENTS permission。
+#      这两个错都会伪装成"锚点取不到 → 用兜底几何 → 按到别处 → 两帧相同 → 没差异",
+#      所以亮屏要等到前台窗口真的是我们的 Activity(见 `wait_foreground`),dump 也重试。
+anchor_from_labels() {
+  local i
+  for i in 1 2 3 4; do
+    "$ADB" shell uiautomator dump /sdcard/glass-anchor.xml >/dev/null 2>&1 || true
+    "$ADB" shell cat /sdcard/glass-anchor.xml > /tmp/glass-anchor.xml 2>/dev/null || true
+    if python3 - "$PX" "$H" /tmp/glass-anchor.xml <<'PY'
+import sys, re
+px, screen_h, path = float(sys.argv[1]), int(sys.argv[2]), sys.argv[3]
+try:
+    data = open(path, encoding='utf-8', errors='replace').read()
+except OSError:
+    sys.exit(1)
+floor = screen_h * 0.85
+found = {}
+for node in re.findall(r'<node\b[^>]*>', data):
+    t = re.search(r'text="(发现|音阁)"', node)
+    b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', node)
+    if not (t and b):
+        continue
+    x1, y1, x2, y2 = map(int, b.groups())
+    if y2 >= floor:
+        found[t.group(1)] = ((x1 + x2) // 2, y1, y2)
+if len(found) != 2:
+    sys.stderr.write('锚点:下沿内只找到 %d 个 tab 文案(%s)\n' % (len(found), list(found)))
+    sys.exit(1)
+a, b = found['发现'], found['音阁']
+if abs(a[1] - b[1]) > 8:
+    sys.stderr.write('锚点:两个 tab 文案不同高(%d / %d),不是同一排\n' % (a[1], b[1]))
+    sys.exit(1)
+labels = sorted((a, b))
+top = min(l[1] for l in labels) - round(21 * px)   # 图标顶 = 文案顶 - (19 + 2)dp
+bot = max(l[2] for l in labels)
+mid = (top + bot) // 2
+print('X0=%d; X1=%d; MIDY=%d; BAR_BOTTOM=%d' % (labels[0][0], labels[1][0], mid, mid + round(24 * px)))
+PY
+    then return 0; fi
+    "$ADB" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+    sleep 2
+  done
+  return 1
+}
+
+# 等前台真的是被验的 Activity。息屏/锁屏期间 dump 是空的、`input` 会抛 SecurityException
+# (见上面坑 3),而这两件事在 `dumpsys window` 里合成一个可判的信号:前台窗口是
+# `NotificationShade` 就是还压在锁屏上(AOD / 锁屏都算),带上我们的包名才算就绪。
+wait_foreground() {
+  local i st=""
+  for i in $(seq 1 12); do
+    st=$("$ADB" shell dumpsys window 2>/dev/null | grep -m1 mCurrentFocus)
+    case "$st" in *"$1"*) return 0 ;; esac
+    "$ADB" shell input keyevent KEYCODE_WAKEUP >/dev/null 2>&1 || true
+    "$ADB" shell wm dismiss-keyguard >/dev/null 2>&1 || true
+    "$ADB" shell am start -n "$1/com.yuyin.reverb.MainActivity" >/dev/null 2>&1 || true
+    sleep 1.5
+  done
+  echo "⚠️ 12 次等待后前台仍不是 $1:$st"
+  echo "   若是**有密码的锁屏**,adb 解不开 —— 请在手机上解锁后重跑(不要盲按,那样取到的是假证据)。"
+  return 1
+}
+
 
 # INSTALL=0 只抓取不重编(同一版包反复抓不同帧时用)。
 # ⚠️ 部分定制 ROM 上 `adb install` 会在机子上弹「涉及敏感权限 → 继续安装」的门禁,
@@ -58,8 +151,20 @@ if [ "${INSTALL:-1}" = 1 ]; then
   "$ADB" install -r "$APK" >/dev/null
 fi
 "$ADB" shell am start -n "com.yuyin.reverb.android.debug/com.yuyin.reverb.MainActivity" >/dev/null
-sleep 3
+wait_foreground com.yuyin.reverb.android.debug || exit 1
 
+# 用实测 bounds 覆盖兜底几何。量不到就**停下来报错**:兜底那套依赖手势条 inset,
+# 而在没有那行 dumpsys 的机器上它会静悄悄落在系统导航条上,取回三帧"看起来一样"的假证据。
+if ANCHOR=$(anchor_from_labels) && [ -n "$ANCHOR" ]; then
+  eval "$ANCHOR"
+  echo "实测锚点(来自 uiautomator):$ANCHOR"
+elif [ -n "$NAV_ENV" ]; then
+  echo "⚠️ 取不到 tab 文案的 bounds,沿用调用方给的 NAV_PX=$NAV_PX 兜底"
+else
+  echo "❌ 取不到 tab 文案的 bounds,而 dp 兜底几何需要手势条 inset(本机 dumpsys 里 grep 不到)。"
+  echo "   先确认手机亮屏、停在「发现/音阁」这一排 tab 上;确实要手工兜底就带 NAV_PX=<px> 重跑。"
+  exit 1
+fi
 # 摆背景:回「发现」页(点左格 = 选中所在 tab,幂等)并把列表往上推一点,让一行封面的下缘压在栏底下。
 # 页面滚到空档时镜内是全黑的,那种帧标定不出任何东西 —— 这一步就是为了避开它。
 "$ADB" shell input tap "$X0" "$MIDY" >/dev/null
@@ -113,6 +218,13 @@ from PIL import Image
 n, w, h, px, x, ymid = sys.argv[1:7]
 w, h, x, ymid = map(int, (w, h, x, ymid))
 px = float(px)
+# 读数之前先确认"这根本不是一次有效的抓取":息屏/锁屏时整屏是纯黑的,
+# 三帧自然两两相同,差分框会给出"没找到差异"这个**误导性的结论**。
+for tag in ('rest', 'press'):
+    im = Image.open('/tmp/%s_%s_raw.png' % (n, tag)).convert('L')
+    stat = im.resize((32, 32)).getdata()
+    if sum(stat) / len(stat) < 6:
+        sys.exit('整帧几乎纯黑(%s):屏幕没亮或停在锁屏 —— 这不算一次取证,别读下面的数')
 # 栏的落点:底边 = 屏底 - 手势条,高度 48dp(与 ReverbRoot 的落点同源;
 # 若装机时改过栏高或底边,以这里重算的为准 —— 这段的目的就是把"假设"摊开成数)
 BAR_H = round(48 * px)
@@ -163,6 +275,7 @@ if diff:
           % (max(up, 0), max(dn, 0), (dn - up)))
     print('   与栏中线的偏离:%+d px' % ((ys[0] + ys[-1]) // 2 - (bar_top + bar_bot) // 2))
 else:
-    print('== 差分框 == 没找到差异(两帧同一状态?检查抓取时序)')
+    sys.exit('== 差分框 == 静止帧与按住帧逐行相同:按的那一下没落进栏里(核对按压点 y 是否落在'
+             '实测栏中线,或 tab 文案是否被本地化译名换掉了导致锚点回落)')
 PY
 echo "OK /tmp/${OUT}_{rest,press,drag}_{wide,zoom}.png"
