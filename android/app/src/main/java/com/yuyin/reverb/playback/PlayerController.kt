@@ -23,6 +23,15 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
+ * 列表播放模式。顺序 = 播到列表末尾即停;循环 = 末尾回到开头接着播;
+ * 随机 = 把这个列表打乱播一遍(走完表就停)。
+ *
+ * 持久化存的是 **ordinal**(SettingsStore 的 `play_mode`),所以**新增项只能加在末尾** ——
+ * 中间插一个位置,老用户存的数就会指向另一个模式。
+ */
+enum class PlayMode { SEQUENTIAL, REPEAT, SHUFFLE }
+
+/**
  * 播放门面：UI 与后台 [PlaybackService] 之间通过 Media3 MediaController 通信。
  * 集成：离线下载优先本地播放、播放历史记录与续播、睡眠定时。
  */
@@ -56,6 +65,23 @@ object PlayerController {
     // 播放队列(上下文):从哪个列表点开播放,该列表即为队列,决定上/下一集。
     private var queue: List<Episode> = emptyList()
     private var queueIndex = 0
+
+    // 播放模式:顺序 / 循环 / 随机。它是**跨会话的偏好**(存 SettingsStore),
+    // 不是本次播放的临时状态 —— 用户选了循环,下次从列表起播还要按它走。
+    private val _playMode = MutableStateFlow(PlayMode.SEQUENTIAL)
+    val playMode: StateFlow<PlayMode> = _playMode
+
+    // 队列的身份标签(如 "inbox" / "fav" / "dl"):音阁分段条右端那颗播放按钮用它分辨
+    // 「现在播的就是这一段吗」—— 是 → 这次点击切模式;否 → 这次点击起播这一段。
+    // 列表项自己点出来的队列没有标签(空串),不参与这个判断。
+    private val _activeListTag = MutableStateFlow("")
+    val activeListTag: StateFlow<String> = _activeListTag
+
+    // 随机模式用的「打乱索引表」+ 指针。**不是每次抛骰子**:抛骰子会让上一集/下一集不对称
+    // (点下一集之后再点上一集回不到刚才那集),而且同一集可能连着播两次。
+    // 表在起播或切进随机模式时生成一次,正在播的这一集钉在第一位。
+    private var shuffleOrder: List<Int> = emptyList()
+    private var shufflePos = -1
     // 随机电台的播放历史:上一个=回退到刚听过的那期,超出末尾则抓新的随机。
     private val radioHistory = ArrayList<Episode>()
     private var radioPos = -1
@@ -75,10 +101,57 @@ object PlayerController {
             _hasPrev.value = radioPos > 0
             _hasNext.value = true // 电台随时可抓下一个
         } else {
-            _hasPrev.value = queueIndex > 0
-            // 用户队列非空,或上下文队列还有后续,都算「有下一集」
-            _hasNext.value = _userQueue.value.isNotEmpty() || queueIndex in 0 until (queue.size - 1)
+            // 用户队列非空,或上下文队列在**当前播放模式**下还有后续,都算「有下一集」。
+            // 这里必须走 nextQueueIndex() 而不是自己算 +1:循环模式永远有下一集,
+            // 随机模式看的是表指针而不是列表下标。
+            _hasNext.value = _userQueue.value.isNotEmpty() || nextQueueIndex() != null
+            _hasPrev.value = prevQueueIndex() != null
         }
+    }
+
+    /**
+     * 当前播放模式下,上下文队列里的下一集下标;没有下一集返回 null(调用方就此停下)。
+     *
+     * ⚠️ 循环模式只在**队列多于一集**时回绕:不少入口播的是「单曲队列」
+     * (`play(episode)`、从「接下来播放」里点某一行 —— 那里 queue 被刻意换成一条),
+     * 无条件回绕会让那一集无限重播,而用户要循环的是他点播放按钮的那个列表。
+     */
+    private fun nextQueueIndex(): Int? = when (_playMode.value) {
+        PlayMode.SEQUENTIAL -> if (queueIndex in 0 until queue.size - 1) queueIndex + 1 else null
+        PlayMode.REPEAT -> if (queue.size > 1) (queueIndex + 1).mod(queue.size) else null
+        PlayMode.SHUFFLE ->
+            if (shufflePos in 0 until shuffleOrder.lastIndex) shuffleOrder[shufflePos + 1] else null
+    }
+
+    /** 当前播放模式下,上下文队列里的上一集下标;没有返回 null。 */
+    private fun prevQueueIndex(): Int? = when (_playMode.value) {
+        PlayMode.SHUFFLE -> if (shufflePos > 0) shuffleOrder[shufflePos - 1] else null
+        else -> (queueIndex - 1).takeIf { it >= 0 && it < queue.size }
+    }
+
+    /** 按当前模式重洗随机表:正在播的这一集钉在第一位,其余打乱。 */
+    private fun rebuildShuffleOrder() {
+        shuffleOrder = (queue.indices.toList() - queueIndex).shuffled().let { listOf(queueIndex) + it }
+        shufflePos = 0
+    }
+
+    /** 丢掉随机表(切出随机模式、或队列整个换掉时)。留着过期表会让下标指到别的列表。 */
+    private fun clearShuffleOrder() {
+        shuffleOrder = emptyList()
+        shufflePos = -1
+    }
+
+    /**
+     * 沿当前播放模式走到队列的下一集并播它;走到头(顺序播完 / 随机走完表 / 单曲队列)
+     * 返回 false,由调用方停下。
+     */
+    private fun advanceQueue(): Boolean {
+        val ni = nextQueueIndex() ?: return false
+        if (_playMode.value == PlayMode.SHUFFLE) shufflePos++
+        queueIndex = ni
+        updateNavFlags()
+        playEpisode(queue[queueIndex])
+        return true
     }
 
     // ---- 用户播放队列(up next) ----
@@ -126,6 +199,10 @@ object PlayerController {
         // 队列上下文改为单曲:清空列表队列,导航标志据剩余用户队列刷新
         queue = listOf(head)
         queueIndex = 0
+        if (_playMode.value == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
+        // 上下文队列换成了这一条,分段条那颗播放按钮不再「管着」正在播的列表
+        // (按钮回到「点我起播这一段」的语义,见 _activeListTag)
+        _activeListTag.value = ""
         updateNavFlags()
         playEpisode(head, isRadio = false)
         return true
@@ -168,6 +245,8 @@ object PlayerController {
     fun bindSettings(s: SettingsStore) {
         settings = s
         _speed.value = s.defaultSpeed.value // 启动即套用默认倍速
+        // 播放模式是老用户存过的偏好,起来就恢复;存的 ordinal 越界(降级安装)按默认处理
+        _playMode.value = PlayMode.entries.getOrNull(s.playMode.value) ?: PlayMode.SEQUENTIAL
     }
 
     fun skipForward() = seekBy((settings?.skipForwardSec?.value ?: 30) * 1000L)
@@ -233,6 +312,10 @@ object PlayerController {
                     _radioMode.value -> advanceRadio()
                     // 用户队列非空:自动接上队首,连续收听
                     _userQueue.value.isNotEmpty() -> playQueueAt(0)
+                    // 上下文队列(从一个列表起播的):按播放模式接下一集。
+                    // 这条分支是加播放按钮时补上的 —— 之前列表播完一集就停在这里,
+                    // 只有手动按下一集会走;「点一下播这个列表 + 循环/随机」不先补续播就不成立。
+                    else -> advanceQueue()
                 }
             }
         }
@@ -245,15 +328,42 @@ object PlayerController {
     /** 播放单集(单条,无上下文):等价于队列只有它自己,无上/下一集。 */
     fun play(episode: Episode) = playQueue(listOf(episode), 0)
 
-    /** 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。 */
-    fun playQueue(episodes: List<Episode>, startIndex: Int) {
+    /**
+     * 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。
+     *
+     * @param tag 队列身份("inbox" / "fav" / "dl")。音阁分段条右端的播放按钮传它,
+     *   UI 据此判断「这颗按钮现在管的就是正在播的这一段」;普通列表项不传(空串)。
+     */
+    fun playQueue(episodes: List<Episode>, startIndex: Int, tag: String = "") {
         if (episodes.isEmpty()) return
         if (_radioMode.value) stopRadio() // 进入列表上下文即退出电台
         queue = episodes
         queueIndex = startIndex.coerceIn(0, episodes.lastIndex)
-        log.i(TAG, "playQueue count=${episodes.size} index=$queueIndex")
+        if (_playMode.value == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
+        _activeListTag.value = tag
+        log.i(TAG, "playQueue count=${episodes.size} index=$queueIndex tag='$tag' mode=${_playMode.value}")
         updateNavFlags()
         playEpisode(episodes[queueIndex], isRadio = false)
+    }
+
+    // ---- 播放模式 ----
+    /** 顺序 → 循环 → 随机 → 顺序。分段条那颗播放按钮在「正在播这一段」时点它就走这里。 */
+    fun cyclePlayMode() {
+        val entries = PlayMode.entries
+        setPlayMode(entries[(entries.indexOf(_playMode.value) + 1) % entries.size])
+    }
+
+    /**
+     * 设定播放模式并落盘。**播放中切换当场生效**:切进随机要重洗一次表并把当前集钉在第一位
+     * (否则从顺序切进随机后「下一集」还按列表顺序走,等于没切);切出随机则丢掉表。
+     */
+    fun setPlayMode(mode: PlayMode) {
+        if (mode == _playMode.value) return
+        log.i(TAG, "playMode ${_playMode.value} -> $mode")
+        _playMode.value = mode
+        settings?.setPlayMode(mode.ordinal)
+        if (mode == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
+        updateNavFlags()
     }
 
     /** 电台首集/续播用:计入电台历史后播放。 */
@@ -266,27 +376,29 @@ object PlayerController {
         playEpisode(episode, isRadio = true)
     }
 
-    /** 下一集:列表按顺序,电台优先回放历史前进、到末尾则抓新的随机。 */
+    /** 下一集:列表按当前播放模式走(顺序/循环/随机),电台优先回放历史前进、到末尾则抓新的随机。 */
     fun next() {
-        log.i(TAG, "next radio=${_radioMode.value} queueIndex=$queueIndex radioPos=$radioPos")
+        log.i(TAG, "next radio=${_radioMode.value} queueIndex=$queueIndex radioPos=$radioPos mode=${_playMode.value}")
         if (_radioMode.value) {
             if (radioPos in 0 until radioHistory.lastIndex) {
                 radioPos++; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true)
             } else advanceRadio()
         } else if (_userQueue.value.isNotEmpty()) {
             playQueueAt(0) // 用户队列优先:取队首播放
-        } else if (queueIndex in 0 until (queue.size - 1)) {
-            queueIndex++; updateNavFlags(); playEpisode(queue[queueIndex], isRadio = false)
-        }
+        } else advanceQueue()
     }
 
-    /** 上一集:列表回退一集;电台回退到刚听过的那期。 */
+    /** 上一集:列表回退一集(随机模式沿随机表回退);电台回退到刚听过的那期。 */
     fun previous() {
-        log.i(TAG, "previous radio=${_radioMode.value} queueIndex=$queueIndex radioPos=$radioPos")
+        log.i(TAG, "previous radio=${_radioMode.value} queueIndex=$queueIndex radioPos=$radioPos mode=${_playMode.value}")
         if (_radioMode.value) {
             if (radioPos > 0) { radioPos--; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true) }
-        } else if (queueIndex > 0) {
-            queueIndex--; updateNavFlags(); playEpisode(queue[queueIndex], isRadio = false)
+        } else {
+            val pi = prevQueueIndex() ?: return
+            if (_playMode.value == PlayMode.SHUFFLE) shufflePos--
+            queueIndex = pi
+            updateNavFlags()
+            playEpisode(queue[queueIndex], isRadio = false)
         }
     }
 

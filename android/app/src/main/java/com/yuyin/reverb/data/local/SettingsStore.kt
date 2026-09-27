@@ -44,6 +44,14 @@ class SettingsStore(context: Context) {
     val wordHighlight = MutableStateFlow(prefs.getBoolean("word_highlight", true))
     val contextualRadio = MutableStateFlow(prefs.getBoolean("contextual_radio", false)) // 电台模式:false 随机 / true 情境,默认随机
     val subsGrid = MutableStateFlow(prefs.getBoolean("subs_grid", false)) // 订阅排列:false 列表(一行一个)/ true 宫格,默认列表
+    /**
+     * 列表播放模式:0 顺序 / 1 循环 / 2 随机。音阁三段(最新 / 收藏 / 下载)右端那颗播放按钮
+     * 循环切换它,**三段共用一个** —— 与「订阅排列」同理,三把开关只会让人怀疑自己设错了。
+     *
+     * 这里只存 **ordinal**(枚举本体在 `playback/PlayerController.PlayMode`),
+     * 免得数据层反向依赖播放层。新增模式**只能加在枚举末尾**。
+     */
+    val playMode = MutableStateFlow(prefs.getInt("play_mode", 0))
 
     /**
      * 是否已同意**当前版本**的隐私政策。
@@ -84,6 +92,7 @@ class SettingsStore(context: Context) {
     fun setWordHighlight(v: Boolean) { prefs.edit().putBoolean("word_highlight", v).apply(); wordHighlight.value = v }
     fun setContextualRadio(v: Boolean) { prefs.edit().putBoolean("contextual_radio", v).apply(); contextualRadio.value = v }
     fun setSubsGrid(v: Boolean) { prefs.edit().putBoolean("subs_grid", v).apply(); subsGrid.value = v }
+    fun setPlayMode(v: Int) { prefs.edit().putInt("play_mode", v).apply(); playMode.value = v }
 
     /**
      * 同意当前版本的隐私政策。

@@ -21,7 +21,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.BarChart
 import androidx.compose.material.icons.rounded.GridView
+import androidx.compose.material.icons.rounded.Loop
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -47,6 +50,7 @@ import com.yuyin.reverb.data.model.DownloadedEpisode
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.playback.PlayMode
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.GLASS_CHIPS_TOP_PAD
 import com.yuyin.reverb.ui.components.GlassChipsRow
@@ -61,6 +65,14 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val history by container.historyStore.history.collectAsStateWithLifecycle()
     val subsGrid by container.settingsStore.subsGrid.collectAsStateWithLifecycle()
+    // 条右端那颗按钮要按「这一段有没有内容」决定摆不摆,所以这几份数据在**栏这一层**
+    // 也要读一遍(各段自己还会再 collect 同一个 flow —— StateFlow 的订阅很轻,
+    // 且这几个列表只在进页刷新时整体替换,不会逐帧变)。
+    val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
+    val inbox by container.inboxStore.episodes.collectAsStateWithLifecycle()
+    val favorites by container.favoriteStore.favorites.collectAsStateWithLifecycle()
+    val downloads by container.downloadStore.downloads.collectAsStateWithLifecycle()
+    // 分段用 HorizontalPager 承载,可横滑切换;chips 与 pager 双向联动。
     // 订阅 / 最新 / 收藏 / 下载 / 历史。「最新」= 全部订阅的更新聚合,归入音阁。
     val sections = listOf(
         stringResource(R.string.lib_subscriptions),
@@ -69,7 +81,6 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
         stringResource(R.string.lib_downloads),
         stringResource(R.string.lib_history)
     )
-    // 分段用 HorizontalPager 承载,可横滑切换;chips 与 pager 双向联动。
     val pagerState = rememberPagerState(pageCount = { sections.size })
     val section = pagerState.currentPage
     val scope = rememberCoroutineScope()
@@ -90,8 +101,8 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
         )
 
         // 分段玻璃条悬浮在 pager 之上(内容从条下滚过),胶囊随拖动 1:1 平移。
-        // 清空历史/排列切换按钮浮在条的右端(不占 chips 流式布局),条的半透明
-        // 表面就是它们的衬底 —— 原先自带的 background 填块去掉了。
+        // 段尾动作浮在条的右端(不占 chips 流式布局),条的半透明表面就是它们的衬底
+        // —— 原先自带的 background 填块去掉了。
         Box(Modifier.fillMaxWidth().weight(1f)) {
             HorizontalPager(
                 state = pagerState,
@@ -115,7 +126,59 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                 // 之前是浮在条外面的一个 TopEnd 覆盖层,靠 `top=2dp` / `offset=-2dp`
                 // 两个手工数把它凑到 44dp 条的中线上 —— 按钮高度或条高一动就错位,
                 // 而且那颗按钮自带一块实底,压在玻璃条上像贴了块补丁。
+                //
+                // 五段**每段都有一颗自己的动作**,所以条改回通栏之后右端不再是死区
+                // (条宽固定的理由见 Components.kt `GlassChipsRow`)。
+                // 规则:**这一段没内容就不摆动作** —— 空列表上的"播放/清空"点了
+                // 什么都不会发生,是个假按钮。
                 endAction = {
+                    // 三段单集列表(最新 / 收藏 / 下载):一颗**播放按钮**。
+                    //   · 点它 = 播这一段(整列,从屏幕上第一行起播);
+                    //   · **正在播这一段**时再点 = 切播放模式(顺序 → 循环 → 随机)。
+                    // 一颗按钮两件事是定的设计(「点击就播放这个列表,再次可以切换播放模式」),
+                    // 分派依据是「当前队列是不是这一段」—— 起播时把分段身份当 tag 交给
+                    // `playQueue`,见 `PlayerController._activeListTag`。
+                    // 图标显示**模式本身**,所以没起播时读作「会用这个模式播」,
+                    // 起播后读作「正在这么播」;正在播的那一段点亮(primary),
+                    // 另两段留灰 —— 三段共用一个模式,不点亮就看不出刚才是切的哪一段。
+                    if (section in 1..3) {
+                        // 这两个读点放在**这颗按钮这一层**而不是整页:模式一变只需要重建
+                        // 这一颗 Icon,不该把 pager 和五段列表拖下水(同 `GlassChipsRow` 的
+                        // progress 用 lambda 传的理由)。
+                        val playMode by PlayerController.playMode.collectAsStateWithLifecycle()
+                        val activeTag by PlayerController.activeListTag.collectAsStateWithLifecycle()
+                        val (tag, list) = when (section) {
+                            1 -> "inbox" to inbox
+                            2 -> "fav" to favorites
+                            else -> "dl" to downloads.map { it.episode }
+                        }
+                        if (list.isNotEmpty()) {
+                            val isLive = activeTag == tag
+                            IconButton(onClick = {
+                                if (isLive) PlayerController.cyclePlayMode()
+                                else PlayerController.playQueue(list, 0, tag)
+                            }) {
+                                Icon(
+                                    imageVector = when (playMode) {
+                                        PlayMode.SEQUENTIAL -> Icons.Rounded.PlayArrow
+                                        PlayMode.REPEAT -> Icons.Rounded.Loop
+                                        PlayMode.SHUFFLE -> Icons.Rounded.Shuffle
+                                    },
+                                    contentDescription = if (isLive) {
+                                        stringResource(
+                                            when (playMode) {
+                                                PlayMode.SEQUENTIAL -> R.string.play_mode_sequential
+                                                PlayMode.REPEAT -> R.string.play_mode_repeat
+                                                PlayMode.SHUFFLE -> R.string.play_mode_shuffle
+                                            }
+                                        )
+                                    } else stringResource(R.string.lib_play_this_list),
+                                    tint = if (isLive) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
                     if (section == 4 && history.isNotEmpty()) {
                         TextButton(
                             onClick = { container.historyStore.clear() },
@@ -126,7 +189,7 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                         ) { Text(stringResource(R.string.action_clear_confirm)) }
                     }
                     // 订阅分段:右侧「行 / 宫格」排列切换。图标显示切换后的目标布局。
-                    if (section == 0) {
+                    if (section == 0 && subs.isNotEmpty()) {
                         IconButton(onClick = { container.settingsStore.setSubsGrid(!subsGrid) }) {
                             Icon(
                                 if (subsGrid) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.GridView,
@@ -192,6 +255,8 @@ private fun FavoritesSection() {
         EmptyHint(stringResource(R.string.empty_favorites))
         return
     }
+    // 存储里就是「最新收藏在前」(`FavoriteStore.toggle` 用 add(0, …)),显示不再翻。
+    // 分段条那颗播放按钮起播用的是**同一份** favorites,两边顺序必须一致。
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -205,6 +270,7 @@ private fun FavoritesSection() {
                 episode = ep,
                 isCurrent = current?.id == ep.id,
                 isPlaying = isPlaying,
+                // 队列跟着屏幕上的顺序走
                 onPlay = { PlayerController.playOrToggle(ep, favorites) },
                 showPodcastTitle = true,
                 isFavorite = true,
@@ -232,6 +298,8 @@ private fun DownloadsSection() {
         EmptyHint(stringResource(R.string.empty_downloads))
         return
     }
+    // 与收藏段同理:存储顺序即「最新下载在前」,显示不再翻。
+    // 分段条那颗播放按钮起播用的是 `downloads.map { it.episode }` —— 同一份顺序。
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(

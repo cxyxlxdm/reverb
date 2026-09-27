@@ -36,6 +36,9 @@ import kotlinx.coroutines.launch
 /**
  * 「最新」列表主体:合并所有订阅的最新单集。缓存秒显 + 进入即后台刷新 + 下拉刷新。
  * 不含标题栏(供「音阁」的「最新」分段内嵌复用)。
+ *
+ * 顺序固定「最新发布在前」(InboxStore 的口径,发现首页那条「最新」是同一份);
+ * 想按别的走法连着听,是播放模式的事(见 `playback.PlayMode`)。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

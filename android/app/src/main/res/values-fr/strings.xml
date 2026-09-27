@@ -155,6 +155,10 @@
 
     <string name="lib_subscriptions">Abonnements</string>
     <string name="subs_layout_toggle">Changer la disposition</string>
+    <string name="lib_play_this_list">Lire cette liste</string>
+    <string name="play_mode_sequential">Lecture dans l\'ordre</string>
+    <string name="play_mode_repeat">Lecture en boucle</string>
+    <string name="play_mode_shuffle">Lecture aléatoire</string>
     <string name="lib_favorites">Favoris</string>
     <string name="empty_favorites">Aucun épisode favori pour l\'instant. Touchez le cœur dans le lecteur pour en enregistrer un</string>
     <string name="a11y_favorite">Ajouter aux favoris</string>

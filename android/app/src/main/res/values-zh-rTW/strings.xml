@@ -155,6 +155,10 @@
 
     <string name="lib_subscriptions">訂閱</string>
     <string name="subs_layout_toggle">切換排列方式</string>
+    <string name="lib_play_this_list">播放這個列表</string>
+    <string name="play_mode_sequential">順序播放</string>
+    <string name="play_mode_repeat">循環播放</string>
+    <string name="play_mode_shuffle">隨機播放</string>
     <string name="lib_favorites">收藏</string>
     <string name="empty_favorites">還沒有收藏的單集。在播放頁點心形按鈕即可收藏</string>
     <string name="a11y_favorite">收藏</string>
