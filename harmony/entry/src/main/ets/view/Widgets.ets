@@ -121,7 +121,12 @@ export struct ScreenHeader {
       Row() {
         Text(this.title)
           .fontSize(TypeScale.headlineMedium * this.fontScale)
-          .fontWeight(FontWeight.Bold)
+          // **SemiBold,对齐 Android**:`ui/screens/Widgets.kt` 的 ScreenHeader
+          // 显式写了 `fontWeight = FontWeight.SemiBold`。这里原先是 Bold(700),
+          // 同一档字号下粗一档就读成"大一号"——用户反馈的"鸿蒙字体有些大",
+          // 实测两端字号表同值,字重与行数才是来源(另一处见 Components.PodcastListItem)。
+          // 写数值不写枚举:本 SDK 的 FontWeight 枚举里没有 SemiBold 这一档。
+          .fontWeight(600)
           .fontColor(this.scheme.onBackground)
           .layoutWeight(1)
 

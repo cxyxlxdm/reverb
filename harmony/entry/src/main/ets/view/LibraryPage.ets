@@ -1,4 +1,4 @@
-import { Scheme, TypeScale, Metrics, withAlpha } from '../theme/Theme';
+import { Scheme, TypeScale, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
 import { AppContainer } from '../AppContainer';
@@ -129,51 +129,59 @@ export struct LibraryPage {
         .width('100%')
         .height('100%')
 
-        Stack({ alignContent: Alignment.End }) {
-          ChipsRow({
-            scheme: this.scheme,
-            fontScale: this.fontScale,
-            labels: this.segments(),
-            selected: this.chipSel,
-            sync: this.chipSync,
-            onSelect: (i: number) => { this.seg = i; this.chipSel = i; }
-          })
-          if (this.seg === 0 && this.subscriptions.subscriptions.length > 0) {
-            // 与 Android 一致:图标按钮,且**图标表示切换后的目标布局**(当前是宫格就显示"列表")
-            Glyph({
-              symbol: this.settings.subsGrid ? Sym.list : Sym.grid,
-              dim: 20, color: this.scheme.onSurfaceVariant
-            })
-              .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
-              .backgroundEffect({
-                radius: 40,
-                saturation: 1.3,
-                brightness: 1.0,
-                color: withAlpha(this.scheme.surface, 0.6)
-              })
-              .onClick(() => { this.settings.setSubsGrid(!this.settings.subsGrid); })
-          }
-          if (this.seg === 4 && this.history.history.length > 0) {
-            Text(L.s('action_clear'))
-              .fontSize(TypeScale.caption * this.fontScale)
-              .fontColor(this.scheme.primary)
-              .padding({ left: 10, right: Metrics.pagePadding, top: 4, bottom: 4 })
-              .backgroundEffect({
-                radius: 40,
-                saturation: 1.3,
-                brightness: 1.0,
-                color: withAlpha(this.scheme.surface, 0.6)
-              })
-              .onClick(() => { this.history.clear(); })
-          }
-        }
-        .width('100%')
+        ChipsRow({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          labels: this.segments(),
+          selected: this.chipSel,
+          sync: this.chipSync,
+          onSelect: (i: number) => { this.seg = i; this.chipSel = i; },
+          // 段尾动作交给条自己摆(条内右端 + 垂直居中)。原先这两个按钮是这里另起一个
+          // Stack 浮在条外面的:右缘按 pagePadding 16 对齐,而条的留白是 12,两者差几 vp
+          // 就对不上条的右圆顶;再各自糊一块 backgroundEffect,玻璃上叠玻璃成了补丁。
+          endAction: () => { this.barActions() }
+        })
       }
       .width('100%')
       .layoutWeight(1)
     }
     .width('100%')
     .height('100%')
+  }
+
+  /**
+   * 分段条右端的动作位(由 `ChipsRow.endAction` 摆位,自己不定位)。
+   *
+   * ⚠️ **不要再给它们加背景**:底就是那条玻璃。原先各带一块 `backgroundEffect`,
+   * 玻璃条上再糊一颗玻璃,装机判为「太丑」。
+   * `padding` 在 `onClick` **之前** ⇒ 内边距算进命中框,点字的边缘也触发得了一旁。
+   * 左右都留 16:左边是与正在横滚的 chips 之间的缝,右边让文字不贴着条的圆顶。
+   * **两端同值**:Android 侧那颗 `TextButton` 的 `contentPadding` 是 start 16 / end 8,
+   * 外加 `endAction` 容器自己的 8dp end 内边距 ⇒ 文字离条右缘同样是 16。
+   */
+  @Builder
+  barActions() {
+    // ⚠️ **不看订阅数**:Android 侧同一颗按钮的条件只有 `section == 0`,没有"非空才显示"。
+    // 这里先前多挂了 `subscriptions.length > 0`,装机表现就是用户反馈的「切到订阅 tab
+    // 右侧没有排序方式按钮」—— 一台还没订阅的手机两边行为立刻不一样,而排列方式是全局
+    // 设置,空列表时切了下次进来看得到,没有任何理由藏起来。
+    if (this.seg === 0) {
+      // 与 Android 一致:图标按钮,且**图标表示切换后的目标布局**(当前是宫格就显示"列表")
+      Glyph({
+        symbol: this.settings.subsGrid ? Sym.list : Sym.grid,
+        dim: 20, color: this.scheme.onSurfaceVariant
+      })
+        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        .onClick(() => { this.settings.setSubsGrid(!this.settings.subsGrid); })
+    }
+    if (this.seg === 4 && this.history.history.length > 0) {
+      Text(L.s('action_clear'))
+        // 字号取 labelLarge 与 Android 那颗 TextButton 同档(原先是 caption,比另一端小一号)
+        .fontSize(TypeScale.labelLarge * this.fontScale)
+        .fontColor(this.scheme.primary)
+        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        .onClick(() => { this.history.clear(); })
+    }
   }
 
   /// 拖动位移 → 目标页。位移过半才算切,并夹在合法范围内。

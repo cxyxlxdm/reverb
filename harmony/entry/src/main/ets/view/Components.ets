@@ -64,7 +64,10 @@ export struct PodcastListItem {
           .letterSpacing(Tracking.titleMedium)
           .fontWeight(FontWeight.Medium)
           .fontColor(this.scheme.onBackground)
-          .maxLines(2)
+          // **一行**。原先是 2:字号与 Android 同档(titleMedium 16),但长标题在这里
+          // 换成两行、Android 省略号截掉,于是同一屏鸿蒙的行比 Android 高一倍 ——
+          // 用户读作"鸿蒙字大",实际是行高。对齐 Android 的 `maxLines = 1`。
+          .maxLines(1)
           .textOverflow({ overflow: TextOverflow.Ellipsis })
         if (this.podcast.author.length > 0) {
           Text(this.podcast.author)
@@ -410,6 +413,13 @@ export struct EpisodeListItem {
 export const CHIPS_STRIP_H = 44;
 
 /**
+ * 分段条距屏幕左右的留白。**条宽收口**要拿它从可用宽里减掉,所以和上面那层
+ * `.padding({ left: 12, right: 12 })` 必须是同一个数 —— 写两处的话,一处改宽一处
+ * 就凭空少/多 12vp(见 [CHIPS_RESERVE_H] 那条"两处读同一个常量"的同类教训)。
+ */
+export const CHIPS_SIDE_PAD = 12;
+
+/**
  * 页面在滚动容器顶部**该留的余量**。比条本身高 8vp —— 占位若只给 `CHIPS_STRIP_H`,
  * 静止时首项的顶边与条的下描边**重合**(真机实测两者都在 y=681),首项只剩自己的
  * 4vp 内边距撑着,读起来就是"标题贴着分类条"。
@@ -474,6 +484,20 @@ export struct ChipsRow {
   /// 与页面的 Swiper 手势联动总线(页面持有并灌帧);不传则无联动,纯弹簧
   sync: ChipsSwipeSync = new ChipsSwipeSync();
   onSelect: (i: number) => void = () => {};
+  /**
+   * 钉在**条内右端**、不随 chips 横滚的动作位(如「清空」「宫格切换」)。
+   *
+   * 由条自己按 `Alignment.End`(右 + 垂直居中)摆 ⇒ 天然垂直居中、且一定落在条的右圆顶之内。
+   * 之前这些按钮是页面在条**外面**另起一个 Stack 浮上去的:右缘按屏幕留白对齐
+   * (比条的右缘还外/内几 vp,和条的圆顶对不上),又各自带一块 `backgroundEffect`
+   * —— 玻璃条上再糊一颗玻璃,装机判为「太丑」(见 H104 同轮的装机反馈)。
+   * **按钮不要再自带背景**,底就是这条玻璃。
+   *
+   * Android `GlassChipsRow` 有同名同语义的 `endAction` 槽,改一处两端一起改。
+   */
+  @BuilderParam endAction: () => void = this.emptyEnd;
+
+  @Builder emptyEnd(): void {}
 
   private scroller: Scroller = new Scroller();
   /// 上一次已滚动到的选中项,避免每次重渲都重复下发滚动指令
@@ -484,6 +508,33 @@ export struct ChipsRow {
   /** 透明胶囊当前位置与宽度;首帧没量到选中 chip 之前先藏着 */
   @State capX: number = 0;
   @State capW: number = 0;
+
+  /**
+   * 条宽收口的三个量:玻璃只包住「chips + 右端动作位」,不再通栏。
+   *
+   * 为什么原先是通栏:最早这条栏要盖住 19 个分类、必须占满一行才滚得动;后来音阁
+   * 也用它(5 个短标签),通栏就在右端留下约一个按钮宽的空白玻璃 —— 用户反馈
+   * 「不切到订阅/历史时右侧一大块空白,不协调」。**空白正好等于那颗按钮**,
+   * 因为当初的通栏宽度就是按「标签 + 按钮」量出来的。
+   *
+   * `barW = 0` 表示还没量全,按通栏画 —— 别在首帧画出一条 0 宽的栏。
+   */
+  @State barW: number = 0;
+  /// chips 内容实测宽(含内层 Row 左右各 8 的内边距)
+  private chipsW: number = 0;
+  /// 右端动作位实测宽(该分段没有动作位时为 0)
+  @State actionW: number = 0;
+  /// 能画条的带宽 = 外层 Row 实测宽 - 左右各 [CHIPS_SIDE_PAD]
+  private hostW: number = 0;
+
+  /// 三个量任意一个变了都重算一次条宽。量不全时回落到通栏,不留 0 宽。
+  private resizeBar(): void {
+    if (this.chipsW <= 0 || this.hostW <= 0) {
+      this.barW = 0;
+      return;
+    }
+    this.barW = Math.min(this.hostW, this.chipsW + this.actionW);
+  }
 
   aboutToAppear(): void {
     // 行先于胶囊(子组件)注册收尾回调:springTo 的钉位依赖 active 仍为 true
@@ -561,66 +612,96 @@ export struct ChipsRow {
      * margin 再往外扩,右缘会溢出(与 searchBar 同款坑,见 DiscoverPage 注释)。
      */
     Row() {
-      Scroll(this.scroller) {
-        Stack({ alignContent: Alignment.Start }) {
-          /**
-           * 透明胶囊(与 GlassTabBar 同款语言):罩住选中 chip 的半透明衬底 + 发丝描边。
-           * 独立成子组件:Swiper 手势期间每帧只重建这一颗胶囊,不牵动整条 ChipsRow。
-           */
-          ChipsCapsule({
-            scheme: this.scheme,
-            capX: this.capX,
-            capW: this.capW,
-            chipX: this.chipX,
-            chipW: this.chipW,
-            sync: this.sync
-          })
+      // 条 + 右端动作位的宿主:动作位画在玻璃**之上**、由 Stack 的 `Alignment.End` 摆到条内右端并垂直居中。
+      // 放在这层而不是页面那层,是为了让它跟着条的左右 12vp 留白走 —— 浮在条外面时
+      // 它按屏幕留白(pagePadding 16)对齐,和条的右圆顶永远差几 vp。
+      Stack({ alignContent: Alignment.End }) {
+        Scroll(this.scroller) {
+          Stack({ alignContent: Alignment.Start }) {
+            /**
+             * 透明胶囊(与 GlassTabBar 同款语言):罩住选中 chip 的半透明衬底 + 发丝描边。
+             * 独立成子组件:Swiper 手势期间每帧只重建这一颗胶囊,不牵动整条 ChipsRow。
+             */
+            ChipsCapsule({
+              scheme: this.scheme,
+              capX: this.capX,
+              capW: this.capW,
+              chipX: this.chipX,
+              chipW: this.chipW,
+              sync: this.sync
+            })
 
-          Row({ space: 8 }) {
-            ForEach(this.labels, (label: string, idx: number) => {
-              Text(label)
-                // chip 文字取 labelLarge(14),与 Android 的 Material FilterChip 同档
-                .fontSize(TypeScale.labelLarge * this.fontScale)
-                // 选中态的底色交给胶囊,chip 自己只换文字色;未选中保持灰底
-                .fontColor(this.selected === idx ? this.scheme.primary : this.scheme.onSurfaceVariant)
-                .backgroundColor(this.selected === idx ? Color.Transparent : withAlpha(this.scheme.onSurfaceVariant, 0.10))
-                .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-                .borderRadius(16)
-                // 高亮做淡入淡出,不要硬切。原先 backgroundColor/fontColor 是直接按三元赋值,
-                // 状态一变颜色瞬间跳过去,配上页面的滑动动画就显得生硬。
-                .animation({ duration: 200, curve: Curve.EaseOut })
-                .onClick(() => this.onSelect(idx))
-                .onAreaChange((_o: Area, n: Area) => {
-                  // Area.position 是相对父组件的局部坐标(d.ts 标注 "local position"):
-                  // 内层 Row 在 Stack 原点,胶囊与 chip 共用同一坐标系,x 直接当 translate 用
-                  this.chipX[idx] = Number(n.position.x);
-                  this.chipW[idx] = Number(n.width);
-                  if (idx === this.selected) this.springTo(idx);
-                })
-            }, (label: string, idx: number) => `${idx}-${label}`)
+            Row({ space: 8 }) {
+              ForEach(this.labels, (label: string, idx: number) => {
+                Text(label)
+                  // chip 文字取 labelLarge(14),与 Android 的 Material FilterChip 同档
+                  .fontSize(TypeScale.labelLarge * this.fontScale)
+                  // 选中态的底色交给胶囊,chip 自己只换文字色;未选中保持灰底
+                  .fontColor(this.selected === idx ? this.scheme.primary : this.scheme.onSurfaceVariant)
+                  .backgroundColor(this.selected === idx ? Color.Transparent : withAlpha(this.scheme.onSurfaceVariant, 0.10))
+                  .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+                  .borderRadius(16)
+                  // 高亮做淡入淡出,不要硬切。原先 backgroundColor/fontColor 是直接按三元赋值,
+                  // 状态一变颜色瞬间跳过去,配上页面的滑动动画就显得生硬。
+                  .animation({ duration: 200, curve: Curve.EaseOut })
+                  .onClick(() => this.onSelect(idx))
+                  .onAreaChange((_o: Area, n: Area) => {
+                    // Area.position 是相对父组件的局部坐标(d.ts 标注 "local position"):
+                    // 内层 Row 在 Stack 原点,胶囊与 chip 共用同一坐标系,x 直接当 translate 用
+                    this.chipX[idx] = Number(n.position.x);
+                    this.chipW[idx] = Number(n.width);
+                    if (idx === this.selected) this.springTo(idx);
+                  })
+              }, (label: string, idx: number) => `${idx}-${label}`)
+            }
+            .padding({ left: 8, right: 8 })
+            .onAreaChange((_o: Area, n: Area) => {
+              // 内容宽回填后重算条宽。这里顺带还负责 revealSelected —— 见下方 onSelectedChange
+              // 的注释:面积变化回调只在布局真的变了时来,选中项变化不能只靠它兜底。
+              this.chipsW = Number(n.width);
+              this.resizeBar();
+              this.revealSelected();
+            })
           }
-          .padding({ left: 8, right: 8 })
-          .onAreaChange(() => { this.revealSelected(); })
         }
+        .scrollable(ScrollDirection.Horizontal)
+        .scrollBar(BarState.Off)
+        .width('100%')
+        .height(CHIPS_STRIP_H)
+        .borderRadius(21)
+        // 玻璃本体:参数与 GlassTabBar 一致(见彼处注释),两端观感统一
+        .backgroundEffect({
+          radius: 40,
+          saturation: 1.3,
+          brightness: 1.0,
+          color: withAlpha(this.scheme.surface, 0.6)
+        })
+        .border({ width: 0.8, color: withAlpha(this.scheme.outline, 0.45) })
+        .align(Alignment.Start)
+
+        // 右端动作位压在玻璃**之上**:底就是这条玻璃,按钮自己不要再带背景。
+        // 包一层 Row 只为**测它的宽**:条要收口到「chips + 动作位」,不量就不知道该留多宽。
+        // 某个分段没有动作位时这层宽为 0,条就正好收成 chips 那么长。
+        Row() {
+          this.endAction()
+        }
+        .onAreaChange((_o: Area, n: Area) => {
+          this.actionW = Number(n.width);
+          this.resizeBar();
+        })
       }
-      .scrollable(ScrollDirection.Horizontal)
-      .scrollBar(BarState.Off)
-      .width('100%')
+      // 条宽:量全之前按通栏画,量全之后只包住内容(见 [barW] 那段为什么)
+      .width(this.barW > 0 ? this.barW : '100%')
       .height(CHIPS_STRIP_H)
-      .borderRadius(21)
-      // 玻璃本体:参数与 GlassTabBar 一致(见彼处注释),两端观感统一
-      .backgroundEffect({
-        radius: 40,
-        saturation: 1.3,
-        brightness: 1.0,
-        color: withAlpha(this.scheme.surface, 0.6)
-      })
-      .border({ width: 0.8, color: withAlpha(this.scheme.outline, 0.45) })
-      .align(Alignment.Start)
     }
     .width('100%')
     .height(CHIPS_STRIP_H)
-    .padding({ left: 12, right: 12 })
+    .padding({ left: CHIPS_SIDE_PAD, right: CHIPS_SIDE_PAD })
+    .onAreaChange((_o: Area, n: Area) => {
+      // 外层 Row 的实测宽**含自己那层 padding**,所以减掉左右才是要对比的可用宽
+      this.hostW = Number(n.width) - CHIPS_SIDE_PAD * 2;
+      this.resizeBar();
+    })
   }
 }
 
