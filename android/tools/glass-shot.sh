@@ -97,4 +97,72 @@ for tag in ('rest', 'press', 'drag'):
     a.resize((a.width * 2, a.height * 2), Image.LANCZOS).save('/tmp/%s_%s_zoom.png' % (n, tag))
     print(tag, im.size)
 PY
+
+# —————————————————————— 纵向居中的量化判据(装机反馈「透镜置底」)——————————————————————
+# 为什么要有这一段:**「透镜在栏里偏下」这句话,光看代码和光看截图都判不了。**
+# 代码里两颗椭圆的 y 是 `(栏高 - 镜高)/2`,算出来必然居中;截图上"看着低"也可能是
+# 栏自己的方向光投影把镜的下鼓出糊掉了(对比度问题,不是几何问题)。两种症状同形,
+# 修法相反 —— 前者改锚点,后者改投影。所以要把**上下鼓出量各是多少 px**打成数。
+#
+# 取的是**透镜中心那一列**的亮度折线:透镜那圈 1dp 高光亮边是这一列上最锐的两个峰,
+# 上峰 - 栏顶 = 上鼓出,栏底 - 下峰 = 下鼓出。折线整条都打印,判错也看得见(硬规矩 18:
+# 看不见中间值就先把中间值打出来,别靠眼睛在 2800 高的截图里估)。
+python3 - "$OUT" "$W" "$H" "$PX" "$X0" "$MIDY" <<'PY'
+import sys
+from PIL import Image
+n, w, h, px, x, ymid = sys.argv[1:7]
+w, h, x, ymid = map(int, (w, h, x, ymid))
+px = float(px)
+# 栏的落点:底边 = 屏底 - 手势条,高度 48dp(与 ReverbRoot 的落点同源;
+# 若装机时改过栏高或底边,以这里重算的为准 —— 这段的目的就是把"假设"摊开成数)
+BAR_H = round(48 * px)
+bar_bot = ymid + BAR_H // 2
+bar_top = bar_bot - BAR_H
+top = max(0, bar_top - round(16 * px))
+bot = min(h, bar_bot + round(16 * px))
+
+
+def prof(tag):
+    im = Image.open('/tmp/%s_%s_raw.png' % (n, tag)).convert('L')
+    # 中心列左右各 3px 取均值:单列会撞上图标描边的竖线,均值只留下横向的边
+    rows = []
+    for yy in range(top, bot):
+        s = sum(im.getpixel((xx, yy)) for xx in range(x - 3, x + 4))
+        rows.append((yy, s / 7.0))
+    return rows
+
+
+for tag in ('rest', 'press'):
+    rows = prof(tag)
+    print('== %s  栏顶=%d 栏底=%d 栏中线=%d ==' % (tag, bar_top, bar_bot, (bar_top + bar_bot) // 2))
+    # 找最锐的两个"上跳"边:亮度在一行内跳升最多的位置(高光亮边的上沿)
+    jumps = sorted(
+        ((rows[i][1] - rows[i - 1][1], rows[i][0]) for i in range(1, len(rows))),
+        reverse=True,
+    )[:6]
+    print('   亮度上跳最大的 6 处 (Δ亮度, y):', [(round(d, 1), yy) for d, yy in jumps])
+    print('   折线 (y:亮度):', ' '.join('%d:%d' % (yy, round(l)) for yy, l in rows[::2]))
+
+# 差分框:按住帧比静止帧**多出来**的那一段 = 透镜(含它鼓出栏外的上下两截)。
+# 上下两个鼓出量应该相等(几何上两颗椭圆都锚在栏中线)。注意两处已知的对称污染:
+#   · 整栏按 1.06 放大 ⇒ 栏自己的边上下各外移 ≈3 px(两边等量,不影响"对不对称"的判读);
+#   · 栏的投影**只在下缘**(spot 往下偏)⇒ 下缘的差分框会被影子撑大。
+#     这正是本次要分清的两件事:若 Δ 不对称且多出的量落在**下方**,读数会被影子污染,
+#     不代表几何偏心(本轮已把 spot 归零,重测即可验证)。
+# ⚠️ **读数有 ±2 px 的地板**:栏顶/栏底是按 48dp 常量重算的,与真机布局的取整差 1~2 px。
+#    小于这个量不要下结论 —— 这一版几何的算法本身就居中,要推翻它需要看得见的偏离(≥4 px)。
+a = prof('rest')
+b = prof('press')
+diff = {yy: abs(l1 - l2) for (yy, l1), (_, l2) in zip(a, b) if abs(l1 - l2) > 40}
+if diff:
+    ys = sorted(diff)
+    up = bar_top - ys[0]
+    dn = ys[-1] - bar_bot
+    print('== 差分框 == 顶=%d 底=%d 中线=%d' % (ys[0], ys[-1], (ys[0] + ys[-1]) // 2))
+    print('   鼓出栏外:上 %d px / 下 %d px  → 差 %+d px(正=偏下)'
+          % (max(up, 0), max(dn, 0), (dn - up)))
+    print('   与栏中线的偏离:%+d px' % ((ys[0] + ys[-1]) // 2 - (bar_top + bar_bot) // 2))
+else:
+    print('== 差分框 == 没找到差异(两帧同一状态?检查抓取时序)')
+PY
 echo "OK /tmp/${OUT}_{rest,press,drag}_{wide,zoom}.png"

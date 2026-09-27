@@ -241,6 +241,9 @@ private const val SPRING_STIFFNESS = 224f
  * - 按住帧与拖动帧的透镜**同为 321 px 宽**(同一裁剪窗内底边被截到同一处),只有中心
  *   x 从 371 走到 597 ⇒ 尺寸不含拖动量 ✓;含整栏 1.06 缩放后 322×169 px,宽高比 1.90 ≡ [ASPECT],
  *   上沿高出栏顶 13 px 且**没被裁** ⇒ 鼓出栏外是活的 ✓;
+ *   **顺带这条 13 px 也说明纵向是居中的**((169−143)/2 = 13,上下等量) —— 所以下一轮装机
+ *   报「透镜置底」时,几何推导判不出偏心,嫌疑落在"下缘那截鼓出被栏自己的方向光投影糊掉、
+ *   于是看不见"。两条候选、两处改动各自的性质,以及新加的**上下鼓出量差分框**怎么判读,见 H109;
  * - 静止帧整栏找不到 >38 px 的中性高亮连通块(那块是未选中图标的白描边)⇒ 没有常驻玻璃 ✓;
  * - 发现图标:静止 61×96 px 中心 (386,2671),按住与拖动两帧**都是** 65×102 px 中心 (371,2670),
  *   差值恰好等于整栏 1.06 缩放(636+(386−636)×1.06=371)⇒ 内容零形变、也不跟药丸走 ✓。
@@ -284,7 +287,6 @@ fun GlassNavBar(
     val currentSelected by rememberUpdatedState(selected)
     val currentOnSelect by rememberUpdatedState(onSelect)
 
-    val barHpx = with(density) { GLASS_BAR_H.toPx() }
     val restWpx = with(density) { REST_W.toPx() }
     val itemInsetPx = with(density) { ITEM_INSET.toPx() }
     val settleSpec = spring<Float>(dampingRatio = DAMP_PILL, stiffness = SPRING_STIFFNESS)
@@ -461,7 +463,21 @@ fun GlassNavBar(
                 // 投影给 z 轴高度:整条栏"浮"在页面之上,而非贴底的一块平面。
                 // 阴影外形用真胶囊,理由见 Components.kt GlassChipsRow(H92):
                 // 半径小于半高的高程阴影在形状中央留接缝,透过半透明玻璃显形。
-                .shadow(elevation = 8.dp, shape = RoundedCornerShape(percent = 50), clip = false)
+                //
+                // **spot(方向光)那一档归零,和透镜同一口径**(透镜那圈为什么归零见 H107):
+                // spot 按「光源在上方」整层**往下偏**,于是在栏的底边下面压出一条比栏本身更暗的
+                // 带 —— 而透镜往下鼓出只有 ≈3dp(8~9 px),正好整条落进这条暗带里,下缘的对比
+                // 被吃掉;往上鼓出那 3dp 贴在干净的页面背景上,清清楚楚。于是"上下对称地鼓出"
+                // 在真机上读成"只往下淌",这就是装机反馈「透镜相对栏置底」的候选成因。
+                // ambient 那一档保留:它与形状同心,给的是"浮着"的柔光边,不带方向。
+                // ⚠️ 这一条**尚未在真机上对照验证**(本轮设备不在):如果装机看到下缘仍然糊,
+                // 说明成因不在投影而在别处,先把这行退回(它只影响栏的投影,不动几何)。
+                .shadow(
+                    elevation = 8.dp,
+                    shape = RoundedCornerShape(percent = 50),
+                    clip = false,
+                    spotColor = Color.Transparent
+                )
                 // 玻璃打底:半透明 surface + 发丝描边(透明度取舍见类注释)。
                 .background(
                     color = colorScheme.surface.copy(alpha = BASE_TINT),
@@ -569,13 +585,14 @@ fun GlassNavBar(
                 val restScale = lensScaleOf(lensAlphaOf(growth.value))
                 Box(
                     Modifier
+                        // **纵向交给布局居中,不再自己算**:之前是 `offset { y = (barHpx - h)/2 }`,
+                        // 而 `barHpx` 是 GLASS_BAR_H 这个**常量**换算出来的数 —— 栏高一旦和这个
+                        // 常量脱钩(改栏高、给栏加纵向 padding),两颗椭圆就会静悄悄地偏出去。
+                        // align(CenterStart) 让"在栏内纵向居中"成为结构事实(装机反馈"透镜置底")。
+                        .align(Alignment.CenterStart)
                         .offset {
                             val w = with(density) { (REST_W * restScale).toPx() }
-                            val h = with(density) { (REST_H * restScale).toPx() }
-                            IntOffset(
-                                (pillPx() + (restWpx - w) / 2f).roundToInt(),
-                                ((barHpx - h) / 2f).roundToInt()
-                            )
+                            IntOffset((pillPx() + (restWpx - w) / 2f).roundToInt(), 0)
                         }
                         .size(width = REST_W * restScale, height = REST_H * restScale)
                         .background(
@@ -595,8 +612,10 @@ fun GlassNavBar(
                 GlassLens(
                     growth = growth,
                     pillCx = { pillCx() },
-                    barHpx = barHpx,
-                    isDark = isDark
+                    isDark = isDark,
+                    // 纵向居中交给布局(见 GlassLens 内注释);align 是 BoxScope 的扩展,
+                    // 只能在调用处拿到,所以从这一层传进去。
+                    modifier = Modifier.align(Alignment.CenterStart)
                 )
             }
 
@@ -650,7 +669,6 @@ private fun lensScaleOf(alpha: Float): Float = 1f + (LENS_SCALE - 1f) * alpha
 private fun GlassLens(
     growth: State<Float>,
     pillCx: () -> Float,
-    barHpx: Float,
     isDark: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -664,13 +682,12 @@ private fun GlassLens(
 
     Box(
         modifier
+            // 纵向居中由**调用处传进来的 `align`** 负责(它是 BoxScope 的扩展,这一层拿不到),
+            // offset 只表达"跟手的那一维"。这样"透镜在栏里纵向居中"不再依赖 GLASS_BAR_H
+            // 这个常量有没有跟着栏的实际高度改(装机反馈"透镜置底")。
             .offset {
                 val w = with(density) { lw.toPx() }
-                val h = with(density) { lh.toPx() }
-                IntOffset(
-                    (pillCx() - w / 2f).roundToInt(),
-                    ((barHpx - h) / 2f).roundToInt()
-                )
+                IntOffset((pillCx() - w / 2f).roundToInt(), 0)
             }
             .size(width = lw, height = lh)
             .graphicsLayer {
