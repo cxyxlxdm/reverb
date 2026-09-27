@@ -147,6 +147,10 @@ val LocalGlassBottomPad = staticCompositionLocalOf { 0.dp }
  *   chips 行与调用方(整页)不参与 —— 同鸿蒙 H64 的最小重建面原则。
  * @param selected 高亮项(调用方传 pagerState.currentPage 即可,过半自动预切,
  *   与鸿蒙 dragTarget 语义一致;只在翻页瞬间离散变化,不会拖累整页重建)。
+ * @param trailing 跟在最后一枚 chip **后面**、会随 chips 一起横滚的补充项(如「排序」)。
+ * @param endAction 钉在**条内右端**、不随 chips 滚的按钮(如「清空」「宫格切换」)。
+ *   由条自己按 `CenterEnd` 摆位 ⇒ 天然垂直居中,调用方不要再补对中偏移。
+ *   鸿蒙 `ChipsRow` 有同名同语义的 `@BuilderParam`,改一处要两端一起改。
  */
 @Composable
 fun GlassChipsRow(
@@ -155,7 +159,8 @@ fun GlassChipsRow(
     progress: () -> Float,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    trailing: (@Composable RowScope.() -> Unit)? = null
+    trailing: (@Composable RowScope.() -> Unit)? = null,
+    endAction: (@Composable () -> Unit)? = null
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val scroll = rememberScrollState()
@@ -235,6 +240,16 @@ fun GlassChipsRow(
                 }
                 trailing?.invoke(this)
             }
+        }
+        // 条内右端的固定按钮:画在玻璃之上、垂直居中。
+        // ⚠️ 不要退回调用方那套 `.align(TopEnd) + padding(top=2dp)` 的手工对中 ——
+        // 那颗按钮原先浮在条**外面**,和 chips 的基线各算各的,一端改了另一端就漂(H96 同类)。
+        if (endAction != null) {
+            Box(
+                Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp)
+            ) { endAction() }
         }
     }
 }

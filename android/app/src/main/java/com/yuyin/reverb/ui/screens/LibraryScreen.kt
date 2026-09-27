@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -40,7 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.zIndex
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
@@ -112,37 +110,33 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                 labels = sections,
                 selected = section,
                 progress = { pagerState.currentPage + pagerState.currentPageOffsetFraction },
-                onSelect = { i -> scope.launch { pagerState.animateScrollToPage(i) } }
-            )
-            if (section == 4 && history.isNotEmpty()) {
-                TextButton(
-                    onClick = { container.historyStore.clear() },
-                    // 与 44dp 玻璃条对中:TextButton 高 40dp,top 补 (44-40)/2=2dp。
-                    // 原先 top=5dp 让整体偏下(H90 用户反馈「置底」)。
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(top = 2.dp, end = 20.dp)
-                        .zIndex(1f)
-                ) { Text(stringResource(R.string.action_clear_confirm)) }
-            }
-            // 订阅分段:右侧「行 / 宫格」排列切换。图标显示切换后的目标布局。
-            if (section == 0) {
-                IconButton(
-                    onClick = { container.settingsStore.setSubsGrid(!subsGrid) },
-                    // IconButton 高 48dp 比条高,负 offset 才能真正对中:(44-48)/2=-2dp
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .offset(y = (-2).dp)
-                        .padding(end = 8.dp)
-                        .zIndex(1f)
-                ) {
-                    Icon(
-                        if (subsGrid) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.GridView,
-                        contentDescription = stringResource(R.string.subs_layout_toggle),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                onSelect = { i -> scope.launch { pagerState.animateScrollToPage(i) } },
+                // 段尾动作:**交给条自己摆**(条内右端 + 垂直居中)。
+                // 之前是浮在条外面的一个 TopEnd 覆盖层,靠 `top=2dp` / `offset=-2dp`
+                // 两个手工数把它凑到 44dp 条的中线上 —— 按钮高度或条高一动就错位,
+                // 而且那颗按钮自带一块实底,压在玻璃条上像贴了块补丁。
+                endAction = {
+                    if (section == 4 && history.isNotEmpty()) {
+                        TextButton(
+                            onClick = { container.historyStore.clear() },
+                            // start 16dp:与左边正在横滚的 chips 留出可见的缝(装机反馈
+                            // 「间距再大一些」);end 8dp + 容器那 8dp ⇒ 文字离条的右圆顶 16dp。
+                            // 鸿蒙 `LibraryPage.barActions()` 的 padding 是同一组数,改要两端一起改。
+                            contentPadding = PaddingValues(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
+                        ) { Text(stringResource(R.string.action_clear_confirm)) }
+                    }
+                    // 订阅分段:右侧「行 / 宫格」排列切换。图标显示切换后的目标布局。
+                    if (section == 0) {
+                        IconButton(onClick = { container.settingsStore.setSubsGrid(!subsGrid) }) {
+                            Icon(
+                                if (subsGrid) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.GridView,
+                                contentDescription = stringResource(R.string.subs_layout_toggle),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
-            }
+            )
         }
     }
 }
