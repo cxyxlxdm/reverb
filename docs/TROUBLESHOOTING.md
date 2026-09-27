@@ -3077,3 +3077,204 @@ spot 归零那一行就是这次的修复。静止帧另有一项确认:栏上�
    (`endAction` 的注释里已互指,改一处两端一起改)。
 ③ **bounds 相交比截图更能定性。** 这次若只看裁剪图,大概率结论是"挤但能用";
    量出 1081 < 1125 才无可争辩。真机取证要留数字,不只留图。
+
+### H112. 鸿蒙订阅宫格:`GridItem` 没有 span —— 一个占位只吃掉**一格**,首行于是整排右移并顶进分段条
+
+**现象**(2026-09-28,BRA-AL00 真机 / 1216×2688 / 密度 3.25):
+把订阅段切成宫格(三列)之后装机,两个症状同时出现:
+1. 第一行封面的**上半部分被玻璃分段条盖住**(列表分支不会,宫格必现)。
+2. 首行只有**两张**封面,第三列空着;从第二行起才排满 —— 即"整排右移一格"。
+
+`uitest dumpLayout` 量到第一张真实封面在 **x=436**(三列里的那一颗中间列),
+而它左边那一格是空的 ⇒ 症状 2 不是渲染问题,是**首行前面多出一格**。
+一格 436px 的位移正好把首行顶进了分段条的可见区上方,于是症状 1 也解释了:
+占位没有真的让出一整行高,首行的顶边停在 `padding.top`(10vp)处,而条悬在内容上。
+
+**根因**:
+顶部/尾部各放了**一个** `GridItem(){ Row().height(CHIPS_RESERVE_H) }` 当占位,
+心里想的是 List 的 `ListItem` 语义 —— 在 List 里一项就是通栏一行,所以那里一个就够。
+但 **ArkUI 的 `GridItem` 默认只占模板里的一格**;要跨格只有
+`rowStart/rowEnd/columnStart/columnEnd` 这一组绝对定位,而那组**只在非滚动的模板模式下生效**
+(`columnsGap` + 可滚动 Grid 里不可用)。于是:
+- 头部占位吃掉首行的**第一格**,真实封面从第二格开始排 ⇒ 首行少一张、整排右移;
+- 占位高度只撑出**一格**的行高,而它又和真实封面同属一行,行高由内容(封面)决定 ⇒
+  让位量实际是 0,首行顶边 = Grid 的 `padding.top`,被条压住。
+尾部占位是同一处对称的错误:它落进最后一行,把那一行的行高撑成 `bottomPad`,
+末行下方拖出一大块空白。
+
+**修法**(`harmony/entry/src/main/ets/view/LibraryPage.ets` 的 `subscriptionsSection()`):
+占位改成**一整行**(列数个 `GridItem`),并把列数收成唯一的真相来源:
+
+```ts
+const SUBS_GRID_COLS = 3;
+function subsGridTemplate(): string   // 由它生成 '1fr 1fr 1fr'
+function subsGridSpacers(): number[]  // 由它给出占位个数 [0,1,2]
+```
+
+`columnsTemplate` 与占位个数都从 `SUBS_GRID_COLS` 派生 —— 两处各写一份的话,
+改列数一定会让占位个数跟不上,又变回这个 bug。头尾各换成
+`ForEach(subsGridSpacers(), …)`,尾占位高度仍为 `bottomPad`。
+
+**验收**:宫格路径**已改完但本轮未装机复验**(签名挡住,见下)。
+静态可确定的部分是"首行前面不再有多余的一格";复验要量两件事:
+① 首行**三**张封面的 bounds,② 首行顶边 y 与分段条底边 y **不相交**,
+以及末行下方不再拖出 `bottomPad` 那么高的一块空白。
+
+**教训与可复用的规律**:
+① **从 List 抄到 Grid 的"一个占位 = 一行"不成立。** `ListItem` 天生通栏,
+   `GridItem` 天生一格。凡是"用占位项让出滚动余量"的写法,换容器要重问一遍
+   "这个容器里一项占多少",别按上一个容器的直觉写。
+② **占位/模板这类成对的常量要有一个来源。** 三列写在 `columnsTemplate`、
+   占位个数写在别处,就是等一个必然发生的错位;生成函数比注释管用。
+③ **"少了一张卡"这种症状,先量坐标再猜渲染。** x=436 一个数字就把"排布错位"
+   和"画坏了"分开,后者要查的完全是另一条链。
+
+### H113. 鸿蒙长按菜单阈值改不动:`bindContextMenu` 的 `ResponseType` 重载不暴露时长,得换**状态驱动**那个重载
+
+**现象**(2026-09-28,用户反馈):
+「继续收听」卡片长按弹菜单,「这个长按的时间触发阈值太长了」——
+同页的宫格/列表项、以及 Android 的同一张卡都要快得多。
+
+**排查**:
+先假设"系统时长不可配、只能忍着",这个假设**没有依据**,是靠读 SDK 定义否掉的:
+- `bindContextMenu(builder, ResponseType.LONG_PRESS, options)` 这个重载**没有任何时长参数**;
+  它的长按走系统判定,应用拿不到。
+- 同一个 API 另有 `bindContextMenu(isShown: boolean, content: CustomBuilder, options?)`
+  重载(API 12 起,`common.d.ts`)—— **显示与否由调用方的 boolean 决定**。
+  这个重载才是把控制权拿回来的入口。
+- 这个 SDK 里既没有 `openCustomContextMenu`,也没有 `ContextMenuController.openMenu`,
+  所以"命令式打开菜单"这条路不存在;能用的就是 boolean 驱动。
+
+**修法**(`harmony/entry/src/main/ets/view/Components.ets` + `view/DiscoverPage.ets`):
+用 `LongPressGesture({ duration })` 自己定时长,`onAction` 里把那个 boolean 置起。
+时长取 **500ms**,与 Android 对齐(`combinedClickable` 的
+`viewConfiguration.longPressTimeoutMillis` 实测就是 500ms),不是手感拍脑袋:
+
+```ts
+export const LIST_MENU_LONG_PRESS_MS = 500;
+```
+
+`Components.ets` 的 `EpisodeListItem` 与 `DiscoverPage.ets` 的 `ContinueCard`
+**两处一起换**,保持同一形态(`@State menuShown` / `@State pressX` +
+`.bindContextMenu(this.menuShown, this.contextMenu(), { enableArrow:false,
+offset:{x:this.pressX,y:0}, aboutToDisappear: () => { TapGuard.lowerSoon(); this.menuShown = false; }})`),
+否则同一张卡在两个页面长按手感不同,正是这张卡最容易漂的地方。
+`pressX` 取自 `event.fingerList[0].localX`,让菜单在按下的位置出现,而不是钉在组件中心。
+`aboutToAppear` 里补 `TapGuard.raise()`,与旧路径的守卫行为一致。
+
+**验收**:**已编译,未装机复验**(签名挡住)。复验要覆盖四件事,前两件是功能、后两件是这次换实现引进的风险:
+① 长按 500ms 出菜单、快按不误触(`bindContextMenu` 的长按判定让位给了手势,`onClick` 是否仍会在长按后触发要实测);
+② 菜单项点击照常生效;
+③ 菜单在按下点附近出现;
+④ **贴右缘的卡片**长按时菜单会不会被 `offset.x` 挤出屏幕 —— 这条在注释里已标为未验,并同步记进 ROADMAP。
+
+**教训与可复用的规律**:
+① **"这个 API 不支持"要先证明。** SDK 的 d.ts 就在本机,重载列表一读就有;
+   把"我没找到参数"写成"系统不给配",代价是整条修复路径都不存在。
+   (与硬规矩 17 同源:接口形状对不上不代表没别的路。)
+② **状态驱动的重载是通用逃生口。** 当某个手势的触发条件(时长/次数/方向)不可配,
+   找它的 `isShown/isVisible: boolean` 版本,自己用手势喂 —— 这次是 `bindContextMenu`,
+   下一处可能是任意 `bindXxx`。
+③ **跨端一致的手感要有数字依据。** 500ms 来自 Android 的 `longPressTimeoutMillis`,
+   注释里写明出处,后来人才知道这不是随意值。
+④ **同一组件的多个实例必须一起换。** 两张卡共用一张卡的菜单逻辑,只改一处就是新的分叉。
+
+### H114. 删除下载没有二次确认 —— 两端各漏一处,而且漏法不同;确认框本身是三份拷贝
+
+**现象**(2026-09-28,用户反馈):
+「删除下载前没有确认提示,直接就删除了。」
+
+**根因**(两处独立遗漏,加上一处结构性隐患):
+1. **鸿蒙「音阁 · 下载」段**:`onDeleteDownload` 直接调 `downloadManager.delete(ep.id)`。
+2. **鸿蒙频道主页**:同一个回调同样直删。
+3. **Android 频道主页**(`PodcastDetailScreen.kt`)也直删 —— 而 Android 的「下载」段
+   **早就有**确认框(`LibraryScreen.kt` 的 `pendingDelete`)。
+   所以这不是"另一端做得好",是**同端两个入口只有一个做了**,而 `docs/FEATURES.md`
+   写的是「离线单集,删除有二次确认 两端一致」—— **文档那一行在此之前是不成立的**。
+结构性隐患:鸿蒙的确认框逻辑在 `SettingsPage.ets` 里(清空缓存/下载/历史/日志共用),
+是页内 `@Builder` + 页内 `class ConfirmSpec`。要在新页面复用只能拷贝,
+而三处拷贝的遮罩色、圆角、危险色按钮一定会漂。
+
+**修法**:
+- 把 `ConfirmSpec` 与 `ConfirmDialog` **上提到 `Components.ets`**(全应用共用组件的位置),
+  `SettingsPage` 删掉本地类和本地 `@Builder`,改为 `import { ConfirmDialog, ConfirmSpec }`,
+  四个调用点从 `ConfirmSpec.cache(this)` 换成模块级工厂 `cacheConfirm(this)` 等。
+- 鸿蒙两处删除入口接上确认:挂 `@State pendingDelete: ConfirmSpec | null`,
+  由 `askDeleteDownload(ep)` 填 `new ConfirmSpec(L.s('download_delete_title'), L.f('download_delete_message', ep.title), L.s('action_delete'), () => delete(ep.id))`。
+  **确认框挂在整页的 `Stack` 上而不是分段条那个 Stack 里** —— 后者只覆盖内容区,
+  要连页头一起遮住才和 Android 的 `AlertDialog` 同范围。
+- Android 频道主页补 `pendingDelete` + `AlertDialog`,与 `LibraryScreen.kt` 同形态。
+- 文案与 Android 同源:`download_delete_title` / `download_delete_message(集名)`,
+  五语种(`base`/`zh_TW`/`en_US`/`fr_FR`/`es_ES`)各加 2 条,值取自 Android 的五份 `strings.xml`。
+  体检过:五份文件均解析通过、各 290 条、无重名,`zh_TW` 那条确实是繁体。
+
+**验收**:**两端均编译通过(鸿蒙 CompileArkTS、Android default + store 两个 flavor),未装机复验。**
+复验要看:弹框文案含集名、「取消」不删、「删除」当场删掉且列表更新;
+Android 频道主页与「下载」段的框**长得一样**(同一套文案 key 已保证文字一致)。
+
+**教训与可复用的规律**:
+① **"某端已有这个交互"不能推成"某个入口已有"。** 同一动作在列表页和详情页是两个入口,
+   确认逻辑要逐个入口接。验收口径写在 FEATURES 里的那种"两端一致"的断言,
+   落点应该是**每个入口**,不是每一端。
+② **共享前先收拢。** 三处要用同一个框,就把类和视图提到一个文件里,
+   而不是在新页面复制 40 行 —— 这次顺手把 `SettingsPage` 的那份也收上来,
+   未来加第四、五处才不会再漂。
+③ **文档里的"已实现"是最容易腐烂的断言。** 这一轮改动才让 FEATURES 那一行变成真的;
+   改完之后必须回头核对自己写过的清单(硬规矩 5)。
+
+### H115. 列表播放按钮首次点击图标不变 —— 默认模式恰好是「播放三角」,而暂停态只在冷启后第一次有意义
+
+**现象**(2026-09-28,用户反馈):
+「最新、收藏、下载、频道主页的播放按钮,首次点击按钮不会变……
+初始暂停,点击之后还是不变,就让人觉着怪怪的。」
+
+**根因**:
+按钮的图标由「这一列是不是当前在播的列(`live()`)」+ `playMode` 决定:
+
+```ts
+if (!live()) return pauseFill;           // 不是当前列:显示「点我开播」
+if (playMode === REPEAT) return repeat;
+if (playMode === SHUFFLE) return shuffle;
+return playFill;                          // 顺序:播放三角
+```
+
+而 `PlayMode` 的**持久化默认值就是 `SEQUENTIAL`**。于是首次点击做了两件事 ——
+把这一列设为当前列(`live()` 由 false 变 true)**并且**进入顺序播放 ——
+两边的图标都是 ▶。**状态确实变了,图标没变**,用户只能靠"音频开始响"来确认,
+而这三段里点按钮的期望本来就是"开始播这一列",观感上就是"按下去没反应"。
+
+第二层是状态机本身:按钮的语义是**模式轮动**(顺序 → 循环 → 随机 → 顺序),
+`⏸` 只是"这个位置还没开过播"的门面。用户规定的口径(原话摘要):
+初始是暂停态,**点一次之后不再出现暂停,除非下一次启动**。
+
+**修法**:
+引入**会话级、不落盘**的标志,两端同名(`harmony/.../playback/PlayerController.ets` 的
+`listPlayUsed: boolean`;`android/.../playback/PlayerController.kt` 的
+`_listPlayUsed = MutableStateFlow(false)`),只在**带 tag 的** `playQueue(list, startIndex, tag)`
+里置真。判据与 `activeListTag` 同源:音阁各段与频道主页**都算**,包括直接点段里的单集行
+(它们传的就是 `inbox`/`fav`/`dl` 这些列表 tag);不传 tag 的入口(发现页、历史行、迷你条、
+「下一个播放」)不算,因为它们不对应任何一颗按钮。
+图标改成:
+
+```ts
+if (!live()) return listPlayUsed ? playFill : pauseFill;
+```
+
+于是链路成为 `⏸ →(点)▶(顺序)→ 🔁 → 🔀 → ▶ …`,且 `⏸` 在整个会话里只出现一次。
+**不落盘**是刻意的:它是"这台设备上这次启动还没开过播"的观感,不是用户设置;
+存下去会让下次冷启的按钮直接是 ▶,而那时列并没有在播。
+
+**验收**:**两端均编译通过,未装机复验。**
+复验要跑完整一圈(⏸→▶→🔁→🔀→▶)、确认首点后不再是 ⏸、且**杀掉应用重开后回到 ⏸**;
+四个入口(最新/收藏/下载/频道主页)共用同一颗组件,验一处即可推全,但频道主页那颗是
+上一轮新加的 tag(`podcast:<feedUrl>`),要点一遍确认它也进 `listPlayUsed`。
+
+**教训与可复用的规律**:
+① **"默认态"要和"轮动的第一格"区分开。** 当一个按钮既是"开始"又是"切换模式",
+   而默认模式的名字恰好就是"开始"的那个图标,首点必然无反馈。
+   修法不是换图标,是承认有一个"本会话还没开过播"的前置态。
+② **观感状态不要落盘。** 判据是"重启之后它应该是什么样":应该回到初始观感的东西,
+   落盘就错了(`listPlayUsed` 落盘会让下次冷启的按钮撒谎)。
+   与 H60 那条"设置要落盘"不冲突 —— 那条是用户选择,这条是会话事实。
+③ **同一套模式引擎两端字段要同构。** 两端都叫 `listPlayUsed`、都只在带 tag 的
+   `playQueue` 置真,后来人才可能在任一端读懂另一端。

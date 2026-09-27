@@ -33,6 +33,8 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -89,6 +91,9 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
     val listenStats by container.listenStatsStore.stats.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var sharing by remember { mutableStateOf(false) }
+    // 删除下载是不可逆操作,点删除图标先弹确认 —— 与「音阁 · 下载」同一颗框、同一句文案。
+    // 此前只有下载段有确认,详情页漏了(鸿蒙同样漏,本轮两端一起补)。
+    var pendingDelete by remember { mutableStateOf<Episode?>(null) }
     val state = vm.state
 
     // 下拉刷新:强制重新拉取最新单集。与发现页同款:加最短可见时长,让刷新
@@ -198,7 +203,7 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                                 onPlay = { PlayerController.playOrToggle(ep, s.episodes, listTag) },
                                 downloadStatus = downloadStates[ep.id],
                                 onDownload = { DownloadManager.download(ep) },
-                                onDeleteDownload = { DownloadManager.delete(ep.id) },
+                                onDeleteDownload = { pendingDelete = ep },
                                 played = played,
                                 onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
                                 onPlayNext = { PlayerController.playNext(ep) },
@@ -214,6 +219,23 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
             // 由上面的 clipToBounds 裁掉,不残留
             PullToRefreshContainer(state = pullState, modifier = Modifier.align(Alignment.TopCenter))
         }
+    }
+
+    pendingDelete?.let { ep ->
+        AlertDialog(
+            onDismissRequest = { pendingDelete = null },
+            title = { Text(stringResource(R.string.download_delete_title)) },
+            text = { Text(stringResource(R.string.download_delete_message, ep.title)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    DownloadManager.delete(ep.id)
+                    pendingDelete = null
+                }) { Text(stringResource(R.string.action_delete)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDelete = null }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
     }
 }
 

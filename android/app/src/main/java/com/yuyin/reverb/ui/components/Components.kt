@@ -728,6 +728,11 @@ private fun PlayCircle(isCurrent: Boolean, isPlaying: Boolean, onClick: () -> Un
  * 图标显示**模式本身**,所以没起播时读作「会用这个模式播」,起播后读作「正在这么播」;
  * 正在播的那一段点亮(primary),其余留灰 —— 各处共用一个全局模式,不点亮就看不出刚才是切的哪一段。
  *
+ * ⚠️ **唯一的例外是本次会话的第一下**:那一刻默认模式是「顺序」,图标是播放三角,
+ * 点下去起播之后仍是三角 —— 装机反馈「初始暂停,点击之后还是不变,就让人觉着怪怪的」。
+ * 所以起播前(且本次会话没点过任何一颗按钮时)画**暂停**,点过一次之后暂停不再出现,
+ * 直到下次启动 app。判据在 `PlayerController._listPlayUsed`。
+ *
  * 规则:**列表没内容就不摆这颗按钮** —— 空列表上的"播放"点了什么都不会发生,是个假按钮。
  */
 @Composable
@@ -737,7 +742,11 @@ fun ListPlayButton(tag: String, episodes: List<Episode>, modifier: Modifier = Mo
     // 不该把 pager 和整列列表拖下水(同 `GlassChipsRow` 的 progress 用 lambda 传的理由)。
     val playMode by PlayerController.playMode.collectAsStateWithLifecycle()
     val activeTag by PlayerController.activeListTag.collectAsStateWithLifecycle()
+    val listPlayUsed by PlayerController.listPlayUsed.collectAsStateWithLifecycle()
     val isLive = activeTag == tag
+    // 没起播 + 本次会话还没点过任何一颗列表按钮 ⇒ 暂停图标(见 PlayerController._listPlayUsed)。
+    // 其余情况一律画模式图标:点亮时读作「正在这么播」,没点亮读作「点它会用这个模式起播」。
+    val showPause = !isLive && !listPlayUsed
     IconButton(
         modifier = modifier,
         onClick = {
@@ -746,10 +755,11 @@ fun ListPlayButton(tag: String, episodes: List<Episode>, modifier: Modifier = Mo
         }
     ) {
         Icon(
-            imageVector = when (playMode) {
-                PlayMode.SEQUENTIAL -> Icons.Rounded.PlayArrow
-                PlayMode.REPEAT -> Icons.Rounded.Loop
-                PlayMode.SHUFFLE -> Icons.Rounded.Shuffle
+            imageVector = when {
+                showPause -> Icons.Rounded.Pause
+                playMode == PlayMode.REPEAT -> Icons.Rounded.Loop
+                playMode == PlayMode.SHUFFLE -> Icons.Rounded.Shuffle
+                else -> Icons.Rounded.PlayArrow
             },
             contentDescription = if (isLive) {
                 stringResource(

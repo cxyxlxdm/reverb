@@ -77,6 +77,17 @@ object PlayerController {
     private val _activeListTag = MutableStateFlow("")
     val activeListTag: StateFlow<String> = _activeListTag
 
+    // 本次会话里,列表播放按钮**是否已被点过一次**。只服务一个观感问题:按钮在没起播时画什么。
+    // 画"播放"三角的话首点之后是三角→三角,用户读作「没按上」(装机原话:「初始暂停,
+    // 点击之后还是不变,就让人觉着怪怪的」)。所以未起播时画**暂停**,起播后画模式图标,
+    // 而暂停此后不再出现 —— 它是「这一列还没开始过」的记号,不是"当前处于暂停"。
+    //
+    // 故意不持久化:下次启动回到"还没开始过"。判据与 _activeListTag 同源 —— 只有带 tag 的
+    // 起播才算(音阁各段与频道主页,含直接点段里的单集行);发现页/历史行/迷你条不传 tag,
+    // 它们不对应任何一颗按钮。改一处两端一起改(见 `Components.ets` 的 ListPlayButton)。
+    private val _listPlayUsed = MutableStateFlow(false)
+    val listPlayUsed: StateFlow<Boolean> = _listPlayUsed
+
     // 随机模式用的「打乱索引表」+ 指针。**不是每次抛骰子**:抛骰子会让上一集/下一集不对称
     // (点下一集之后再点上一集回不到刚才那集),而且同一集可能连着播两次。
     // 表在起播或切进随机模式时生成一次,正在播的这一集钉在第一位。
@@ -342,6 +353,7 @@ object PlayerController {
         queueIndex = startIndex.coerceIn(0, episodes.lastIndex)
         if (_playMode.value == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
         _activeListTag.value = tag
+        if (tag.isNotEmpty()) _listPlayUsed.value = true
         log.i(TAG, "playQueue count=${episodes.size} index=$queueIndex tag='$tag' mode=${_playMode.value}")
         updateNavFlags()
         playEpisode(episodes[queueIndex], isRadio = false)
