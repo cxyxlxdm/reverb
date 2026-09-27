@@ -6,6 +6,8 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
@@ -187,6 +190,23 @@ private fun MainShell(rootNav: NavHostController) {
             NavHost(
                 navController = tabNav,
                 startDestination = "discover",
+                // **换 tab 不做转场动画。** 缺省值是在 2.7.7 的字节码里核实过的
+                // (NavHostKt$NavHost$3/$4 → sipush 700 + fadeIn/fadeOut):
+                // `fadeIn(tween(700))` / `fadeOut(tween(700))` —— 一次点击要把两整页
+                // (发现是 19 个分类 + 封面宫格,音阁是订阅列表)同时画 700 ms,
+                // 而且新页在这 700 ms 里一直是**半透明**的,叠在旧页上。
+                // 四个方向都要关掉:onSelect 用 `popUpTo(start){saveState}`,所以
+                // 「音阁 → 发现」是一次 **pop**,走的是 popEnter/popExit 那一对 ——
+                // 只关 enter/exit 的话,一半方向的淡入淡出还在。
+                // 底部栏那颗透镜的逐帧动画留着,它就是"我切了"的反馈;内容要的是立刻。
+                // ⚠️ 「改完真的不卡了吗」这条**没法用帧数证明**:两臂都量到满帧
+                // (点后 500ms 窗口 44~48 帧,挪到 450~850ms 窗口还有 42 帧,janky 都是 1)
+                // —— 那段时间里一直有东西在逐帧画,而底部玻璃那套弹簧+取样本身就够把窗口
+                // 占满,淡入淡出加不加在帧计数上分不出来。量具为什么一律失效,见 H108。
+                enterTransition = { EnterTransition.None },
+                exitTransition = { ExitTransition.None },
+                popEnterTransition = { EnterTransition.None },
+                popExitTransition = { ExitTransition.None },
                 modifier = Modifier.fillMaxSize()
             ) {
                 composable("discover") {
@@ -209,7 +229,15 @@ private fun MainShell(rootNav: NavHostController) {
                 // 那个数是"栏底到小白条 = 小白条到屏底"这条规则在那台机上的解;
                 // 本机量出来整个 inset 已经比目标紧一点(5.4dp vs 7.1dp),照抄会把栏底压到小白条上沿。
                 // 移植时重解规则、别搬常数 —— 见 H104。
+                //
+                // ⚠️ 但"两边等距"这条规则本身被装机否了:等距只保证不偏心,
+                // 不保证看得见、够得着 —— 装机反馈"贴得太近"。所以在 inset 之外再抬 6.dp,
+                // 抬完复量:栏底→小白条 21 px → **40 px**,小白条→屏底 21 px 不变。
+                // (同一处本机还量出过 16 px 那一组,那是"到小白条**上沿**"的口径,
+                //  与"到可见亮边"差几个像素 —— 绝对值别当规范,要复现自己重扫。)
+                // 鸿蒙那台要一起抬得重解它的 0.62,不是把这个 6dp 抄过去(这轮没动鸿蒙)。
                 .navigationBarsPadding()
+                .padding(bottom = 6.dp)
                 .onSizeChanged { overlayPx = it.height },
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {

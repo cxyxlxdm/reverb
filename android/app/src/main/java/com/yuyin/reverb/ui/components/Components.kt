@@ -184,20 +184,18 @@ fun GlassChipsRow(
     var boxOriginX by remember { mutableStateOf(0f) }
 
     Box(modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        // 条宽**由内容撑开**,上限就是父容器给的可用宽 —— 不占满整行,右侧不留空白
-        // (装机反馈:不切到「订阅 / 历史」时条的右半截是空的,不协调)。
+        // 条**恒为通栏**(占满父容器给的可用宽)。中间一度改成"按内容收口"(见 H106),
+        // 装机反馈又改回来了:通栏是**稳定的一条**,收口之后每切一个分段条的右缘就跳一次
+        // (订阅段有按钮、收藏段没有 ⇒ 宽 1213 / 1070 两态),读起来像条在抖。
+        // 收口本来是治"右半截空白"的,而空白的正解是**把该段真正需要的动作放到右端**
+        // (见 LibraryScreen 的 endAction:每段都有按钮之后,通栏不再有死区)。
         //
-        // 为什么不走「先量内容宽、再 setState 改 width」那条路(鸿蒙 `ChipsRow.resizeBar()`
-        // 就是这么做的,两端同构在这里刻意不同构):
-        //   ① 量测要等两次布局,实测每次进页有 ≈50ms(6 帧)是通栏、然后当场缩一下;
-        //   ② 条一缩,钉在**父容器**右端的 endAction 就掉到条外面去了 —— 它得跟着条走。
-        // 交给布局自己算:内层 Row 不 fillMaxWidth ⇒ 条宽 = chips 段 + 按钮段;
-        // chips 段带 `weight(1f, fill = false)` ⇒ 上界是「可用宽 - 按钮宽」,
-        // 装得下就全给它、装不下才横滚。零状态、零闪动,按钮天然在条内右端。
-        // 鸿蒙那两处量测等真机对比过观感再决定要不要一起改(见 H106)。
+        // 因此这里也不需要"量内容再 setState 改宽"那条路 —— 那是 H106 记录的首帧闪通栏
+        // 的成因,现在连需求都没了。
         Box(
             Modifier
                 .onGloballyPositioned { boxOriginX = it.positionInWindow().x }
+                .fillMaxWidth()
                 .height(44.dp)
                 // 阴影外形必须用真胶囊(percent=50),不能用与外观同款的 21dp:
                 // 半径小于半高时,RenderNode 高程阴影的上下两条直边投影在形状中央
@@ -212,7 +210,8 @@ fun GlassChipsRow(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Row(
                     Modifier
-                        .weight(1f, fill = false)
+                        // 通栏 ⇒ chips 段吃掉「条宽 − 按钮段」,装得下就不滚,装不下才横滚
+                        .weight(1f)
                         .horizontalScroll(scroll)
                         .padding(horizontal = 8.dp, vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically
