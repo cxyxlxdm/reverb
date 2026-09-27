@@ -485,12 +485,15 @@ export struct ChipsRow {
   sync: ChipsSwipeSync = new ChipsSwipeSync();
   onSelect: (i: number) => void = () => {};
   /**
-   * 钉在**条内右端**、不随 chips 横滚的动作位(如「清空」「宫格切换」)。
+   * 钉在**条内右端**、不随 chips 横滚的动作位(如「清空」「宫格切换」「播这一整段」)。
    *
-   * 由条自己按 `Alignment.End`(右 + 垂直居中)摆 ⇒ 天然垂直居中、且一定落在条的右圆顶之内。
+   * 由条自己摆在 chips 段**后面**(chips 段 `layoutWeight(1)` 只吃剩下的宽)
+   * ⇒ 天然垂直居中、天然占位,一定落在条的右圆顶之内。
    * 之前这些按钮是页面在条**外面**另起一个 Stack 浮上去的:右缘按屏幕留白对齐
    * (比条的右缘还外/内几 vp,和条的圆顶对不上),又各自带一块 `backgroundEffect`
    * —— 玻璃条上再糊一颗玻璃,装机判为「太丑」(见 H104 同轮的装机反馈)。
+   * ⚠️ 也不要退回条内的 `Alignment.End` **覆盖层**:不占位 ⇒ 五段标签铺满时压在最后一颗
+   * chip 上(装机实测过,见下面「条**恒为通栏**」那段)。
    * **按钮不要再自带背景**,底就是这条玻璃。
    *
    * Android `GlassChipsRow` 有同名同语义的 `endAction` 槽,改一处两端一起改。
@@ -510,36 +513,23 @@ export struct ChipsRow {
   @State capW: number = 0;
 
   /**
-   * 条宽收口的三个量:玻璃只包住「chips + 右端动作位」,不再通栏。
+   * 条**恒为通栏**,右端动作位靠布局占位而不是浮在 chips 之上。
    *
-   * 为什么原先是通栏:最早这条栏要盖住 19 个分类、必须占满一行才滚得动;后来音阁
-   * 也用它(5 个短标签),通栏就在右端留下约一个按钮宽的空白玻璃 —— 用户反馈
-   * 「不切到订阅/历史时右侧一大块空白,不协调」。**空白正好等于那颗按钮**,
-   * 因为当初的通栏宽度就是按「标签 + 按钮」量出来的。
+   * 这里走过一条弯路:先前是「量出 chips 宽 + 动作位宽,再把条收口到刚好包住内容」
+   * (旧的 `@State barW` + 三处 onAreaChange 回填)。装机之后两端分头否掉了它:
+   *   · **收口本身要的是"右半截空白",而空白的正解是给那一段真的放一个动作** ——
+   *     现在每个分段右端都有按钮(订阅=宫格/列表切换、历史=清空、最新/收藏/下载=播放这一整段),
+   *     死区不存在了,收口就没有了需求方;
+   *   · 每切一段条的右缘就跳一次(有按钮/没按钮两态宽度不同),读起来像条在抖;
+   *   · 量了再 setState 必然先出一帧通栏再缩(Android 侧实测 ≈50 ms,H106 记的就是这个)。
+   * Android 同名的 `GlassChipsRow` 已按"通栏 + chips 段 `weight(1f)`"定稿(见 H106 之后的
+   * 那轮回退),这里同构过来:**chips 段 `layoutWeight(1)` 吃掉「条宽 − 按钮段」**,
+   * 装得下就不滚、装不下才横滚。
    *
-   * `barW = 0` 表示还没量全,按通栏画 —— 别在首帧画出一条 0 宽的栏。
-   *
-   * ⚠️ Android 同名组件**没有走这条路**:量了再 setState 必然先出一帧通栏再缩
-   * (实测 ≈50 ms),它改成让约束自己算(`weight(1f, fill = false)`,见 H106)。
-   * 这里先保持原样,因为鸿蒙包这一轮装不上、无法真机确认它到底闪不闪;
-   * 下次能装机时先复现,再决定要不要同构过去。
+   * ⚠️ **不要把按钮改回 Stack 的 `Alignment.End` 覆盖层**:那样它不占位,
+   * 五段标签(订阅/最新/收藏/下载/历史)在 1216px 的机上正好铺满整条,
+   * 按钮就压在最后一颗 chip 的胶囊上(装机实测:按钮 x 1059..1125 与「历史」1081 相交)。
    */
-  @State barW: number = 0;
-  /// chips 内容实测宽(含内层 Row 左右各 8 的内边距)
-  private chipsW: number = 0;
-  /// 右端动作位实测宽(该分段没有动作位时为 0)
-  @State actionW: number = 0;
-  /// 能画条的带宽 = 外层 Row 实测宽 - 左右各 [CHIPS_SIDE_PAD]
-  private hostW: number = 0;
-
-  /// 三个量任意一个变了都重算一次条宽。量不全时回落到通栏,不留 0 宽。
-  private resizeBar(): void {
-    if (this.chipsW <= 0 || this.hostW <= 0) {
-      this.barW = 0;
-      return;
-    }
-    this.barW = Math.min(this.hostW, this.chipsW + this.actionW);
-  }
 
   aboutToAppear(): void {
     // 行先于胶囊(子组件)注册收尾回调:springTo 的钉位依赖 active 仍为 true
@@ -617,10 +607,10 @@ export struct ChipsRow {
      * margin 再往外扩,右缘会溢出(与 searchBar 同款坑,见 DiscoverPage 注释)。
      */
     Row() {
-      // 条 + 右端动作位的宿主:动作位画在玻璃**之上**、由 Stack 的 `Alignment.End` 摆到条内右端并垂直居中。
-      // 放在这层而不是页面那层,是为了让它跟着条的左右 12vp 留白走 —— 浮在条外面时
-      // 它按屏幕留白(pagePadding 16)对齐,和条的右圆顶永远差几 vp。
-      Stack({ alignContent: Alignment.End }) {
+      // 条本体(玻璃画在这一层)。右端动作位是它的**同级**,不是覆盖层 —— 理由见上面
+      // 「条**恒为通栏**」那段。
+      // 换成通栏 + 占位之后,条不再需要"先量后缩",也就不需要中间那层宿主。
+      Row() {
         Scroll(this.scroller) {
           Stack({ alignContent: Alignment.Start }) {
             /**
@@ -660,53 +650,45 @@ export struct ChipsRow {
               }, (label: string, idx: number) => `${idx}-${label}`)
             }
             .padding({ left: 8, right: 8 })
-            .onAreaChange((_o: Area, n: Area) => {
-              // 内容宽回填后重算条宽。这里顺带还负责 revealSelected —— 见下方 onSelectedChange
-              // 的注释:面积变化回调只在布局真的变了时来,选中项变化不能只靠它兜底。
-              this.chipsW = Number(n.width);
-              this.resizeBar();
+            .onAreaChange((_o: Area, _n: Area) => {
+              // 只负责把选中项滚进视野 —— 见下方 onSelectedChange 的注释:面积变化回调只在
+              // 布局真的变了时来,选中项变化不能只靠它兜底。(以前这里还回填 chipsW 重算条宽,
+              // 条改成恒通栏之后那笔账没有了。)
               this.revealSelected();
             })
           }
         }
         .scrollable(ScrollDirection.Horizontal)
         .scrollBar(BarState.Off)
-        .width('100%')
+        // **占位的是 chips 段**:条宽减去按钮段就是它能用的宽,装得下就不滚、装不下才横滚
+        // (Android 侧同名组件用的是 `weight(1f)`,同语义)。
+        .layoutWeight(1)
         .height(CHIPS_STRIP_H)
-        .borderRadius(21)
-        // 玻璃本体:参数与 GlassTabBar 一致(见彼处注释),两端观感统一
-        .backgroundEffect({
-          radius: 40,
-          saturation: 1.3,
-          brightness: 1.0,
-          color: withAlpha(this.scheme.surface, 0.6)
-        })
-        .border({ width: 0.8, color: withAlpha(this.scheme.outline, 0.45) })
         .align(Alignment.Start)
 
-        // 右端动作位压在玻璃**之上**:底就是这条玻璃,按钮自己不要再带背景。
-        // 包一层 Row 只为**测它的宽**:条要收口到「chips + 动作位」,不量就不知道该留多宽。
-        // 某个分段没有动作位时这层宽为 0,条就正好收成 chips 那么长。
+        // 右端动作位:底就是这条玻璃,按钮自己不要再带背景。
+        // 垂直居中由 Row 的默认对齐(居中)负责,不要手工算 top 偏移 —— 那颗按钮曾经浮在条
+        // **外面**按 pagePadding 对齐,与条的右圆顶差几 vp,一端改了另一端就漂(H96 同类)。
         Row() {
           this.endAction()
         }
-        .onAreaChange((_o: Area, n: Area) => {
-          this.actionW = Number(n.width);
-          this.resizeBar();
-        })
+        .height(CHIPS_STRIP_H)
       }
-      // 条宽:量全之前按通栏画,量全之后只包住内容(见 [barW] 那段为什么)
-      .width(this.barW > 0 ? this.barW : '100%')
+      .width('100%')
       .height(CHIPS_STRIP_H)
+      .borderRadius(21)
+      // 玻璃本体:参数与 GlassTabBar 一致(见彼处注释),两端观感统一
+      .backgroundEffect({
+        radius: 40,
+        saturation: 1.3,
+        brightness: 1.0,
+        color: withAlpha(this.scheme.surface, 0.6)
+      })
+      .border({ width: 0.8, color: withAlpha(this.scheme.outline, 0.45) })
     }
     .width('100%')
     .height(CHIPS_STRIP_H)
     .padding({ left: CHIPS_SIDE_PAD, right: CHIPS_SIDE_PAD })
-    .onAreaChange((_o: Area, n: Area) => {
-      // 外层 Row 的实测宽**含自己那层 padding**,所以减掉左右才是要对比的可用宽
-      this.hostW = Number(n.width) - CHIPS_SIDE_PAD * 2;
-      this.resizeBar();
-    })
   }
 }
 
