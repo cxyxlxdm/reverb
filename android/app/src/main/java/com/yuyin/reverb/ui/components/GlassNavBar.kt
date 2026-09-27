@@ -295,9 +295,25 @@ fun GlassNavBar(
      * 位置源,按下时透镜从灰底**原地**长大,不会先跳一下(锚点选择见 [pillXFor])。
      */
     val pillX = remember { Animatable(0f) }
+    /**
+     * 只当两个用途:① 拖拽期间挡住 [LaunchedEffect] 的吸附;② 决定 `interacting` 归谁熄灭。
+     *
+     * ⚠️ **不再是绘制路径的输入**。上一版 `pillPx()` 写成 `if (dragging) dragStartX + dragAccum
+     * else pillX.value`,于是拖拽期间 `pillX` 一直停在按下时的旧槽位;而 [settle] 第一件事就是
+     * `dragging = false`,把绘制源瞬间切回那个旧值 —— 松手那一帧药丸**先跳回出发的那个 tab**,
+     * 下一帧才被 `snapTo(拖拽终点)` + 弹簧拉回去。用户看到的"松手又自动滑回去"就是这一帧
+     * (H105)。鸿蒙那一版没有这个坑,因为它每帧 `pillTo(x)` 直接把位置写进同一个状态量。
+     */
     var dragging by remember { mutableStateOf(false) }
-    var dragStartX by remember { mutableFloatStateOf(0f) }
-    var dragAccum by remember { mutableFloatStateOf(0f) }
+    /**
+     * 拖拽期间**手指命令**的静止底左缘 x,只当作下一帧增量的基准用。
+     *
+     * ⚠️ 绘制路径**不许读它** —— 一读就又变成"两个位置源",松手切回弹簧值就会回跳(H105,
+     * 上一版的 `dragAccum` 正是栽在这条上)。它之所以还要存在:`onHorizontalDrag` 在
+     * Compose 1.6.8 里不是 suspend,写进弹簧要经 `scope.launch`,万一晚一帧,以弹簧值为基准
+     * 会吞掉那一帧的位移(拖动手感变半速)。用 `FloatArray` 而不是 state:它不该触发重组。
+     */
+    val dragCmdX = remember { FloatArray(1) }
     /** 按下预选的 tab;-1 = 无 */
     var previewIdx by remember { mutableIntStateOf(-1) }
     /** 拖拽/按下期间按接近度高亮的项;-1 = 跟 selected 走 */
@@ -306,6 +322,13 @@ fun GlassNavBar(
     var interacting by remember { mutableStateOf(false) }
     var placed by remember { mutableStateOf(false) }
     var previewJob by remember { mutableStateOf<Job?>(null) }
+    /**
+     * 预览弹簧**当前正飞向**哪一项;`previewIdx` 不行,它在 onPress 收尾时被同步清成 -1,
+     * 而 `selected` 要等下一次重组才变 —— 那时 [LaunchedEffect] 已经读不到它了。
+     *
+     * 用 `IntArray` 而不是 state:只有 sync 那一处读,写它不该触发重组。
+     */
+    val previewTarget = remember { IntArray(1) { -1 } }
 
     fun halfW(): Float = barWpx / 2f
 
@@ -325,8 +348,12 @@ fun GlassNavBar(
     /** 药丸停在第 idx 项时**静止底左缘**的 x(锚在 [REST_W] 而不是透镜宽,理由见 [pillX])。 */
     fun pillXFor(idx: Int): Float = slotCx(idx) - restWpx / 2f
 
-    /// 药丸当前静止底左缘 x:拖拽期 1:1 跟手,平时读弹簧值。只在绘制/布局 lambda 里调用。
-    fun pillPx(): Float = if (dragging) dragStartX + dragAccum else pillX.value
+    /**
+     * 药丸当前静止底左缘 x。**唯一来源是 [pillX]**:拖拽帧由 `snapTo` 逐帧写进来,其余时候由
+     * 弹簧写进来 —— 两条路径写同一个量,所以任何时刻切换都不会出现"回跳"(见 [dragging])。
+     * 只在绘制/布局 lambda 里调用。
+     */
+    fun pillPx(): Float = pillX.value
 
     /** 静止底中心 = 槽位判定用的那个点(见 [settle] 里的 H94 说明) */
     fun pillCx(): Float = pillPx() + restWpx / 2f
@@ -347,7 +374,16 @@ fun GlassNavBar(
             pillX.snapTo(pillXFor(selected))
             placed = true
         } else if (!dragging) {
-            pillX.animateTo(pillXFor(selected), settleSpec)
+            // **预览弹簧还在飞向这一项就别重启它。** `animateTo` 经 MutatorMutex 掐掉上一段,
+            // 新那段以初速 0 重新起步:真机实测药丸已爬到 19px/帧时被打断,重启后单帧跳
+            // +57px、过冲到 713(静止位 690)再花 300ms 爬回来 —— 用户报的"点击切换发涩"
+            // 主要是这一条,不是掉帧。见 H105。
+            val flying = previewJob
+            if (previewTarget[0] != selected || flying?.isActive != true) {
+                previewTarget[0] = -1
+                pillX.animateTo(pillXFor(selected), settleSpec)
+            }
+            // 否则让按下预览那一段自己跑完,这里不接手
         }
     }
 
@@ -374,7 +410,13 @@ fun GlassNavBar(
 
     val isDark = isSystemInDarkTheme()
 
-    /// 松手 / 被系统取消:按药丸当前位置吸附最近项。commit=false(取消)只回弹。
+    /**
+     * 松手 / 被系统取消:按药丸当前位置吸附最近项。commit=false(取消)只回弹。
+     *
+     * 这里**不再写位置**:药丸此刻已经停在手指放开的那个点上(拖拽帧每帧 `snapTo` 写进
+     * [pillX] 的)。上一版在这里补一句 `snapTo(dragStartX + dragAccum)`,正是为了纠正
+     * `dragging=false` 那一瞬间的回跳 —— 补在原地方,回跳的那一帧照样已经画出去了(H105)。
+     */
     fun settle(commit: Boolean) {
         if (!dragging) return
         dragging = false
@@ -389,14 +431,11 @@ fun GlassNavBar(
         // 音阁→发现 31% 就判过半,两个方向松手阈值不对称(H94:向右拖过半
         // 松手不切、向左拖过半却切)。中心过中线 = 恰好行程过半,两向对称。
         val target = tabAt(pillCx())
-        scope.launch {
-            pillX.snapTo(dragStartX + dragAccum)
-            if (commit && target != currentSelected) {
-                // 药丸不在这里动:selected 一变,LaunchedEffect 会从当前绘制位弹簧过去
-                currentOnSelect(target)
-            } else {
-                pillX.animateTo(pillXFor(currentSelected), settleSpec)
-            }
+        if (commit && target != currentSelected) {
+            // 药丸不在这里动:selected 一变,LaunchedEffect 会从当前绘制位弹簧过去
+            currentOnSelect(target)
+        } else {
+            scope.launch { pillX.animateTo(pillXFor(currentSelected), settleSpec) }
         }
     }
 
@@ -437,16 +476,15 @@ fun GlassNavBar(
                     detectHorizontalDragGestures(
                         onDragStart = { _ ->
                             if (halfW() > 0f) {
-                                // 从药丸当前位置继续拖(按下预选可能已挪动它),别回到选中位;
-                                // 预览动画若还在跑,先掐掉,免得跟 snapTo 抢同一个 Animatable
+                                // 预览动画若还在跑,先掐掉:下面的 snapTo 与它抢同一个 Animatable
                                 previewJob?.cancel()
                                 previewJob = null
                                 dragging = true
                                 // 拖拽期间途经 tab 也要有按压态(鸿蒙 onTouch Down/Up 的语义):
                                 // interacting 由这里点亮、settle 里熄灭,tap 路径取消时不再代管
                                 interacting = true
-                                dragAccum = 0f
-                                dragStartX = pillX.value
+                                // 从药丸**当前**位置起步(按下预选可能已把它挪走一截)
+                                dragCmdX[0] = pillX.value
                             }
                         },
                         onDragEnd = { settle(commit = true) },
@@ -454,12 +492,23 @@ fun GlassNavBar(
                         onHorizontalDrag = { change, amount ->
                             if (dragging) {
                                 change.consume()
-                                dragAccum += amount
                                 val lo = pillXFor(0)
                                 val hi = pillXFor(tabs.size - 1)
+                                // 1:1 跟手 = **每帧把位置写进弹簧本身**,而不是记在旁边。
+                                // 同鸿蒙 `pillTo()`。上一版记在 dragAccum 里,松手切回弹簧值
+                                // 就出现回跳那一帧(见 [dragging] / H105)。
+                                //
+                                // ⚠️ 增量累在 `dragCmdX` 上、而不是读 `pillX.value` 再加:
+                                // 本回调在 Compose 1.6.8 里不是 suspend,`snapTo` 只能靠
+                                // `scope.launch`(Main.immediate)递进去。若那一递晚于下一帧,
+                                // 从 pillX.value 取基准就会**吞掉一帧位移**(手感变成半速)。
+                                // 以命令值做基准,弹簧只负责被绘制,慢半拍也只是慢半拍,不丢量。
+                                //
                                 // 这里**只改位置**:透镜宽度不读拖动量(见 lensScaleOf),
                                 // 所以滑动中它保持按住时那一档,不再越拖越大。
-                                dragAccum = dragAccum.coerceIn(lo - dragStartX, hi - dragStartX)
+                                dragCmdX[0] = (dragCmdX[0] + amount).coerceIn(lo, hi)
+                                val cmd = dragCmdX[0]
+                                scope.launch { pillX.snapTo(cmd) }
                                 // 用药丸中心查槽(理由见 settle),途经 tab 的高亮才与
                                 // 松手提交的判定一致
                                 nearIdx = tabAt(pillCx())
@@ -477,6 +526,7 @@ fun GlassNavBar(
                                 // 按下即预选:药丸先滑到手指所在的 tab,页面等松手再切
                                 previewIdx = idx
                                 nearIdx = idx
+                                previewTarget[0] = idx
                                 previewJob = scope.launch {
                                     pillX.animateTo(pillXFor(idx), settleSpec)
                                 }
