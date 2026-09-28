@@ -469,6 +469,16 @@ export const CHIPS_SIDE_PAD = 12;
 export const CHIPS_RESERVE_H = CHIPS_STRIP_H + 8;
 
 /**
+ * 分段条右端「还有内容」渐隐带的宽度。**只在内容真的溢出、且还没滚到右端时出现**
+ * (判据见 `ChipsRow.refreshOverflow`),不是常驻装饰 —— 装得下三段标签的订阅条上
+ * 它根本不存在,常驻会让条看起来永远糊了一角。
+ *
+ * 36 的来由:chip 右内边距 14 + 一颗被切的 chip 露出的那半截圆角。再窄就还是
+ * "硬切"(读不出渐隐),再宽就开始糊到 chip 的可读文字上(chip 文字宽 ≈ 字数×14)。
+ */
+export const CHIPS_EDGE_FADE_W = 36;
+
+/**
  * 顶部分类条与 Swiper 的手势联动总线:页面在 onGestureSwipe 每帧灌入进度,
  * 胶囊按帧插值绘制(1:1 跟手,与底部栏同手感);松手时行/胶囊各自收尾。
  * 全程不走状态观察 —— 每帧只经回调重建胶囊这一个组件(H64 最小重建面)。
@@ -549,6 +559,34 @@ export struct ChipsRow {
   /** 透明胶囊当前位置与宽度;首帧没量到选中 chip 之前先藏着 */
   @State capX: number = 0;
   @State capW: number = 0;
+
+  /// chips 视口宽与内容自然宽(两个都由 onAreaChange 量,单位 vp)。
+  /// 溢出判定要用**布局框**,不是截屏上看到的尺寸 —— 见 H116:`dumpLayout` 的 bounds
+  /// 是裁剪后的可见框,拿它读"被压缩"会得出完全错误的结论。
+  private viewW: number = 0;
+  private chipsW: number = 0;
+  /** 右端还有没滚出来的 chip:画那条渐隐带的唯一开关 */
+  @State hasMoreRight: boolean = false;
+
+  /**
+   * 「右端还有内容」= **内容比视口宽** 且 **还没滚到右端**。
+   *
+   * 两个条件都要,因为这两个量各自的失效方向不一样,而且互补短板:
+   *   · 只看 `isAtEnd()`:装得下的条(订阅三段)会不会被报告成"不在末端",
+   *     从而永久挂上一条渐隐带?这一步我没法在本机证,所以不敢单押;
+   *   · 只看 `chipsW > viewW`:滚到底之后内容仍然比视口宽,那就该一直糊着右角。
+   * 真出现误判,方向也是**少画而不是多画**:量不到内容宽(横向 Scroll 首帧的测量
+   * 口径我改过一次没改对,见 H116 回退的那版)时读成"没溢出",条身干净,
+   * 只是少了一个提示 —— 比在装得下的条上留一块永久雾面好。
+   *
+   * 只在值**翻转**时才 setState:滚动帧里每个事件都会进来读数,但一次横滑最多翻两次,
+   * 不会把整条 ChipsRow 拖进逐帧重建(同 H64 的最小重建面)。
+   */
+  private refreshOverflow(): void {
+    if (this.viewW <= 0 || this.chipsW <= 0) return;
+    const more = this.chipsW > this.viewW + 2 && !this.scroller.isAtEnd();
+    if (more !== this.hasMoreRight) this.hasMoreRight = more;
+  }
 
   /**
    * 条**恒为通栏**,右端动作位靠布局占位而不是浮在 chips 之上。
@@ -647,62 +685,108 @@ export struct ChipsRow {
     Row() {
       // 条本体(玻璃画在这一层)。右端动作位是它的**同级**,不是覆盖层 —— 理由见上面
       // 「条**恒为通栏**」那段。
-      // 换成通栏 + 占位之后,条不再需要"先量后缩",也就不需要中间那层宿主。
+      // 换成通栏 + 占位之后,条不再需要"先量后缩";下面那层 Stack 与这件事无关,
+      // 它只为把右端那条渐隐带钉在 **chips 视口**的右缘而存在。
       Row() {
-        Scroll(this.scroller) {
-          Stack({ alignContent: Alignment.Start }) {
-            /**
-             * 透明胶囊(与 GlassTabBar 同款语言):罩住选中 chip 的半透明衬底 + 发丝描边。
-             * 独立成子组件:Swiper 手势期间每帧只重建这一颗胶囊,不牵动整条 ChipsRow。
-             */
-            ChipsCapsule({
-              scheme: this.scheme,
-              capX: this.capX,
-              capW: this.capW,
-              chipX: this.chipX,
-              chipW: this.chipW,
-              sync: this.sync
-            })
+        // chips 段的宿主。为什么多这一层 Stack:右端那条渐隐带要贴在 **chips 视口**的右缘,
+        // 而不是玻璃条的右缘 —— 有按钮的分段(订阅/历史/最新…)两者差着一个按钮段宽。
+        // 占位仍由这层的 `layoutWeight(1)` 负责,Scroll 在里面按 100% 铺满,语义不变。
+        Stack({ alignContent: Alignment.TopEnd }) {
+          Scroll(this.scroller) {
+            Stack({ alignContent: Alignment.Start }) {
+              /**
+               * 透明胶囊(与 GlassTabBar 同款语言):罩住选中 chip 的半透明衬底 + 发丝描边。
+               * 独立成子组件:Swiper 手势期间每帧只重建这一颗胶囊,不牵动整条 ChipsRow。
+               */
+              ChipsCapsule({
+                scheme: this.scheme,
+                capX: this.capX,
+                capW: this.capW,
+                chipX: this.chipX,
+                chipW: this.chipW,
+                sync: this.sync
+              })
 
-            Row({ space: 8 }) {
-              ForEach(this.labels, (label: string, idx: number) => {
-                Text(label)
-                  // chip 文字取 labelLarge(14),与 Android 的 Material FilterChip 同档
-                  .fontSize(TypeScale.labelLarge * this.fontScale)
-                  // 选中态的底色交给胶囊,chip 自己只换文字色;未选中保持灰底
-                  .fontColor(this.selected === idx ? this.scheme.primary : this.scheme.onSurfaceVariant)
-                  .backgroundColor(this.selected === idx ? Color.Transparent : withAlpha(this.scheme.onSurfaceVariant, 0.10))
-                  .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-                  .borderRadius(16)
-                  // 高亮做淡入淡出,不要硬切。原先 backgroundColor/fontColor 是直接按三元赋值,
-                  // 状态一变颜色瞬间跳过去,配上页面的滑动动画就显得生硬。
-                  .animation({ duration: 200, curve: Curve.EaseOut })
-                  .onClick(() => this.onSelect(idx))
-                  .onAreaChange((_o: Area, n: Area) => {
-                    // Area.position 是相对父组件的局部坐标(d.ts 标注 "local position"):
-                    // 内层 Row 在 Stack 原点,胶囊与 chip 共用同一坐标系,x 直接当 translate 用
-                    this.chipX[idx] = Number(n.position.x);
-                    this.chipW[idx] = Number(n.width);
-                    if (idx === this.selected) this.springTo(idx);
-                  })
-              }, (label: string, idx: number) => `${idx}-${label}`)
+              Row({ space: 8 }) {
+                ForEach(this.labels, (label: string, idx: number) => {
+                  Text(label)
+                    // chip 文字取 labelLarge(14),与 Android 的 Material FilterChip 同档
+                    .fontSize(TypeScale.labelLarge * this.fontScale)
+                    // 选中态的底色交给胶囊,chip 自己只换文字色;未选中保持灰底
+                    .fontColor(this.selected === idx ? this.scheme.primary : this.scheme.onSurfaceVariant)
+                    .backgroundColor(this.selected === idx ? Color.Transparent : withAlpha(this.scheme.onSurfaceVariant, 0.10))
+                    .padding({ left: 14, right: 14, top: 7, bottom: 7 })
+                    .borderRadius(16)
+                    // 高亮做淡入淡出,不要硬切。原先 backgroundColor/fontColor 是直接按三元赋值,
+                    // 状态一变颜色瞬间跳过去,配上页面的滑动动画就显得生硬。
+                    .animation({ duration: 200, curve: Curve.EaseOut })
+                    .onClick(() => this.onSelect(idx))
+                    .onAreaChange((_o: Area, n: Area) => {
+                      // Area.position 是相对父组件的局部坐标(d.ts 标注 "local position"):
+                      // 内层 Row 在 Stack 原点,胶囊与 chip 共用同一坐标系,x 直接当 translate 用
+                      this.chipX[idx] = Number(n.position.x);
+                      this.chipW[idx] = Number(n.width);
+                      if (idx === this.selected) this.springTo(idx);
+                    })
+                }, (label: string, idx: number) => `${idx}-${label}`)
+              }
+              .padding({ left: 8, right: 8 })
+              .onAreaChange((_o: Area, n: Area) => {
+                // 内容自然宽:这一层在 Scroll 里,主轴不受视口约束,量到的是"全部 chip 排开"的宽
+                this.chipsW = Number(n.width);
+                // 只负责把选中项滚进视野 —— 见下方 onSelectedChange 的注释:面积变化回调只在
+                // 布局真的变了时来,选中项变化不能只靠它兜底。(以前这里还回填 chipsW 重算条宽,
+                // 条改成恒通栏之后那笔账没有了;现在回填它是给右端渐隐带判溢出用的。)
+                this.revealSelected();
+                this.refreshOverflow();
+              })
             }
-            .padding({ left: 8, right: 8 })
-            .onAreaChange((_o: Area, _n: Area) => {
-              // 只负责把选中项滚进视野 —— 见下方 onSelectedChange 的注释:面积变化回调只在
-              // 布局真的变了时来,选中项变化不能只靠它兜底。(以前这里还回填 chipsW 重算条宽,
-              // 条改成恒通栏之后那笔账没有了。)
-              this.revealSelected();
-            })
+          }
+          .scrollable(ScrollDirection.Horizontal)
+          .scrollBar(BarState.Off)
+          // 视口铺满宿主(宿主的宽才是"条宽 − 按钮段",见上面那层注释)
+          .width('100%')
+          .height(CHIPS_STRIP_H)
+          .align(Alignment.Start)
+          .onAreaChange((_o: Area, n: Area) => {
+            // 视口宽。渐变带要不要出现比的是"内容宽 vs 这一层宽",两者都得量到才敢下结论
+            this.viewW = Number(n.width);
+            this.refreshOverflow();
+          })
+          .onDidScroll((_x: number, _y: number, _s: ScrollState) => {
+            // 滚到/滚离右端都从这里翻 `hasMoreRight`;该回调只在真有滚动时来,静止不耗
+            this.refreshOverflow();
+          })
+
+          /**
+           * 「右端还有内容」的渐隐带 —— 装机反馈是「历史这颗 chip 被右端按钮盖住了一半」,
+           * 而它其实是被视口**裁掉**了(H116:条能横滑,滑过去就完整)。裁掉和盖住在画面上
+           * 一模一样,区别只有没有人告诉你"这边还能滑",所以修法是补这个提示,不是改布局。
+           * 颜色收口到玻璃条自己的染色(surface α0.6),渐隐到尽头就是"一条干净的条";
+           * 若收到不透明色,条身会凭空亮一块。
+           * 外缘带圆角:音阁那一段没有按钮(chips 段就是整条),不圆就会从条的右圆顶
+           * 外头**方块角**漏出去;有按钮的那几段它的右缘落在按钮段之前,圆角看不出来。
+           * `HitTestMode.None`:这一层只是画,手指按在它上面仍要能拖动下面的 chips。
+           */
+          if (this.hasMoreRight) {
+            Row()
+              .width(CHIPS_EDGE_FADE_W)
+              .height(CHIPS_STRIP_H)
+              .borderRadius({ topRight: 21, bottomRight: 21 })
+              .linearGradient({
+                angle: 90,
+                colors: [[withAlpha(this.scheme.surface, 0.0), 0.0],
+                         [withAlpha(this.scheme.surface, 0.28), 0.45],
+                         [withAlpha(this.scheme.surface, 0.60), 1.0]]
+              })
+              .hitTestBehavior(HitTestMode.None)
+              .transition(TransitionEffect.OPACITY.animation({ duration: 150, curve: Curve.EaseOut }))
           }
         }
-        .scrollable(ScrollDirection.Horizontal)
-        .scrollBar(BarState.Off)
         // **占位的是 chips 段**:条宽减去按钮段就是它能用的宽,装得下就不滚、装不下才横滚
         // (Android 侧同名组件用的是 `weight(1f)`,同语义)。
         .layoutWeight(1)
         .height(CHIPS_STRIP_H)
-        .align(Alignment.Start)
 
         // 右端动作位:底就是这条玻璃,按钮自己不要再带背景。
         // 垂直居中由 Row 的默认对齐(居中)负责,不要手工算 top 偏移 —— 那颗按钮曾经浮在条
