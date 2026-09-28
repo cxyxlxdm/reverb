@@ -9,8 +9,21 @@ import { DownloadStore } from '../store/DownloadStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym } from './Widgets';
-import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, ListPlayButton, ConfirmDialog, ConfirmSpec } from './Components';
+import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, PlayModeButton, ConfirmDialog, ConfirmSpec } from './Components';
 import { Log } from '../util/Logger';
+
+/**
+ * 音阁三段的「列身份」。与 Android `LibraryScreen.kt` 的 `TAG_INBOX/TAG_FAV/TAG_DL` 同值。
+ * 同一个串用在**两处**:段条右端那颗模式按钮按它读写自己那一格,
+ * 段内某一行起播时把它随 `playQueue` 传下去(装机日志里 `tag='…'` 读到的就是它)。
+ * 两边必须是同一个值 —— 否则「在这一列设的模式」和「这一列起播时用的模式」各走各的,
+ * 而且不会报错,只会表现成"设了没生效"。
+ *
+ * 频道主页用的是 `"podcast:" + (feedUrl 或频道名)`,那个前缀保证它撞不上这三个。
+ */
+const TAG_INBOX = 'inbox';
+const TAG_FAV = 'fav';
+const TAG_DL = 'dl';
 
 /// 音阁:订阅 / 最新 / 收藏 / 历史 四分段(下载段留后续轮次)。
 /// 对应 Android `LibraryScreen.kt`。分段用 chips + Swiper 双向联动。
@@ -175,6 +188,9 @@ export struct LibraryPage {
    * 玻璃条上再糊一颗玻璃,装机判为「太丑」。
    * `padding` 在 `onClick` **之前** ⇒ 内边距算进命中框,点字的边缘也触发得了一旁。
    * 左右都留 16:左边是与正在横滚的 chips 之间的缝,右边让文字不贴着条的圆顶。
+   * 规则与 Android 同:**这一段没内容就不摆动作**(空列表上的"清空 / 排列"点了什么都
+   * 不会发生,是个假按钮)。**唯一的例外是播放模式那颗** —— 它改的是这一列的模式设置,
+   * 列空着照样能设,下次有内容时起播就按它走。
    * **两端同值**:Android 侧那颗 `TextButton` 的 `contentPadding` 是 start 16 / end 8,
    * 外加 `endAction` 容器自己的 8dp end 内边距 ⇒ 文字离条右缘同样是 16。
    */
@@ -202,29 +218,19 @@ export struct LibraryPage {
         .onClick(() => { this.history.clear(); })
     }
     /**
-     * 三段单集列表(最新 / 收藏 / 下载):一颗**播放按钮**。
-     * 交互、图标语义与「没内容不摆按钮」那条规则都收在 `Components.ListPlayButton`
+     * 三段单集列表(最新 / 收藏 / 下载):一颗**本列的播放模式按钮**。
+     * 三态图标与点击口径收在 `Components.PlayModeButton`
      * (频道主页「全 N 集」那一行右端用的是同一颗)。
-     * 三段共用一个**全局**模式,所以正在播的那一段点亮(primary),
-     * 另两段留灰 —— 不点亮就看不出刚才是切的哪一段。
+     * 三段**各有一份**模式,所以这里传的是**这一段自己的** tag ⇒ 三段看到三个值。
      */
     if (this.seg === 1) {
-      ListPlayButton({
-        scheme: this.scheme, player: this.player, tag: 'inbox',
-        count: this.inbox.episodes.length, episodes: (): Episode[] => this.inbox.episodes
-      })
+      PlayModeButton({ scheme: this.scheme, player: this.player, tag: TAG_INBOX })
     }
     if (this.seg === 2) {
-      ListPlayButton({
-        scheme: this.scheme, player: this.player, tag: 'fav',
-        count: this.favorites.favorites.length, episodes: (): Episode[] => this.favorites.favorites
-      })
+      PlayModeButton({ scheme: this.scheme, player: this.player, tag: TAG_FAV })
     }
     if (this.seg === 3) {
-      ListPlayButton({
-        scheme: this.scheme, player: this.player, tag: 'dl',
-        count: this.downloads.downloads.length, episodes: (): Episode[] => this.downloadEpisodes()
-      })
+      PlayModeButton({ scheme: this.scheme, player: this.player, tag: TAG_DL })
     }
   }
 
@@ -353,7 +359,7 @@ export struct LibraryPage {
                   isCurrent: this.player.current !== null && this.player.current.id === e.id,
                   isPlaying: this.player.isPlaying,
                   played: this.history.isPlayed(e.id),
-                  onPlay: () => this.onPlayEpisode(e, this.inbox.episodes, 'inbox'),
+                  onPlay: () => this.onPlayEpisode(e, this.inbox.episodes, TAG_INBOX),
                   onPlayNext: () => { this.player.playNext(e); },
                   onEnqueue: () => { this.player.enqueue(e); }
                 })
@@ -391,7 +397,7 @@ export struct LibraryPage {
                 isCurrent: this.player.current !== null && this.player.current.id === e.id,
                 isPlaying: this.player.isPlaying,
                 played: this.history.isPlayed(e.id),
-                onPlay: () => this.onPlayEpisode(e, this.favorites.favorites, 'fav'),
+                onPlay: () => this.onPlayEpisode(e, this.favorites.favorites, TAG_FAV),
                 showFavorite: true,
                 isFavorite: this.favorites.isFavorite(e.id),
                 onToggleFavorite: () => { this.favorites.toggle(e); },
@@ -430,7 +436,7 @@ export struct LibraryPage {
                 isPlaying: this.player.isPlaying,
                 played: this.history.isPlayed(d.episode.id),
                 downloadState: 2,
-                onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes(), 'dl'),
+                onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes(), TAG_DL),
                 onDeleteDownload: () => { this.askDeleteDownload(d.episode); },
                 onPlayNext: () => { this.player.playNext(d.episode); },
                 onEnqueue: () => { this.player.enqueue(d.episode); }

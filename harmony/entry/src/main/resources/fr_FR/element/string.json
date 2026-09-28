@@ -1137,16 +1137,12 @@
       "value": "L’éditeur ne fournit pas de transcription pour cet épisode"
     },
     {
-      "name": "lib_play_this_list",
-      "value": "Lire cette liste"
-    },
-    {
       "name": "play_mode_sequential",
       "value": "Lecture dans l'ordre"
     },
     {
-      "name": "play_mode_repeat",
-      "value": "Lecture en boucle"
+      "name": "play_mode_repeat_one",
+      "value": "Répéter cet épisode"
     },
     {
       "name": "play_mode_shuffle",

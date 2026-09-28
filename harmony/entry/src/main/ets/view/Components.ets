@@ -869,70 +869,61 @@ struct ChipsCapsule {
 }
 
 /**
- * 列表播放按钮:**一颗按钮两件事** —— 点它 = 从这一列的第一行起播;
- * 正在播这一列时再点 = 切播放模式(顺序 → 循环 → 随机)。
+ * 播放模式按钮:**一颗按钮只管模式**,顺序 → 单曲循环 → 随机 → 顺序。
+ * 挂在音阁「最新 / 收藏 / 下载」分段条右端与频道主页「全 N 集」那一行右端两处。
  *
- * 挂在两处:音阁「最新 / 收藏 / 下载」分段条右端(`ChipsRow.endAction`),
- * 以及频道主页「全 N 集」那一行的右端。列身份用 `tag` 区分
- * ("inbox" / "fav" / "dl" / "podcast:<feedUrl>"),所以三段之间、
- * 分段与频道主页之间都不会互相点亮。
+ * **模式是每列各一份**(`tag` 就是列身份,见 `PlayerController.playModes`):
+ * 按钮显示并修改**它所在那一列自己的**模式,所以最新设了随机、收藏仍读顺序。
+ * 曾做过"全局一份"(2026-09-28 同日撤销,见 H119)。
  *
- * 与 Android `Components.kt ListPlayButton` 同名同语义,改一处两端一起改。
+ * **这里没有播放/暂停**:起播的入口是列表里的行 —— 点某一集就播这一整列,不需要再摆一颗
+ * "从第一行起播"。2026-09-28 之前这颗按钮是一钮两用(点它 = 起播这一列 + 正在播这列时切模式),
+ * 为了它先后加过 `listPlayUsed`(H115)和"点亮/未点亮两套图标"(H118),
+ * 还把图标画成过与全 App 相反的口径。根因是一个图标槽位同时扛「状态」和「模式」两个语义 ——
+ * 拆开之后两个补丁都不需要了,所以也不再需要 `count`(没内容就没有行可点,按钮本身不是假按钮:
+ * 它改的是这一列**以后**怎么播)、需要 `episodes` 数组(它一集都不播)。
  *
- * ⚠️ **为什么数组走 `episodes()` 而不是 @Prop**:@Prop 对数组是**深拷贝**,
- * 而这一列可能有几百集;这颗按钮又要 `@ObjectLink player`(模式一变就得重画图标),
- * 重建比一般组件频繁 —— 整列复制一遍是纯浪费。所以只把「有没有内容」这个整数
- * 交给 @Prop 决定显不显示,数组本身按引用现取(Android 传 `List<Episode>` 是
- * 按引用、不复制,这里用 lambda 拿到同等语义)。
+ * 与 Android `Components.kt PlayModeButton` 同名同语义,改一处两端一起改。
  */
 @Component
-export struct ListPlayButton {
+export struct PlayModeButton {
   @Prop scheme: Scheme;
   @ObjectLink player: PlayerController;
   @Prop tag: string = '';
-  /// 这一列的集数。为 0 时**整颗按钮不出现** —— 空列表上的"播放"点了什么都不会发生,是假按钮。
-  @Prop count: number = 0;
-  episodes: () => Episode[] = () => [];
 
-  /// 这颗按钮管的正是当前在播的那一列 ⇒ 点亮,再点切模式。
-  /// (写成方法不是 getter:ArkTS 的自定义组件里 getter 支持不稳。)
-  private live(): boolean {
-    return this.player.activeListTag === this.tag;
+  /// 这一列自己的模式;没设过的列读回落值(`''` 那一格)。写成方法不是 getter:
+  /// ArkTS 的自定义组件里 getter 支持不稳。
+  private mode(): PlayMode {
+    const own = this.player.playModes.get(this.tag);
+    if (own !== undefined) return own;
+    const fb = this.player.playModes.get('');
+    return fb === undefined ? PlayMode.SEQUENTIAL : fb;
   }
 
-  /// 图标。**例外只有一个**:本次会话还没点过任何一颗列表按钮、而这一段又没在播 ⇒ 画暂停。
-  /// 理由见 `PlayerController.listPlayUsed`(装机反馈:默认模式是顺序、图标是播放三角,
-  /// 首点起播后仍是三角,看着像「没按上」)。暂停只出现在那一段时间里,点过一次就不再出现。
+  /// 图标三态就是模式本身,不表播放状态。
   private symbolOf(): Resource {
-    if (!this.live()) {
-      return this.player.listPlayUsed ? Sym.playFill : Sym.pauseFill;
-    }
-    if (this.player.playMode === PlayMode.REPEAT) return Sym.repeat;
-    if (this.player.playMode === PlayMode.SHUFFLE) return Sym.shuffle;
-    return Sym.playFill;
+    const m = this.mode();
+    if (m === PlayMode.REPEAT_ONE) return Sym.repeatOne;
+    if (m === PlayMode.SHUFFLE) return Sym.shuffle;
+    return Sym.list;
   }
 
-  /// 无障碍文案 = Android 的 contentDescription。点亮时读的是"当前是什么模式",
-  /// 没点亮读的是"点它会起播这一列" —— 与另一端逐字同口径。
+  /// 无障碍文案 = Android 的 contentDescription,读的是"当前是什么模式"(与显示给眼睛的同源)。
   private labelOf(): string {
-    if (!this.live()) return L.s('lib_play_this_list');
-    if (this.player.playMode === PlayMode.REPEAT) return L.s('play_mode_repeat');
-    if (this.player.playMode === PlayMode.SHUFFLE) return L.s('play_mode_shuffle');
+    const m = this.mode();
+    if (m === PlayMode.REPEAT_ONE) return L.s('play_mode_repeat_one');
+    if (m === PlayMode.SHUFFLE) return L.s('play_mode_shuffle');
     return L.s('play_mode_sequential');
   }
 
   build() {
-    if (this.count > 0) {
-      // 与分段条里另外两颗按钮(排列 / 清空)同一套内边距:左右 16 是与横滚 chips 的缝
-      // 和条右圆顶的距离,上下 12 把 20 的图标撑到 44 的条里正好垂直居中。
-      Glyph({ symbol: this.symbolOf(), dim: 20, color: this.live() ? this.scheme.primary : this.scheme.onSurfaceVariant })
-        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-        .accessibilityText(this.labelOf())
-        .onClick(() => {
-          if (this.live()) this.player.cyclePlayMode();
-          else this.player.playQueue(this.episodes(), 0, this.tag);
-        })
-    }
+    // 与分段条里另外两颗按钮(排列 / 清空)同一套内边距:左右 16 是与横滚 chips 的缝
+    // 和条右圆顶的距离,上下 12 把 20 的图标撑到 44 的条里正好垂直居中。
+    // 颜色恒为 onSurfaceVariant:这颗按钮不再"点亮"(点亮是为了区分一颗按钮的两种职责)。
+    Glyph({ symbol: this.symbolOf(), dim: 20, color: this.scheme.onSurfaceVariant })
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .accessibilityText(this.labelOf())
+      .onClick(() => { this.player.cyclePlayMode(this.tag); })
   }
 }
 

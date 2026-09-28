@@ -15,16 +15,46 @@ const PLAYER_UA = 'Reverb/1.0 (HarmonyOS podcast client)';
 /**
  * 列表播放模式。与 Android `PlayerController.PlayMode` **同名同序**。
  *
- * 顺序 = 播到列表末尾即停;循环 = 末尾回到开头接着播;随机 = 把这个列表打乱播一遍(走完表就停)。
+ * 顺序 = 播到列表末尾即停;单曲循环 = **本集播完原地再来一遍**(手动按「下一集」仍换下一首,
+ * 见 `advanceQueue` 的 `auto`);随机 = 把这个列表打乱播一遍(走完表就停)。
  *
- * 持久化存的是 **ordinal**(SettingsStore 的 `play_mode`),所以**新增项只能加在末尾** ——
+ * 持久化存的是 **ordinal**(SettingsStore 的 `play_mode` / `play_mode_map`),所以**新增项只能加在末尾** ——
  * 中间插一个位置,老用户存的数就会指向另一个模式。
+ *
+ * ⚠️ ordinal **1 的含义变过**:原来是「列表循环」(整列播完回到开头)。2026-09-28 换成
+ * 「单曲循环」(H118),数字不动、含义换 —— 老用户存的 1 会变成单曲循环。这是**明知故犯**的取舍:
+ * 加版本号会让所有人已设的模式清零,而"循环"两个字在界面上本来就既可能指列表也可能指单曲,
+ * 换过去的代价是让极少数人的那一格变成另一个循环,不换的代价是永远没有单曲循环。
  */
-export enum PlayMode { SEQUENTIAL, REPEAT, SHUFFLE }
+export enum PlayMode { SEQUENTIAL, REPEAT_ONE, SHUFFLE }
 
-/// 播放模式的中文名(只给日志用)。界面文案走 `L.s('play_mode_*')`,见 Components.ListPlayButton。
+/// 播放模式的英文名(只给日志用)。界面文案走 `L.s('play_mode_*')`,见 Components.PlayModeButton。
 function modeName(m: PlayMode): string {
-  return m === PlayMode.REPEAT ? 'REPEAT' : m === PlayMode.SHUFFLE ? 'SHUFFLE' : 'SEQUENTIAL';
+  return m === PlayMode.REPEAT_ONE ? 'REPEAT_ONE' : m === PlayMode.SHUFFLE ? 'SHUFFLE' : 'SEQUENTIAL';
+}
+
+/// 把存的 ordinal 变成模式;越界(降级安装时存了未来的值)回落顺序。
+/// 比的是字面量而不是 `PlayMode.X`:落盘的是普通 number,和枚举成员直接 `===`
+/// 在 ArkTS 的严格规则下不稳(同一份代码在 Android 侧走 `entries.getOrNull`)。
+function modeFromOrdinal(v: number): PlayMode {
+  if (v === 1) return PlayMode.REPEAT_ONE;
+  if (v === 2) return PlayMode.SHUFFLE;
+  return PlayMode.SEQUENTIAL;
+}
+
+/// 模式 → 落盘的 ordinal。手写映射而不是 `mode as number`:与上面 `modeFromOrdinal`
+/// 成对,读侧同样是逐值比对,两侧都不依赖"枚举底层就是 number"这个隐式约定。
+function modeOrdinal(mode: PlayMode): number {
+  if (mode === PlayMode.REPEAT_ONE) return 1;
+  if (mode === PlayMode.SHUFFLE) return 2;
+  return 0;
+}
+
+/// 只有回落值的一张表(`''` = 没有列身份时走什么)。
+function onlyFallback(mode: PlayMode): Map<string, PlayMode> {
+  const m = new Map<string, PlayMode>();
+  m.set('', mode);
+  return m;
 }
 
 /**
@@ -102,31 +132,33 @@ export class PlayerController {
   private queue: Episode[] = [];
   private queueIndex = 0;
   /**
-   * 列表播放模式与**正在播的那一列的身份**("inbox" / "fav" / "dl" / "podcast:<feedUrl>")。
+   * **正在播的这一列**用哪个模式(不是"全局设置",也不落盘 —— 落盘的是下面那张表)。
    *
-   * 两颗字段都放在本类上,是因为它们都由 `@ObjectLink player` 观察 —— 与 `positionMs`
+   * 表里某一格变了,只有变的正是这一格时才当场改写它;起播时按**那一列自己存的**走法起。
+   */
+  private playMode: PlayMode = PlayMode.SEQUENTIAL;
+  /**
+   * **每一列自己的**播放模式(2026-09-28 从"全局一份"改过来,见 H119)。
+   * key 是 `playQueue` 的 tag("inbox" / "fav" / "dl" / "podcast:<feedUrl>"),
+   * `""` 这条是**回落值**(老版本那份全局设置,也是没有列身份的起播走的)。
+   * 这是 SettingsStore 那张 ordinal 表的枚举视图,只给界面读 ——
+   * 每颗模式按钮显示的是**它所在那一列**的模式,所以三段之间互不影响。
+   *
+   * 这两个字段都放在本类上,是因为它们都由 `@ObjectLink player` 观察 —— 与 `positionMs`
    * 不同(H64:高频量必须离开 @Observed),它们**只在用户点按钮时变**,一秒不到一次,
-   * 重建面可控。真正要控的是**观察者的数量**:所以读它们的是 `ListPlayButton`
+   * 重建面可控。真正要控的是**观察者的数量**:所以读它们的是 `PlayModeButton`
    * 那颗独立小组件,不是整页(同 Android 把 collect 挂在按钮一层)。
    */
-  playMode: PlayMode = PlayMode.SEQUENTIAL;
-  activeListTag: string = '';
+  playModes: Map<string, PlayMode> = onlyFallback(PlayMode.SEQUENTIAL);
   /**
-   * 本次会话里,列表播放按钮**是否已被点过一次**。
+   * 正在播的那一列的 tag(`""` = 不属于任何可见列)。**它是功能性的,不是观感补丁**:
+   * 「改某一列的模式」只有在改的正是正在播那一列时才当场生效,判据就在这儿。
    *
-   * 只服务一个观感问题:按钮在没起播时该画什么。画"播放"三角的话,首点之后
-   * 图标从三角变成三角 —— 用户读作「没按上」(装机反馈原话:「初始暂停,点击之后
-   * 还是不变,就让人觉着怪怪的」)。所以未起播时画**暂停**,首点起播后画模式图标,
-   * 而暂停图标此后不再出现 —— 它是「这一列还没开始过」的记号,不是"当前是暂停中"。
-   *
-   * 故意**不持久化**:下次启动 app 又回到"还没开始过"。持久化它就变成一个
-   * 用户看不见、也没有入口清除的状态,而这里的语义只是"本次使用的第一下"。
-   *
-   * 判据与 `activeListTag` 同源 —— 只有**带 tag 的起播**才算(音阁各段与频道主页,
-   * 含直接点段里的单集行);不传 tag 的入口(发现页、历史行、迷你条、「下一个播放」)
-   * 不算,因为它们根本不对应任何一颗按钮。
+   * 同一个名字在 Android 侧曾为「一颗按钮扛两件事」(点它=起播还是切模式)而存在,
+   * 那件事已经不存在了(起播只走列表行,H118 因此把它删过一轮);
+   * 现在留着它只为上面这一个用途 —— 别把它再当成按钮的点亮依据。
    */
-  listPlayUsed: boolean = false;
+  private activeListTag: string = '';
   /// 随机表:按当前模式打乱后的**队列下标**序列;`shufflePos` 是表指针(不是队列下标)
   private shuffleOrder: number[] = [];
   private shufflePos = -1;
@@ -165,10 +197,39 @@ export class PlayerController {
     this.history = history;
     this.settings = settings;
     this.speed = settings.defaultSpeed;
-    // 播放模式是老用户存过的偏好,起来就恢复;存的 ordinal 越界(降级安装)按默认处理。
-    // 逐个比对而不是 `as PlayMode`:ArkTS 里 number→枚举的隐式转换不安全。
-    const saved = settings.playMode;
-    this.playMode = saved === 1 ? PlayMode.REPEAT : saved === 2 ? PlayMode.SHUFFLE : PlayMode.SEQUENTIAL;
+    // 播放模式是老用户存过的偏好,起来就恢复:按列的表和回落值一起拉起(越界值在
+    // `modeFromOrdinal` 里降级成顺序)。此刻还没有"正在播的那一列",生效模式取回落值。
+    this.refreshPlayModes();
+    this.playMode = this.fallbackMode();
+  }
+
+  /** 把 SettingsStore 那两份 ordinal 换成一张枚举表(整表换新引用,界面才会收到)。 */
+  private refreshPlayModes(): void {
+    const s = this.settings;
+    if (s === null) return;
+    const next = new Map<string, PlayMode>();
+    const byTag = s.playModeByTag;
+    const keys = Object.keys(byTag);
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i].length === 0) continue;
+      next.set(keys[i], modeFromOrdinal(byTag[keys[i]]));
+    }
+    // 回落键**最后写**:表里本来不该有它(空 tag 在落盘处就被分流走了),
+    // 万一老数据里有,也以 `play_mode` 为准 —— 两处各存一份时读谁必须有唯一答案。
+    next.set('', modeFromOrdinal(s.playModeDefault));
+    this.playModes = next;
+  }
+
+  /// 回落值(没有列身份时的走法)。
+  private fallbackMode(): PlayMode {
+    const fb = this.playModes.get('');
+    return fb === undefined ? PlayMode.SEQUENTIAL : fb;
+  }
+
+  /** 某一列该按什么走法播;没设过的列用回落值。界面读的是 `playModes`,这个只给起播/切换用。 */
+  private modeFor(tag: string): PlayMode {
+    const own = this.playModes.get(tag);
+    return own === undefined ? this.fallbackMode() : own;
   }
 
   bindListen(add: (e: Episode, deltaMs: number) => void, flush: () => void): void {
@@ -186,19 +247,22 @@ export class PlayerController {
    * 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。
    *
    * @param tag 队列身份("inbox" / "fav" / "dl" / 频道主页用 "podcast:<feedUrl>")。
-   *   分段条与频道主页那两颗播放按钮传它,UI 据此判断「这颗按钮现在管的就是正在播的这一段」;
-   *   不属于任何可见列表的入口(「下一个播放」摘出来单播、迷你条)不传(空串)。
+   *   三个用途,少一个都会以很难查的方式坏掉:
+   *   ① 起播按**这一列自己存着的**播放模式走(见 `modeFor`);
+   *   ② 日志里的列身份(`playQueue count=… tag='inbox'`,装机验收一直靠这一行判断点的是哪一段);
+   *   ③ `setPlayModeFor` 判断"改的是不是正在播那一列"。
+   *   不属于任何可见列表的入口(「下一个播放」摘出来单播、迷你条)传空串 ⇒ 走回落值。
    */
   playQueue(list: Episode[], startIndex: number, tag: string = ''): void {
     if (list.length === 0) return;
     if (this.radioMode) this.stopRadio();   // 手动播放即退出电台
     this.queue = list;
     this.queueIndex = Math.max(0, Math.min(startIndex, list.length - 1));
-    if (this.playMode === PlayMode.SHUFFLE) this.rebuildShuffleOrder(); else this.clearShuffleOrder();
     this.activeListTag = tag;
-    if (tag.length > 0) this.listPlayUsed = true;
+    // 先定模式再播:随机要在这一步把表洗出来(正在播的这一集钉在第一位),
+    // 顺序/单曲循环则要保证没有上一次的旧表残留。表是按下标存的,换列表必须重算。
+    this.applyPlayMode(this.modeFor(tag));
     Log.i('Player', `playQueue count=${list.length} index=${this.queueIndex} tag='${tag}' mode=${modeName(this.playMode)}`);
-    this.updateNavFlags();
     this.startEpisode(this.queue[this.queueIndex], true);
   }
 
@@ -554,11 +618,12 @@ export class PlayerController {
         } else if (this.userQueue.length > 0) {
           continues = true;
           this.consumeQueueAt(0);
-        } else if (this.nextQueueIndex() >= 0) {
-          // 判据必须走 nextQueueIndex() 而不是自己算 +1:循环模式永远有下一集,
-          // 随机模式看的是表指针而不是列表下标(与 Android onEnded 同口径)
-          continues = true;
-          this.next();
+        } else {
+          // 上下文队列(点某一集起播的):按**这一列**的模式自动续播。
+          // 判据必须走 nextQueueIndex() 而不是自己算 +1 —— 随机模式看的是表指针而不是列表下标
+          // (与 Android onEnded 同口径)。而「单曲循环播完自己再来一遍」这条特例**只在
+          // 这里的 auto 路径上生效**:手动按下一集要走另一条路(见 advanceQueue)。
+          continues = this.advanceQueue(true);
         }
       }
       // 自动续集/用户队列/电台取下一首期间保持会话;只有真正播完或睡眠到集尾才释放。
@@ -761,16 +826,13 @@ export class PlayerController {
   // ── 队列导航 ──
 
   /**
-   * 当前播放模式下,上下文队列里的下一集下标;没有下一集返回 -1(调用方就此停下)。
+   * 当前播放模式下,上下文队列里**手动下一集**要去的下标;没有下一集返回 -1(调用方就此停下)。
    *
-   * ⚠️ 循环模式只在**队列多于一集**时回绕:不少入口播的是「单曲队列」
-   * (`play(episode)`、从「接下来播放」里点某一行 —— 那里 queue 被刻意换成一条),
-   * 无条件回绕会让那一集无限重播,而用户要循环的是他点播放按钮的那个列表。
+   * 顺序与单曲循环在这里是同一个走法:按下「下一集」就是要换一首,原地重播当前这集会被读成按钮坏了。
+   * 「单曲循环播完自己再来一遍」那条特例只在 `advanceQueue` 的 `auto` 路径上生效。
+   * (这里也不再有任何"列表循环"的回绕分支 —— 那个模式在 2026-09-28 被单曲循环替掉了,见 H118。)
    */
   private nextQueueIndex(): number {
-    if (this.playMode === PlayMode.REPEAT) {
-      return this.queue.length > 1 ? (this.queueIndex + 1) % this.queue.length : -1;
-    }
     if (this.playMode === PlayMode.SHUFFLE) {
       return this.shufflePos >= 0 && this.shufflePos < this.shuffleOrder.length - 1
         ? this.shuffleOrder[this.shufflePos + 1] : -1;
@@ -807,8 +869,25 @@ export class PlayerController {
     this.shufflePos = -1;
   }
 
-  /** 沿当前模式走到队列的下一集并播它;走到头(顺序播完 / 随机走完表 / 单曲队列)返回 false。 */
-  private advanceQueue(): boolean {
+  /**
+   * 沿当前播放模式走到队列的下一集并播它;走到头(顺序播完 / 随机走完表)返回 false,由调用方停下。
+   *
+   * @param auto 只有「本集自然播完」这条路径传真。**单曲循环只在自动推进时原地重播**;
+   *   手动按「下一集」不传,于是走 `nextQueueIndex` 的顺序口径。
+   *   注意这等于承认「单曲队列 + 单曲循环 = 这一集无限重播」—— 那正是这个模式的名字。
+   *   (列表循环时代刻意躲开的正是它:那时无条件回绕会让"从接下来播放里点一行"
+   *   这种单曲队列无限重播,而用户要循环的是他点过播放按钮的那个列表。换成语义明确的
+   *   「单曲循环」之后,这条特例不再需要 —— 见本文件 ordinal 1 含义变更那段。)
+   *   重播从 0 开始是自然的:`completed` 里先把历史进度写回 0,再走这条路径(见 `positionFor`)。
+   */
+  private advanceQueue(auto: boolean = false): boolean {
+    if (auto && this.playMode === PlayMode.REPEAT_ONE) {
+      if (this.queue.length === 0) return false;
+      Log.i('Player', `advanceQueue repeat-one index=${this.queueIndex}`);
+      this.updateNavFlags();
+      this.startEpisode(this.queue[this.queueIndex], true);
+      return true;
+    }
     const ni = this.nextQueueIndex();
     if (ni < 0) return false;
     if (this.playMode === PlayMode.SHUFFLE) this.shufflePos++;
@@ -855,25 +934,38 @@ export class PlayerController {
 
   // ── 播放模式 ──
 
-  /** 顺序 → 循环 → 随机 → 顺序。分段条那颗播放按钮在「正在播这一段」时点它就走这里。 */
-  cyclePlayMode(): void {
+  /** 顺序 → 单曲循环 → 随机 → 顺序。某一列右端那颗模式按钮点一下,就走这一列自己的那一格。 */
+  cyclePlayMode(tag: string): void {
     // 表而不是 `playMode + 1`:ArkTS 对枚举做算术要显式转 number,而这张表顺带
     // 就是"模式的顺序"这件事的唯一出处(图标顺序、文案顺序都按它读)。
-    const modes: PlayMode[] = [PlayMode.SEQUENTIAL, PlayMode.REPEAT, PlayMode.SHUFFLE];
+    const modes: PlayMode[] = [PlayMode.SEQUENTIAL, PlayMode.REPEAT_ONE, PlayMode.SHUFFLE];
     let i = 0;
-    for (let k = 0; k < modes.length; k++) if (modes[k] === this.playMode) i = k;
-    this.setPlayMode(modes[(i + 1) % modes.length]);
+    const cur = this.modeFor(tag);
+    for (let k = 0; k < modes.length; k++) if (modes[k] === cur) i = k;
+    this.setPlayModeFor(tag, modes[(i + 1) % modes.length]);
   }
 
   /**
-   * 设定播放模式并落盘。**播放中切换当场生效**:切进随机要重洗一次表并把当前集钉在第一位
-   * (否则从顺序切进随机后「下一集」还按列表顺序走,等于没切);切出随机则丢掉表。
+   * 设定**某一列**的播放模式并落盘。
+   *
+   * 只有改的正是**正在播那一列**时才当场生效;改别的列只是记下它以后的走法 ——
+   * 否则「看着收藏但正在播最新」时点一下就把正在播的走法改掉了,那才是真的串。
    */
-  setPlayMode(mode: PlayMode): void {
-    if (mode === this.playMode) return;
-    Log.i('Player', `playMode ${modeName(this.playMode)} -> ${modeName(mode)}`);
+  setPlayModeFor(tag: string, mode: PlayMode): void {
+    if (this.settings !== null) this.settings.setPlayModeFor(tag, modeOrdinal(mode));
+    this.refreshPlayModes();
+    Log.i('Player', `playMode tag='${tag}' -> ${modeName(mode)}`
+      + `${tag === this.activeListTag ? ' (生效)' : ` (未生效:正在播 '${this.activeListTag}')`}`);
+    if (tag === this.activeListTag) this.applyPlayMode(mode);
+  }
+
+  /**
+   * 让某个模式**当场生效**:切进随机要重洗一次表并把当前集钉在第一位
+   * (否则从顺序切进随机后「下一集」还按列表顺序走,等于没切);切出随机则丢掉表。
+   * 落盘不在这里 —— 模式按列存,见 `setPlayModeFor`。
+   */
+  private applyPlayMode(mode: PlayMode): void {
     this.playMode = mode;
-    if (this.settings !== null) this.settings.setPlayMode(mode);
     if (mode === PlayMode.SHUFFLE) this.rebuildShuffleOrder(); else this.clearShuffleOrder();
     this.updateNavFlags();
   }
@@ -985,9 +1077,9 @@ export class PlayerController {
     this.queue = [e];
     this.queueIndex = 0;
     if (this.playMode === PlayMode.SHUFFLE) this.rebuildShuffleOrder(); else this.clearShuffleOrder();
-    // 上下文队列换成了这一条,分段条那颗播放按钮不再「管着」正在播的列表
-    // (按钮回到「点我起播这一段」的语义,见 activeListTag)
-    this.activeListTag = '';
+    // 上下文队列换成了这一条:此后自动续播按「用户队列优先」走,列表模式暂时管不到它。
+    // **不动 `activeListTag`** —— 生效的那格模式没变(还是原来那一列存的),在这里清成空串
+    // 会让那一列的按钮当场失去"改了就生效",与用户的感受相反(与 Android 修法 6 同口径)。
     Log.i('Player', `play from userQueue id=${e.id} remaining=${this.userQueue.length}`);
     this.updateNavFlags();
     this.startEpisode(e, true);
@@ -1004,7 +1096,9 @@ export class PlayerController {
       this.hasNext = true;   // 在台永远有下一首(现抓)
     } else {
       // 用户队列非空,或上下文队列在**当前播放模式**下还有后续,都算「有下一集」。
-      // 必须走 nextQueueIndex():循环模式永远有下一集,随机模式看的是表指针而不是列表下标。
+      // 必须走 nextQueueIndex():随机模式看的是表指针而不是列表下标。
+      // 而**单曲循环不影响这个判据** —— 它只改自动续播那条路(见 advanceQueue 的 auto):
+      // 手动按「下一集」播到列表末尾就是没有下一集,按钮该灰,原地重播不算"还有下一集"。
       this.hasPrev = this.prevQueueIndex() >= 0;
       this.hasNext = this.userQueue.length > 0 || this.nextQueueIndex() >= 0;
     }

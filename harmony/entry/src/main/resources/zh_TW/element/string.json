@@ -1137,16 +1137,12 @@
       "value": "這一集發布方未提供逐字稿"
     },
     {
-      "name": "lib_play_this_list",
-      "value": "播放這個列表"
-    },
-    {
       "name": "play_mode_sequential",
       "value": "順序播放"
     },
     {
-      "name": "play_mode_repeat",
-      "value": "循環播放"
+      "name": "play_mode_repeat_one",
+      "value": "單曲循環"
     },
     {
       "name": "play_mode_shuffle",

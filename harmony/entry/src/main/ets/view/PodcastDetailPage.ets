@@ -8,7 +8,7 @@ import { ListenStatsStore } from '../store/ListenStatsStore';
 import { DownloadManager, DownloadResult } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, LoadingBox, Artwork, Glyph, Sym } from './Widgets';
-import { EpisodeListItem, ListPlayButton, formatListenDuration, ConfirmDialog, ConfirmSpec } from './Components';
+import { EpisodeListItem, PlayModeButton, formatListenDuration, ConfirmDialog, ConfirmSpec } from './Components';
 import { formatCachedAt } from '../util/DateParse';
 import { Log } from '../util/Logger';
 import { Files } from '../util/Files';
@@ -124,8 +124,9 @@ export struct PodcastDetailPage {
   }
 
   /**
-   * 这一列的身份:头部那颗播放按钮靠它判断「正在播的就是这一列」。
-   * 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名会把另一家的按钮点亮。
+   * 这一列的身份:头部那颗模式按钮靠它读写**这一列自己的**播放模式,起播时也随
+   * `playQueue` 传下去(装机日志里 `tag='…'` 读到的就是它)。
+   * 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名会把两家的设置串成一格。
    * 加前缀是为了**永不可能**撞上音阁那三个分段名("inbox" / "fav" / "dl")。
    */
   private listTag(): string {
@@ -428,24 +429,22 @@ export struct PodcastDetailPage {
           .fontSize(TypeScale.label * this.fontScale)
           .fontColor(this.scheme.onSurfaceVariant)
       }
-      if (this.episodes.length > 0) {
-        // 单集数这一行是这一列的标题行,所以播放按钮挂在它右端 —— 与音阁「段条右端」
-        // 同一处语义(动作属于那一段列表,不属于页面顶栏)。Android 同位置同一颗。
-        Row() {
-          Text(L.f('episode_count', this.episodes.length))
-            .fontSize(TypeScale.titleSmall * this.fontScale)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.scheme.onBackground)
-            .layoutWeight(1)
-          ListPlayButton({
-            scheme: this.scheme, player: this.player,
-            tag: this.listTag(), count: this.episodes.length,
-            episodes: (): Episode[] => this.episodes
-          })
-        }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
+      // 单集数这一行是这一列的标题行,所以模式按钮挂在它右端 —— 与音阁「段条右端」
+      // 同一处语义(动作属于那一段列表,不属于页面顶栏)。Android 同位置同一颗。
+      // 与 Android 一致**不看集数**:这一行是标题行,空列表时读「全 0 集」;
+      // 而模式按钮在空列上也不是假按钮 —— 它改的是这一列**以后**怎么播。
+      Row() {
+        Text(L.f('episode_count', this.episodes.length))
+          .fontSize(TypeScale.titleSmall * this.fontScale)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.scheme.onBackground)
+          .layoutWeight(1)
+        PlayModeButton({
+          scheme: this.scheme, player: this.player, tag: this.listTag()
+        })
       }
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
     }
     .alignItems(HorizontalAlign.Start)
     .width('100%')

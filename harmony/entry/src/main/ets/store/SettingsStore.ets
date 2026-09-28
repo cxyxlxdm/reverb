@@ -34,12 +34,27 @@ export class SettingsStore {
   skipBackSec: number = 10;
   skipForwardSec: number = 30;
   /**
-   * 列表播放模式,存的是 `PlayMode` 的 **ordinal**(与 Android `play_mode` 同口径)。
+   * 列表播放模式的**回落值**,存的是 `PlayMode` 的 **ordinal**(与 Android `play_mode` 同键同口径)。
+   *
+   * 它服务两种情况:①老版本只有这一份全局设置,升级后它就是"没单独设过的列"的走法;
+   * ②起播时**没有列身份**(发现页、历史行、迷你条、「下一个播放」)就按它走。
    *
    * ⚠️ 因为是 ordinal,**新增模式只能加在枚举末尾** —— 往中间插一个位置,
    * 老用户存的数就会指向另一个模式。读侧另有越界回落(降级安装时存的可能是未来值)。
    */
-  playMode: number = 0;
+  playModeDefault: number = 0;
+  /**
+   * **每一列自己的**播放模式:key 是 `playQueue` 的 tag
+   * ("inbox" / "fav" / "dl" / "podcast:<feedUrl>"),value 是 `PlayMode` 的 ordinal。
+   * 见 H119(原先"全局一份",装机反馈「在收藏里切了单曲循环,下载也变了」)。
+   *
+   * 与 Android 的 `play_mode_map` **同名不同编码**:那边是一个字符串集合,元素写成
+   * `tag=ordinal`,读的时候必须按**最后一个** `=` 切 —— 频道那一列的 tag 本身就是 feedUrl,
+   * query 里带 `=` 就会把整条静默丢掉(H119 修法 1)。鸿蒙这边 preferences 没有集合的对等物,
+   * 索性把整张表存成一段 JSON,**key 里出现 `=` 不需要任何转义,那个坑在结构上不存在**。
+   * 两端的键名与语义一致,容器不同;这份数据不跨端搬运(备份分区里没有播放模式)。
+   */
+  playModeByTag: Record<string, number> = {};
   /// 订阅段是否宫格排布
   subsGrid: boolean = false;
   /// 电台模式:false 随机 / true 情境(按时段选分类)
@@ -87,7 +102,8 @@ export class SettingsStore {
     this.defaultSpeed = Prefs.getNumber('default_speed', 1.0);
     this.skipBackSec = Prefs.getNumber('skip_back', 10);
     this.skipForwardSec = Prefs.getNumber('skip_fwd', 30);
-    this.playMode = Prefs.getNumber('play_mode', 0);
+    this.playModeDefault = Prefs.getNumber('play_mode', 0);
+    this.playModeByTag = readPlayModeMap();
     this.subsGrid = Prefs.getBool('subs_grid', false);
     this.contextualRadio = Prefs.getBool('contextual_radio', false);
     this.updatesEnabled = Prefs.getBool('updates_enabled', false);
@@ -162,8 +178,32 @@ export class SettingsStore {
     this.skipForwardSec = v;
     Prefs.put('skip_fwd', v);
   }
-  setPlayMode(v: number): void {
-    this.playMode = v;
+  /**
+   * 写**某一列**的播放模式并落盘。**空 tag 不进这张表** —— 它表示"没有列身份",
+   * 走 `setPlayModeDefault`。这条分流与 Android 同口径,且不是防御性摆设:
+   * 表里的 `""` 一旦有值就会和回落键打架,两处各存一份、读的时候不知听谁。
+   *
+   * 整个对象**换新引用**再写:ArkUI 的观察粒度是对象不是字段,原地改属性不会通知任何人,
+   * 而这里的语义正是"表变了"。退订的频道不会从这张表里被清掉 —— 与 Android 一致,
+   * 一条 URL 的整数不值得为它加回收逻辑(残留量以"用户订阅过的频道数"为上界)。
+   */
+  setPlayModeFor(tag: string, v: number): void {
+    if (tag.length === 0) {
+      this.setPlayModeDefault(v);
+      return;
+    }
+    if (this.playModeByTag[tag] === v) return;
+    const next: Record<string, number> = {};
+    const keys = Object.keys(this.playModeByTag);
+    for (let i = 0; i < keys.length; i++) next[keys[i]] = this.playModeByTag[keys[i]];
+    next[tag] = v;
+    this.playModeByTag = next;
+    Prefs.put('play_mode_map', JSON.stringify(next));
+  }
+
+  /// 回落值:没有列身份的起播按它走(也是老版本那份全局设置的现名)。
+  setPlayModeDefault(v: number): void {
+    this.playModeDefault = v;
     Prefs.put('play_mode', v);
   }
   setContextualRadio(v: boolean): void {
@@ -206,4 +246,29 @@ export class SettingsStore {
     this.subsGrid = v;
     Prefs.put('subs_grid', v);
   }
+}
+
+/**
+ * 读「按列存的播放模式」表。整张表是一段 JSON 对象(`{"inbox":1,"podcast:https://…":2}`)。
+ *
+ * 三个回落都必须静默:空串(从没设过)、JSON 解析失败(手改过文件 / 未来版本换了格式)、
+ * 值不是数字。这张表读不出来时用回落值(`play_mode`)播就行 —— 它在启动时同步读,
+ * **绝不能因为一段坏 JSON 让整个应用起不来**。
+ */
+function readPlayModeMap(): Record<string, number> {
+  const raw = Prefs.getString('play_mode_map', '');
+  if (raw.length === 0) return {};
+  let out: Record<string, number> = {};
+  try {
+    const root = JSON.parse(raw) as Record<string, Object>;
+    const keys = Object.keys(root);
+    for (let i = 0; i < keys.length; i++) {
+      const v = root[keys[i]];
+      if (typeof v === 'number' && v >= 0) out[keys[i]] = v;
+    }
+  } catch (e) {
+    Log.w('Settings', `play_mode_map 解析失败,按空表处理:${(e as Error).message}`);
+    out = {};
+  }
+  return out;
 }

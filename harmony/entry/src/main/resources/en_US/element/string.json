@@ -1137,20 +1137,16 @@
       "value": "The publisher provides no transcript for this episode"
     },
     {
-      "name": "lib_play_this_list",
-      "value": "Play this list"
-    },
-    {
       "name": "play_mode_sequential",
       "value": "Play in order"
     },
     {
-      "name": "play_mode_repeat",
-      "value": "Repeat this list"
+      "name": "play_mode_repeat_one",
+      "value": "Repeat this episode"
     },
     {
       "name": "play_mode_shuffle",
-      "value": "Shuffle this list"
+      "value": "Shuffle"
     },
     {
       "name": "download_delete_title",

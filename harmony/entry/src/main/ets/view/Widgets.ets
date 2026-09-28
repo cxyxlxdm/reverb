@@ -72,9 +72,10 @@ export class Sym {
   static readonly libraryFill: Resource = $r('sys.symbol.music_note_list_fill');
   static readonly library: Resource = $r('sys.symbol.music_note_list');         // Rounded.LibraryMusic
   static readonly shuffle: Resource = $r('sys.symbol.shuffle');                 // Rounded.Shuffle
-  // 播放模式三态里的「循环」。Material 侧是 Rounded.Loop(两个首尾相接的箭头),
-  // Symbol 字体里的对等形状是 repeat(同名同形);`repeat_1` 是"单曲循环",**不要拿它冒充**。
-  static readonly repeat: Resource = $r('sys.symbol.repeat');                   // Rounded.Loop
+  // 播放模式三态里的「单曲循环」。Material 侧是 Rounded.RepeatOne,Symbol 字体的对等件
+  // 就是 repeat_1(循环箭头里带一个 1);**不要拿 `repeat` 冒充** —— 那枚是"列表循环",
+  // 而列表循环这个模式在 2026-09-28 已经被单曲循环替掉了(见 PlayerController 枚举注释、H118)。
+  static readonly repeatOne: Resource = $r('sys.symbol.repeat_1');              // Rounded.RepeatOne
   static readonly sun: Resource = $r('sys.symbol.sun_max');                     // Rounded.WbSunny
   static readonly twilight: Resource = $r('sys.symbol.cloud_and_sun_fill');     // Rounded.WbTwilight
   static readonly moon: Resource = $r('sys.symbol.moon');                       // 情境电台·夜间
