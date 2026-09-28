@@ -71,20 +71,48 @@ object PlayerController {
     private var queue: List<Episode> = emptyList()
     private var queueIndex = 0
 
-    // 播放模式:顺序 / 循环 / 随机。它是**跨会话的偏好**(存 SettingsStore),
-    // 不是本次播放的临时状态 —— 用户选了循环,下次从列表起播还要按它走。
+    // **当前生效的**播放模式(顺序 / 单曲循环 / 随机):自动续播与手动切集都按它走。
+    // 它是跨会话的偏好,但**不直接落盘** —— 落盘的是下面那张按列的表,这里只是
+    // 「正在播的这一列」那一格(没有列身份时是回落值)。
     private val _playMode = MutableStateFlow(PlayMode.SEQUENTIAL)
-    val playMode: StateFlow<PlayMode> = _playMode
 
-    // 这里原先挂着两个**为按钮而生的会话状态**,现在都删了:
+    /**
+     * **每一列自己的**播放模式(2026-09-28 从"全局一份"改过来,见 H119)。
+     * key 是 `playQueue` 的 tag;`""` 这条是**回落值**(老版本那份全局设置,也是没有列身份时
+     * 的走法)。这张表是 SettingsStore 那份的枚举视图,只给 UI 读。
+     */
+    private val _playModes = MutableStateFlow(mapOf("" to PlayMode.SEQUENTIAL))
+    val playModes: StateFlow<Map<String, PlayMode>> = _playModes
+
+    /** 某一列该按什么走法播;没设过的列用回落值。UI 读的是上面那张表,这个只给起播/切换用。 */
+    private fun modeFor(tag: String): PlayMode = _playModes.value[tag] ?: _playModes.value.getValue("")
+
+    private fun refreshPlayModes() {
+        val s = settings ?: return
+        _playModes.value = s.playModeByTag.value
+            .entries.associate { (k, v) -> k to modeFromOrdinal(v) } + ("" to modeFromOrdinal(s.playModeDefault.value))
+    }
+
+    private fun modeFromOrdinal(v: Int) = PlayMode.entries.getOrNull(v) ?: PlayMode.SEQUENTIAL
+
+    /**
+     * 正在播的那一列的 tag(`""` = 不属于任何可见列)。**这次它是功能性的,不是观感补丁**:
+     * 「改某一列的模式」只有在改的正是正在播那一列时才当场生效,判据就在这儿。
+     *
+     * 同一个名字上一轮被删过,那次它是为「一颗按钮扛两件事」服务的(点它=起播还是切模式),
+     * 那件事已经不存在了(起播只走列表行)。别把它再当成按钮的点亮依据。
+     */
+    private val _activeListTag = MutableStateFlow("")
+
+    // 这里原先还挂着一个**为那颗按钮而生的会话状态**,现在没了:
     //   · `_listPlayUsed`(H115):让未起播时画暂停图标,好让首点看得出变化 —— 那是全 App 图标口径的
     //     反面,2026-09-28 装机被报「弄反了」(H118)。
-    //   · `activeListTag`:让那颗按钮分辨「现在播的是不是这一段」,是 → 切模式,否 → 起播。
-    // 根因是那颗按钮一颗扛两件事(起播 + 切模式),两个状态都是在给它打补丁。
+    // 根因是那颗按钮一颗扛两件事(起播 + 切模式),那个状态是在给它打补丁。
     // 2026-09-28 定稿:**一颗按钮只管播放模式**(顺序 / 单曲循环 / 随机),
-    // 起播的入口回到「点列表里的某一集」这一条本来就有的路上 —— 两个状态同时失去需求方。
-    // `playQueue` 的 `tag` 参数**保留**,它现在是日志里的列身份
-    // (`playQueue count=… tag='inbox'`),装机验收一直靠这一行判断点的是哪一段。
+    // 起播的入口回到「点列表里的某一集」这一条本来就有的路上 —— 补丁失去需求方。
+    // `playQueue` 的 `tag` 参数**保留**:它既是日志里的列身份
+    // (`playQueue count=… tag='inbox'`,装机验收一直靠这一行判断点的是哪一段),
+    // 也是上面那张「按列存的播放模式」的 key。
 
     // 随机模式用的「打乱索引表」+ 指针。**不是每次抛骰子**:抛骰子会让上一集/下一集不对称
     // (点下一集之后再点上一集回不到刚才那集),而且同一集可能连着播两次。
@@ -220,7 +248,9 @@ object PlayerController {
         queue = listOf(head)
         queueIndex = 0
         if (_playMode.value == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
-        // 上下文队列换成了这一条:此后自动续播按「用户队列优先」走,列表模式暂时管不到它
+        // 上下文队列换成了这一条:此后自动续播按「用户队列优先」走,列表模式暂时管不到它。
+        // **不动 `_activeListTag`** —— 生效的那格模式没变(还是原来那一列存的),
+        // 在这里清成空串会让那一列的按钮当场失去"改了就生效",与用户的感受相反。
         updateNavFlags()
         playEpisode(head, isRadio = false)
         return true
@@ -263,8 +293,10 @@ object PlayerController {
     fun bindSettings(s: SettingsStore) {
         settings = s
         _speed.value = s.defaultSpeed.value // 启动即套用默认倍速
-        // 播放模式是老用户存过的偏好,起来就恢复;存的 ordinal 越界(降级安装)按默认处理
-        _playMode.value = PlayMode.entries.getOrNull(s.playMode.value) ?: PlayMode.SEQUENTIAL
+        // 各列的模式是老用户存过的偏好,起来就恢复;存的 ordinal 越界(降级安装)按默认处理。
+        // 生效值先取**回落值**:此刻还没有任何列在播。
+        refreshPlayModes()
+        _playMode.value = _playModes.value.getValue("")
     }
 
     fun skipForward() = seekBy((settings?.skipForwardSec?.value ?: 30) * 1000L)
@@ -350,38 +382,53 @@ object PlayerController {
     /**
      * 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。
      *
-     * @param tag 队列身份("inbox" / "fav" / "dl" / 频道主页用 "podcast:<feedUrl>")。
-     *   **只进日志**,用作装机验收时"点的到底是哪一段"的判据;曾经还驱动过分段条那颗按钮的点亮
-     *   与"点它=起播还是切模式",那两颗状态都删了(见本对象顶部注释与 H118)。
-     *   不属于任何可见列表的入口(「下一个播放」摘出来单播、迷你条)不传(空串)。
+     * @param tag 队列身份("inbox" / "fav" / "dl" / 频道主页用 "podcast:<feedUrl>")。三个用途:
+     *   ① 起播时按**这一列自己存着的播放模式**走(见 [modeFor]);② 日志里的列身份
+     *   (`playQueue count=… tag='inbox'`,装机验收靠这一行判断点的是哪一段);
+     *   ③ [setPlayModeFor] 判断"改的是不是正在播那一列"。
+     *   不属于任何可见列表的入口(「下一个播放」摘出来单播、迷你条、发现页)不传(空串),
+     *   空串走的是**回落值**。
      */
     fun playQueue(episodes: List<Episode>, startIndex: Int, tag: String = "") {
         if (episodes.isEmpty()) return
         if (_radioMode.value) stopRadio() // 进入列表上下文即退出电台
         queue = episodes
         queueIndex = startIndex.coerceIn(0, episodes.lastIndex)
-        if (_playMode.value == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
+        _activeListTag.value = tag
+        // 先定模式再播:随机要在这一步把表洗出来(当前集钉在第一位)
+        applyPlayMode(modeFor(tag))
         log.i(TAG, "playQueue count=${episodes.size} index=$queueIndex tag='$tag' mode=${_playMode.value}")
-        updateNavFlags()
         playEpisode(episodes[queueIndex], isRadio = false)
     }
 
     // ---- 播放模式 ----
-    /** 顺序 → 单曲循环 → 随机 → 顺序。分段条与频道主页右端那颗模式按钮点一下就走一格。 */
-    fun cyclePlayMode() {
+    /** 顺序 → 单曲循环 → 随机 → 顺序。某一列右端那颗模式按钮点一下就走这一列自己的那一格。 */
+    fun cyclePlayMode(tag: String) {
         val entries = PlayMode.entries
-        setPlayMode(entries[(entries.indexOf(_playMode.value) + 1) % entries.size])
+        val cur = modeFor(tag)
+        setPlayModeFor(tag, entries[(entries.indexOf(cur) + 1) % entries.size])
     }
 
     /**
-     * 设定播放模式并落盘。**播放中切换当场生效**:切进随机要重洗一次表并把当前集钉在第一位
-     * (否则从顺序切进随机后「下一集」还按列表顺序走,等于没切);切出随机则丢掉表。
+     * 设定**某一列**的播放模式并落盘。
+     *
+     * 只有改的正是**正在播那一列**时才当场生效;改别的列只是记下它以后的走法 ——
+     * 否则「看着收藏但正在播最新」时点一下就把正在播的走法改掉了,那才是真的串。
      */
-    fun setPlayMode(mode: PlayMode) {
-        if (mode == _playMode.value) return
-        log.i(TAG, "playMode ${_playMode.value} -> $mode")
+    fun setPlayModeFor(tag: String, mode: PlayMode) {
+        settings?.setPlayModeFor(tag, mode.ordinal)
+        refreshPlayModes()
+        log.i(TAG, "playMode tag='$tag' -> $mode${if (tag == _activeListTag.value) " (生效)" else " (未生效:正在播 '${_activeListTag.value}')"}")
+        if (tag == _activeListTag.value) applyPlayMode(mode)
+    }
+
+    /**
+     * 让某个模式**当场生效**:切进随机要重洗一次表并把当前集钉在第一位
+     * (否则从顺序切进随机后「下一集」还按列表顺序走,等于没切);切出随机则丢掉表。
+     * 落盘不在这里 —— 模式按列存,见 [setPlayModeFor]。
+     */
+    private fun applyPlayMode(mode: PlayMode) {
         _playMode.value = mode
-        settings?.setPlayMode(mode.ordinal)
         if (mode == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
         updateNavFlags()
     }

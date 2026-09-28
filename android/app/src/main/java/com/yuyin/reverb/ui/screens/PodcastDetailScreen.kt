@@ -171,9 +171,11 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                     val subscribed = subs.any { it.feedUrl == s.podcast.feedUrl }
                     // 听歌时长存的是这个 key(既有口径,不能改)
                     val channelKey = s.podcast.feedUrl.ifBlank { s.podcast.title }
-                    // 这一列的身份,起播时随 playQueue 进日志(装机靠这一行认出点的是哪一列)。
-                    // 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名日志里就分不出是谁。
-                    // 加前缀是为了**永不可能**撞上音阁那三个分段名("inbox" / "fav" / "dl")。
+                    // 这一列的身份,两处共用:行起播时随 playQueue 传下去(装机靠日志里
+                    // `tag='…'` 认出点的是哪一列),右端那颗模式按钮也按它读写**本列**的模式。
+                    // 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名既分不出日志,也会
+                    // 让两个频道共用同一格模式。
+                    // 加前缀是为了**永不可能**撞上音阁那三个分段名(TAG_INBOX / TAG_FAV / TAG_DL)。
                     val listTag = "podcast:$channelKey"
                     LazyColumn(
                         Modifier.fillMaxSize(),
@@ -188,6 +190,7 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                             PodcastDetailHeader(
                                 podcast = s.podcast,
                                 episodes = s.episodes,
+                                listTag = listTag,
                                 listenedMs = listenedMs,
                                 subscribed = subscribed,
                                 onSubscribe = { container.subscriptionStore.toggle(s.podcast) }
@@ -243,6 +246,8 @@ private fun PodcastDetailHeader(
     podcast: Podcast,
     /** 这一列的单集:「共 N 集」那一行要显示条数。 */
     episodes: List<Episode>,
+    /** 这一列的身份:模式按钮按它读写本列那一格(与行起播传的是同一个串)。 */
+    listTag: String,
     listenedMs: Long,
     subscribed: Boolean,
     onSubscribe: () -> Unit
@@ -329,7 +334,7 @@ private fun PodcastDetailHeader(
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onBackground
             )
-            PlayModeButton()
+            PlayModeButton(listTag)
         }
         if (listenedMs > 0) {
             Spacer(Modifier.height(6.dp))

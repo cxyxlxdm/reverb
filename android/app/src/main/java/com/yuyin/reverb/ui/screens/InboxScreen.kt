@@ -96,7 +96,7 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
                         episode = ep,
                         isCurrent = current?.id == ep.id,
                         isPlaying = isPlaying,
-                        onPlay = { PlayerController.playOrToggle(ep, episodes, "inbox") },
+                        onPlay = { PlayerController.playOrToggle(ep, episodes, TAG_INBOX) },
                         showPodcastTitle = true,
                         played = played,
                         onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },

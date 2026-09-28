@@ -719,8 +719,11 @@ private fun PlayCircle(isCurrent: Boolean, isPlaying: Boolean, onClick: () -> Un
 
 /**
  * 播放模式按钮:**一颗按钮只管模式**,顺序 → 单曲循环 → 随机 → 顺序。
- * 挂在音阁「最新 / 收藏 / 下载」分段条右端与频道主页「共 N 集」那一行右端两处;
- * 模式是**全局一份、落盘**,所以两处显示同一个值,点哪一处都改全部。
+ * 挂在音阁「最新 / 收藏 / 下载」分段条右端与频道主页「共 N 集」那一行右端两处。
+ *
+ * **模式是每列各一份**(`tag` 就是列身份,见 `PlayerController.playModes`):
+ * 按钮显示并修改**它所在那一列自己的**模式,所以最新设了随机、收藏仍读顺序。
+ * 曾做过"全局一份"(2026-09-28 同日撤销,装机反馈「在收藏里切了单曲循环,下载也变了」)。
  *
  * **这里没有播放/暂停**:起播的入口是列表里的行 —— 点某一集就播这一整列,
  * 不需要再摆一颗"从第一行起播"。2026-09-28 之前这颗按钮是一钮两用
@@ -731,9 +734,10 @@ private fun PlayCircle(isCurrent: Boolean, isPlaying: Boolean, onClick: () -> Un
  * 图标三态就是模式本身,不再表播放状态;无障碍读的是模式名(与显示给眼睛的那一套同源)。
  */
 @Composable
-fun PlayModeButton(modifier: Modifier = Modifier) {
-    val mode by PlayerController.playMode.collectAsStateWithLifecycle()
-    IconButton(onClick = { PlayerController.cyclePlayMode() }, modifier = modifier) {
+fun PlayModeButton(tag: String, modifier: Modifier = Modifier) {
+    val modes by PlayerController.playModes.collectAsStateWithLifecycle()
+    val mode = modes[tag] ?: modes.getValue("")
+    IconButton(onClick = { PlayerController.cyclePlayMode(tag) }, modifier = modifier) {
         Icon(
             imageVector = when (mode) {
                 PlayMode.SEQUENTIAL -> Icons.AutoMirrored.Rounded.FormatListBulleted

@@ -56,6 +56,18 @@ import com.yuyin.reverb.ui.components.PodcastGridItem
 import com.yuyin.reverb.ui.components.PodcastListItem
 import kotlinx.coroutines.launch
 
+/**
+ * 音阁三段的「列身份」。同一个串用在**两处**:段条右端那颗模式按钮按它读写自己那一格,
+ * 段内某一行起播时把它随 `playQueue` 传下去(装机日志里 `tag='…'` 读到的就是它)。
+ * 两边必须是同一个值 —— 否则「在这一列设的模式」和「这一列起播时用的模式」各走各的,
+ * 而且不会报错,只会表现成"设了没生效"。
+ *
+ * 频道主页用的是 `"podcast:" + (feedUrl 或频道名)`,那个前缀保证它撞不上这三个。
+ */
+const val TAG_INBOX = "inbox"
+const val TAG_FAV = "fav"
+const val TAG_DL = "dl"
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenListenStats: () -> Unit) {
@@ -125,13 +137,20 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                 // 五段**每段都有一颗自己的动作**,所以条改回通栏之后右端不再是死区
                 // (条宽固定的理由见 Components.kt `GlassChipsRow`)。
                 // 规则:**这一段没内容就不摆动作** —— 空列表上的"清空/排列"点了
-                // 什么都不会发生,是个假按钮。**唯一的例外是播放模式那颗**:它改的是全局
-                // 模式而不是这一列,列空着点它照样生效。
+                // 什么都不会发生,是个假按钮。**唯一的例外是播放模式那颗**:它改的是
+                // 这一列的模式设置,列空着照样能设(下次有内容时起播就按它走)。
                 endAction = {
-                    // 三段单集列表(最新 / 收藏 / 下载):一颗**播放模式按钮**。
+                    // 三段单集列表(最新 / 收藏 / 下载):一颗**本列的播放模式按钮**。
                     // 三态图标与点击口径收在 `Components.kt PlayModeButton`
-                    // (频道主页「共 N 集」那一行右端用的是同一颗)。模式是全局一份,三段看到同一个值。
-                    if (section in 1..3) PlayModeButton()
+                    // (频道主页「共 N 集」那一行右端用的是同一颗)。
+                    // 三段各有一份模式,所以这里传的是**这一段自己的** tag —— 三段看到三个值。
+                    if (section in 1..3) PlayModeButton(
+                        when (section) {
+                            1 -> TAG_INBOX
+                            2 -> TAG_FAV
+                            else -> TAG_DL
+                        }
+                    )
                     if (section == 4 && history.isNotEmpty()) {
                         TextButton(
                             onClick = { container.historyStore.clear() },
@@ -224,7 +243,7 @@ private fun FavoritesSection() {
                 isCurrent = current?.id == ep.id,
                 isPlaying = isPlaying,
                 // 队列跟着屏幕上的顺序走
-                onPlay = { PlayerController.playOrToggle(ep, favorites, "fav") },
+                onPlay = { PlayerController.playOrToggle(ep, favorites, TAG_FAV) },
                 showPodcastTitle = true,
                 isFavorite = true,
                 onToggleFavorite = { container.favoriteStore.toggle(ep) },
@@ -266,7 +285,7 @@ private fun DownloadsSection() {
                 episode = d.episode,
                 isCurrent = current?.id == d.episode.id,
                 isPlaying = isPlaying,
-                onPlay = { PlayerController.playOrToggle(d.episode, downloads.map { it.episode }, "dl") },
+                onPlay = { PlayerController.playOrToggle(d.episode, downloads.map { it.episode }, TAG_DL) },
                 // 下载同样是跨节目混排,节目名要显示(见历史段注释)
                 showPodcastTitle = true,
                 downloadStatus = DownloadStatus.Completed,

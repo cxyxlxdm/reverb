@@ -45,9 +45,9 @@ class SettingsStore(context: Context) {
     val contextualRadio = MutableStateFlow(prefs.getBoolean("contextual_radio", false)) // 电台模式:false 随机 / true 情境,默认随机
     val subsGrid = MutableStateFlow(prefs.getBoolean("subs_grid", false)) // 订阅排列:false 列表(一行一个)/ true 宫格,默认列表
     /**
-     * 列表播放模式:0 顺序 / 1 单曲循环 / 2 随机。音阁三段(最新 / 收藏 / 下载)与频道主页
-     * 右端那颗模式按钮循环切换它,**各处共用一个** —— 与「订阅排列」同理,三把开关只会让人
-     * 怀疑自己设错了。
+     * 播放模式的**回落值**:0 顺序 / 1 单曲循环 / 2 随机。
+     * 两个用途 —— ① 老版本"全局一份"时代存的就是这个键,升级后它成为每一列的**起点**;
+     * ② 没有列身份的起播(发现页 / 历史行 / 迷你条 / 单曲播放)用它。
      *
      * ⚠️ 1 这个位置 2026-09-28 之前是「列表循环」,含义换成了「单曲循环」而**存的数没变**
      * (见 `PlayMode` 的注释与 H118)。
@@ -55,7 +55,42 @@ class SettingsStore(context: Context) {
      * 这里只存 **ordinal**(枚举本体在 `playback/PlayerController.PlayMode`),
      * 免得数据层反向依赖播放层。新增模式**只能加在枚举末尾**。
      */
-    val playMode = MutableStateFlow(prefs.getInt("play_mode", 0))
+    val playModeDefault = MutableStateFlow(prefs.getInt("play_mode", 0))
+
+    /**
+     * **每一列自己的**播放模式:key = `playQueue` 的那个 tag
+     * ("inbox" / "fav" / "dl" / 频道主页的 "podcast:<feedUrl,缺图链接时用频道名>"),value = ordinal。
+     *
+     * 2026-09-28 从"全局一份"改成"按列一份":用户实测「在最新里切了随机,收藏里也变随机」
+     * 之后判定模式属于**这一列怎么播**,不属于"我怎么听"(见 H119)。
+     * 没存过的列回落到 [playModeDefault],所以升级当天各列的起点就是用户原本设的那个值。
+     *
+     * 为什么存成 `tag=ordinal` 的 StringSet 而不是拼一个大字符串:tag 里带 `:` 与 `/`,
+     * feedUrl 里还可能出现 `=` 与 `,` —— **一条一个 entry、只按第一个 `=` 切**才不会被 URL 拆坏
+     * (tag 本身不可能以 `=` 开头或含前导分隔符)。
+     *
+     * 已知残留:退订之后这一列的条目不会自动清(一条几字节,且重新订阅还能接上原设置)。
+     */
+    private val _playModeByTag = MutableStateFlow(readPlayModeMap())
+    val playModeByTag: StateFlow<Map<String, Int>> = _playModeByTag
+
+    private fun readPlayModeMap(): Map<String, Int> =
+        (prefs.getStringSet("play_mode_map", emptySet()) ?: emptySet())
+            .mapNotNull { e ->
+                val i = e.indexOf('=')
+                if (i <= 0) return@mapNotNull null
+                e.substring(0, i) to (e.substring(i + 1).toIntOrNull() ?: return@mapNotNull null)
+            }.toMap()
+
+    /** 写某一列的模式。**空 tag 不写这张表** —— 它表示"没有列身份",走 [setPlayModeDefault]。
+     *  这条分流不是防御性摆设:表里的 `""` 一旦有值就会和回落键打架,两处各存一份、读的时候不知听谁。*/
+    fun setPlayModeFor(tag: String, v: Int) {
+        if (tag.isEmpty()) return setPlayModeDefault(v)
+        if (_playModeByTag.value[tag] == v) return
+        val next = _playModeByTag.value + (tag to v)
+        prefs.edit().putStringSet("play_mode_map", next.entries.map { "${it.key}=${it.value}" }.toSet()).apply()
+        _playModeByTag.value = next
+    }
 
     /**
      * 是否已同意**当前版本**的隐私政策。
@@ -96,7 +131,7 @@ class SettingsStore(context: Context) {
     fun setWordHighlight(v: Boolean) { prefs.edit().putBoolean("word_highlight", v).apply(); wordHighlight.value = v }
     fun setContextualRadio(v: Boolean) { prefs.edit().putBoolean("contextual_radio", v).apply(); contextualRadio.value = v }
     fun setSubsGrid(v: Boolean) { prefs.edit().putBoolean("subs_grid", v).apply(); subsGrid.value = v }
-    fun setPlayMode(v: Int) { prefs.edit().putInt("play_mode", v).apply(); playMode.value = v }
+    fun setPlayModeDefault(v: Int) { prefs.edit().putInt("play_mode", v).apply(); playModeDefault.value = v }
 
     /**
      * 同意当前版本的隐私政策。
