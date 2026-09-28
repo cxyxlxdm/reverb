@@ -66,8 +66,13 @@ class SettingsStore(context: Context) {
      * 没存过的列回落到 [playModeDefault],所以升级当天各列的起点就是用户原本设的那个值。
      *
      * 为什么存成 `tag=ordinal` 的 StringSet 而不是拼一个大字符串:tag 里带 `:` 与 `/`,
-     * feedUrl 里还可能出现 `=` 与 `,` —— **一条一个 entry、只按第一个 `=` 切**才不会被 URL 拆坏
-     * (tag 本身不可能以 `=` 开头或含前导分隔符)。
+     * feedUrl 里还可能出现 `=` 与 `,` —— **一条一个 entry**,才不会被 URL 里的分隔符拆坏。
+     *
+     * ⚠️ 解析按**最后一个** `=` 切,不是第一个:频道列的 tag 就是 feedUrl,而 URL 的 query
+     * 里带 `=` 很常见(`?feed=abc`)。按第一个切会把键切成半截、后缀也因带 `=` 而解析不出数字,
+     * 于是**这一列的设置读不回来、静默回落到默认**(写进去还在,读不出来 —— 最难查的那种)。
+     * value 恒为纯数字,所以"最后一个 `=` 之后要能解析成 Int"是足够强的判据;
+     * 真出现不合这个格式的条目就整条丢(等价于没设过)。
      *
      * 已知残留:退订之后这一列的条目不会自动清(一条几字节,且重新订阅还能接上原设置)。
      */
@@ -77,7 +82,7 @@ class SettingsStore(context: Context) {
     private fun readPlayModeMap(): Map<String, Int> =
         (prefs.getStringSet("play_mode_map", emptySet()) ?: emptySet())
             .mapNotNull { e ->
-                val i = e.indexOf('=')
+                val i = e.lastIndexOf('=')
                 if (i <= 0) return@mapNotNull null
                 e.substring(0, i) to (e.substring(i + 1).toIntOrNull() ?: return@mapNotNull null)
             }.toMap()

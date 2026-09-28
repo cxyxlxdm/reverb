@@ -3600,8 +3600,11 @@ H118 把模式定成"跨会话的全局偏好"(`SettingsStore` 里一个 `play_m
 **修法(定稿)**:
 1. **存储按列一张表**:key = tag(`inbox` / `fav` / `dl` / `podcast:<feedUrl>`),value = ordinal。
    用 SharedPreferences 的 **StringSet**(一条一个 `tag=ordinal` entry),而不是拼一个带分隔符的大字符串 ——
-   tag 里带 `:` 与 `/`,feedUrl 还可能出现 `=` 与 `,`,只有"一条一个 entry、只按**第一个 `=`** 切"
-   不会被 URL 拆坏(切在第一个 `=`,后面整段当数)。
+   tag 里带 `:` 与 `/`,feedUrl 里还可能有 `=` 与 `,`。
+   ⚠️ **解析按最后一个 `=` 切**(初版按第一个切,装机时被自己的数据推翻):频道列的 tag 就是 feedUrl,
+   而 URL 的 query 带 `=` 很常见(`…?feed=abc`),按第一个切会把键切成半截、后缀也因带 `=` 解析不出数字
+   ⇒ 那一列的设置**写进去还在、读不回来,静默回落到默认**(比崩溃更难查)。
+   value 恒为纯数字,所以"最后一个 `=` 之后能解析成 Int"是足够强的判据,格式不合就整条丢(等价于没设过)。
 2. **旧的 `play_mode` 键不删,降级成回落值**:它表「没存过的列」和「没有列身份的入口」的走法。
    于是升级当天各列的起点就是用户原本设的那一个值 —— 不需要迁移表,也不会"一更新就清空"。
    代价是那个键从此有两个读法(回落 + 历史),注释里写死了。
@@ -3623,13 +3626,26 @@ H118 把模式定成"跨会话的全局偏好"(`SettingsStore` 里一个 `play_m
 
 **验收**:
 - 两渠道编译通过(`compileDefaultDebugKotlin` + `compileStoreDebugKotlin`,BUILD SUCCESSFUL)。
-- 真机判据三条(**待装**):① 「最新」连点两下到随机 → 切到「收藏」,那颗仍是 ☰(顺序);
-  ② 从收藏点一集起播,日志 `playQueue … tag='fav' mode=SEQUENTIAL`(而不是 inbox 那份随机);
-  ③ 在正在播的那一列点按钮 → `(生效)`;在别的列点 → `(未生效:正在播 '…')`。
-  落盘看 `reverb_settings.xml` 里的 `play_mode_map`。
+- **真机已装并验通**(2026-09-28 Pixel 3 / 8CBX1LP64;判据 = `uiautomator dump` 的 content-desc +
+  应用自己的日志 + `run-as … cat shared_prefs/reverb_settings.xml` 三样对上):
+  · 在「最新」连点两下 → desc `随机播放`,prefs 只多出 `inbox=2`,回落键 `play_mode` **纹丝不动**;
+    同时切到「收藏」那颗仍是 `顺序播放` ⇒ 一份设置不再传染;
+  · 从收藏点一集起播 → `playQueue count=2 index=0 tag='fav' mode=REPEAT_ONE`,
+    取的是 fav 自己存的那格(那一刻 inbox=2 / fav=1),**不是** inbox 的随机;
+  · 正在播 fav 时点「最新」那颗 → `playMode tag='inbox' -> REPEAT_ONE (未生效:正在播 'fav')`;
+    点「收藏」那颗 → `playMode tag='fav' -> SHUFFLE (生效)` ⇒ 生效判据按预期分流;
+  · **频道主页**那颗(「共 73 集」行右端 `[937,1150][1003,1216]`)点一下 →
+    `playMode tag='podcast:https://feed.xyzfm.space' -> REPEAT_ONE (未生效:正在播 'fav')`。
+    **这一条顺带暴露了修法 1 那条警告的风险**:频道 tag 是 feedUrl,而 URL 完全可能自带 `=`
+    (query 参数),按第一个 `=` 切就会读不回来 —— 所以解析按最后一个切。日志与落盘的写法不同
+    (Logger 把 URL 收成 host,存储留完整地址)也是这一条顺手记下来的。
 - 渠道无关(纯逻辑,无包内容差异),不解包 grep。
 
 **没做完 / 已知残留**:
+**没做完 / 已知残留**:
+- **修法 1 的"按最后一个 `=` 切"是装机之后改的**:两渠道编译过了,**未装机复验**。
+  复验判据 = 杀掉进程重开,频道页那颗仍显示上一次设的模式
+  (旧写法对**不含 `=` 的 URL** 恰好也对,所以装机验通的那条不构成对新写法的证据)。
 - **鸿蒙端未移植**,而且它比 Android 落后两轮:H115 那一套按钮(带 `listPlayUsed`)+ 模式全局一份。
   移植清单见 H118 末尾,再加本条的按列存储。
 - **退订频道的条目不会从表里清**(`podcast:<feedUrl>` 一条条留着)。一条几字节,
