@@ -3,12 +3,13 @@ package com.yuyin.reverb.ui
 import android.Manifest
 import android.net.Uri
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,21 +28,25 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.yuyin.reverb.R
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
-import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.GlassNavBar
@@ -58,8 +63,6 @@ import com.yuyin.reverb.ui.screens.PodcastDetailScreen
 import com.yuyin.reverb.ui.screens.QueueScreen
 import com.yuyin.reverb.ui.screens.SettingsScreen
 import com.yuyin.reverb.ui.screens.StampsScreen
-
-private data class TopDest(val route: String, val label: String, val icon: ImageVector)
 
 /**
  * 外层导航：全屏页面（tab 外壳 / 播放器 / 设置 / 关于 / 开源）互不共享底部栏，
@@ -149,26 +152,47 @@ private fun FullScreen(content: @Composable () -> Unit) {
     }
 }
 
-/** 带底部栏的 tab 外壳：内层导航承载 发现 / 音阁 / 播客详情（详情保留迷你播放条、隐藏 tab）。 */
+/** 带底部栏的 tab 外壳：两个顶层 tab 常驻叠层(不走导航栈),详情 / 播放 / 设置由外层承载。 */
 @Composable
 private fun MainShell(rootNav: NavHostController) {
-    val tabNav = rememberNavController()
-
-    val backStackEntry by tabNav.currentBackStackEntryAsState()
-    val route = backStackEntry?.destination?.route
-
+    /**
+     * 两个顶层 tab **不走导航栈**,叠在同一个 Box 里用 [tabKept] 切换。
+     *
+     * 为什么(2026-09-28,Pixel 3 实测):「换 tab 卡」这条被报了**三次**,前两次都当成
+     * "切换时多画了一段东西"——第一次怀疑玻璃栏逐帧读 size,第二次抓到 NavHost 缺省的
+     * 700ms 交叉淡入并关掉(见 H108),用户当时说"不卡了",之后又回来了。
+     * 这次先做**不含被怀疑动作的对照**,同一台机同一种量法(Choreographer 掉帧行数):
+     *
+     * ```
+     * 音阁内换分段 / 发现内换分类      Skipped = 0
+     * 点已选中的那颗 tab(只按不换)   Skipped = 0,整次交互只出 1 帧
+     * 发现 → 音阁(目的地重建)        Skipped = 31 ≈ 517 ms  ← 卡顿就在这一下
+     * ```
+     *
+     * 于是成本既不在转场、也不在底部栏、也不在分段内容,而在**切走的那一页被整个 dispose**:
+     * NavHost 只组合当前 entry,切回来要从零 compose,而且进页的刷新会重跑
+     * (logcat 里每次切回发现都重发一次 `Charts.topByGenre`,切进音阁重发一次
+     * `InboxStore.refresh`)。叠层之后两页共存:每页只在**第一次被选中**时建一次
+     * (`seenLibrary` 那笔账见下面注释),之后切换只是翻一个布尔。
+     */
     val tabs = listOf(
-        TopDest("discover", stringResource(R.string.nav_discover), Icons.Rounded.Explore),
-        TopDest("library", stringResource(R.string.nav_library), Icons.Rounded.LibraryMusic)
+        GlassTabSpec(stringResource(R.string.nav_discover), Icons.Rounded.Explore),
+        GlassTabSpec(stringResource(R.string.nav_library), Icons.Rounded.LibraryMusic)
     )
-    // route 在 tab 切换瞬间可能短暂为 null,若据此判定会让底部栏动画进出、内容上下跳动;
-    // 故 null 一律视作顶层(两个 tab 都带底部栏),消除切 tab 时偶发的上下闪动。
-    val isTopLevel = route == null || tabs.any { it.route == route }
-    val rawIdx = tabs.indexOfFirst { it.route == route }
-    // 选中 tab:route 瞬时为 null 时沿用上一次的,药丸别被抖回第一格
-    var lastTab by remember { mutableIntStateOf(0) }
-    LaunchedEffect(rawIdx) { if (rawIdx >= 0) lastTab = rawIdx }
-    val selectedTab = if (rawIdx >= 0) rawIdx else lastTab
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    /// 音阁建过没有。**懒**建它有两个理由:① 冷启动不该为一个没打开的页面付 compose 的钱;
+    /// ② 进音阁会顺带触发「最新」的进页刷新(`InboxBody` 的 LaunchedEffect),
+    ///    冷启就多发一轮网络请求。首建之后一直留着 —— 留着才是要解决的问题。
+    var seenLibrary by rememberSaveable { mutableStateOf(false) }
+
+    fun select(i: Int) {
+        if (i == 1) seenLibrary = true
+        selectedTab = i
+    }
+
+    // 系统返回的语义与内层 NavHost 时代一致:不在首页先回首页,已在首页才交给系统退出。
+    // (以前这条路由内层回退栈天然提供,拆掉栈之后必须显式接回来。)
+    BackHandler(enabled = selectedTab != 0) { select(0) }
 
     /**
      * 底部悬浮玻璃栏(与鸿蒙 GlassTabBar 同款,装机验收基准)。原来是一块贴底的
@@ -187,32 +211,25 @@ private fun MainShell(rootNav: NavHostController) {
     // navigationBarsPadding 管。
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         CompositionLocalProvider(LocalGlassBottomPad provides bottomPad) {
-            NavHost(
-                navController = tabNav,
-                startDestination = "discover",
-                // **换 tab 不做转场动画。** 缺省值是在 2.7.7 的字节码里核实过的
-                // (NavHostKt$NavHost$3/$4 → sipush 700 + fadeIn/fadeOut):
-                // `fadeIn(tween(700))` / `fadeOut(tween(700))` —— 一次点击要把两整页
-                // (发现是 19 个分类 + 封面宫格,音阁是订阅列表)同时画 700 ms,
-                // 而且新页在这 700 ms 里一直是**半透明**的,叠在旧页上。
-                // 四个方向都要关掉:onSelect 用 `popUpTo(start){saveState}`,所以
-                // 「音阁 → 发现」是一次 **pop**,走的是 popEnter/popExit 那一对 ——
-                // 只关 enter/exit 的话,一半方向的淡入淡出还在。
-                // 底部栏那颗透镜的逐帧动画留着,它就是"我切了"的反馈;内容要的是立刻。
-                // ⚠️ 「改完真的不卡了吗」这条**没法用帧数证明**:两臂都量到满帧
-                // (点后 500ms 窗口 44~48 帧,挪到 450~850ms 窗口还有 42 帧,janky 都是 1)
-                // —— 那段时间里一直有东西在逐帧画,而底部玻璃那套弹簧+取样本身就够把窗口
-                // 占满,淡入淡出加不加在帧计数上分不出来。量具为什么一律失效,见 H108。
-                enterTransition = { EnterTransition.None },
-                exitTransition = { ExitTransition.None },
-                popEnterTransition = { EnterTransition.None },
-                popExitTransition = { ExitTransition.None },
-                modifier = Modifier.fillMaxSize()
+            // 两页叠在一起,谁可见由 selectedTab 决定。**不要用 if 把它们互斥包起来** ——
+            // 那就退回"切走即销毁"的老问题(见 MainShell 上面那段差分)。
+            // [tabKept] 的语义是"照样测量与布局,但不画、不进无障碍树";
+            // 隐藏页因此一直占好尺寸,切回来第一帧就是对的。
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .zIndex(if (selectedTab == 0) Z_VISIBLE else Z_HIDDEN)
+                    .tabKept(selectedTab != 0)
             ) {
-                composable("discover") {
-                    DiscoverScreen(onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") })
-                }
-                composable("library") {
+                DiscoverScreen(onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") })
+            }
+            if (seenLibrary) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(if (selectedTab == 1) Z_VISIBLE else Z_HIDDEN)
+                        .tabKept(selectedTab != 1)
+                ) {
                     LibraryScreen(
                         onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
                         onOpenSettings = { rootNav.navigate("settings") },
@@ -220,10 +237,40 @@ private fun MainShell(rootNav: NavHostController) {
                     )
                 }
             }
+            // **吸收层**:夹在两页之间(命中顺序 可见页 [Z_VISIBLE] → 吸收层 [Z_SHIELD] → 隐藏页 [Z_HIDDEN])。
+            //
+            // 为什么必须有这一层(2026-09-28,Pixel 3 实测):整层摘掉之后,在「发现」的真空白处
+            // 点一下 —— 坐标正好压在隐藏那页的「下载 / 收藏」chip 上 —— 切回音阁**分段真的被改了**。
+            // 可见页不是整屏都可点的:行距、间距、留白处的手势不会被它消费,于是整段漏到下面那页,
+            // 表现就是"切回来发现刚才那页自己换了分段 / 滚走了"。
+            //
+            // 为什么夹在中间,而不是把吞事件的 pointerInput 直接挂到隐藏页上:
+            // Initial 遍先于 Main 遍走完所有节点,隐藏页若在 Initial 里 consume,
+            // 可见页在 Main 里的 `awaitFirstDown()`(默认要求未消费)就拿不到这一下。
+            // ⚠️ 这一句是**推断,没实测**(没有再装一版"挂隐藏页"的去对照)。
+            // 实测过的是当前这一版:可见页的滚动、点击进详情、系统返回全部照常
+            // (消费只挡住"同一事件里排在后面的节点",不会追认到下一个事件,所以挡不住上层的正常识别)。
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .zIndex(Z_SHIELD)
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            do {
+                                awaitPointerEvent().changes.forEach { it.consume() }
+                            } while (currentEvent.changes.any { it.pressed })
+                        }
+                    }
+            )
         }
         Column(
             Modifier
                 .align(Alignment.BottomCenter)
+                // 见 [Z_BAR]:两页带上显式 zIndex 之后,栏必须也跟着显式压在上面。
+                // 不是保险 —— 摘掉这一行装机实测:栏的两个标签从 `uiautomator dump` 里消失、
+                // 点 (746,1945) 完全不换页(8 轮落点全 X),截屏底部也没有栏的像素。
+                .zIndex(Z_BAR)
                 .fillMaxWidth()
                 // 底部留白 = **整个**手势区。鸿蒙同一处是 0.62 倍(`INSET_KEEP`),
                 // 那个数是"栏底到小白条 = 小白条到屏底"这条规则在那台机上的解;
@@ -245,22 +292,44 @@ private fun MainShell(rootNav: NavHostController) {
                 onExpand = { rootNav.navigate("player") },
                 onOpenQueue = { rootNav.navigate("queue") }
             )
-            AnimatedVisibility(visible = isTopLevel) {
-                GlassNavBar(
-                    tabs = tabs.map { GlassTabSpec(it.label, it.icon) },
-                    selected = selectedTab,
-                    onSelect = { i ->
-                        tabNav.navigate(tabs[i].route) {
-                            launchSingleTop = true
-                            restoreState = true
-                            popUpTo(tabNav.graph.startDestinationId) { saveState = true }
-                        }
-                    }
-                )
-            }
+            // 底部栏在这一层**恒显示**(它是顶层外壳的一部分;详情/播放页各有各的外壳,
+            // 不经过这里)。以前包一层 `AnimatedVisibility(isTopLevel)`,而 isTopLevel 由
+            // 内层导航的 route 推出来 —— 拆掉内层栈之后那个判断恒为真,留着只会让人以为
+            // 这里还有"隐藏 tab"的状态(详情页第 87 行那条注释说的是另一件事)。
+            GlassNavBar(
+                tabs = tabs,
+                selected = selectedTab,
+                onSelect = { i -> select(i) }
+            )
         }
     }
 }
+
+/**
+ * tab 外壳这一层的命中/绘制次序(数值本身没有意义,只要大小关系成立)。
+ * [Z_BAR] 必须高于 [Z_VISIBLE]:底部玻璃栏与迷你播放条是后声明的兄弟节点,
+ * 本来只靠声明顺序压在内容之上;两页一旦带上 zIndex,**显式的会盖过隐式的**,
+ * 不给栏一个更大的数就会被可见页整块压住(栏看不见、也点不着)。
+ */
+private const val Z_HIDDEN = 0f
+private const val Z_SHIELD = 1f
+private const val Z_VISIBLE = 2f
+private const val Z_BAR = 3f
+
+/**
+ * 「留着但看不见」的 Modifier —— 隐藏页**照做测量与布局**,只是不画、不进无障碍树。
+ *
+ * 为什么两件事都要:
+ * - 不画用 [drawWithContent] 直接空实现,比 `graphicsLayer { alpha = 0f }` 省 —— 后者仍然
+ *   把整棵子树绘制一遍再乘 0,而这里子树是两张满屏列表,这笔钱不该付。
+ * - [clearAndSetSemantics] 让读屏与 `uiautomator dump` 只看得见当前那一页。不做这条,
+ *   无障碍会把背后那页念出来,装机取证拿到的节点树也会多出一整套假节点(H116 的量法就靠它)。
+ *
+ * 手势不在这里管,由中间那道吸收层挡(理由见调用处)。
+ */
+private fun Modifier.tabKept(hidden: Boolean): Modifier = if (!hidden) this else this
+    .drawWithContent { }
+    .clearAndSetSemantics { }
 
 /** 底部迷你播放条(有正在播放的内容才显示)。供 tab 外壳与频道详情全屏页共用。 */
 @Composable
