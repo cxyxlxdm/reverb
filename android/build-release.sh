@@ -103,6 +103,30 @@ if [ "$IS_SIGNED" = "1" ]; then
       echo "✗ 这个包是**调试证书**签的($SIGNER_DN),发布会被拒。检查 keystore.properties。"
       exit 1;;
   esac
+  # v1 补签:AGP 8.5 在 minSdk>=24 时会忽略 enableV1Signing,v1(JAR)签名块进不了包
+  # (build.gradle 里的 enableV3Signing 有效,v1 无效 —— 实测确认过)。
+  # 部分国内风控的静态解析器只认 META-INF 里的 JAR 签名块,读不到证书就走
+  # 「未知签名 → 风险」分支(a.gray.BulimiaTGen.f 误报期间的包面收敛)。
+  # 这里用 apksigner 显式做 v1+v2+v3 全方案重签,再交给下面的验证环节。
+  # 注意 verify 的口径:补签后 apksigner verify 仍显示「v1:false」—— 那是
+  # 「minSdk>=24 的平台安装校验不采用 v1」的如实报告,不是块无效;jarsigner
+  # -verify 为「jar verified」,keytool -printcert -jarfile 能从块里读出证书,
+  # 这正是老风控解析器要做的两件事。
+  if [ -n "$APKSIGNER" ]; then
+    KS_FILE=$(sed -n 's/^storeFile=//p' keystore.properties)
+    # keystore.properties 的 storeFile 由 build.gradle 相对 app/ 解析;本脚本在仓库
+    # android/ 根目录跑,这里做一次同样的回退
+    [ -f "$KS_FILE" ] || KS_FILE="app/$KS_FILE"
+    KS_ALIAS=$(sed -n 's/^keyAlias=//p' keystore.properties)
+    KS_PASS=$(sed -n 's/^storePassword=//p' keystore.properties)
+    KEY_PASS=$(sed -n 's/^keyPassword=//p' keystore.properties)
+    "$APKSIGNER" sign \
+      --ks "$KS_FILE" --ks-key-alias "$KS_ALIAS" \
+      --ks-pass "pass:$KS_PASS" --key-pass "pass:$KEY_PASS" \
+      --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+      --out "$APK.resigned" "$APK"
+    mv "$APK.resigned" "$APK"
+  fi
   cp "$APK" "$DIST/$OUT_APK"
   OUT_NAME="$OUT_APK"
 else

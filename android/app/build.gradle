@@ -31,6 +31,14 @@ android {
                 storePassword keystoreProps['storePassword']
                 keyAlias keystoreProps['keyAlias']
                 keyPassword keystoreProps['keyPassword']
+                // 签名方案全开(v1 JAR + v2 + v3)。此前仅 v2:v2-only 对 Android 8+
+                // 装机完全正常,但部分国内风控的静态解析器只认 META-INF 里的 JAR
+                // 签名块,读不到证书时会走「未知签名 → 风险」分支 —— 在
+                // a.gray.BulimiaTGen.f 误报持续期间,这是零代价的包面收敛。
+                // v3 对当前判定无影响,先带上(证书未销毁前留一轮换位;真要轮换
+                // 还需旧证书签 rotation 声明,见 H82:这条路已永久关闭,勿指望)。
+                enableV1Signing true
+                enableV3Signing true
             }
         }
     }

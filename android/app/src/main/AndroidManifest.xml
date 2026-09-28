@@ -15,6 +15,15 @@
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
+    <!-- RECEIVE_BOOT_COMPLETED 不在本应用任何代码里使用,它是 work-runtime 的
+         manifest 合入带进来的(RescheduleReceiver)。H75 已把 WorkManager 的
+         自动初始化移除、改为隐私同意后惰性初始化,已排程任务在重启后由系统
+         JobScheduler 自身的持久化恢复,这个接收器只是锦上添花的兜底。
+         而它是灰色软件启发式的高权重项(a.gray 系误报,2026-09 起持续),
+         声明着却零消费纯属白付风险 —— 显式从合并结果中移除。 -->
+    <uses-permission
+        android:name="android.permission.RECEIVE_BOOT_COMPLETED"
+        tools:node="remove" />
 
     <application
         android:name=".ReverbApp"
