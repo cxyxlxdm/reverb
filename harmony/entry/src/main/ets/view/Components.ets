@@ -173,8 +173,8 @@ export struct EpisodeListItem {
   @Prop isFavorite: boolean = false;
   onToggleFavorite: () => void = () => {};
   /// 行内「加入播放列表」。只在节目详情页开:浏览选集为主的页面,一步入队比长按菜单顺手
-  /// —— 长按的触发时长是系统定值(约 500ms,`bindContextMenu` 不可配),改不了;
-  /// 慢的**观感**靠下面的按压态底色缓解,而慢本身靠这个按钮绕开。
+  /// —— 长按再快也要"按住等半秒"(时长已可自定,见 `LIST_MENU_LONG_PRESS_MS`),
+  /// 而这个按钮把那一整步绕开。慢的**观感**另靠下面的按压态底色缓解。
   @Prop showQueueAdd: boolean = false;
   /// 「标记已播完 / 未播完」这一项出现在**能承担撤销的地方**:发现页的搜索结果
   /// (与 Android 一致)和音阁 · 历史。后者是必须的 —— 发现页「继续收听」卡上那个
@@ -402,8 +402,8 @@ export struct EpisodeListItem {
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 12, bottom: 12 })
     .onClick(() => this.onPlay())
     /**
-     * 按压态底色。长按菜单的触发时长是系统定值,等待期原本零反馈 —— 手指按住时
-     * 「不知道按没按上」,观感就是「长按反馈慢」(Android 同样时长但有 ripple 垫着)。
+     * 按压态底色。长按要等满 `LIST_MENU_LONG_PRESS_MS` 才出菜单,等待期原本零反馈 ——
+     * 手指按住时「不知道按没按上」,观感就是「长按反馈慢」(Android 同样时长但有 ripple 垫着)。
      *
      * 不用 stateStyles:它的 pressed 对子图标上的触摸同样会亮(点「入队」键整行高亮,
      * 看着像点了播放)。改由 onTouch 驱动 @State,配合右侧图标的 stopPropagation,
