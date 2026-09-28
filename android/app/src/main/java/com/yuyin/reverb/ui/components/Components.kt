@@ -30,6 +30,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Check
@@ -38,9 +39,9 @@ import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.GraphicEq
-import androidx.compose.material.icons.rounded.Loop
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.RepeatOne
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.FilterChipDefaults
@@ -717,61 +718,35 @@ private fun PlayCircle(isCurrent: Boolean, isPlaying: Boolean, onClick: () -> Un
 }
 
 /**
- * 「这一段列表」的播放按钮 —— 音阁分段条右端与频道主页单集数那一行**共用同一颗**。
+ * 播放模式按钮:**一颗按钮只管模式**,顺序 → 单曲循环 → 随机 → 顺序。
+ * 挂在音阁「最新 / 收藏 / 下载」分段条右端与频道主页「共 N 集」那一行右端两处;
+ * 模式是**全局一份、落盘**,所以两处显示同一个值,点哪一处都改全部。
  *
- * 一颗按钮两件事是定稿设计(「点击就播放这个列表,再次可以切换播放模式」):
- *   · 点它 = 播这一段(整列,从屏幕上第一行起播);
- *   · **正在播这一段**时再点 = 切播放模式(顺序 → 循环 → 随机)。
- * 分派依据是「当前队列是不是这一段」—— 起播时把列表身份当 tag 交给 `playQueue`
- * (见 `PlayerController._activeListTag`)。
+ * **这里没有播放/暂停**:起播的入口是列表里的行 —— 点某一集就播这一整列,
+ * 不需要再摆一颗"从第一行起播"。2026-09-28 之前这颗按钮是一钮两用
+ * (点它 = 起播这一列 + 正在播这列时切模式),为了它先后加过 `_listPlayUsed`(H115)
+ * 和 `activeListTag` 两个会话状态,还把图标画成过与全 App 相反的口径(H118)。
+ * 根因是一个图标槽位同时扛「状态」和「模式」两个语义 —— 拆开之后两个补丁都不需要了。
  *
- * 图标显示**模式本身**,所以没起播时读作「会用这个模式播」,起播后读作「正在这么播」;
- * 正在播的那一段点亮(primary),其余留灰 —— 各处共用一个全局模式,不点亮就看不出刚才是切的哪一段。
- *
- * ⚠️ **唯一的例外是本次会话的第一下**:那一刻默认模式是「顺序」,图标是播放三角,
- * 点下去起播之后仍是三角 —— 装机反馈「初始暂停,点击之后还是不变,就让人觉着怪怪的」。
- * 所以起播前(且本次会话没点过任何一颗按钮时)画**暂停**,点过一次之后暂停不再出现,
- * 直到下次启动 app。判据在 `PlayerController._listPlayUsed`。
- *
- * 规则:**列表没内容就不摆这颗按钮** —— 空列表上的"播放"点了什么都不会发生,是个假按钮。
+ * 图标三态就是模式本身,不再表播放状态;无障碍读的是模式名(与显示给眼睛的那一套同源)。
  */
 @Composable
-fun ListPlayButton(tag: String, episodes: List<Episode>, modifier: Modifier = Modifier) {
-    if (episodes.isEmpty()) return
-    // 这两个读点挂在**这颗按钮这一层**而不是整页:模式一变只需要重建这一颗 Icon,
-    // 不该把 pager 和整列列表拖下水(同 `GlassChipsRow` 的 progress 用 lambda 传的理由)。
-    val playMode by PlayerController.playMode.collectAsStateWithLifecycle()
-    val activeTag by PlayerController.activeListTag.collectAsStateWithLifecycle()
-    val listPlayUsed by PlayerController.listPlayUsed.collectAsStateWithLifecycle()
-    val isLive = activeTag == tag
-    // 没起播 + 本次会话还没点过任何一颗列表按钮 ⇒ 暂停图标(见 PlayerController._listPlayUsed)。
-    // 其余情况一律画模式图标:点亮时读作「正在这么播」,没点亮读作「点它会用这个模式起播」。
-    val showPause = !isLive && !listPlayUsed
-    IconButton(
-        modifier = modifier,
-        onClick = {
-            if (isLive) PlayerController.cyclePlayMode()
-            else PlayerController.playQueue(episodes, 0, tag)
-        }
-    ) {
+fun PlayModeButton(modifier: Modifier = Modifier) {
+    val mode by PlayerController.playMode.collectAsStateWithLifecycle()
+    IconButton(onClick = { PlayerController.cyclePlayMode() }, modifier = modifier) {
         Icon(
-            imageVector = when {
-                showPause -> Icons.Rounded.Pause
-                playMode == PlayMode.REPEAT -> Icons.Rounded.Loop
-                playMode == PlayMode.SHUFFLE -> Icons.Rounded.Shuffle
-                else -> Icons.Rounded.PlayArrow
+            imageVector = when (mode) {
+                PlayMode.SEQUENTIAL -> Icons.AutoMirrored.Rounded.FormatListBulleted
+                PlayMode.REPEAT_ONE -> Icons.Rounded.RepeatOne
+                PlayMode.SHUFFLE -> Icons.Rounded.Shuffle
             },
-            contentDescription = if (isLive) {
-                stringResource(
-                    when (playMode) {
-                        PlayMode.SEQUENTIAL -> R.string.play_mode_sequential
-                        PlayMode.REPEAT -> R.string.play_mode_repeat
-                        PlayMode.SHUFFLE -> R.string.play_mode_shuffle
-                    }
-                )
-            } else stringResource(R.string.lib_play_this_list),
-            tint = if (isLive) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant
+            contentDescription = stringResource(
+                when (mode) {
+                    PlayMode.SEQUENTIAL -> R.string.play_mode_sequential
+                    PlayMode.REPEAT_ONE -> R.string.play_mode_repeat_one
+                    PlayMode.SHUFFLE -> R.string.play_mode_shuffle
+                }
+            )
         )
     }
 }

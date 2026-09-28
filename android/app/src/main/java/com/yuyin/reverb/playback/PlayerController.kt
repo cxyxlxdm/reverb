@@ -23,13 +23,18 @@ import kotlinx.coroutines.launch
 import java.io.File
 
 /**
- * 列表播放模式。顺序 = 播到列表末尾即停;循环 = 末尾回到开头接着播;
+ * 列表播放模式。顺序 = 播到列表末尾即停;单曲循环 = 本集播完原地重播;
  * 随机 = 把这个列表打乱播一遍(走完表就停)。
  *
  * 持久化存的是 **ordinal**(SettingsStore 的 `play_mode`),所以**新增项只能加在末尾** ——
  * 中间插一个位置,老用户存的数就会指向另一个模式。
+ *
+ * ⚠️ 2026-09-28 把 ordinal 1 从「列表循环」换成「单曲循环」(见 H118):这是**同一位置换含义**,
+ * 老用户存过 1 的话升级后会直接进单曲循环。接受这个结果是因为按钮就在那儿、图标当场变了,
+ * 用户看得见并能再点一下改回去;而"加第四个值 + 迁移表"要为一个已经没有 UI 出口的
+ * 列表循环永久养一个状态。列表循环整条**删掉了**,不是藏起来。
  */
-enum class PlayMode { SEQUENTIAL, REPEAT, SHUFFLE }
+enum class PlayMode { SEQUENTIAL, REPEAT_ONE, SHUFFLE }
 
 /**
  * 播放门面：UI 与后台 [PlaybackService] 之间通过 Media3 MediaController 通信。
@@ -71,22 +76,15 @@ object PlayerController {
     private val _playMode = MutableStateFlow(PlayMode.SEQUENTIAL)
     val playMode: StateFlow<PlayMode> = _playMode
 
-    // 队列的身份标签(如 "inbox" / "fav" / "dl"):音阁分段条右端那颗播放按钮用它分辨
-    // 「现在播的就是这一段吗」—— 是 → 这次点击切模式;否 → 这次点击起播这一段。
-    // 列表项自己点出来的队列没有标签(空串),不参与这个判断。
-    private val _activeListTag = MutableStateFlow("")
-    val activeListTag: StateFlow<String> = _activeListTag
-
-    // 本次会话里,列表播放按钮**是否已被点过一次**。只服务一个观感问题:按钮在没起播时画什么。
-    // 画"播放"三角的话首点之后是三角→三角,用户读作「没按上」(装机原话:「初始暂停,
-    // 点击之后还是不变,就让人觉着怪怪的」)。所以未起播时画**暂停**,起播后画模式图标,
-    // 而暂停此后不再出现 —— 它是「这一列还没开始过」的记号,不是"当前处于暂停"。
-    //
-    // 故意不持久化:下次启动回到"还没开始过"。判据与 _activeListTag 同源 —— 只有带 tag 的
-    // 起播才算(音阁各段与频道主页,含直接点段里的单集行);发现页/历史行/迷你条不传 tag,
-    // 它们不对应任何一颗按钮。改一处两端一起改(见 `Components.ets` 的 ListPlayButton)。
-    private val _listPlayUsed = MutableStateFlow(false)
-    val listPlayUsed: StateFlow<Boolean> = _listPlayUsed
+    // 这里原先挂着两个**为按钮而生的会话状态**,现在都删了:
+    //   · `_listPlayUsed`(H115):让未起播时画暂停图标,好让首点看得出变化 —— 那是全 App 图标口径的
+    //     反面,2026-09-28 装机被报「弄反了」(H118)。
+    //   · `activeListTag`:让那颗按钮分辨「现在播的是不是这一段」,是 → 切模式,否 → 起播。
+    // 根因是那颗按钮一颗扛两件事(起播 + 切模式),两个状态都是在给它打补丁。
+    // 2026-09-28 定稿:**一颗按钮只管播放模式**(顺序 / 单曲循环 / 随机),
+    // 起播的入口回到「点列表里的某一集」这一条本来就有的路上 —— 两个状态同时失去需求方。
+    // `playQueue` 的 `tag` 参数**保留**,它现在是日志里的列身份
+    // (`playQueue count=… tag='inbox'`),装机验收一直靠这一行判断点的是哪一段。
 
     // 随机模式用的「打乱索引表」+ 指针。**不是每次抛骰子**:抛骰子会让上一集/下一集不对称
     // (点下一集之后再点上一集回不到刚才那集),而且同一集可能连着播两次。
@@ -113,23 +111,23 @@ object PlayerController {
             _hasNext.value = true // 电台随时可抓下一个
         } else {
             // 用户队列非空,或上下文队列在**当前播放模式**下还有后续,都算「有下一集」。
-            // 这里必须走 nextQueueIndex() 而不是自己算 +1:循环模式永远有下一集,
-            // 随机模式看的是表指针而不是列表下标。
+            // 这里必须走 nextQueueIndex() 而不是自己算 +1:随机模式看的是表指针而不是列表下标,
+            // 而单曲循环**不影响这个判据**(它只改自动续播那条路,见 advanceQueue)——
+            // 手动「下一集」播到列表末尾就是没有下一集,按钮该灰。
             _hasNext.value = _userQueue.value.isNotEmpty() || nextQueueIndex() != null
             _hasPrev.value = prevQueueIndex() != null
         }
     }
 
     /**
-     * 当前播放模式下,上下文队列里的下一集下标;没有下一集返回 null(调用方就此停下)。
+     * 当前播放模式下,上下文队列里**手动下一集**要去的下标;没有下一集返回 null(调用方就此停下)。
      *
-     * ⚠️ 循环模式只在**队列多于一集**时回绕:不少入口播的是「单曲队列」
-     * (`play(episode)`、从「接下来播放」里点某一行 —— 那里 queue 被刻意换成一条),
-     * 无条件回绕会让那一集无限重播,而用户要循环的是他点播放按钮的那个列表。
+     * 顺序与单曲循环在这里是同一个走法:按下「下一集」就是要换一首,原地重播当前这集会被读成按钮坏了。
+     * 「单曲循环播完自己再来一遍」那条特例只在 [advanceQueue] 的 `auto` 路径上生效。
      */
     private fun nextQueueIndex(): Int? = when (_playMode.value) {
-        PlayMode.SEQUENTIAL -> if (queueIndex in 0 until queue.size - 1) queueIndex + 1 else null
-        PlayMode.REPEAT -> if (queue.size > 1) (queueIndex + 1).mod(queue.size) else null
+        PlayMode.SEQUENTIAL, PlayMode.REPEAT_ONE ->
+            if (queueIndex in 0 until queue.size - 1) queueIndex + 1 else null
         PlayMode.SHUFFLE ->
             if (shufflePos in 0 until shuffleOrder.lastIndex) shuffleOrder[shufflePos + 1] else null
     }
@@ -153,10 +151,21 @@ object PlayerController {
     }
 
     /**
-     * 沿当前播放模式走到队列的下一集并播它;走到头(顺序播完 / 随机走完表 / 单曲队列)
-     * 返回 false,由调用方停下。
+     * 沿当前播放模式走到队列的下一集并播它;走到头(顺序播完 / 随机走完表)返回 false,由调用方停下。
+     *
+     * @param auto 只有「本集自然播完」这条路径传真。**单曲循环只在自动推进时原地重播**;
+     *   手动按「下一集」不传,于是走 [nextQueueIndex] 的顺序口径。
+     *   注意这等于承认「单曲队列 + 单曲循环 = 这一集无限重播」—— 那正是这个模式的名字,
+     *   以前列表循环时代刻意躲开的正是它(见本文件被删掉的那段 ⚠️ 与 H118)。
      */
-    private fun advanceQueue(): Boolean {
+    private fun advanceQueue(auto: Boolean = false): Boolean {
+        if (auto && _playMode.value == PlayMode.REPEAT_ONE) {
+            if (queue.isEmpty()) return false
+            log.i(TAG, "advanceQueue repeat-one index=$queueIndex")
+            updateNavFlags()
+            playEpisode(queue[queueIndex])
+            return true
+        }
         val ni = nextQueueIndex() ?: return false
         if (_playMode.value == PlayMode.SHUFFLE) shufflePos++
         queueIndex = ni
@@ -211,9 +220,7 @@ object PlayerController {
         queue = listOf(head)
         queueIndex = 0
         if (_playMode.value == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
-        // 上下文队列换成了这一条,分段条那颗播放按钮不再「管着」正在播的列表
-        // (按钮回到「点我起播这一段」的语义,见 _activeListTag)
-        _activeListTag.value = ""
+        // 上下文队列换成了这一条:此后自动续播按「用户队列优先」走,列表模式暂时管不到它
         updateNavFlags()
         playEpisode(head, isRadio = false)
         return true
@@ -323,10 +330,11 @@ object PlayerController {
                     _radioMode.value -> advanceRadio()
                     // 用户队列非空:自动接上队首,连续收听
                     _userQueue.value.isNotEmpty() -> playQueueAt(0)
-                    // 上下文队列(从一个列表起播的):按播放模式接下一集。
-                    // 这条分支是加播放按钮时补上的 —— 之前列表播完一集就停在这里,
-                    // 只有手动按下一集会走;「点一下播这个列表 + 循环/随机」不先补续播就不成立。
-                    else -> advanceQueue()
+                    // 上下文队列(点某一集起播的):按播放模式接下一集。
+                    // 这条分支是加播放按钮那轮补上的 —— 之前列表播完一集就停在这里,
+                    // 只有手动按下一集会走。现在**随机与单曲循环两档全靠它成立**
+                    // (单曲循环就是这里的 auto 路径,见 advanceQueue)。
+                    else -> advanceQueue(auto = true)
                 }
             }
         }
@@ -343,7 +351,8 @@ object PlayerController {
      * 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。
      *
      * @param tag 队列身份("inbox" / "fav" / "dl" / 频道主页用 "podcast:<feedUrl>")。
-     *   分段条与频道主页那两颗播放按钮传它,UI 据此判断「这颗按钮现在管的就是正在播的这一段」;
+     *   **只进日志**,用作装机验收时"点的到底是哪一段"的判据;曾经还驱动过分段条那颗按钮的点亮
+     *   与"点它=起播还是切模式",那两颗状态都删了(见本对象顶部注释与 H118)。
      *   不属于任何可见列表的入口(「下一个播放」摘出来单播、迷你条)不传(空串)。
      */
     fun playQueue(episodes: List<Episode>, startIndex: Int, tag: String = "") {
@@ -352,15 +361,13 @@ object PlayerController {
         queue = episodes
         queueIndex = startIndex.coerceIn(0, episodes.lastIndex)
         if (_playMode.value == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
-        _activeListTag.value = tag
-        if (tag.isNotEmpty()) _listPlayUsed.value = true
         log.i(TAG, "playQueue count=${episodes.size} index=$queueIndex tag='$tag' mode=${_playMode.value}")
         updateNavFlags()
         playEpisode(episodes[queueIndex], isRadio = false)
     }
 
     // ---- 播放模式 ----
-    /** 顺序 → 循环 → 随机 → 顺序。分段条那颗播放按钮在「正在播这一段」时点它就走这里。 */
+    /** 顺序 → 单曲循环 → 随机 → 顺序。分段条与频道主页右端那颗模式按钮点一下就走一格。 */
     fun cyclePlayMode() {
         val entries = PlayMode.entries
         setPlayMode(entries[(entries.indexOf(_playMode.value) + 1) % entries.size])
@@ -490,9 +497,7 @@ object PlayerController {
     /**
      * 队列版:同一集则暂停/继续,否则以该列表为队列从此集起播。
      *
-     * @param tag 与 [playQueue] 同一个队列身份。**列表行内点起播也要传它** —— 否则从某一集
-     *   起播之后,段条/头部那颗播放按钮认不出「这颗按钮管的就是正在播的这一段」,
-     *   点它会回到「从头播这一段」而不是切播放模式(频道主页那颗按钮就是这样被点第一集弄丢的)。
+     * @param tag 与 [playQueue] 同一个队列身份,行内点起播也照传(它只进日志,见那边)。
      */
     fun playOrToggle(episode: Episode, queue: List<Episode>, tag: String = "") {
         if (_current.value?.id == episode.id && controller != null) togglePlayPause()

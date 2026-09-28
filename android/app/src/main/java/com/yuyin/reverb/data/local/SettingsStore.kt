@@ -45,8 +45,12 @@ class SettingsStore(context: Context) {
     val contextualRadio = MutableStateFlow(prefs.getBoolean("contextual_radio", false)) // 电台模式:false 随机 / true 情境,默认随机
     val subsGrid = MutableStateFlow(prefs.getBoolean("subs_grid", false)) // 订阅排列:false 列表(一行一个)/ true 宫格,默认列表
     /**
-     * 列表播放模式:0 顺序 / 1 循环 / 2 随机。音阁三段(最新 / 收藏 / 下载)右端那颗播放按钮
-     * 循环切换它,**三段共用一个** —— 与「订阅排列」同理,三把开关只会让人怀疑自己设错了。
+     * 列表播放模式:0 顺序 / 1 单曲循环 / 2 随机。音阁三段(最新 / 收藏 / 下载)与频道主页
+     * 右端那颗模式按钮循环切换它,**各处共用一个** —— 与「订阅排列」同理,三把开关只会让人
+     * 怀疑自己设错了。
+     *
+     * ⚠️ 1 这个位置 2026-09-28 之前是「列表循环」,含义换成了「单曲循环」而**存的数没变**
+     * (见 `PlayMode` 的注释与 H118)。
      *
      * 这里只存 **ordinal**(枚举本体在 `playback/PlayerController.PlayMode`),
      * 免得数据层反向依赖播放层。新增模式**只能加在枚举末尾**。

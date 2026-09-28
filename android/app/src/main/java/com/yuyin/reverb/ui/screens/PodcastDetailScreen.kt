@@ -66,7 +66,7 @@ import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.PodcastState
 import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.EpisodeListItem
-import com.yuyin.reverb.ui.components.ListPlayButton
+import com.yuyin.reverb.ui.components.PlayModeButton
 import com.yuyin.reverb.ui.components.formatListenDuration
 import com.yuyin.reverb.ui.share.ShareCards
 import com.yuyin.reverb.ui.podcastViewModel
@@ -171,8 +171,8 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                     val subscribed = subs.any { it.feedUrl == s.podcast.feedUrl }
                     // 听歌时长存的是这个 key(既有口径,不能改)
                     val channelKey = s.podcast.feedUrl.ifBlank { s.podcast.title }
-                    // 这一列的身份:头部那颗播放按钮靠它判断「正在播的就是这一列」。
-                    // 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名会把另一家的按钮点亮。
+                    // 这一列的身份,起播时随 playQueue 进日志(装机靠这一行认出点的是哪一列)。
+                    // 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名日志里就分不出是谁。
                     // 加前缀是为了**永不可能**撞上音阁那三个分段名("inbox" / "fav" / "dl")。
                     val listTag = "podcast:$channelKey"
                     LazyColumn(
@@ -188,7 +188,6 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                             PodcastDetailHeader(
                                 podcast = s.podcast,
                                 episodes = s.episodes,
-                                playListTag = listTag,
                                 listenedMs = listenedMs,
                                 subscribed = subscribed,
                                 onSubscribe = { container.subscriptionStore.toggle(s.podcast) }
@@ -242,9 +241,8 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
 @Composable
 private fun PodcastDetailHeader(
     podcast: Podcast,
-    /** 这一列的单集 + 身份 tag:「单集数」那一行右端那颗播放按钮要用(与音阁分段条同一颗)。 */
+    /** 这一列的单集:「共 N 集」那一行要显示条数。 */
     episodes: List<Episode>,
-    playListTag: String,
     listenedMs: Long,
     subscribed: Boolean,
     onSubscribe: () -> Unit
@@ -321,8 +319,9 @@ private fun PodcastDetailHeader(
         }
 
         Spacer(Modifier.height(16.dp))
-        // 单集数这一行是这一列的标题行,所以播放按钮挂在它右端 —— 与音阁「段条右端」
+        // 单集数这一行是这一列的标题行,所以模式按钮挂在它右端 —— 与音阁「段条右端」
         // 同一处语义(动作属于那一段列表,不属于页面顶栏)。
+        // 起播没有专门那颗按钮:点下面任意一集就播这一整列(见 Components.kt `PlayModeButton`)。
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 stringResource(R.string.episode_count, episodes.size),
@@ -330,7 +329,7 @@ private fun PodcastDetailHeader(
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onBackground
             )
-            ListPlayButton(tag = playListTag, episodes = episodes)
+            PlayModeButton()
         }
         if (listenedMs > 0) {
             Spacer(Modifier.height(6.dp))

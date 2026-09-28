@@ -155,9 +155,8 @@
 
     <string name="lib_subscriptions">Suscripciones</string>
     <string name="subs_layout_toggle">Cambiar disposición</string>
-    <string name="lib_play_this_list">Reproducir esta lista</string>
     <string name="play_mode_sequential">Reproducción en orden</string>
-    <string name="play_mode_repeat">Reproducción en bucle</string>
+    <string name="play_mode_repeat_one">Repetir este episodio</string>
     <string name="play_mode_shuffle">Reproducción aleatoria</string>
     <string name="lib_favorites">Favoritos</string>
     <string name="empty_favorites">Aún no hay episodios favoritos. Toca el corazón en el reproductor para guardar uno</string>

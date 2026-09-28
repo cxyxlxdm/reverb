@@ -50,7 +50,7 @@ import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.GLASS_CHIPS_TOP_PAD
 import com.yuyin.reverb.ui.components.GlassChipsRow
-import com.yuyin.reverb.ui.components.ListPlayButton
+import com.yuyin.reverb.ui.components.PlayModeButton
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.PodcastGridItem
 import com.yuyin.reverb.ui.components.PodcastListItem
@@ -62,13 +62,11 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val history by container.historyStore.history.collectAsStateWithLifecycle()
     val subsGrid by container.settingsStore.subsGrid.collectAsStateWithLifecycle()
-    // 条右端那颗按钮要按「这一段有没有内容」决定摆不摆,所以这几份数据在**栏这一层**
-    // 也要读一遍(各段自己还会再 collect 同一个 flow —— StateFlow 的订阅很轻,
-    // 且这几个列表只在进页刷新时整体替换,不会逐帧变)。
+    // 订阅分段右端那颗「行 / 宫格」切换要按**有没有内容**决定摆不摆,
+    // 所以这份数据在**栏这一层**也要读一遍(订阅页自己还会再 collect 同一个 flow ——
+    // StateFlow 的订阅很轻,且这个列表只在进页刷新时整体替换,不会逐帧变)。
+    // 最新 / 收藏 / 下载三份**不在这里读了**:段尾那颗现在只有播放模式,与列空不空无关。
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
-    val inbox by container.inboxStore.episodes.collectAsStateWithLifecycle()
-    val favorites by container.favoriteStore.favorites.collectAsStateWithLifecycle()
-    val downloads by container.downloadStore.downloads.collectAsStateWithLifecycle()
     // 分段用 HorizontalPager 承载,可横滑切换;chips 与 pager 双向联动。
     // 订阅 / 最新 / 收藏 / 下载 / 历史。「最新」= 全部订阅的更新聚合,归入音阁。
     val sections = listOf(
@@ -126,22 +124,14 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                 //
                 // 五段**每段都有一颗自己的动作**,所以条改回通栏之后右端不再是死区
                 // (条宽固定的理由见 Components.kt `GlassChipsRow`)。
-                // 规则:**这一段没内容就不摆动作** —— 空列表上的"播放/清空"点了
-                // 什么都不会发生,是个假按钮。
+                // 规则:**这一段没内容就不摆动作** —— 空列表上的"清空/排列"点了
+                // 什么都不会发生,是个假按钮。**唯一的例外是播放模式那颗**:它改的是全局
+                // 模式而不是这一列,列空着点它照样生效。
                 endAction = {
-                    // 三段单集列表(最新 / 收藏 / 下载):一颗**播放按钮**。
-                    // 交互、图标语义与「没内容不摆按钮」那条规则都收在
-                    // `Components.kt ListPlayButton`(频道主页用的是同一颗)。
-                    // 三段共用一个**全局**模式,所以正在播的那一段点亮(primary),
-                    // 另两段留灰 —— 不点亮就看不出刚才是切的哪一段。
-                    if (section in 1..3) {
-                        val (tag, list) = when (section) {
-                            1 -> "inbox" to inbox
-                            2 -> "fav" to favorites
-                            else -> "dl" to downloads.map { it.episode }
-                        }
-                        ListPlayButton(tag = tag, episodes = list)
-                    }
+                    // 三段单集列表(最新 / 收藏 / 下载):一颗**播放模式按钮**。
+                    // 三态图标与点击口径收在 `Components.kt PlayModeButton`
+                    // (频道主页「共 N 集」那一行右端用的是同一颗)。模式是全局一份,三段看到同一个值。
+                    if (section in 1..3) PlayModeButton()
                     if (section == 4 && history.isNotEmpty()) {
                         TextButton(
                             onClick = { container.historyStore.clear() },
@@ -219,7 +209,7 @@ private fun FavoritesSection() {
         return
     }
     // 存储里就是「最新收藏在前」(`FavoriteStore.toggle` 用 add(0, …)),显示不再翻。
-    // 分段条那颗播放按钮起播用的是**同一份** favorites,两边顺序必须一致。
+    // 行内点某一集起播时,整列 favorites 会成为播放队列 —— 显示顺序与队列顺序必须是同一份。
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
@@ -262,7 +252,7 @@ private fun DownloadsSection() {
         return
     }
     // 与收藏段同理:存储顺序即「最新下载在前」,显示不再翻。
-    // 分段条那颗播放按钮起播用的是 `downloads.map { it.episode }` —— 同一份顺序。
+    // 行内点某一集起播时,整列 `downloads.map { it.episode }` 会成为播放队列 —— 顺序必须是同一份。
     LazyColumn(
         Modifier.fillMaxSize(),
         contentPadding = PaddingValues(

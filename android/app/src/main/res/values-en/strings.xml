@@ -155,10 +155,9 @@
 
     <string name="lib_subscriptions">Subscriptions</string>
     <string name="subs_layout_toggle">Toggle layout</string>
-    <string name="lib_play_this_list">Play this list</string>
     <string name="play_mode_sequential">Play in order</string>
-    <string name="play_mode_repeat">Repeat this list</string>
-    <string name="play_mode_shuffle">Shuffle this list</string>
+    <string name="play_mode_repeat_one">Repeat this episode</string>
+    <string name="play_mode_shuffle">Shuffle</string>
     <string name="lib_favorites">Favorites</string>
     <string name="empty_favorites">No favorite episodes yet. Tap the heart on the player to save one</string>
     <string name="a11y_favorite">Favorite</string>

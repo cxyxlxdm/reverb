@@ -3256,6 +3256,9 @@ offset:{x:this.pressX,y:0}, aboutToDisappear: () => { TapGuard.lowerSoon(); this
 
 ### H115. 列表播放按钮首次点击图标不变 —— 默认模式恰好是「播放三角」,而暂停态只在冷启后第一次有意义
 
+> ⚠️ **本条的修法同日已被撤销**:它引入的 `listPlayUsed` 后来被判定是"图标口径的反面",
+> 而那颗按钮的起播职责整块删掉了。定稿见 **H118**。下面保留原文,是因为根因分析(教训 ①②)仍然成立。
+
 **现象**(2026-09-28,用户反馈):
 「最新、收藏、下载、频道主页的播放按钮,首次点击按钮不会变……
 初始暂停,点击之后还是不变,就让人觉着怪怪的。」
@@ -3478,3 +3481,98 @@ Compose Foundation 1.6.8,`visible` 是 1.7 才有的扩展,写了直接 `Unresol
    (网络图 + 进页刷新),色差读数落在 0.5 与 1.0 之间分不开 ⇒ **放弃这条**。
    留在这里的意义:**判断叠层先看命中顺序(那条好测,点一下就知道),别顺手把绘制顺序当已知**;
    而且这类"两个变量都在动"的图像对照,要么先固定内容要么别做。
+
+### H118. 那颗「列表播放按钮」一颗扛两件事 —— 三轮图标口径都救不了,最后是把职责拆掉
+
+**现象**(2026-09-28,用户反馈,原话):
+「默认按钮应该是三角形吧,代表暂停播放,双竖杠代表正在播放,现在应该是弄反了。」
+同日最后一句才是定论:
+「应该是有一个按钮,用于切换顺序播放、单曲循环、随机播放,表现这三种即可。
+**不需要单独增加一个播放按钮**,因为点击列表里的某一个条目就可以开始播放了。」
+
+**根因**:
+音阁分段条右端与频道主页「共 N 集」行右端那颗按钮,被设计成**一钮两用**:
+点它 = ①从头播这一整列(起播)**并且** ②正在播这一列时切播放模式。
+一个图标槽位要同时表达「播没播」和"按什么走法",于是三轮都只能牺牲一边:
+
+| 轮次 | 图标表什么 | 症状 | 当时的补丁 |
+|---|---|---|---|
+| ① | 模式(▶ 顺序 / 🔁 / 🔀) | 默认模式就是 ▶,首点"状态变了图标没变",读作没按上 | H115 加会话状态 `listPlayUsed`,未起播时画 ⏸ |
+| ② | 播放状态(▶ / ⏸) | 与全 App 其余四处相反,用户报「弄反了」 | 模式改**长按**切 —— 于是模式**失去可视载体** |
+| ③ | 状态 + 长按切模式 + 气泡念文字 | 气泡装机后判定「感觉不好,不要」 | 整块删 |
+
+三轮的共同点是**都在给那颗按钮找说法**,而不是问"它该不该存在"。
+起播的入口本来就有(点列表里任意一集,`playOrToggle(ep, 整列, tag)` 会把这一列变成队列),
+那颗按钮的"起播"这一半是**重复功能** —— 删掉它,另一半(切模式)就不需要任何状态、
+不需要长按、也不需要气泡:图标画的就是模式本身,点一下走一格,所见即所得。
+
+**修法(定稿)**:
+1. `ListPlayButton(tag, episodes)` → **`PlayModeButton()`**:`IconButton` + 三态图标
+   (`Icons.AutoMirrored.Rounded.FormatListBulleted` 顺序 / `Icons.Rounded.RepeatOne` 单曲循环 /
+   `Icons.Rounded.Shuffle` 随机),点一下 `cyclePlayMode()`。`contentDescription` 就是模式名,
+   所以读屏念出来的也是当前模式 —— 这是撤掉气泡之后模式唯一的文字出口。
+2. **两个为那颗按钮而生的会话状态一起删**:`_listPlayUsed`(H115)与 `activeListTag`。
+   `playQueue(..., tag)` 的 `tag` **参数保留**,但只进日志
+   (`playQueue count=… tag='inbox'` 是历次装机验收的判据)。
+3. **「循环播放」(列表回绕)整条换成「单曲循环」**:枚举 ordinal 1 换含义、存的数不变
+   (见 `PlayMode` 与 `SettingsStore.playMode` 的注释)。
+   关键实现点:**手动「下一集」与自动续播必须分家** ——
+   `nextQueueIndex()` 里 `REPEAT_ONE` 与 `SEQUENTIAL` 同走法(按下下一集就是要换一首,
+   原地重播会被读成按钮坏了,`hasNext` 也因此该灰),
+   原地重播只在 `advanceQueue(auto = true)` 这条"本集自然播完"的路径上生效。
+   顺带承认了「单曲队列 + 单曲循环 = 这一集无限重播」—— 那正是这个模式的名字;
+   以前列表循环时代刻意躲开的无限重播,是躲"用户要循环整列却被单曲队列卡住",与这里不是一回事。
+4. 「这一段没内容就不摆动作」那条规则**只保留给清空/排列**,模式按钮不受它管:
+   它改的是全局模式,列空着点它照样生效。
+
+**走过的技术死路(留档,别再试)**:
+- material3 **1.2.1** 里 `BasicTooltipBox` / `rememberBasicTooltipState` / `TooltipBox` 全是 **internal**
+  (编译直接报 `it is internal`),公开的 `PlainTooltip` 是 `CaretScope` 上的扩展函数,
+  不进 `TooltipBox` 拿不到那个 receiver ⇒ **这个版本组合里"系统同款 tooltip"根本走不通**,
+  只能自己挂 `androidx.compose.ui.window.Popup` + 手写 `PopupPositionProvider`。
+  手搓版做完、装机、被判定不要,整块删除。
+- `TooltipDefaults.plainTooltipContainerShape / ContainerColor / ContentColor` 是**属性不是函数**,加括号编译失败。
+- `IconButton` 没有长按槽,要长按只能换 `combinedClickable`(需 `@OptIn(ExperimentalFoundationApi::class)`) ——
+  这条现在也不需要了,但顺带记一下:换过去之后触控目标从 48dp 掉到自设的 40dp。回到 `IconButton` 就回来了。
+
+**验收**:
+- 两渠道编译通过(`compileDefaultDebugKotlin` + `compileStoreDebugKotlin`,BUILD SUCCESSFUL)。
+- 图标可用性**先验产物再写**:解 `material-icons-extended-android/1.6.8` 的 `classes.jar`,
+  确认 `rounded/RepeatOneKt`、`rounded/ShuffleKt`、`automirrored/rounded/FormatListBulletedKt` 三个类都在
+  (同版本另有非 automirrored 的 `FormatListBulleted`,已 `@Deprecated`)。
+- **真机已装并验到的一半**(2026-09-28 Pixel 3 / 8CBX1LP64,判据 = `uiautomator dump` 的 content-desc
+  + 截屏裁剪 + 应用自己的日志 `adb exec-out run-as … cat files/logs/reverb.log`):
+  · 音阁「最新」段那颗在 `[926,311][992,377]`,三态 desc 随模式走(`顺序播放` / `单曲循环` / `随机播放`),
+    裁剪图三个图标都实拍到(☰ 项目列表 / 🔁¹ 带 1 的回绕 / 🔀 交叉箭头),尺寸下都可辨;
+  · 连点日志 `SEQUENTIAL -> REPEAT_ONE -> SHUFFLE -> SEQUENTIAL -> REPEAT_ONE -> SHUFFLE` 五格连续,
+    **期间没有一条 `playQueue` / `togglePlayPause`** —— 点它不再顺带起播,这是这一轮要的效果;
+  · **频道主页**那颗在「共 73 集」那一行右端 `[937,1150][1003,1216]`,desc 同为 `顺序播放`;
+  · 起播入口仍然工作(用户自己在机上点列表行,日志出 `playQueue count=24 index=1 tag='inbox' mode=SEQUENTIAL`)。
+- **未验(必须补)**:① **单曲循环自然播完原地重播**(要等一集 `STATE_ENDED`,判据是日志新增的
+  `advanceQueue repeat-one index=…`);② 随机走完表停;③ 单曲循环下手动「下一集」照常前进、
+  且到列表末尾 `hasNext` 该灰;④ 顺序播放那颗 ☰ 会不会被读成"打开播放队列"(`QueueMusic` 已在迷你条上)。
+  ①②③ 都是**只有真机能给结论**的,装机之后连着一集播完的时间窗一起做。
+- **老用户影响未验**:存过 `play_mode=1`(旧列表循环)的设备升级后直接进单曲循环。
+  接受这个结果的理由写在 `PlayMode` 注释里;真机验的时候要找一台存过 1 的机子看一眼按钮图标。
+
+**没做完 / 已知残留**:
+- **鸿蒙端未移植**,而且它现在跑的是 H115 那一套(`listPlayUsed` + 模式图标 + 列表循环),
+  与 Android **口径相反**。移植清单:`Components.ets` 的 `ListPlayButton`、
+  `PlayerController.ets` 的 `listPlayUsed` / `activeListTag` / `PlayMode` 枚举 / `nextQueueIndex` 与自动续播分家、
+  五语种的 `play_mode_repeat` → `play_mode_repeat_one`、以及 ArkTS 没有 DCE 这件事与本条无关(纯逻辑改动)。
+- macOS 端本来就没有这颗按钮(它的电台按钮另有图标口径),不动。
+
+**教训与可复用的规律**:
+① **同一个观感问题连着三轮都靠换图标解决,就该怀疑的是控件本身。**
+   判据很简单:如果每次修法都要**新增一个状态**(`listPlayUsed`)或**新增一种手势**(长按)
+   或**新增一层浮层**(气泡)来解释这颗按钮,那它承担的职责就多于一件。
+② **先问"这个入口是不是已经有了"。** 起播早就有(点某一集),那颗按钮的起播是重复功能;
+   重复功能不会因为没有入口而消失,只会因为"两个入口说法不同"而制造 bug。
+③ **报障的措辞里往往已经含了正确修法。** "应该是弄反了"给出的是期望口径,
+   第一动作应该是 grep 全 App 找同类控件的写法(结果四处都是 `isPlaying ? Pause : PlayArrow`),
+   而不是就地重新设计 —— 这一步我晚了三轮。
+④ **"默认态"要和"轮动的第一格"区分开**(H115 那条教训仍然成立,但解法变了):
+   不再给轮动加前置态,而是让图标只表模式 —— 顺序播放就是它的样子,没有"还没开始"的画法。
+⑤ **改枚举里某个 ordinal 的含义,要么加版本号,要么把后果写在原地。**
+   这里选了"写在原地"(两处注释 + 本条),因为第四个值没有 UI 出口、迁移表无处可去。
+   与硬规矩 11 的差别在于:那是缓存数据(能作废重算),这是用户设置(只能就地说明)。
