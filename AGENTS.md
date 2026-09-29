@@ -69,28 +69,42 @@ hdc install -r entry/build/default/outputs/default/entry-default-signed.hap
 
 ```bash
 cd macos
+# ↓↓ 这两条在「构建机」上跑(本机跑不了,原因见下面 ⚠️ 块)↓↓
 swift build -c release             # 只编译
 ./package.sh                       # 编译 → .app → ad-hoc 签名 → 解包验收 → dmg 进 dist/
 ```
 
-> ⚠️ **这两条命令在开发机(本文写作时那台)跑不起来,而且不是"只差一步"**:
-> ① 只有 Command Line Tools —— `swift --version` 是 5.7.2(SwiftPM 报错里写的 installed version 是 5.7.1),
-> 而 `macos/Package.swift` 声明 `swift-tools-version:5.9` ⇒ SwiftPM 直接版本门挡回;
-> ② 可用的最高 SDK 是 13.1(`/Library/Developer/CommandLineTools/SDKs/` 只有 12 / 12.3 / 13 / 13.1),
-> 而 `TranscriptPage.swift` 那四处双参数 `onChange` 要 macOS 14 SDK;机器上没有 Xcode
-> (`xcodebuild` 直接报 requires Xcode),也没法装 —— **Xcode 15+ 要求 macOS 13+,这台是 12.7.6**;
+> ⚠️ **这两条命令不在本机跑。本机的角色已由用户定死(2026-09-29):开发 Android / 鸿蒙 / 文档,
+> 加上对 macOS「读代码、改代码、做类型检查」;macOS 的出包与运行验收固定在另一台机器上。**
+> 别再在这台上重试,也别为了让它们跑起来去改源码 —— 下面四层是实测,不是"没装好":
+> ① `macos/Package.swift` 是 `swift-tools-version:5.9`,而本机 SwiftPM 报 installed version 5.7.1
+> (`swift --version` 自己写 5.7.2)⇒ 版本门直接挡回;
+> ② **上限封在 SDK 上**:机型 `MacBookPro11,4`(无 T2),`softwareupdate --list-full-installers`
+> 只列出 12.7.6 / 11.7 / 10.15 / 10.13 ⇒ **系统上限就是当前的 12.7.6,没有 Ventura 及以后**;
+> 系统 12 ⇒ 最高 Xcode 14.2 ⇒ 最高 SDK **13.1**(`/Library/Developer/CommandLineTools/SDKs/` 只有 12 / 12.3 / 13 / 13.1),
+> 而 `TranscriptPage.swift` 那四处双参数 `onChange` 要 macOS 14 SDK —— 14 SDK 只随 Xcode 15 分发,
+> Xcode 15 又要 macOS 13.5+(`xcodebuild` 在这台直接报 requires Xcode)。
+> **单独去装 Swift 5.9 编译器也没用:缺的是 SDK,不是编译器。**
 > ③ 就算前两条都好办,**这台机器也跑不起来产物**:`Info.plist` 的 `LSMinimumSystemVersion` 是 13.0,
-> 低于宿主机 12.7.6 ⇒ 二进制定位不到可运行的系统。
+> 高于宿主机 12.7.6 ⇒ 加载即拒。
+> ④ **靠降级换兼容也不通**:`RootView.swift:20`、`ListenStatsView.swift:16`、`FootprintView.swift:15`
+> 用的是 macOS 13+ 的 `NavigationStack` 且没有降级分支 ⇒ 要让包在 12.7.6 上跑,要重写的是整个根导航,
+> 不是那 4 行 `onChange`;而本机就算硬编出来,也只是一个面向 macOS 13+ 的 x86_64 包(在架那个是 arm64),
+> 自己跑不了、也不该拿去交付。
 > **所以「出包 + 运行验收」必须在装了 Xcode 15+ 且系统 ≥ macOS 13 的机器上做。**
 > 旁证:`macos/dist/余音-Reverb-1.0.2-arm64.dmg`(2026-09-20 那个包)里 `minos 13.0 / sdk 26.5 / arm64 单架构`,
 > 是另一台得多的机器打的。
-> 这台机器上能做的最强验收是**整模块 typecheck 并与改前基线差分**:
+> **本机对 macOS 改动的最强验收 = 整模块 typecheck 并与改前基线差分**:
 > `swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target x86_64-apple-macos13.0 $(find Sources -name '*.swift')`
 > —— 基线用 `git archive HEAD macos | tar -x -C /tmp/…` 解一份出来单独跑,再逐条比对错误集;
 > **只说"错误没变多"是不够的,要同时说明它证明不了什么**(界面与行为一帧都没跑起来)。见 H124。
-> `package.sh` 末尾那段解包验收(版本号 / 四语 `.strings` lint / 播放模式字符串在不在二进制里 /
-> `minos`+`sdk`+架构 / ad-hoc 签名)已在这台机器上拿那个 1.0.2 旧包**空跑验证过输出形态**
-> (它报出 `play_mode_map 0`、`1.0.2`、`arm64`),但产生新包那几步仍未跑。
+>
+> **在构建机上出包 = 一条命令**:`cd macos && ./package.sh`。它做 编译 → 组装 .app → ad-hoc 签名 →
+> **解包验收**(处理量 / 八个判据词计数 / 四语 `.strings` lint / 版本号 + `minos` + `sdk` + 架构 / 签名身份)
+> → dmg 落进 `macos/dist/`。验收段里「期望非 0」的那几个词是播放模式的判据,已拿 1.0.2 旧包实测为全 0
+> (负控制成立),所以它报非 0 才算数。**出包时要当场定架构**:`swift build` 跟随宿主芯片,
+> 历史包是 arm64 单架构,要覆盖 Intel 得 `swift build --arch arm64 --arch x86_64 -c release` 再合并
+> (脚本目前没做这一步,列在任务 #59)。出完还要实跑那四项界面与自动续播验收,清单在 `docs/ROADMAP.md` 三-A。
 
 ### 发布物料(截图/商店图/上传用图标)
 
