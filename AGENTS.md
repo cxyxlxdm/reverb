@@ -70,17 +70,27 @@ hdc install -r entry/build/default/outputs/default/entry-default-signed.hap
 ```bash
 cd macos
 swift build -c release             # 只编译
-./package.sh                       # 编译 → .app → ad-hoc 签名 → dmg(无需 Xcode GUI)
+./package.sh                       # 编译 → .app → ad-hoc 签名 → 解包验收 → dmg 进 dist/
 ```
 
-> ⚠️ **这两条命令在开发机(本文写作时那台)跑不起来**:只有 Command Line Tools
-> (Swift 5.7.1 / macOS 12.7.6 / SDK 13.1),而 `macos/Package.swift` 声明
-> `swift-tools-version:5.9` + `.macOS(.v13)` ⇒ SwiftPM 直接版本门挡回,且没有 macOS 14 SDK
-> (`TranscriptPage.swift` 的双参数 `onChange` 要它)。**出包要在装了 Xcode 15+ 的机器上做。**
+> ⚠️ **这两条命令在开发机(本文写作时那台)跑不起来,而且不是"只差一步"**:
+> ① 只有 Command Line Tools —— `swift --version` 是 5.7.2(SwiftPM 报错里写的 installed version 是 5.7.1),
+> 而 `macos/Package.swift` 声明 `swift-tools-version:5.9` ⇒ SwiftPM 直接版本门挡回;
+> ② 可用的最高 SDK 是 13.1(`/Library/Developer/CommandLineTools/SDKs/` 只有 12 / 12.3 / 13 / 13.1),
+> 而 `TranscriptPage.swift` 那四处双参数 `onChange` 要 macOS 14 SDK;机器上没有 Xcode
+> (`xcodebuild` 直接报 requires Xcode),也没法装 —— **Xcode 15+ 要求 macOS 13+,这台是 12.7.6**;
+> ③ 就算前两条都好办,**这台机器也跑不起来产物**:`Info.plist` 的 `LSMinimumSystemVersion` 是 13.0,
+> 低于宿主机 12.7.6 ⇒ 二进制定位不到可运行的系统。
+> **所以「出包 + 运行验收」必须在装了 Xcode 15+ 且系统 ≥ macOS 13 的机器上做。**
+> 旁证:`macos/dist/余音-Reverb-1.0.2-arm64.dmg`(2026-09-20 那个包)里 `minos 13.0 / sdk 26.5 / arm64 单架构`,
+> 是另一台得多的机器打的。
 > 这台机器上能做的最强验收是**整模块 typecheck 并与改前基线差分**:
 > `swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target x86_64-apple-macos13.0 $(find Sources -name '*.swift')`
 > —— 基线用 `git archive HEAD macos | tar -x -C /tmp/…` 解一份出来单独跑,再逐条比对错误集;
 > **只说"错误没变多"是不够的,要同时说明它证明不了什么**(界面与行为一帧都没跑起来)。见 H124。
+> `package.sh` 末尾那段解包验收(版本号 / 四语 `.strings` lint / 播放模式字符串在不在二进制里 /
+> `minos`+`sdk`+架构 / ad-hoc 签名)已在这台机器上拿那个 1.0.2 旧包**空跑验证过输出形态**
+> (它报出 `play_mode_map 0`、`1.0.2`、`arm64`),但产生新包那几步仍未跑。
 
 ### 发布物料(截图/商店图/上传用图标)
 

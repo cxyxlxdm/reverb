@@ -4175,3 +4175,28 @@ VoiceOver 读到 —— 界面一帧都没跑起来看过(逐条在 ROADMAP 三-
 否则下一个人(或下一个我)会把它当成代码问题去查。
 ④ 工具链不够时,**基线差分的 typecheck** 仍是有价值的验收:它能证明"没引入新错误",
 但**不能**证明界面与行为正确 —— 这两件事要分开说,不许合成一句"已验证"。
+
+**补记(同日,「出包并验证」这一跳为什么跳不过去)**:上一条把原因写成"Swift 版本不够 + 没 Xcode",
+那只是前两层;真去试出包时撞到第三层,而且这一层更硬。逐层实测:
+- `swift build -c release` → `package 'macos' is using Swift tools version 5.9.0 but the installed version is 5.7.1`
+  (注意 `swift --version` 自己报 **5.7.2** —— 同一个工具链里两处版本号不一致,别拿其中一个去否定另一个的结论)。
+- SDK 天花板:`ls /Library/Developer/CommandLineTools/SDKs/` 只有 `MacOSX12 / 12.3 / 13 / 13.1`,
+  全机没有 macOS 14 SDK;而 `TranscriptPage.swift` 那四处双参数 `onChange` 要它
+  —— 整模块 typecheck 的错误集正好就是这 4 条(改前改后同一组,见上一条)。
+- **装不了新 Xcode,不是"没装"而是"装不上"**:宿主机 `sw_vers` = **macOS 12.7.6**,Xcode 15+ 要求 macOS 13+。
+- **就算硬凑出一个包,这台机器也跑不了它**:`Info.plist` 的 `LSMinimumSystemVersion` 与二进制的
+  `minos` 都是 **13.0**,高于宿主 12.7.6 —— 加载即拒。这一层与前两层**互相独立**:
+  解决编译器版本并不会让运行验收变得可能。
+
+旁证很直接:`macos/build/` 里躺着一个 2026-09-20 的 `Reverb.dmg`(已归档到 `macos/dist/余音-Reverb-1.0.2-arm64.dmg`),
+解出来 `minos 13.0 / sdk 26.5 / arm64 单架构 / Signature=adhoc` —— **它是另一台得多的机器打的**,
+本机的 macOS 构建能力一直是零,只是文档里那句 `cd macos && swift build` 让它看起来不像。
+顺带发现两个流程洞并已补:macOS 的包**不落在 `dist/`**(脚本原本写 `build/`,且 `macos/.gitignore` 里没有 `dist/`),
+以及**打完没人解包核对**(硬规矩 1 在桌面端此前是空文)。现在 `package.sh` 末尾自带一段验收,
+输出形态是拿那个 1.0.2 旧包**空跑**验出来的(它如实报 `play_mode_map 0`、四语 `.strings` lint OK、`1.0.2`、`arm64`),
+但**产出新包的那几步仍未跑过** —— 脚本改动的最强证据到这一层为止。
+
+⑤ **判断"这台机器能不能出某端的包",要分三层看,缺一不可:编译器/tools-version、SDK 有没有那个 API、
+宿主系统版本是否 ≥ 产物的 minos。** 前两层决定"能不能编出来",第三层决定"编出来能不能验收"。
+只查前两层就下结论,会得到一个"改天换台机器编一下就行"的假希望 —— 而运行验收其实永远不可能在这台上做。
+另外:**每个平台的产物落点与"打完就验"要在脚本里焊死**,不靠人记 —— 这次 macOS 的两个洞就是这么暴露的。
