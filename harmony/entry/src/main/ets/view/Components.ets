@@ -194,15 +194,27 @@ export struct EpisodeListItem {
    */
   @State pressed: boolean = false;
   /**
-   * 长按菜单的显示位 + 按下点在行内的横向位置。
+   * 长按菜单的显示位 + 按下点在行内的位置(x 与 y 都要)。
    *
    * `bindContextMenu` 走的是**状态驱动**那个重载(第一参数是 boolean),这样触发时长
    * 才由下面的 `LongPressGesture` 说了算(见 `LIST_MENU_LONG_PRESS_MS`)。代价是它不再
-   * "自动在按下点弹出",要用 `pressX` 通过 `offset` 自己挪过去 —— 这一行是整屏宽的,
-   * 不挪的话菜单永远贴着屏幕左边弹。
+   * "自动在按下点弹出",要自己把锚点挪过去 —— 这一行是整屏宽的,横向不挪的话
+   * 菜单永远贴着屏幕左边弹。
+   *
+   * ⚠️ **"自己挪"只能靠锚点节点,不能靠 `options.offset`。** 这个重载的 `offset`
+   * 在真机上**完全不生效**(两次不同 x 的长按给出同一个菜单矩形;写死 `{x:30,y:-50}`
+   * 也还是那个矩形)。它的 `placement` 默认是 **`Placement.BottomLeft`** —— 菜单顶边
+   * 贴在本节点**下沿**,于是永远从行下面弹出来,按在行的哪一格都一样。
+   * 装机反馈「菜单太靠下了」即此。修法见 build 里那个 1×1 锚点(与 Android 的
+   * `pressPoint` + 零尺寸 `Box` 同一套),坑记录见 H121。
+   *
+   * ✅ 装机验过(2026-09-29,BRA-AL00):整宽行按 (600,2500) 时菜单放不下,框架**自动翻到上方**
+   * (`[600,2136][1091,2474]`),横向**仍然跟着手指** —— 因为跟手的是**节点位置**,
+   * 那句"翻转后失效"针对的是 `offset`。按 (1150,·) 贴右缘时菜单右缘落在手指处、不越屏。
    */
   @State menuShown: boolean = false;
   @State pressX: number = 0;
+  @State pressY: number = 0;
 
   /// 长按弹出的菜单。项与 Android `EpisodeListItem` 的 DropdownMenu 一一对应。
   @Builder
@@ -274,174 +286,193 @@ export struct EpisodeListItem {
   }
 
   build() {
-    Row({ space: 12 }) {
-      // 封面 + 半透明黑蒙层 + 白色播放/暂停图标。
-      //
-      // **播放入口就叠在封面上**,行右侧不再另放一个圆钮(与 Android 一致)。
-      // 原先右侧那个 34 见方的灰圆圈让每行多一个抢眼的重元素,与封面争视线,
-      // 而整行本来就可点播放 —— 它并不提供额外能力,只是把行撑宽、把标题挤成两行。
-      Stack() {
-        Artwork({ scheme: this.scheme, url: this.episode.artworkUrl, dim: 52, corner: 10 })
-        Row()
-          .width(52).height(52)
-          .borderRadius(10)
-          .backgroundColor(withAlpha('#000000', this.isCurrent ? 0.42 : 0.28))
-        // 裸三角 / 双竖条,不是 `sys.media.ohos_ic_public_play` 那枚**带白色圆底**的:
-        // 圆底那枚叠在封面上显得笨重,与 Android 的裸 PlayArrow 观感差一截。
-        // 用 Symbol 字体的实心变体(名字已在真机上验过能渲染 —— Symbol 名写错不报错、
-        // 直接空白,所以换这类资源必须真机看一眼,见 Widgets 注释)。
-        Glyph({
-          symbol: this.isCurrent && this.isPlaying ? Sym.pauseFill : Sym.playFill,
-          dim: 24,
-          color: Color.White
-        })
-      }
-      .width(52).height(52)
-
-      Column({ space: 3 }) {
-        // 标题 + 已播对勾(与 Android 一致:对勾紧跟标题,16 号,onSurfaceVariant 色)
-        Row({ space: 6 }) {
-          Text(this.episode.title)
-            // 常规字重、正文号(对齐 Android 的 bodyLarge 常规体)。原先是 Medium,
-            // 与灰糊的副信息叠在一起显得又粗又胖,一屏比 Android 少放三四行。
-            .fontSize(TypeScale.body * this.fontScale)
-            // 字距与行高:ArkUI 默认字距 0、行距紧凑,而 Compose 用 Material 字号表时
-            // 两者都自带 —— 不补就是"字挨着字、行贴着行",密排列表尤其显挤(见 Tracking 注释)
-            .letterSpacing(Tracking.body)
-            .lineHeight(TypeScale.body * this.fontScale * LineHeight.body)
-            .fontColor(this.titleColor())
-            .maxLines(2)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            // 不用 layoutWeight(1):那会让标题撑满、把对勾推到行最右。
-            // Android 是 weight(1f, fill = false) —— 文字按内容宽、必要时收缩,对勾紧跟其后。
-            .flexShrink(1)
-          if (this.played) {
-            Glyph({ symbol: Sym.played, dim: 16, color: this.scheme.onSurfaceVariant })
-          }
+    Stack({ alignContent: Alignment.TopStart }) {
+      Row({ space: 12 }) {
+        // 封面 + 半透明黑蒙层 + 白色播放/暂停图标。
+        //
+        // **播放入口就叠在封面上**,行右侧不再另放一个圆钮(与 Android 一致)。
+        // 原先右侧那个 34 见方的灰圆圈让每行多一个抢眼的重元素,与封面争视线,
+        // 而整行本来就可点播放 —— 它并不提供额外能力,只是把行撑宽、把标题挤成两行。
+        Stack() {
+          Artwork({ scheme: this.scheme, url: this.episode.artworkUrl, dim: 52, corner: 10 })
+          Row()
+            .width(52).height(52)
+            .borderRadius(10)
+            .backgroundColor(withAlpha('#000000', this.isCurrent ? 0.42 : 0.28))
+          // 裸三角 / 双竖条,不是 `sys.media.ohos_ic_public_play` 那枚**带白色圆底**的:
+          // 圆底那枚叠在封面上显得笨重,与 Android 的裸 PlayArrow 观感差一截。
+          // 用 Symbol 字体的实心变体(名字已在真机上验过能渲染 —— Symbol 名写错不报错、
+          // 直接空白,所以换这类资源必须真机看一眼,见 Widgets 注释)。
+          Glyph({
+            symbol: this.isCurrent && this.isPlaying ? Sym.pauseFill : Sym.playFill,
+            dim: 24,
+            color: Color.White
+          })
         }
-        .width('100%')
-        .alignItems(VerticalAlign.Center)
-        // 副信息:节目名(强调色)靠左 + 日期·时长(灰)右对齐。
-        // 不显示节目名的场景(频道详情页)退化成日期·时长单独居左,与 Android 同。
-        if (this.showsPodcastTitle()) {
-          Row() {
-            Text(this.shortPodcastTitle())
-              .fontSize(TypeScale.caption * this.fontScale)
-              .letterSpacing(Tracking.caption)
-              .fontColor(this.scheme.primary)
-              .maxLines(1)
-            Blank()
-            if (this.meta().length > 0) {
-              Text(this.meta())
-                .fontSize(TypeScale.caption * this.fontScale)
-                .letterSpacing(Tracking.caption)
-                .fontColor(this.scheme.onSurfaceVariant)
-                .maxLines(1)
+        .width(52).height(52)
+
+        Column({ space: 3 }) {
+          // 标题 + 已播对勾(与 Android 一致:对勾紧跟标题,16 号,onSurfaceVariant 色)
+          Row({ space: 6 }) {
+            Text(this.episode.title)
+              // 常规字重、正文号(对齐 Android 的 bodyLarge 常规体)。原先是 Medium,
+              // 与灰糊的副信息叠在一起显得又粗又胖,一屏比 Android 少放三四行。
+              .fontSize(TypeScale.body * this.fontScale)
+              // 字距与行高:ArkUI 默认字距 0、行距紧凑,而 Compose 用 Material 字号表时
+              // 两者都自带 —— 不补就是"字挨着字、行贴着行",密排列表尤其显挤(见 Tracking 注释)
+              .letterSpacing(Tracking.body)
+              .lineHeight(TypeScale.body * this.fontScale * LineHeight.body)
+              .fontColor(this.titleColor())
+              .maxLines(2)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              // 不用 layoutWeight(1):那会让标题撑满、把对勾推到行最右。
+              // Android 是 weight(1f, fill = false) —— 文字按内容宽、必要时收缩,对勾紧跟其后。
+              .flexShrink(1)
+            if (this.played) {
+              Glyph({ symbol: Sym.played, dim: 16, color: this.scheme.onSurfaceVariant })
             }
           }
           .width('100%')
           .alignItems(VerticalAlign.Center)
-        } else if (this.meta().length > 0) {
-          Text(this.meta())
-            .fontSize(TypeScale.caption * this.fontScale)
-            .letterSpacing(Tracking.caption)
-            .fontColor(this.scheme.onSurfaceVariant)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          // 副信息:节目名(强调色)靠左 + 日期·时长(灰)右对齐。
+          // 不显示节目名的场景(频道详情页)退化成日期·时长单独居左,与 Android 同。
+          if (this.showsPodcastTitle()) {
+            Row() {
+              Text(this.shortPodcastTitle())
+                .fontSize(TypeScale.caption * this.fontScale)
+                .letterSpacing(Tracking.caption)
+                .fontColor(this.scheme.primary)
+                .maxLines(1)
+              Blank()
+              if (this.meta().length > 0) {
+                Text(this.meta())
+                  .fontSize(TypeScale.caption * this.fontScale)
+                  .letterSpacing(Tracking.caption)
+                  .fontColor(this.scheme.onSurfaceVariant)
+                  .maxLines(1)
+              }
+            }
+            .width('100%')
+            .alignItems(VerticalAlign.Center)
+          } else if (this.meta().length > 0) {
+            Text(this.meta())
+              .fontSize(TypeScale.caption * this.fontScale)
+              .letterSpacing(Tracking.caption)
+              .fontColor(this.scheme.onSurfaceVariant)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+          }
+        }
+        .alignItems(HorizontalAlign.Start)
+        .layoutWeight(1)
+
+        // 行内收藏心形(与 Android 同位置:元信息之后、下载控件之前)
+        if (this.showFavorite) {
+          Glyph({
+            symbol: this.isFavorite ? Sym.favorite : Sym.favoriteOff,
+            dim: 20,
+            color: this.isFavorite ? this.scheme.primary : this.scheme.onSurfaceVariant
+          })
+            // 图标只有 20,命中区外扩到 36 见方,免得点不中(行本身的 onClick 是播放,
+            // 命中区重叠会被行吃掉,所以这里必须显式外扩)
+            .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+            // 截断触摸冒泡:行的按压高亮只属于「按到行本身」,点图标不该点亮整行
+            .onTouch((event: TouchEvent) => event.stopPropagation())
+            .onClick(() => this.onToggleFavorite())
+        }
+
+        // 行内「加入播放列表」(showQueueAdd 打开时):与收藏心形同位置规则、同命中区外扩。
+        // 图标用列表+加号(add_songlist)而不是队列符号 —— 它的动作是「入队」,
+        // 与「打开队列页」的队列图标同形会误导(真机反馈)。
+        if (this.showQueueAdd) {
+          Glyph({ symbol: Sym.queueAdd, dim: 20, color: this.scheme.onSurfaceVariant })
+            .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+            .onTouch((event: TouchEvent) => event.stopPropagation())
+            .onClick(() => {
+              this.onEnqueue();
+              // 入队结果在别页,界面无任何变化,不提示等于没按上
+              this.showToast(L.s('queue_added'));
+            })
+        }
+
+        // 下载三态,与 Android `DownloadControl` 一一对应:
+        // 已下载 = DownloadDone(强调色,点击删除)/ 进行中·排队 = 进度圈 / 未下载 = Download
+        // 原先用「已存」「下载」文字代替 —— sys.media.* 没有这两个图标,换 Symbol 后有正主。
+        if (this.downloadState === DownloadState.DOWNLOADING || this.downloadState === DownloadState.QUEUED) {
+          LoadingProgress().width(20).height(20).color(this.scheme.primary)
+        } else if (this.downloadState === DownloadState.COMPLETED) {
+          Glyph({ symbol: Sym.downloaded, dim: 20, color: this.scheme.primary })
+            .onTouch((event: TouchEvent) => event.stopPropagation())
+            .onClick(() => this.onDeleteDownload())
+        } else if (this.downloadState >= 0) {
+          Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
+            .onTouch((event: TouchEvent) => event.stopPropagation())
+            .onClick(() => this.onDownload())
         }
       }
-      .alignItems(HorizontalAlign.Start)
-      .layoutWeight(1)
+      .width('100%')
+      .alignItems(VerticalAlign.Center)
+      .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 12, bottom: 12 })
+      .onClick(() => this.onPlay())
+      /**
+       * 按压态底色。长按要等满 `LIST_MENU_LONG_PRESS_MS` 才出菜单,等待期原本零反馈 ——
+       * 手指按住时「不知道按没按上」,观感就是「长按反馈慢」(Android 同样时长但有 ripple 垫着)。
+       *
+       * 不用 stateStyles:它的 pressed 对子图标上的触摸同样会亮(点「入队」键整行高亮,
+       * 看着像点了播放)。改由 onTouch 驱动 @State,配合右侧图标的 stopPropagation,
+       * 高亮只属于「按到行本身」。Move 也熄灭 —— 列表滚动都从 Down 开始,
+       * 不灭会让被划过的行拖一条亮块;长按期间手指不动,不受影响。
+       */
+      .backgroundColor(this.pressed ? withAlpha(this.scheme.onSurfaceVariant, 0.10) : Color.Transparent)
+      .onTouch((event: TouchEvent) => {
+        this.pressed = event.type === TouchType.Down;
+      })
+      /**
+       * 长按。**自己识别长按 + 状态驱动弹出**,不用 `ResponseType.LongPress` 那个重载
+       * —— 它的识别时长在框架里,应用改不动(装机反馈「长按触发阈值太长」)。
+       *
+       * 这里只负责**采下按下点**(`FingerInfo.localX/localY`,相对本行,单位 vp),
+       * 菜单本身挂在 build 末尾那个 1×1 锚点上 —— 参数的理由与 offset 失效的证据都写在彼处。
+       */
+      .gesture(LongPressGesture({ duration: LIST_MENU_LONG_PRESS_MS })
+        .onAction((event: GestureEvent) => {
+          const f = event.fingerList.length > 0 ? event.fingerList[0] : null;
+          this.pressX = f === null ? 0 : f.localX;
+          this.pressY = f === null ? 0 : f.localY;
+          this.menuShown = true;
+        }))
 
-      // 行内收藏心形(与 Android 同位置:元信息之后、下载控件之前)
-      if (this.showFavorite) {
-        Glyph({
-          symbol: this.isFavorite ? Sym.favorite : Sym.favoriteOff,
-          dim: 20,
-          color: this.isFavorite ? this.scheme.primary : this.scheme.onSurfaceVariant
+      /**
+       * 菜单锚点:1×1、摆在按下点,`bindContextMenu` 挂在它身上。
+       *
+       * 为什么不用 `options.offset` 挪:**这个重载根本不读 offset**(真机两次不同 x 的长按
+       * 给出同一个菜单矩形;写死 `{x:30,y:-50}` 也还是那个矩形)。而锚点自己的位置应用侧
+       * 说了算 —— 菜单相对锚点仍按默认的 `Placement.BottomLeft` 摆(顶边贴锚点**下沿**),
+       * 但锚点只有 1×1:摆到手指处,菜单顶边就落在手指下方 29px(≈9vp,框架给弹层留的间距,
+       * 真机四档按下点实测同一个常数)。与 Android 的
+       * `Box(Modifier.offset { pressPoint })` + `DropdownMenu` 结构等价。
+       *
+       * `hitTestBehavior(HitTestMode.None)` 是必须的:锚点叠在行上,默认会吃掉这一下触摸,
+       * 行就点不动了。给它 1×1 而不是 0 尺寸 —— 纯为留一个可挂弹层的节点,尺寸不参与布局。
+       *
+       * `enableArrow` 必须是 **false**:带箭头时 ArkUI 把菜单**锚到组件横向正中**,
+       * 而这一行是整屏宽的 ⇒ 无论按在哪儿都从屏幕正中弹。
+       *
+       * `aboutToAppear` / `aboutToDisappear` 升降「误触盾」,吃掉「点外部关菜单」那一下的
+       * 穿透点击(ArkUI 会把它同时派发给下面的组件,见 TapGuard)。Disappear 里还要把
+       * `menuShown` 收回 false:状态驱动的弹出位必须与菜单真实生命周期同步,否则下一次
+       * 置 true 不产生变化,菜单再也不弹。
+       */
+      Column()
+        .width(1).height(1)
+        .position({ x: this.pressX, y: this.pressY })
+        .hitTestBehavior(HitTestMode.None)
+        .bindContextMenu(this.menuShown, this.contextMenu(), {
+          enableArrow: false,
+          aboutToAppear: () => { TapGuard.raise(); this.pressed = false; },
+          aboutToDisappear: () => { TapGuard.lowerSoon(); this.menuShown = false; }
         })
-          // 图标只有 20,命中区外扩到 36 见方,免得点不中(行本身的 onClick 是播放,
-          // 命中区重叠会被行吃掉,所以这里必须显式外扩)
-          .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
-          // 截断触摸冒泡:行的按压高亮只属于「按到行本身」,点图标不该点亮整行
-          .onTouch((event: TouchEvent) => event.stopPropagation())
-          .onClick(() => this.onToggleFavorite())
-      }
-
-      // 行内「加入播放列表」(showQueueAdd 打开时):与收藏心形同位置规则、同命中区外扩。
-      // 图标用列表+加号(add_songlist)而不是队列符号 —— 它的动作是「入队」,
-      // 与「打开队列页」的队列图标同形会误导(真机反馈)。
-      if (this.showQueueAdd) {
-        Glyph({ symbol: Sym.queueAdd, dim: 20, color: this.scheme.onSurfaceVariant })
-          .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
-          .onTouch((event: TouchEvent) => event.stopPropagation())
-          .onClick(() => {
-            this.onEnqueue();
-            // 入队结果在别页,界面无任何变化,不提示等于没按上
-            this.showToast(L.s('queue_added'));
-          })
-      }
-
-      // 下载三态,与 Android `DownloadControl` 一一对应:
-      // 已下载 = DownloadDone(强调色,点击删除)/ 进行中·排队 = 进度圈 / 未下载 = Download
-      // 原先用「已存」「下载」文字代替 —— sys.media.* 没有这两个图标,换 Symbol 后有正主。
-      if (this.downloadState === DownloadState.DOWNLOADING || this.downloadState === DownloadState.QUEUED) {
-        LoadingProgress().width(20).height(20).color(this.scheme.primary)
-      } else if (this.downloadState === DownloadState.COMPLETED) {
-        Glyph({ symbol: Sym.downloaded, dim: 20, color: this.scheme.primary })
-          .onTouch((event: TouchEvent) => event.stopPropagation())
-          .onClick(() => this.onDeleteDownload())
-      } else if (this.downloadState >= 0) {
-        Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
-          .onTouch((event: TouchEvent) => event.stopPropagation())
-          .onClick(() => this.onDownload())
-      }
     }
-    .width('100%')
-    .alignItems(VerticalAlign.Center)
-    .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 12, bottom: 12 })
-    .onClick(() => this.onPlay())
-    /**
-     * 按压态底色。长按要等满 `LIST_MENU_LONG_PRESS_MS` 才出菜单,等待期原本零反馈 ——
-     * 手指按住时「不知道按没按上」,观感就是「长按反馈慢」(Android 同样时长但有 ripple 垫着)。
-     *
-     * 不用 stateStyles:它的 pressed 对子图标上的触摸同样会亮(点「入队」键整行高亮,
-     * 看着像点了播放)。改由 onTouch 驱动 @State,配合右侧图标的 stopPropagation,
-     * 高亮只属于「按到行本身」。Move 也熄灭 —— 列表滚动都从 Down 开始,
-     * 不灭会让被划过的行拖一条亮块;长按期间手指不动,不受影响。
-     */
-    .backgroundColor(this.pressed ? withAlpha(this.scheme.onSurfaceVariant, 0.10) : Color.Transparent)
-    .onTouch((event: TouchEvent) => {
-      this.pressed = event.type === TouchType.Down;
-    })
-    /**
-     * 长按菜单。**自己识别长按 + 状态驱动弹出**,不用 `ResponseType.LongPress` 那个重载
-     * —— 它的识别时长在框架里,应用改不动(装机反馈「长按触发阈值太长」)。
-     *
-     * 三个参数都是踩出来的:
-     *
-     * - `enableArrow` 必须是 **false**。带箭头时 ArkUI 会把菜单**锚到组件**上,而这一行
-     *   是整屏宽的 ⇒ 无论按在哪儿,菜单都从屏幕横向正中弹出。Android 那边是同一套做法
-     *   (零尺寸锚点放在按下点,见 `Components.kt` 的 pressPoint)。
-     * - `offset.x` 取按下点在行内的 x:状态驱动的重载不会自己找按下点(旧重载会),
-     *   不挪就永远贴着行左缘。贴右缘时会不会被挤出屏幕**尚未装机验证**(见 ROADMAP)。
-     * - `aboutToAppear` / `aboutToDisappear` 升降「误触盾」,吃掉「点外部关菜单」
-     *   那一下的穿透点击(ArkUI 会把它同时派发给下面的组件,见 TapGuard)。
-     *   `aboutToDisappear` 里还要把 `menuShown` 收回 false:状态驱动的弹出位必须与
-     *   菜单的真实生命周期同步,否则下一次置 true 不产生变化,菜单再也不弹。
-     */
-    .gesture(LongPressGesture({ duration: LIST_MENU_LONG_PRESS_MS })
-      .onAction((event: GestureEvent) => {
-        const f = event.fingerList.length > 0 ? event.fingerList[0] : null;
-        this.pressX = f === null ? 0 : f.localX;
-        this.menuShown = true;
-      }))
-    .bindContextMenu(this.menuShown, this.contextMenu(), {
-      enableArrow: false,
-      offset: { x: this.pressX, y: 0 },
-      aboutToAppear: () => { TapGuard.raise(); this.pressed = false; },
-      aboutToDisappear: () => { TapGuard.lowerSoon(); this.menuShown = false; }
-    })
   }
 }
 

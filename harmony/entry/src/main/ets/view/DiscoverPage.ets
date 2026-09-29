@@ -967,11 +967,15 @@ struct ContinueCard {
   /// 从这条横里去掉 —— 就是「标记已播完」,见 contextMenu 注释。
   onMarkPlayed: () => void = () => {};
 
-  /// 长按菜单的显示位 + 按下点在卡内的 x。走 `bindContextMenu(isShown, …)` 的状态驱动
-  /// 重载,触发时长才归应用管(旧重载的识别在框架内部,装机反馈「长按阈值太长」)——
+  /// 长按菜单的显示位 + 按下点在卡内的位置(x 与 y)。走 `bindContextMenu(isShown, …)`
+  /// 的状态驱动重载,触发时长才归应用管(旧重载的识别在框架内部,装机反馈「长按阈值太长」)——
   /// 完整理由见 `Components.ets` 的 `LIST_MENU_LONG_PRESS_MS` 与 `EpisodeListItem`。
+  ///
+  /// 这两个值喂给锚点的 `.position()`,不是喂给 `options.offset` —— 后者在这个重载上
+  /// 实测**根本不生效**(证据与推导写在 build 里锚点那段注释,装机反馈「菜单太靠下了」)。
   @State menuShown: boolean = false;
   @State pressX: number = 0;
+  @State pressY: number = 0;
 
   /// 菜单项字体:labelLarge(14) 常规体。与 Components.ets 的 EpisodeListItem 同档 ——
   /// ArkUI 菜单默认字号偏大且不跟主题,全应用的菜单要长一个样。
@@ -1016,53 +1020,86 @@ struct ContinueCard {
   }
 
   build() {
-    Column({ space: 6 }) {
-      SquareArtwork({ scheme: this.scheme, url: this.episode.artworkUrl, corner: 12 })
-      Text(this.episode.title)
-        .fontSize(TypeScale.caption * this.fontScale)
-        .fontColor(this.scheme.onBackground)
-        .maxLines(2)
-        .textOverflow({ overflow: TextOverflow.Ellipsis })
-        .width('100%')
-      /**
-       * 细进度条。轨道用 surfaceVariant(与 Android 的 trackColor 同),
-       * **不要用 onSurfaceVariant 加透明度** —— 那样轨道在深色底上几乎看不见,
-       * 于是刚开始听(进度 1%~15%)时整条进度条只剩左端一个绿点,像屏幕上落了灰,
-       * 读不出"这集听到哪了"。有底槽才有进度可读。
-       */
-      Stack({ alignContent: Alignment.Start }) {
-        Row().width('100%').height(3)
-          .backgroundColor(this.scheme.surfaceVariant).borderRadius(2)
-        Row().width(`${Math.min(100, this.positionMs / this.durationMs * 100)}%`).height(3)
-          .backgroundColor(this.scheme.primary).borderRadius(2)
+    Stack({ alignContent: Alignment.TopStart }) {
+      Column({ space: 6 }) {
+        SquareArtwork({ scheme: this.scheme, url: this.episode.artworkUrl, corner: 12 })
+        Text(this.episode.title)
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.onBackground)
+          .maxLines(2)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        /**
+         * 细进度条。轨道用 surfaceVariant(与 Android 的 trackColor 同),
+         * **不要用 onSurfaceVariant 加透明度** —— 那样轨道在深色底上几乎看不见,
+         * 于是刚开始听(进度 1%~15%)时整条进度条只剩左端一个绿点,像屏幕上落了灰,
+         * 读不出"这集听到哪了"。有底槽才有进度可读。
+         */
+        Stack({ alignContent: Alignment.Start }) {
+          Row().width('100%').height(3)
+            .backgroundColor(this.scheme.surfaceVariant).borderRadius(2)
+          Row().width(`${Math.min(100, this.positionMs / this.durationMs * 100)}%`).height(3)
+            .backgroundColor(this.scheme.primary).borderRadius(2)
+        }
+        .width('100%').height(3)
       }
-      .width('100%').height(3)
+      // 132 而非 112:与 Android 卡宽一致。112 太窄,两行标题基本只够放七八个字,
+      // 每张卡都以省略号收尾。
+      .width(132)
+      .onClick(() => this.onPlay())
+      /**
+       * 长按识别。**自己识别长按 + 状态驱动弹出**(与 Components.ets 的单集行同一套):
+       * `ResponseType.LongPress` 那个重载的触发时长在框架里改不动,装机反馈
+       * 「长按弹出菜单的触发阈值太长」,换成 `bindContextMenu(isShown, …)` 之后
+       * 时长由 `LIST_MENU_LONG_PRESS_MS` 决定(取 500ms,与 Android 同值)。
+       * 这里只负责**记下按下点并置位**,菜单不绑在卡上(绑在下面的锚点上)。
+       */
+      .gesture(LongPressGesture({ duration: LIST_MENU_LONG_PRESS_MS })
+        .onAction((event: GestureEvent) => {
+          const f = event.fingerList.length > 0 ? event.fingerList[0] : null;
+          this.pressX = f === null ? 0 : f.localX;
+          this.pressY = f === null ? 0 : f.localY;
+          this.menuShown = true;
+        }))
+
+      /**
+       * 菜单的锚点:一个 1×1 的透明节点,`.position()` 挪到按下点,菜单绑在它身上。
+       *
+       * **为什么不用 `options.offset` 直接挪菜单**:装机实测 —— 状态驱动的
+       * `bindContextMenu(isShown, …)` **完全不读 `offset`**。把按下点算进去(局部坐标
+       * 与卡高都取对了,`onAreaChange` 报 172.85vp 与 dumpLayout 的卡高 562px/3.25 一致)
+       * 菜单分毫不动;再退一步把 offset 写成常量 `{x:30, y:-50}`,位置仍然一模一样。
+       * 于是"菜单永远贴着卡片下沿"(默认 `Placement.BottomLeft`),这就是装机反馈的
+       * 「长按菜单太靠下了」。
+       *
+       * 改成挪**节点**而不是挪**菜单**:`.position()` 是常规布局属性,状态变了确实会重排,
+       * 而菜单相对锚点的位置由框架算 —— 与 Android 那边把零尺寸 Box 挪到 `pressPoint`
+       * 是同一个做法(见 `DiscoverScreen.kt` 的 ContinueCard)。
+       * 顺带把横向也修好了:原先 offset 不生效,菜单永远贴卡的左缘,按在最右那张卡上
+       * 时整块菜单会被挤出屏幕右侧。
+       *
+       * `hitTestBehavior(None)` 是必须的:锚点画在卡之上,不关掉命中就会在手指处
+       * 挡出一个 1×1 的死区(而且它跟着手指跑,死区会留在上一次按下的地方)。
+       *
+       * ✅ 装机验过的一条(2026-09-29,BRA-AL00):按下点太低、菜单放不下时框架会**自动翻到
+       * 上方**,而横向**仍然跟着手指**(整宽行按 (600,2500) → 菜单 `[600,2136][1091,2474]`,
+       * 左缘正好 600)。SDK 那句"翻转之后位置由框架定"说的是 `offset` 失效,不是节点位置 ——
+       * 这正是要挪**节点**而不是挪**菜单**的另一条理由。
+       * 菜单顶边实测恒在按下点下方 29px(≈9vp),是框架给锚点留的间距,不是误差累积;
+       * 与 Android 一样"贴着手指下方弹",不再盖住手指按的那一行。
+       */
+      Column()
+        .width(1).height(1)
+        .position({ x: this.pressX, y: this.pressY })
+        .hitTestBehavior(HitTestMode.None)
+        .bindContextMenu(this.menuShown, this.contextMenu(), {
+          // enableArrow 必须是 false:带箭头时 ArkUI 把菜单**锚到组件横向正中**,
+          // 挪不动不说,还和"贴着手指弹"这件事互相矛盾。
+          enableArrow: false,
+          aboutToAppear: () => TapGuard.raise(),
+          aboutToDisappear: () => { TapGuard.lowerSoon(); this.menuShown = false; }
+        })
     }
-    // 132 而非 112:与 Android 卡宽一致。112 太窄,两行标题基本只够放七八个字,
-    // 每张卡都以省略号收尾。
     .width(132)
-    .onClick(() => this.onPlay())
-    /**
-     * 长按菜单。**自己识别长按 + 状态驱动弹出**(与 Components.ets 的单集行同一套,
-     * 理由与参数说明见彼处):`ResponseType.LongPress` 那个重载的触发时长在框架里改不动,
-     * 装机反馈「长按弹出菜单的触发阈值太长」,换成 `bindContextMenu(isShown, …)` 之后
-     * 时长由 `LIST_MENU_LONG_PRESS_MS` 决定(取 500ms,与 Android 同值)。
-     *
-     * `enableArrow: false` 才走"贴着锚点弹",带箭头会锚到组件横向正中;
-     * `aboutToAppear/Disappear` 升降误触盾,挡掉"点外部关菜单"穿透下来的那一下;
-     * Disappear 里同时把 `menuShown` 收回 false,否则下一次置 true 不产生状态变化。
-     */
-    .gesture(LongPressGesture({ duration: LIST_MENU_LONG_PRESS_MS })
-      .onAction((event: GestureEvent) => {
-        const f = event.fingerList.length > 0 ? event.fingerList[0] : null;
-        this.pressX = f === null ? 0 : f.localX;
-        this.menuShown = true;
-      }))
-    .bindContextMenu(this.menuShown, this.contextMenu(), {
-      enableArrow: false,
-      offset: { x: this.pressX, y: 0 },
-      aboutToAppear: () => TapGuard.raise(),
-      aboutToDisappear: () => { TapGuard.lowerSoon(); this.menuShown = false; }
-    })
   }
 }
