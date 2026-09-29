@@ -24,14 +24,31 @@ struct LibraryView: View {
     private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin, maximum: Metrics.cardMax),
                                     spacing: Metrics.gridSpacing)]
 
+    /// 音阁三段的「列身份」。同一个串用在**两处**:分段行右端那颗模式按钮按它读写自己那一格,
+    /// 段内某一行起播时把它随 `playQueue` 传下去(日志里 `tag='…'` 读到的就是它)。
+    /// 订阅 / 历史两段返回 nil:前者不是单集列表,后者的按钮位置已经是「清空」。
+    private var segmentTag: String? {
+        switch segment {
+        case .inbox: return ListTag.inbox
+        case .favorites: return ListTag.fav
+        case .downloads: return ListTag.dl
+        case .subscriptions, .history: return nil
+        }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            Picker("", selection: $segment) {
-                ForEach(Segment.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
+            HStack(spacing: 12) {
+                Picker("", selection: $segment) {
+                    ForEach(Segment.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 440)
+                if let tag = segmentTag {
+                    PlayModeButton(tag: tag)
+                }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 440)
             .padding(.horizontal, Metrics.pagePadding)
             .padding(.top, Metrics.topPadding)
             .padding(.bottom, 18)
@@ -139,7 +156,7 @@ struct LibraryView: View {
                                     showPodcast: true,
                                     played: env.history.isPlayed(ep.id),
                                     accent: accent,
-                                    onPlay: { player.playOrToggle(ep, queue: items) })
+                                    onPlay: { player.playOrToggle(ep, queue: items, tag: ListTag.fav) })
                                     .episodeContextMenu(ep)
                                 Button { env.favorites.toggle(ep) } label: {
                                     Image(systemName: "heart.fill").foregroundStyle(accent)
@@ -208,7 +225,7 @@ struct LibraryView: View {
                                     showPodcast: true,
                                     played: env.history.isPlayed(ep.id),
                                     accent: accent,
-                                    onPlay: { player.playOrToggle(ep, queue: items) })
+                                    onPlay: { player.playOrToggle(ep, queue: items, tag: ListTag.dl) })
                                     .episodeContextMenu(ep)
                                 Button { pendingDelete = ep } label: {
                                     Image(systemName: "trash").foregroundStyle(.secondary)

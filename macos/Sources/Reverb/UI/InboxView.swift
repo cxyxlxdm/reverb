@@ -32,7 +32,7 @@ struct InboxView: View {
                                 showDate: true,
                                 played: env.history.isPlayed(ep.id),
                                 accent: accent,
-                                onPlay: { player.playOrToggle(ep, queue: items) })
+                                onPlay: { player.playOrToggle(ep, queue: items, tag: ListTag.inbox) })
                                 .episodeContextMenu(ep)
                         }
                     }

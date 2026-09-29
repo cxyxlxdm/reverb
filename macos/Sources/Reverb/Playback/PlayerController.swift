@@ -4,7 +4,41 @@ import Combine
 import MediaPlayer
 import AppKit
 
-/// 播放门面:AVPlayer 播放 + 队列上下文(上/下一集)+ 随机电台 + 睡眠定时 + 音频淡入淡出。
+/// 列表播放模式。顺序 = 播到列表末尾即停;单曲循环 = 本集播完原地重播;
+/// 随机 = 把这个列表打乱播一遍(走完表就停)。
+///
+/// **与 Android `PlayerController.PlayMode`、鸿蒙同名同 ordinal**(0/1/2),
+/// 持久化存的也是 ordinal,所以**新增项只能加在末尾** —— 中间插一个位置,
+/// 老用户存的数就会指向另一个模式(换含义的历史见 H118)。
+enum PlayMode: Int, CaseIterable {
+    case sequential = 0
+    case repeatOne = 1
+    case shuffle = 2
+
+    /// 日志里用的名字,与 Android / 鸿蒙**同一串**:装机判据是同一条 grep
+    /// (`playMode tag='…' -> SHUFFLE`、`playQueue … mode=REPEAT_ONE`),换端不该改词。
+    /// 不是给用户看的字(那三个走 Localizable.strings)。
+    var logName: String {
+        switch self {
+        case .sequential: return "SEQUENTIAL"
+        case .repeatOne: return "REPEAT_ONE"
+        case .shuffle: return "SHUFFLE"
+        }
+    }
+}
+
+/// 「列身份」的取值,两处共用同一个串:列右端那颗模式按钮按它读写自己那一格,
+/// 列内某一行起播时把它随 `playQueue` 传下去(日志里 `tag='…'` 读到的就是它)。
+/// 两边必须一致,否则「在这一列设的模式」和「这一列起播时用的模式」各走各的,
+/// 不报错,只表现成"设了没生效"。频道主页前缀保证撞不上音阁那三个分段名。
+enum ListTag {
+    static let inbox = "inbox"
+    static let fav = "fav"
+    static let dl = "dl"
+    static func podcast(_ channelKey: String) -> String { "podcast:\(channelKey)" }
+}
+
+/// 播放门面:AVPlayer 播放 + 队列上下文(上/下一集)+ 按列的播放模式 + 随机电台 + 睡眠定时 + 音频淡入淡出。
 /// 与 Android 版 PlayerController 行为对齐。
 @MainActor
 final class PlayerController: ObservableObject {
@@ -18,6 +52,13 @@ final class PlayerController: ObservableObject {
     @Published private(set) var radioMode = false
     @Published private(set) var hasNext = false
     @Published private(set) var hasPrev = false
+    /// **每一列自己的**播放模式(与 Android/鸿蒙 1.0.3 定稿口径同构,见 H119)。
+    /// key 是 `ListTag` 的值;`""` 那一格是**回落值**(老用户那份全局设置,也是没有列身份时
+    /// 起播的走法)。UI 读这张表,不读下面那个「当前生效」的。
+    @Published private(set) var playModes: [String: PlayMode] = ["": .sequential]
+    /// 正在播的那一列的 tag(`""` = 不属于任何可见列)。它是功能性的:
+    /// 「改某一列的模式」只有在改的正是正在播那一列时才当场生效。
+    @Published private(set) var activeListTag = ""
     /// 用户播放队列(up next):优先于当前上下文队列/电台续播。
     @Published private(set) var userQueue: [Episode] = []
     // 睡眠定时:剩余毫秒(0=关),或「本集结束」
@@ -47,6 +88,14 @@ final class PlayerController: ObservableObject {
     // 队列上下文
     private var queue: [Episode] = []
     private var queueIndex = 0
+    /// **当前生效的**播放模式:自动续播与手动切集都按它走。它是「正在播的这一列」那一格
+    /// (没有列身份时是回落值),不直接落盘 —— 落盘的是按列的那张表。
+    private var playMode: PlayMode = .sequential
+    /// 随机模式用的「打乱索引表」+ 指针。**不是每次抛骰子**:抛骰子会让上一集/下一集不对称
+    /// (点下一集之后再点上一集回不到刚才那集),而且同一集可能连着播两次。
+    /// 表在起播或切进随机模式时生成一次,正在播的这一集钉在第一位。
+    private var shuffleOrder: [Int] = []
+    private var shufflePos = -1
     // 电台
     private var radioNext: (() async -> Episode?)?
     private var radioHistory: [Episode] = []
@@ -141,6 +190,8 @@ final class PlayerController: ObservableObject {
         self.history = history
         self.settings = settings
         self.speed = settings.defaultSpeed
+        refreshPlayModes()
+        playMode = mode(for: activeListTag)
     }
 
     func bindListenStats(_ s: ListenStatsStore) { self.listenStats = s }
@@ -151,7 +202,10 @@ final class PlayerController: ObservableObject {
     func play(_ episode: Episode) { playQueue([episode], startIndex: 0) }
 
     /// 以列表为队列从 startIndex 起播。
-    func playQueue(_ episodes: [Episode], startIndex: Int) {
+    ///
+    /// - Parameter tag: 队列身份(`ListTag.inbox/fav/dl`、频道主页 `podcast:<key>`)。
+    ///   不属于任何可见列表的入口(单播、迷你条、发现页)不传,空串走回落那一格。
+    func playQueue(_ episodes: [Episode], startIndex: Int, tag: String = "") {
         guard !episodes.isEmpty else {
             Log.w("Player", "playQueue 空队列,忽略")
             return
@@ -160,18 +214,117 @@ final class PlayerController: ObservableObject {
         if radioMode { stopRadio() }
         queue = episodes
         queueIndex = min(max(startIndex, 0), episodes.count - 1)
-        Log.i("Player", "playQueue count=\(episodes.count) index=\(queueIndex)")
-        updateNavFlags()
+        activeListTag = tag
+        // 先定模式再播:随机要在这一步把表洗出来(当前集钉在第一位)
+        applyPlayMode(mode(for: tag))
+        Log.i("Player", "playQueue count=\(episodes.count) index=\(queueIndex) tag='\(tag)' mode=\(playMode.logName)")
         playEpisode(episodes[queueIndex])
     }
 
     /// 同一集则暂停/继续,否则以该列表为队列起播。
-    func playOrToggle(_ episode: Episode, queue: [Episode]) {
+    func playOrToggle(_ episode: Episode, queue: [Episode], tag: String = "") {
         if current?.id == episode.id { togglePlayPause() }
-        else { playQueue(queue, startIndex: queue.firstIndex { $0.id == episode.id } ?? 0) }
+        else { playQueue(queue, startIndex: queue.firstIndex { $0.id == episode.id } ?? 0, tag: tag) }
     }
 
     func playOrToggle(_ episode: Episode) { playOrToggle(episode, queue: [episode]) }
+
+    // MARK: - 播放模式
+
+    /// 某一列该按什么走法播;没设过的列用回落值(`""` 那一格)。
+    func mode(for tag: String) -> PlayMode { playModes[tag] ?? playModes[""] ?? .sequential }
+
+    /// 把 SettingsStore 那份 ordinal 表换成枚举视图;`""` 一格永远存在(回落值)。
+    private func refreshPlayModes() {
+        guard let s = settings else { return }
+        var next: [String: PlayMode] = [:]
+        for (k, v) in s.playModeByTag { next[k] = PlayMode(rawValue: v) ?? .sequential }
+        next[""] = PlayMode(rawValue: s.playModeDefault) ?? .sequential
+        playModes = next
+    }
+
+    /// 顺序 → 单曲循环 → 随机 → 顺序。某一列右端那颗模式按钮点一下就走这一列自己的那一格。
+    func cyclePlayMode(_ tag: String) {
+        let all = PlayMode.allCases
+        guard let i = all.firstIndex(of: mode(for: tag)) else { return }
+        setPlayMode(all[(i + 1) % all.count], for: tag)
+    }
+
+    /// 设定**某一列**的播放模式并落盘。
+    ///
+    /// 只有改的正是**正在播那一列**时才当场生效;改别的列只是记下它以后的走法 ——
+    /// 否则「看着收藏但正在播最新」时点一下就把正在播的走法改掉了,那才是真的串。
+    func setPlayMode(_ mode: PlayMode, for tag: String) {
+        settings?.setPlayMode(mode.rawValue, for: tag)
+        refreshPlayModes()
+        Log.i("Player", "playMode tag='\(tag)' -> \(mode.logName)"
+            + "\(tag == activeListTag ? " (生效)" : " (未生效:正在播 '\(activeListTag)')")")
+        if tag == activeListTag { applyPlayMode(mode) }
+    }
+
+    /// 让某个模式**当场生效**:切进随机要重洗一次表并把当前集钉在第一位
+    /// (否则从顺序切进随机后「下一集」还按列表顺序走,等于没切);切出随机则丢掉表。
+    /// 落盘不在这里 —— 模式按列存,见 `setPlayMode(_:for:)`。
+    private func applyPlayMode(_ mode: PlayMode) {
+        playMode = mode
+        if mode == .shuffle { rebuildShuffleOrder() } else { clearShuffleOrder() }
+        updateNavFlags()
+    }
+
+    /// 按当前模式重洗随机表:正在播的这一集钉在第一位,其余打乱。
+    private func rebuildShuffleOrder() {
+        guard !queue.isEmpty else { clearShuffleOrder(); return }
+        let pinned = min(max(queueIndex, 0), queue.count - 1)
+        shuffleOrder = [pinned] + queue.indices.filter { $0 != pinned }.shuffled()
+        shufflePos = 0
+    }
+
+    /// 丢掉随机表(切出随机模式、或队列整个换掉时)。留着过期表会让下标指到别的列表。
+    private func clearShuffleOrder() {
+        shuffleOrder = []
+        shufflePos = -1
+    }
+
+    /// 当前播放模式下,上下文队列里**手动下一集**要去的下标;没有下一集返回 null(按钮该灰)。
+    ///
+    /// 顺序与单曲循环在这里是同一个走法:按下「下一集」就是要换一首,原地重播当前这集会被读成按钮坏了。
+    /// 「单曲循环播完自己再来一遍」那条特例只在 `advanceQueue(auto: true)` 这条路上生效。
+    private func nextQueueIndex() -> Int? {
+        switch playMode {
+        case .sequential, .repeatOne:
+            return (queueIndex >= 0 && queueIndex < queue.count - 1) ? queueIndex + 1 : nil
+        case .shuffle:
+            return (shufflePos >= 0 && shufflePos < shuffleOrder.count - 1) ? shuffleOrder[shufflePos + 1] : nil
+        }
+    }
+
+    /// 当前播放模式下,上下文队列里的上一集下标;没有返回 nil。
+    private func prevQueueIndex() -> Int? {
+        if playMode == .shuffle {
+            return shufflePos > 0 ? shuffleOrder[shufflePos - 1] : nil
+        }
+        let p = queueIndex - 1
+        return (p >= 0 && p < queue.count) ? p : nil
+    }
+
+    /// 沿当前播放模式走到队列的下一集并播它;走到头(顺序播完 / 随机走完表)什么都不做。
+    ///
+    /// - Parameter auto: 只有「本集自然播完」这条路径传真。**单曲循环只在自动推进时原地重播**;
+    ///   手动按「下一集」不传,于是走 `nextQueueIndex` 的顺序口径。
+    private func advanceQueue(auto: Bool = false) {
+        if auto && playMode == .repeatOne {
+            guard !queue.isEmpty else { return }
+            Log.i("Player", "advanceQueue repeat-one index=\(queueIndex)")
+            updateNavFlags()
+            playEpisode(queue[queueIndex])
+            return
+        }
+        guard let ni = nextQueueIndex() else { return }
+        if playMode == .shuffle { shufflePos += 1 }
+        queueIndex = ni
+        updateNavFlags()
+        playEpisode(queue[queueIndex])
+    }
 
     private func playEpisode(_ episode: Episode, isRadio: Bool = false) {
         if !isRadio && radioMode { stopRadio() }
@@ -315,33 +468,40 @@ final class PlayerController: ObservableObject {
 
     func next() {
         loadRetries = 0
-        Log.i("Player", "next radio=\(radioMode) index=\(queueIndex) radioPos=\(radioPos) userQueue=\(userQueue.count)")
+        Log.i("Player", "next radio=\(radioMode) index=\(queueIndex) radioPos=\(radioPos) userQueue=\(userQueue.count) mode=\(playMode.logName)")
         // 用户队列优先
         if !userQueue.isEmpty { consumeUserQueue(at: 0, reason: "next"); return }
         if radioMode {
             if radioPos >= 0 && radioPos < radioHistory.count - 1 {
                 radioPos += 1; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio: true)
             } else { advanceRadio() }
-        } else if queueIndex < queue.count - 1 {
-            queueIndex += 1; updateNavFlags(); playEpisode(queue[queueIndex])
+        } else {
+            advanceQueue()
         }
     }
 
     func previous() {
         loadRetries = 0
-        Log.i("Player", "previous radio=\(radioMode) index=\(queueIndex) radioPos=\(radioPos)")
+        Log.i("Player", "previous radio=\(radioMode) index=\(queueIndex) radioPos=\(radioPos) mode=\(playMode.logName)")
         if radioMode {
             if radioPos > 0 { radioPos -= 1; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio: true) }
-        } else if queueIndex > 0 {
-            queueIndex -= 1; updateNavFlags(); playEpisode(queue[queueIndex])
+        } else if let pi = prevQueueIndex() {
+            if playMode == .shuffle { shufflePos -= 1 }
+            queueIndex = pi
+            updateNavFlags()
+            playEpisode(queue[queueIndex])
         }
     }
 
     private func updateNavFlags() {
         if radioMode { hasPrev = radioPos > 0; hasNext = true }
         else {
-            hasPrev = queueIndex > 0
-            hasNext = (queueIndex >= 0 && queueIndex < queue.count - 1) || !userQueue.isEmpty
+            // 用户队列非空,或上下文队列在**当前播放模式**下还有后续,都算「有下一集」。
+            // 这里必须走 nextQueueIndex() 而不是自己算 +1:随机模式看的是表指针而不是列表下标,
+            // 而单曲循环**不影响这个判据**(它只改自动续播那条路)——
+            // 手动「下一集」播到列表末尾就是没有下一集,按钮该灰。
+            hasPrev = prevQueueIndex() != nil
+            hasNext = !userQueue.isEmpty || nextQueueIndex() != nil
         }
     }
 
@@ -505,6 +665,12 @@ final class PlayerController: ObservableObject {
                 } else if !self.userQueue.isEmpty {
                     // 队列续播:取出队首继续
                     self.consumeUserQueue(at: 0, reason: "end")
+                } else {
+                    // 上下文队列(点某一集起播的):按播放模式接下一集。
+                    // 这条分支是移植播放模式这轮补上的 —— 之前 macOS 列表播完一集就停在这里,
+                    // 只有手动按下一集会走;而**单曲循环与随机两档全靠这条自动路径成立**
+                    // (单曲循环就是这里的 auto 路径,见 advanceQueue)。
+                    self.advanceQueue(auto: true)
                 }
             }
         }

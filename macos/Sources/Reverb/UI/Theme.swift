@@ -296,6 +296,49 @@ struct RoomyEpisodeRow: View {
     }
 }
 
+/// 播放模式按钮:点一下在顺序 / 单曲循环 / 随机之间循环切换**这一列**的走法。
+///
+/// **一颗只管模式,不表播放状态。** 早先那颗是「起播 + 切模式」两件事挤在一个图标槽里,
+/// 为此还养过"未起播时画暂停图标"之类的会话状态,结果与全 App 的图标口径相反、首点看不出变化
+/// (Android/鸿蒙 2026-09-28 装机报的,见 H118)。macOS 直接按定稿口径实现,没走那段弯路。
+/// 起播的入口是「点列表里的某一集」;列空着也照样能设模式 —— 它改的是这一列**以后**怎么播。
+///
+/// 与 Android `Components.kt PlayModeButton`、鸿蒙 `Components.ets PlayModeButton`
+/// 同名同语义,三端改一处要一起改。
+struct PlayModeButton: View {
+    /// 这一列的身份(`ListTag`);模式按它读写自己那一格。
+    let tag: String
+    @EnvironmentObject var player: PlayerController
+
+    var body: some View {
+        let mode = player.mode(for: tag)
+        Button { player.cyclePlayMode(tag) } label: {
+            Image(systemName: Self.symbol(for: mode))
+                .font(.system(size: 15))
+                .foregroundStyle(.secondary)   // 恒为次要色:这颗按钮不再"点亮"
+        }
+        .buttonStyle(.plain)
+        .help(Text(Self.name(for: mode)))      // 悬停提示 = Android 的 contentDescription
+    }
+
+    /// 图标三态就是模式本身。
+    private static func symbol(for mode: PlayMode) -> String {
+        switch mode {
+        case .sequential: return "list.bullet"
+        case .repeatOne: return "repeat.1"
+        case .shuffle: return "shuffle"
+        }
+    }
+
+    private static func name(for mode: PlayMode) -> LocalizedStringKey {
+        switch mode {
+        case .sequential: return "顺序播放"
+        case .repeatOne: return "单曲循环"
+        case .shuffle: return "随机播放"
+        }
+    }
+}
+
 /// 单集行通用右键菜单:下一个播放 / 加入队列 / 标记已播完切换。
 /// 依赖注入的 env(历史)与 player(队列)。
 struct EpisodeContextMenu: ViewModifier {

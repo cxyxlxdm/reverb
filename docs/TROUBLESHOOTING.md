@@ -4124,3 +4124,54 @@ Android 的 `keystore.properties` 里那两个口令(24 位)**开不了** `rever
 `signingConfigs`,这正是 H123 第一轮的成因),所以出包前的固定动作是**两段都核**三段材料路径、alias、
 profile 绑的包名与 type,再用 `DecipherUtil.decryptPwd` 解一遍两段共四串口令密文。
 本次实测 release 段未被改动、四串全可解,20:05 的市场包不必重打 —— 但这是**验出来的**,不是假设。
+
+### H124. 把「播放模式」移植到 macOS,才发现桌面端**压根没有"列表播完接下一集"这条分支**
+
+**现象**(2026-09-29,做完 FEATURES.md 那行的"macOS 未移植"核对之后动手移植时暴露):
+桌面端从列表里点一集开始播,播完就安静地停在那里 —— 上/下一集的按钮看着是能用的,
+`queue` 也带着整列,但自然播完那一次什么都没发生。只有两种情况会续播:开着随机电台,
+或者「播放队列」(up next)里排了东西。所以**顺序模式等于"播完一集就停"**,而
+单曲循环与随机这两档在桌面端根本没有存在的余地。
+
+**根因**:`observeEnd` 里那条链只有三档 —— 睡眠「本集结束」/ `radioMode` / `!userQueue.isEmpty`,
+**缺第四档「上下文队列按当前模式推进」**。Android 与鸿蒙是在加播放模式那一轮一起补上的
+(见 H118、H119 与 FEATURES.md「列表播完自动连播」),而 macOS 从来没有过模式概念:它的
+`hasNext` 是 `queueIndex < queue.count - 1` 手算的,推进也另写一遍,两处各算各的。
+换句话说这不是回归,是**一条从未存在过的路径**,抄 UI 抄不出它。
+
+**修法**(抄的是**判据结构**,不是某一行):
+- `PlayMode: Int, CaseIterable`(0 顺序 / 1 单曲循环 / 2 随机,ordinal 与两端一致 —— 落盘存的就是它,
+  **新增只能加在末尾**),`ListTag` 同四个值(`inbox` / `fav` / `dl` / `podcast:<channelKey>`)。
+- `nextQueueIndex()` / `prevQueueIndex()` / `advanceQueue(auto:)` 三件套照两端同名同语义搬过来,
+  **`hasNext` 改走 `nextQueueIndex()`**(与推进同一个判据),随机用「打乱索引表 + 指针」而不是每次抛骰子,
+  当前集钉在第一位。
+- 播完那条链补上 `else { advanceQueue(auto: true) }` —— 单曲循环只挂在 `auto` 这一边,
+  手动「下一集」仍按顺序走(否则会被读成按钮坏了)。
+- 按列的模式表落 `UserDefaults` 的 **dictionary**(`play_mode_map`),而不是照抄 Android 的
+  `"k=v"` 字符串集合:平台原语没有切 `=` 这一步,Android 那个「feedUrl 自带 `=` 就读不回来」的坑
+  (#49,判死为 Android 特有)**在这两端结构上都不存在**。
+- `bind(history:settings:)` 里补一次 `refreshPlayModes()`:桌面端 PlayerController 是启动后
+  才拿到 SettingsStore 的,不在这里刷一遍,第一次起播读到的是空表而不是用户存的那格。
+
+**验收(等级要说清,它低于另两端)**:这台机器**做不了 macOS 构建** ——
+`Package.swift` 是 `swift-tools-version:5.9` + `.macOS(.v13)`,而只有 Command Line Tools
+(Swift 5.7.1 / macOS 12.7.6 / SDK 13.1)、**没有 Xcode、没有 macOS 14 SDK**,
+`swift build` 直接被版本门挡回,`./package.sh` 更跑不到。
+能跑的最强检查是**整模块 `swiftc -typecheck`**,并把改动前的 HEAD 用 `git archive` 解到 /tmp
+单独 typecheck 出**基线错误集**再逐条比对:改前改后都是同一组 4 条,全在没碰过的
+`UI/TranscriptPage.swift`(双参数 `onChange` 要 macOS 14 SDK)。
+`.strings` 四份 `plutil -lint` 全 OK、键数 182→185 四语一致。
+**没验的**:按钮的两处落位与窄窗挤压、自动续播三项、跨启动读回那张表、`.help()` 能否被
+VoiceOver 读到 —— 界面一帧都没跑起来看过(逐条在 ROADMAP 三-A)。
+
+**教训与可复用的规律**:
+① **移植一个"模式开关"时,UI 与枚举是最容易的部分,真正会漏的是"自动推进"那条分支。**
+只把按钮抄过去,得到的是一个三态图标齐备、播完照样停的 App —— 而且它不报错,类型检查也全绿。
+判据:**看目标端有没有那条 `auto` 路径**,而不是看有没有那个枚举。
+② 推进与置灰必须共用同一个函数(`nextQueueIndex()`),否则「手动下一集」和「自动续播」
+会在两处各算一遍;这条在 Android/鸿蒙已经定过一次,macOS 是第三次印证。
+③ **"这台机器能构建某端"是一条要复验的能力断言,不是永久事实。** AGENTS.md 的常用命令写着
+`cd macos && swift build`,而它在本机是失败的 —— 断言之前先跑一条命令,跑不动就把它写进文档,
+否则下一个人(或下一个我)会把它当成代码问题去查。
+④ 工具链不够时,**基线差分的 typecheck** 仍是有价值的验收:它能证明"没引入新错误",
+但**不能**证明界面与行为正确 —— 这两件事要分开说,不许合成一句"已验证"。

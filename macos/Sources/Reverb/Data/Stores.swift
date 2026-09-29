@@ -210,6 +210,13 @@ enum AppSupport {
     @Published var skipBackSec: Int { didSet { d.set(skipBackSec, forKey: "skip_back") } }
     @Published var skipForwardSec: Int { didSet { d.set(skipForwardSec, forKey: "skip_fwd") } }
     @Published var contextualRadio: Bool { didSet { d.set(contextualRadio, forKey: "contextual_radio") } }
+    /// 播放模式**按列**存:key 是 `ListTag` 的值,value 是 `PlayMode` 的 rawValue(ordinal)。
+    /// 与 Android 的 `play_mode_map` / 鸿蒙同名同义(见 `PlayMode` 注释与 H119)。
+    /// 这里用 dictionary 而不是 Android 那套 "k=v" 字符串集合:UserDefaults 原生支持字典,
+    /// 也就不会有 Android 那边「feedUrl 含 `=` 时按最后一个 `=` 切」的读回坑(H118 记过)。
+    @Published var playModeByTag: [String: Int] { didSet { d.set(playModeByTag, forKey: "play_mode_map") } }
+    /// 回落值:没有列身份的入口(单播、迷你条、发现页)用它。空 tag 不落进上面那张表。
+    @Published var playModeDefault: Int { didSet { d.set(playModeDefault, forKey: "play_mode") } }
     /// 语音转文字:开启后播放页出现"转录"轮播页。默认关(需 macOS 26 + 首次下载语言模型)。
     @Published var transcriptionEnabled: Bool { didSet { d.set(transcriptionEnabled, forKey: "transcription_enabled") } }
     /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。
@@ -236,5 +243,13 @@ enum AppSupport {
         contextualRadio = d.object(forKey: "contextual_radio") as? Bool ?? false
         transcriptionEnabled = d.object(forKey: "transcription_enabled") as? Bool ?? true
         language = d.string(forKey: "app_language") ?? ""
+        playModeByTag = (d.dictionary(forKey: "play_mode_map") as? [String: Int]) ?? [:]
+        playModeDefault = d.object(forKey: "play_mode") as? Int ?? 0
+    }
+
+    /// 写某一列的模式。**空 tag 不写这张表** —— 它表示「没有列身份」,走回落那一格。
+    func setPlayMode(_ v: Int, for tag: String) {
+        if tag.isEmpty { playModeDefault = v; return }
+        playModeByTag[tag] = v
     }
 }

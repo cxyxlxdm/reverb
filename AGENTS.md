@@ -73,6 +73,15 @@ swift build -c release             # 只编译
 ./package.sh                       # 编译 → .app → ad-hoc 签名 → dmg(无需 Xcode GUI)
 ```
 
+> ⚠️ **这两条命令在开发机(本文写作时那台)跑不起来**:只有 Command Line Tools
+> (Swift 5.7.1 / macOS 12.7.6 / SDK 13.1),而 `macos/Package.swift` 声明
+> `swift-tools-version:5.9` + `.macOS(.v13)` ⇒ SwiftPM 直接版本门挡回,且没有 macOS 14 SDK
+> (`TranscriptPage.swift` 的双参数 `onChange` 要它)。**出包要在装了 Xcode 15+ 的机器上做。**
+> 这台机器上能做的最强验收是**整模块 typecheck 并与改前基线差分**:
+> `swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target x86_64-apple-macos13.0 $(find Sources -name '*.swift')`
+> —— 基线用 `git archive HEAD macos | tar -x -C /tmp/…` 解一份出来单独跑,再逐条比对错误集;
+> **只说"错误没变多"是不够的,要同时说明它证明不了什么**(界面与行为一帧都没跑起来)。见 H124。
+
 ### 发布物料(截图/商店图/上传用图标)
 
 **不入库,流程与踩过的坑记在本地运营手册**(`docs/STORE-OPS.md`,gitignore 中,

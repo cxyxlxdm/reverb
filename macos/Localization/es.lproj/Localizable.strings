@@ -186,6 +186,11 @@
 "标记为未播完" = "Marcar como no reproducido";
 "已播完" = "Reproducido";
 
+/* 播放模式(每列右端那颗按钮,与 Android / 鸿蒙同源) */
+"顺序播放" = "Reproducción en orden";
+"单曲循环" = "Repetir este episodio";
+"随机播放" = "Reproducción aleatoria";
+
 /* i18n 补丁:查看频道 / 日志反馈 */
 "查看频道" = "Ver canal";
 "发送日志到开发者邮箱" = "Enviar registros al desarrollador";

@@ -40,9 +40,14 @@ struct PodcastDetailView: View {
                     .frame(minHeight: 280)
                 } else {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("单集")
-                            .font(.title3).fontWeight(.semibold)
-                            .padding(.bottom, 4)
+                        HStack {
+                            Text("单集")
+                                .font(.title3).fontWeight(.semibold)
+                            Spacer()
+                            // 这一列的播放模式(与音阁三段用的是同一颗按钮、同一套 tag 规则)。
+                            PlayModeButton(tag: ListTag.podcast(channelKey))
+                        }
+                        .padding(.bottom, 4)
                         LazyVStack(spacing: 0) {
                             ForEach(episodes) { ep in
                                 HStack(spacing: 12) {
@@ -52,7 +57,8 @@ struct PodcastDetailView: View {
                                         isPlaying: player.isPlaying,
                                         played: env.history.isPlayed(ep.id),
                                         accent: accent,
-                                        onPlay: { player.playOrToggle(ep, queue: episodes) })
+                                        onPlay: { player.playOrToggle(ep, queue: episodes,
+                                                                     tag: ListTag.podcast(channelKey)) })
                                         .episodeContextMenu(ep)
                                     EpisodeDownloadButton(episode: ep, accent: accent)
                                 }
