@@ -111,6 +111,12 @@ macOS 无改动,停在 1.0.2 —— 播放模式尚未移植桌面端,见 FEATUR
   - 未覆盖范围:**没有装机实跑**(市场包只解包核对;真机验证按惯例走 debug hap + 临时测试包名),
     签名链有效性依赖 AGC 上传时的校验;`libc++_shared.so`(1.26 MB)与 `libreverb_pcm.so`(58 KB)是
     预期的 native 件,未逐项反编译
+- ✅ **debug 签名同日也由用户修好**:`build-profile.json5` 的 default 段现在指向真实存在的 `.p12`,
+  profile 绑**正式包名** `com.yuyin.reverb`、`type=debug`;`assembleHap -p product=default -p buildMode=debug`
+  的 `SignHap` 跑过(7.7 s),产出 `entry/build/default/outputs/default/entry-default-signed.hap` 3.84 MB。
+  **只做到"能签",没有装机**(正式包名可能与设备上已装版本签名不同,覆盖安装要先问用户)。
+  修好之后按 H123 教训复验过 release 段:三段材料路径、`keyAlias=yuyin`、profile 绑 `com.yuyin.reverb`
+  且 `type=release` 全部未变,两串口令密文仍能解 —— 所以 20:05 那个市场包不必重打。
 - ⬜ 分发平台的运营事项(截图重拍、物料包重建、审核提交)按惯例不在此文,记本地运营手册
 
 ---
