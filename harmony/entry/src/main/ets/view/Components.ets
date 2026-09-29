@@ -486,12 +486,29 @@ export struct EpisodeListItem {
  * 427.6dp,同值即占屏大 14%。38/374.2 = 10.2% ≈ 44/427.6 = 10.3% ⇒ 这才是"和 Android 一样"。
  * 同一档换算在底部栏(`GlassTabBar.BAR_H` 48→42)与它的留白上一起做的,理由与实测数据写在那处。
  *
- * ⚠️ **条里的 chip 自己不缩**:实测 chip 高 29.8vp,而 Android 的 Material FilterChip 是 34dp,
- * 鸿蒙本来就比 Android 小(占屏 8.0% vs 7.9%,已经对齐),再缩就成了字顶着条边。
+ * ⚠️ **条本身缩了,chip 的"盒子"没跟着缩**:实测 chip 高 29.8vp,而 Android 的 Material
+ * FilterChip 是 34dp,鸿蒙本来就比 Android 小(占屏 8.0% vs 7.9%,已经对齐),盒子再缩
+ * 就成了字顶着条边。**但 chip 里的字缩了**(14→12fp,见 `CHIP_LABEL_FP`)—— 那是用户
+ * 第二次反馈指名的地方,和底部 tab 标签同一档。
  * 圆角也从这里倒推(见下面两处 `CHIPS_STRIP_H / 2`),不要写死 21 —— 那是 44 的一半,
  * 条一改就会露出方角。
  */
 export const CHIPS_STRIP_H = 38;
+
+/**
+ * 分段条里 chip 的文字字号(fp)。**14 → 12(2026-09-29)**,与底部 tab 标签 11→10 同一档
+ * 换算(×0.876,来由见 `GlassTabBar.BAR_H` 与 H122)。
+ *
+ * 原先这里用 `TypeScale.labelLarge`(= Android Material FilterChip 的 14sp),**数值两端相同**
+ * —— 但"相同"在这台机器上不等于"一样":本机 1vp ≈ 1.18 个标准 dp,同字号在鸿蒙物理上大 18%、
+ * 占屏大 14%。底部栏那一圈按占屏换算收小之后,顶部的字没跟着收,反而读成"字比壳大"。
+ *
+ * ⚠️ **只动字号,不动盒子的纵向 padding**(仍是 7):chip 高 = 12×1.17 + 14 ≈ 28vp,
+ * 与条 38 之间上下各剩 5vp —— 这正是 Android 的比例(chip 34 / 条 44 ⇒ 上下各 5)。
+ * 若把竖向 padding 也乘 0.876,盒子会掉到 26vp,chip/条 占比 0.68(Android 0.77),
+ * 条里就空得发飘。**"同一把尺子"只适用于外壳,不适用于已经按占比定好的两个量。**
+ */
+export const CHIP_LABEL_FP = 12;
 
 /**
  * 分段条距屏幕左右的留白。**条宽收口**要拿它从可用宽里减掉,所以和上面那层
@@ -753,13 +770,18 @@ export struct ChipsRow {
               Row({ space: 8 }) {
                 ForEach(this.labels, (label: string, idx: number) => {
                   Text(label)
-                    // chip 文字取 labelLarge(14),与 Android 的 Material FilterChip 同档
-                    .fontSize(TypeScale.labelLarge * this.fontScale)
+                    // chip 文字 12fp。**不是** `TypeScale.labelLarge`(14) —— 那个值与 Android 的
+                    // FilterChip 同数值,但两台机器的 1 单位不等长,收小理由与"为什么只收字不收盒子"
+                    // 全写在上面的 `CHIP_LABEL_FP`。溢出菜单项仍走 labelLarge,两端一致。
+                    .fontSize(CHIP_LABEL_FP * this.fontScale)
                     // 选中态的底色交给胶囊,chip 自己只换文字色;未选中保持灰底
                     .fontColor(this.selected === idx ? this.scheme.primary : this.scheme.onSurfaceVariant)
                     .backgroundColor(this.selected === idx ? Color.Transparent : withAlpha(this.scheme.onSurfaceVariant, 0.10))
-                    .padding({ left: 14, right: 14, top: 7, bottom: 7 })
-                    .borderRadius(16)
+                    // 横向 padding 跟着字号走(14 → 12),竖向保持 7:见 `CHIP_LABEL_FP` 那段
+                    // "只动字号,不动盒子的纵向 padding"。圆角取盒子一半高(28/2),写死 16 会被
+                    // ArkUI 夹到一半,数值上看着像"比条还圆"。
+                    .padding({ left: 12, right: 12, top: 7, bottom: 7 })
+                    .borderRadius(14)
                     // 高亮做淡入淡出,不要硬切。原先 backgroundColor/fontColor 是直接按三元赋值,
                     // 状态一变颜色瞬间跳过去,配上页面的滑动动画就显得生硬。
                     .animation({ duration: 200, curve: Curve.EaseOut })
@@ -900,15 +922,15 @@ struct ChipsCapsule {
   build() {
     Row()
       .width(this.live ? this.iw : this.capW)
-      // 30 不是新拍的数:它要等于 chip 的实测高(14fp 字 + 上下各 7 的 padding ≈ 29.8vp),
+      // 28 不是新拍的数:它要等于 chip 的实测高(12fp 字 + 上下各 7 的 padding ≈ 28vp),
       // 罩上去才「正好是那一颗 chip」。Android 侧胶囊也取自 chip 自己的高(见其 ChipRow),
       // 两边都是"胶囊 == chip",不是"胶囊比 chip 大一圈"。
-      // 为什么从 34 收到 30:条体从 44 收到 38(外壳按 0.876 等比,见 CHIPS_STRIP_H),
-      // 而 chip 本身**不跟着收** —— 它 29.8/374.2 = 8.0% 已经对上了 Android 的 34/427.6 = 7.9%。
-      // 于是原来 34 的胶囊比 chip 上下各多出 2.1vp,收条之后那点多余就变成"罩不住"。
-      // 圆角仍取一半(全圆),与条体一样从各自的高度倒推,不要写死。
-      .height(30)
-      .borderRadius(15)
+      // 为什么从 34 → 30 → 28:条体 44→38 是外壳按 0.876 等比(见 CHIPS_STRIP_H);
+      // 34 那版比 chip(29.8)上下各多出 2.1vp,收条之后那点多余变成"罩不住",所以先齐平到 30。
+      // 再往下这一档是 chip 的**字号**收了(14→12fp,见 CHIP_LABEL_FP),盒子跟着矮 2vp,
+      // 胶囊再一次跟到齐平。圆角始终取自己的一半(全圆)。
+      .height(28)
+      .borderRadius(14)
       // 染色比底部药丸(0.15)深:胶囊滑到两颗 chip 之间的空档时,底下只有玻璃条 +
       // 米色页面,0.15 几乎隐形(实测拖到中途截图基本看不见),加深才能读出"在移动"
       .backgroundColor(withAlpha(this.scheme.primary, 0.26))

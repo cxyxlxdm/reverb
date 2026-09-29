@@ -169,8 +169,9 @@ export class TypeScale {
   /// 与 Android 那边 bodyMedium → bodyLarge 的同一处调整对应:长文用正文号读着费劲。
   /// 列表里的正文不要改用它 —— 那会把行高撑乱。
   static readonly bodyLarge = 16;         // bodyLarge
-  /// chip 与溢出菜单项用它。Material 的 FilterChip / DropdownMenuItem 都取 labelLarge,
-  /// 两端就此对齐(先前 chip 用 label(12)、菜单项走 ArkUI 默认值,都偏大或偏小)。
+  /// **溢出菜单项用它**(Android 的 DropdownMenuItem 同取 labelLarge,两端就此对齐)。
+  /// ⚠️ 分类 chip 原先也用它,2026-09-29 起改用自己的档
+  /// (`Components.CHIP_LABEL_FP` = 12)—— 外壳按占屏比例收小之后,字不能还留在等值那一档。
   static readonly labelLarge = 14;        // labelLarge
   static readonly label = 12;             // labelMedium
   static readonly caption = 11;           // labelSmall
