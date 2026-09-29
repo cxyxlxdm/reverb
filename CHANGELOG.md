@@ -10,10 +10,10 @@
 
 ## 1.0.3 — 2026-09-29
 
-HarmonyOS versionCode 1000003
+Android versionCode 4 · HarmonyOS versionCode 1000003
 
-> 这一版**只出鸿蒙市场包**。Android 侧的对应改动已全部进主干,出包时同步 bump 到
-> versionCode 4 / 1.0.3(下面标注 (Android/鸿蒙) 的条目两端代码一致);
+> 鸿蒙市场包与 Android 两个渠道包都已出好(分别在 `harmony/dist/`、`android/dist/`)。
+> 下面标注 (Android/鸿蒙) 的条目两端代码一致;
 > macOS 本轮无改动,停在 1.0.2(播放模式尚未做到桌面端)。
 
 ### 新增

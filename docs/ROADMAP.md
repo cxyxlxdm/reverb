@@ -16,12 +16,33 @@
 
 | | 已出包 | 主干当前 | 分发 | 状态 |
 |---|---|---|---|---|
-| **Android 自分发版** | 1.0.2(versionCode 3)`dist/reverb.apk` ≈ 64 MB | **1.0.3 代码已齐**,versionCode 仍 3(出包时 bump 4) | 官网 / GitHub Releases | 就绪,可随时放出;体积大是因为内置 57 MB 语音模型 |
-| **Android 大陆商店版** | 1.0.2(versionCode 3)`dist/reverb-store.apk` ≈ 3.9 MB | 同上 | 大陆各家应用市场 | 同上 |
+| **Android 自分发版** | 1.0.3(versionCode 4)`dist/reverb.apk` = 63,408 KB,**解包验收过** | 同左,代码已出包 | 官网 / GitHub Releases | ✅ **可上传**;体积大是因为内置 57 MB 语音模型 + 1.6 MB `.so` |
+| **Android 大陆商店版** | 1.0.3(versionCode 4)`dist/reverb-store.apk` = 3,428 KB,**解包验收过** | 同上 | 大陆各家应用市场 | ✅ **可上传**(删减口径见下面那张验收表) |
 | **HarmonyOS** | 1.0.2(versionCode 1000002)`dist/reverb.app` ≈ 952 KB | **1.0.3 已出包** `dist/reverb.app` ≈ 1032 KB(versionCode 1000003) | 仅应用市场 | ✅ **就绪,可上传**(签名这一关的经过见 H123) |
 | **macOS** | 1.0.2(build 1) | 无改动,停在 1.0.2(播放模式未移植) | 自分发,不涉及商店 | 就绪 |
 
 > 产物尺寸是**上一版实测值**,新版出包后要重新量(尤其鸿蒙这次改了资源与混淆口径)。
+
+**1.0.3 Android 两渠道的解包验收**(2026-09-29 21:2x,硬规矩 1 的口径;处理量先摆出来:
+`reverb.apk` 168 条目 / dex 1 个 6,364,616 B,`reverb-store.apk` 165 条目 / dex 1 个 6,352,056 B):
+
+| 判据 | 期望 | default 实测 | store 实测 |
+|---|---|---|---|
+| `aapt2 dump badging` 包版本 | 两端都 4 / 1.0.3 | ✅ `versionCode='4' versionName='1.0.3'` | ✅ 同左 |
+| `lib/` 条目 | default 1 / store **0** | ✅ `lib/arm64-v8a/libreverb_asr.so` 1,679,264 B | ✅ 0 |
+| `whisper-model` 条目 | default 1 / store **0** | ✅ `assets/whisper-model.bin` 59,707,625 B | ✅ 0 |
+| `RECORD_AUDIO` | default 1 / store **0** | ✅ 在(9 条权限) | ✅ 0(7 条;比 default 少 `RECORD_AUDIO` + `MODIFY_AUDIO_SETTINGS`) |
+| 目录接口 URL(在线目录已恢复,H70) | **两侧都非 0** | ✅ dex 内 `itunes.apple.com`=1 / `fyyd`=3 / `gpodder`=3 | ✅ 同样 1 / 3 / 3 |
+| 签名方案 | v2+v3,并**显式补 v1** | ✅ v2 true / v3 true;v1 见下 | ✅ 同左 |
+
+**v1 的判读口径**(容易自己骗自己,写死在这里):`apksigner verify --verbose` 对这两包都报
+`Verified using v1 scheme (JAR signing): false` —— **这不是没补上**,而是 minSdk≥24 时平台安装校验
+根本不采用 v1,apksigner 如实报"不采用"。要看块在不在,用 `jarsigner -verify`(两包都回
+`jar verified.`)或直接查 `META-INF/REVERB.SF` + `REVERB.RSA` + `MANIFEST.MF` 三件齐不齐。
+补签这一步在 `build-release.sh` 里,不是 gradle 的 `enableV1Signing`(AGP 8.5 在 minSdk≥24 会忽略它)。
+
+**没扫的**:两包的 dex 里没有再核 `BOOT_COMPLETED`(1.0.3 删掉的那条权限)—— 上面权限清单
+已经证明它不在 manifest;至于**代码里**是否还残留接收器类,本轮没扫。
 
 功能完整度(以自分发 Android 版为基准 100%):
 
