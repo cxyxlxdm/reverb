@@ -18,7 +18,7 @@
 |---|---|---|---|---|
 | **Android 自分发版** | 1.0.2(versionCode 3)`dist/reverb.apk` ≈ 64 MB | **1.0.3 代码已齐**,versionCode 仍 3(出包时 bump 4) | 官网 / GitHub Releases | 就绪,可随时放出;体积大是因为内置 57 MB 语音模型 |
 | **Android 大陆商店版** | 1.0.2(versionCode 3)`dist/reverb-store.apk` ≈ 3.9 MB | 同上 | 大陆各家应用市场 | 同上 |
-| **HarmonyOS** | 1.0.2(versionCode 1000002)`dist/reverb.app` ≈ 952 KB | **1.0.3(versionCode 1000003)已 bump** | 仅应用市场 | ⚠️ **市场包等用户重填一次发布口令**:签名配置已回滚到位,只差明文口令(材料都在),见下方 1.0.3 一节与 H123 |
+| **HarmonyOS** | 1.0.2(versionCode 1000002)`dist/reverb.app` ≈ 952 KB | **1.0.3 已出包** `dist/reverb.app` ≈ 1032 KB(versionCode 1000003) | 仅应用市场 | ✅ **就绪,可上传**(签名这一关的经过见 H123) |
 | **macOS** | 1.0.2(build 1) | 无改动,停在 1.0.2(播放模式未移植) | 自分发,不涉及商店 | 就绪 |
 
 > 产物尺寸是**上一版实测值**,新版出包后要重新量(尤其鸿蒙这次改了资源与混淆口径)。
@@ -62,7 +62,7 @@
    ⬜ 剩系统云备份链路:Android 已验(LocalTransport,见三-A);鸿蒙等市场包发布后走
    (debug 包不进备份选项清单,见 harmony-cloud-backup 卡口)
 
-### 1.0.3(代码已齐、版本号已 bump,**卡在鸿蒙发布签名**)
+### 1.0.3(鸿蒙市场包**已出包、解包核对全绿**,2026-09-29 20:05)
 
 2026-09-29:三端里这轮只有鸿蒙要出市场包(Android 代码同批已齐,出包时 bump versionCode 4;
 macOS 无改动,停在 1.0.2 —— 播放模式尚未移植桌面端,见 FEATURES.md 该行)。
@@ -72,7 +72,7 @@ macOS 无改动,停在 1.0.2 —— 播放模式尚未移植桌面端,见 FEATUR
 - ✅ 硬规矩 5 同步:关于页 `about_p_features` 补「播放模式」一项,五语种 × 两端共 10 份文件;
   顺手改掉 fr 一处拼写(`statististiques` → `statistiques`,两端各一处,原本就在)
 - ✅ release 模式编译与打包都过(`entry/build/release/…/entry-default-unsigned.hap` 2.36 MB)
-- ⚠️ **`SignHap` 失败,包出不来**(详见 H123):DevEco 的自动生成签名在 09-26 把
+- ⚠️ **`SignHap` 失败(2026-09-29 白天,已于当晚 20:05 解决并出包)**:DevEco 的自动生成签名在 09-26 把
   `build-profile.json5` 的 **release 段**一起改写成了绑临时测试包名的 debug 材料。
   - ✅ **配置侧已回滚**:从覆盖前的两份备份(`~/Documents/cast-backup-20260925`、
     `~/Downloads/LANDrop/reverb-migrate-secrets-20260920`,都是 08-15 那一版)整段恢复 release 段,
@@ -81,19 +81,36 @@ macOS 无改动,停在 1.0.2 —— 播放模式尚未移植桌面端,见 FEATUR
   - ✅ **卡口加进 `build-release.sh`**:开跑前 1 秒校验「release 段指向 signature/*」
     「profile 的 bundle-name 等于 app.json5」「profile 的 type 是 release」,不合格就打印修法。
     两个方向都实测过(坏配置三条全中并退出、好配置放行)。
-  - ⬜ **只剩明文口令**:回滚回来的加密口令解不开 —— 解密密钥 `harmony/signature/material/`
-    在 09-26 12:14 被重写,而 material 是**每个目录一套随机密钥、全盘没有旧副本**
-    (与 `~/.ohos/config/material/` 逐文件比 sha256,五项全不同),于是报
-    `00303242 … unable to authenticate data`(GCM authTag 不过)。
-    **需要用户本人**在 DevEco → Project Structure → Signing Configs → release 重填一次明文口令
-    (路径与 alias 已经是对的,照着核即可;Apply 会用当前 material 重新加密写回)。
-    不要代填、不要重生成签名材料。
+  - ⚠️→✅ **明文口令这条路的终局:回滚不可行,只能重做签名材料。** 回滚带回的 08-15 密文解不开 ——
+    解密密钥 `harmony/signature/material/` 在 09-26 12:14 被重写,而 material 是**每个目录一套随机密钥、
+    全盘没有旧副本**(与 `~/.ohos/config/material/`、IDE 的 `…/DevEcoStudio26.0/options/data2/material/`
+    逐套试解,三套都解不开那两串),于是报 `00303242 … unable to authenticate data`(GCM authTag 不过)。
+    **判定方法(比试错快,可复现)**:直接调 DevEco 自己的
+    `hvigor-ohos-plugin/src/utils/decipher-util.js` 的 `decryptPwd(path.resolve(storeFile,'..'), 密文)`,
+    并拿一份**已知能签成功的配置**当对照(09-26 自动签名那份的 default 段能解出 11 位明文) ——
+    对照不过说明是判定实现写错了,不是密文失配。自研复刻版曾把 default 段也判成解不开,就是假阴
+    (坑在 `material/fd/0|1|2` 是**子目录**,得读子目录里那个 16 字节文件)。
+    **由用户本人**在 DevEco 重做签名材料后出包;代填口令、代改签名文件、代回滚都不做(见 H123 教训 ⑦)。
   - ⬜ 明文口令若确实找不回:只能新 CSR → 平台重发一张发布证书 + Profile。
     **前提**是先在分发平台后台核实没有以旧证书提交/过审的版本(同包名换签名会断已装用户的升级路径,H82 前提)。
   - ℹ️ 私钥与证书本体都完好(`harmony/signature/reverb.*` 自 08-15 未动、Profile 有效期到 2029-08)。
-- ⬜ 补回口令后 `cd harmony && ./build-release.sh`,再做解包核对(硬规矩 1 全套,期望值沿用
-  1.0.2 清单第 2 项:目录接口 grep 非 0、权限仅 INTERNET / GET_NETWORK_INFO / KEEP_BACKGROUND_RUNNING、
-  BackupExtension + backup_config、版本号一致、无 debugKey)
+- ✅ **市场包已打出并核对通过**:`dist/reverb.app` 1032 KB(hap 2 359 391 B)+ `reverb-symbol.zip` 616 KB。
+  签名这一关的完整经过(自动签名覆盖 → 回滚配置带回旧密文 → material 失配 → 用户重做签名材料后
+  又因 material 每层残留两份文件报 `00303121`)记在 **H123**,含可复现的判定方法。
+- ✅ 解包核对(硬规矩 1,**两侧都验**,处理量:hap 内 17 个文件 / 解包后 2 357 081 B,
+  连 .app 外层共扫 20 个文件 / 4 717 447 B):
+  - 目录接口「有」侧:`modules.abc` 里 itunes.apple.com=1、fyyd=3、gpodder=3(均非 0)
+  - 「没有」侧:`debugKey` 0 命中(20 个文件全扫)、`RECORD_AUDIO` 0、whisper 相关 0
+  - 权限恰好三条:`INTERNET` / `GET_NETWORK_INFO` / `KEEP_BACKGROUND_RUNNING`
+  - `BackupExtension`(带 `$profile:backup_config`)+ `FeedUpdateExtension`(workScheduler)都在;
+    `backup_config.json` 的 `includes` **8 项**齐全,`allowToBackupRestore=true`
+  - 版本一致:`module.json` 与 `pack.info` 都是 1000003 / 1.0.3,`bundleName=com.yuyin.reverb`、
+    `debug=false`、`buildMode=release`、`apiReleaseType=Release`
+  - 硬规矩 5 复核:五语种关于页在 `resources.index`(75 568 B)里都能搜到播放模式一行
+    (简中「顺序」/繁中「順序、單曲循環」/英 sequential / 法 modes de lecture / 西 modos de reproducción)
+  - 未覆盖范围:**没有装机实跑**(市场包只解包核对;真机验证按惯例走 debug hap + 临时测试包名),
+    签名链有效性依赖 AGC 上传时的校验;`libc++_shared.so`(1.26 MB)与 `libreverb_pcm.so`(58 KB)是
+    预期的 native 件,未逐项反编译
 - ⬜ 分发平台的运营事项(截图重拍、物料包重建、审核提交)按惯例不在此文,记本地运营手册
 
 ---

@@ -4071,3 +4071,52 @@ Signature material verification failed, as: Unsupported state or unable to authe
 密文与密钥是两个独立资产,少任一环就是不可恢复,而"配置备份里啥都有"看起来最像能恢复的那个。
 ⑥ **读构建工具的源码比试错快**:这 40 行同时给出"密钥取 keystore **同目录**的 material"和
 "authTag 失败即密钥不符",两条都直接改变了下一步动作(先去全盘找 material,而不是先去试口令)。
+
+**第三轮(同日,直到出包)**:签名这一关最后是被**用户重做签名材料**解开的,不是被回滚解开的。
+两个新事实值得单独记,因为它们各自都能让"看起来对"的配置签不出包:
+
+**① material 的还原必须是**替换**,不能是**并排****。** 把新 material 拷回 `harmony/signature/` 时,
+如果旧的 `fd/0|1|2`、`ac`、`ce` 没清掉,新文件会与旧文件**同目录共存** —— 目录看着完好、五个文件名都是随机
+十六进制,肉眼毫无异常,但 hvigor 的 `decipher-util.js#readDirBytes` 要求**每个叶子目录恰好 1 个文件**
+(`1 !== 文件数` 直接 printErrorExit),于是:
+
+```
+hvigor ERROR: 00303121 Configuration Error
+Signing failed: Signing material error.
+> Ensure signing materials …/signature/material/fd/0 is correct
+```
+
+**与 00303242 的区别要记住**:00303242 = 密文与密钥**不同源**(authTag 不过);
+00303121 = material **结构本身**不合格(文件数不对/尺寸不对)。报错都指向签名,处置完全相反 ——
+前者要重填口令,后者只要把每个目录清到剩一个文件。
+
+**② 判定"密文与 material 是否同源"的正确工具是 DevEco 自己的函数,不是复刻。** 可复现做法:
+
+```bash
+# 直接 require 插件里的 DecipherUtil,入参是 material 的**父目录**(即 storeFile 所在目录)
+node -e 'const M=require("module"),o=M._load,p=new Proxy(function(){},{get:()=>p,apply:()=>p,construct:()=>({})});
+M._load=function(r){return /^@ohos\/hvigor/.test(r)?p:o.apply(this,arguments)};   // 桩掉 @ohos/hvigor
+const {DecipherUtil}=require("/Applications/DevEco-Studio.app/Contents/tools/hvigor/hvigor-ohos-plugin/src/utils/decipher-util.js");
+DecipherUtil._logger={printErrorExit:(c)=>{throw new Error(c)}};                    // 让它抛而不是吞
+console.log(DecipherUtil.decryptPwd("<storeFile 的目录>","<86 位密文>","x").length)'
+```
+
+**必须配对照实验**:同一份代码去解一份**已知能签成功**的配置(本机是 09-26 自动签名当时的
+`build-profile` 的 default 段,配 `~/.ohos/config/material`)。对照能解出 11 位明文,才说明
+"解不开"是密文失配而不是判定写错。我自己的复刻版一开始把 default 段也判成解不开 —— 假阴的根源是
+`material/fd/0|1|2` 是**子目录**,要读的是子目录里那个 16 字节文件,直接 `readFileSync(fd/0)` 得 EISDIR。
+
+**③ 全盘只有三套 material,逐一验完才能下"不可恢复"的结论**:
+`harmony/signature/material`(09-26 12:14)、`~/.ohos/config/material`(09-26 12:15)、
+IDE 自己的 `~/Library/Application Support/Huawei/DevEcoStudio26.0/options/data2/material`(09-26 09:55)。
+顺带否掉两个"也许能捞回来"的假设:IDE 配置目录里**没有** `0000001B…` 形态的口令密文
+(`options/other.xml` 提到 `reverb.p12` 只是文件选择器的历史路径,不是口令存储);
+Android 的 `keystore.properties` 里那两个口令(24 位)**开不了** `reverb.p12`(`keytool -list` 失败)。
+
+**教训(补)**:⑦ **签名材料、口令、material 这三样我一律不代改、不代回滚 —— 读和验可以。**
+这次我把 `build-profile.json5` 整段回滚之前没给它做过备份,而它属于**不可再生产物**(旧 material 一旦
+被覆盖,那份密文就永久解不开);回滚还把 default(调试)段一起带回旧版,`storeFile` 指向一个已被 IDE
+轮换掉的 `.p12`,于是连 debug 包也签不出来(`00303107 Invalid storeFile value`)。
+**不可再生的文件,动手改之前的第一步是落一份带时间戳的副本并把路径说给用户** —— 这条优先于"我能修好"。
+⑧ **回滚一份配置要按段验**:"文件在不在 + 密文能不能解"两问都要跑,只核 release 段而漏掉 debug 段,
+代价是同日两条构建路径一起失效。
