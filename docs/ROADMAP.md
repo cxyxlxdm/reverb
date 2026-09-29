@@ -18,7 +18,7 @@
 |---|---|---|---|---|
 | **Android 自分发版** | 1.0.2(versionCode 3)`dist/reverb.apk` ≈ 64 MB | **1.0.3 代码已齐**,versionCode 仍 3(出包时 bump 4) | 官网 / GitHub Releases | 就绪,可随时放出;体积大是因为内置 57 MB 语音模型 |
 | **Android 大陆商店版** | 1.0.2(versionCode 3)`dist/reverb-store.apk` ≈ 3.9 MB | 同上 | 大陆各家应用市场 | 同上 |
-| **HarmonyOS** | 1.0.2(versionCode 1000002)`dist/reverb.app` ≈ 952 KB | **1.0.3(versionCode 1000003)已 bump** | 仅应用市场 | ⚠️ **市场包暂时打不出来**:release 签名配置被自动签名覆盖,见下方 1.0.3 一节与 H123 |
+| **HarmonyOS** | 1.0.2(versionCode 1000002)`dist/reverb.app` ≈ 952 KB | **1.0.3(versionCode 1000003)已 bump** | 仅应用市场 | ⚠️ **市场包等用户重填一次发布口令**:签名配置已回滚到位,只差明文口令(材料都在),见下方 1.0.3 一节与 H123 |
 | **macOS** | 1.0.2(build 1) | 无改动,停在 1.0.2(播放模式未移植) | 自分发,不涉及商店 | 就绪 |
 
 > 产物尺寸是**上一版实测值**,新版出包后要重新量(尤其鸿蒙这次改了资源与混淆口径)。
@@ -72,14 +72,28 @@ macOS 无改动,停在 1.0.2 —— 播放模式尚未移植桌面端,见 FEATUR
 - ✅ 硬规矩 5 同步:关于页 `about_p_features` 补「播放模式」一项,五语种 × 两端共 10 份文件;
   顺手改掉 fr 一处拼写(`statististiques` → `statistiques`,两端各一处,原本就在)
 - ✅ release 模式编译与打包都过(`entry/build/release/…/entry-default-unsigned.hap` 2.36 MB)
-- ⬜ **`SignHap` 失败,包出不来**:DevEco 的自动生成签名在 2026-09-26 把 `build-profile.json5`
-  的 **release 段**一起改写成了绑临时测试包名的 debug 材料,段里唯一那份加密口令随之丢失
-  (取证与修法见 H123)。**私钥与证书本体都在**(`harmony/signature/reverb.*`,2026-08-15 至今未动),
-  需要用户在 DevEco 的 Signing Configs 里把 release 配置重新指回那三个文件并填明文口令,
-  之后 `cd harmony && ./build-release.sh` 即可出包。**这一步只能人做,不要代填、不要重生成材料。**
-- ⬜ 出包后待做的解包核对(硬规矩 1 全套,期望值沿用 1.0.2 清单第 2 项:目录接口 grep 非 0、
-  权限仅 INTERNET / GET_NETWORK_INFO / KEEP_BACKGROUND_RUNNING、BackupExtension + backup_config、
-  版本号一致、无 debugKey)
+- ⚠️ **`SignHap` 失败,包出不来**(详见 H123):DevEco 的自动生成签名在 09-26 把
+  `build-profile.json5` 的 **release 段**一起改写成了绑临时测试包名的 debug 材料。
+  - ✅ **配置侧已回滚**:从覆盖前的两份备份(`~/Documents/cast-backup-20260925`、
+    `~/Downloads/LANDrop/reverb-migrate-secrets-20260920`,都是 08-15 那一版)整段恢复 release 段,
+    拿回 `./signature/reverb.{p12,p7b,cer}` + keyAlias **`yuyin`** + 两串加密口令;
+    动手前把当时的配置与 material 存进 `~/Documents/reverb-signing-recovery-20260929/`(可退)。
+  - ✅ **卡口加进 `build-release.sh`**:开跑前 1 秒校验「release 段指向 signature/*」
+    「profile 的 bundle-name 等于 app.json5」「profile 的 type 是 release」,不合格就打印修法。
+    两个方向都实测过(坏配置三条全中并退出、好配置放行)。
+  - ⬜ **只剩明文口令**:回滚回来的加密口令解不开 —— 解密密钥 `harmony/signature/material/`
+    在 09-26 12:14 被重写,而 material 是**每个目录一套随机密钥、全盘没有旧副本**
+    (与 `~/.ohos/config/material/` 逐文件比 sha256,五项全不同),于是报
+    `00303242 … unable to authenticate data`(GCM authTag 不过)。
+    **需要用户本人**在 DevEco → Project Structure → Signing Configs → release 重填一次明文口令
+    (路径与 alias 已经是对的,照着核即可;Apply 会用当前 material 重新加密写回)。
+    不要代填、不要重生成签名材料。
+  - ⬜ 明文口令若确实找不回:只能新 CSR → 平台重发一张发布证书 + Profile。
+    **前提**是先在分发平台后台核实没有以旧证书提交/过审的版本(同包名换签名会断已装用户的升级路径,H82 前提)。
+  - ℹ️ 私钥与证书本体都完好(`harmony/signature/reverb.*` 自 08-15 未动、Profile 有效期到 2029-08)。
+- ⬜ 补回口令后 `cd harmony && ./build-release.sh`,再做解包核对(硬规矩 1 全套,期望值沿用
+  1.0.2 清单第 2 项:目录接口 grep 非 0、权限仅 INTERNET / GET_NETWORK_INFO / KEEP_BACKGROUND_RUNNING、
+  BackupExtension + backup_config、版本号一致、无 debugKey)
 - ⬜ 分发平台的运营事项(截图重拍、物料包重建、审核提交)按惯例不在此文,记本地运营手册
 
 ---

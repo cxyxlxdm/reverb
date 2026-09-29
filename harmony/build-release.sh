@@ -49,6 +49,58 @@ if [ ${#MISSING[@]} -gt 0 ]; then
   exit 1
 fi
 
+# 签名段的三条前置校验(H123):装机测试临时改过包名之后,DevEco 的「自动生成签名」
+# 会把 build-profile 的 **release 段一起改写**成新生成的调试材料 —— 那种包既装不了机也提交不了市场,
+# 而要等 90 秒编译全跑完、停在 SignHap 才暴露。所以在这里 1 秒内判掉。
+#   1) release 段指向的必须还是 signature/reverb.*(指向 ~/.ohos/config = 已被自动签名覆盖)
+#   2) profile 里的 bundle-name 必须等于 AppScope/app.json5 的 bundleName(不等 = 00303074)
+#   3) profile 的 type 必须是 release(调试型 profile 上不了架)
+python3 - <<'PY'
+import json, re, sys
+
+raw = open('build-profile.json5', encoding='utf-8').read()
+clean = '\n'.join(l for l in raw.split('\n') if not l.strip().startswith('//'))
+sc = [x for x in json.loads(clean)['app']['signingConfigs'] if x['name'] == 'release']
+if not sc:
+    sys.exit('✗ build-profile.json5 里没有名为 release 的 signingConfig')
+m = sc[0]['material']
+
+app = open('AppScope/app.json5', encoding='utf-8').read()
+bundle = re.search(r'"bundleName"\s*:\s*"([^"]+)"', app).group(1)
+
+prof_path = m.get('profile', '')
+ok, why = True, []
+if 'signature/' not in prof_path:
+    ok = False
+    why.append('release 段的 profile 指向 %s —— 这是 DevEco 自动生成签名的材料,'
+               '绑的是临时测试包名,不能提交市场。' % prof_path)
+try:
+    blob = open(prof_path, 'rb').read()
+except OSError as e:
+    ok = False
+    why.append('profile 读不到:%s' % e)
+    blob = b''
+pfb = re.search(rb'"bundle-name"\s*:\s*"([^"]+)"', blob)
+pft = re.search(rb'"type"\s*:\s*"([^"]+)"', blob)
+if pfb and pfb.group(1).decode() != bundle:
+    ok = False
+    why.append('profile 绑的包名是 %s,而 AppScope/app.json5 是 %s(00303074)。'
+               % (pfb.group(1).decode(), bundle))
+if pft and pft.group(1).decode() != 'release':
+    ok = False
+    why.append('profile 的 type 是 %s(不是 release),这种 profile 上不了架。'
+               % pft.group(1).decode())
+if not ok:
+    print('✗ 发布签名配置不对,先别编译:')
+    [print('    ' + x) for x in why]
+    print('  修法:DevEco → File → Project Structure → Signing Configs → 选中 release →')
+    print('  Store file = ./signature/reverb.p12 / Profile = ./signature/reverb.p7b /')
+    print('  Cert = ./signature/reverb.cer / Key alias = yuyin / 填明文口令 → Apply。')
+    print('  (口令只有加密串存在 build-profile 里,被覆盖就只能重填,明文不在仓库 —— 见 H123)')
+    sys.exit(1)
+print('▸ release 签名段校验通过(profile 绑 %s / type release)' % bundle)
+PY
+
 VER_NAME=$(sed -n 's/.*"versionName"[^"]*"\([^"]*\)".*/\1/p' AppScope/app.json5 | head -1)
 VER_CODE=$(sed -n 's/.*"versionCode"[^0-9]*\([0-9]*\).*/\1/p' AppScope/app.json5 | head -1)
 echo "▸ 余音 Reverb  versionName=$VER_NAME  versionCode=$VER_CODE"

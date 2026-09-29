@@ -4026,3 +4026,48 @@ Cert = `reverb.cer`、Key alias 与两个口令填明文 → Apply。它会重�
 所以"配好即备份(与 material 同批)"必须是动作的一部分,不是出事后的补救。
 ④ 0 命中要连处理量一起打印(见 `zero-hit-must-prove-scan`):这次「历史里找不到」的结论,
 是靠"git 处理 0 条 / 本地历史 228KB 扫过 / 日志里有路径无口令 / 当前 sync 快照已被覆盖"四条分别排除才敢下的。
+
+**第二轮(同日;用户提示「直接回滚配置不就行了」)**:回滚做完了,结论是**路径能回滚、口令不能**。
+
+用 `mdfind -name build-profile.json5` 找到两份**覆盖之前**的备份
+(`~/Documents/cast-backup-20260925/cast-full/`、`~/Downloads/LANDrop/reverb-migrate-secrets-20260920/`,
+两份里的 build-profile 都是 08-15 22:45 那一版),把 release 段整段回滚回去
+—— **动手前先把当时的 build-profile 与 `signature/material/` 存进
+`~/Documents/reverb-signing-recovery-20260929/`,保证这一步可退**。回滚拿回来的关键信息:
+
+- 路径是**相对**的 `./signature/reverb.{p12,p7b,cer}`(hvigor 按 projectDir 归一化,所以换机器也能用);
+- keyAlias = **`yuyin`** —— 此前 p12 是加密封装、无口令读不出别名,现在从配置里拿到了;
+- 两串 86 位加密口令也回来了。
+
+但重跑 `./build-release.sh` 仍停在 SignHap,**换了错误码**:
+
+```
+hvigor ERROR: 00303242 Configuration Error
+Signature material verification failed, as: Unsupported state or unable to authenticate data
+```
+
+原因读源码读清楚了(`hvigor-ohos-plugin/src/utils/decipher-util.js`,约 40 行):
+加密串是 **AES-128-GCM**,密钥链为
+`material/fd`(三个 16 字节分量 XOR)⊕ 内置常量 → `pbkdf2(seed, material/ac 作 salt, 1e4, 16, sha256)`
+= rootKey → 解 `material/ce` 得工作密钥 → 再解口令。
+**authTag 校验不过 = 密钥不对**,也就是 `harmony/signature/material/` 在 09-26 12:14 被重写之后,
+已经解不开 08-15 那两串密文了。两条证据钉死:
+
+1. `find /Users/liang -maxdepth 7 -type d -path "*signature/material"` → 全盘**只有当前这一份**,旧密钥没有副本;
+2. `harmony/signature/material/` 与 `~/.ohos/config/material/` 逐文件比 sha256 → 五个文件**全不相同**
+   ⇒ material 是**每个目录一套随机密钥**,不是机器级常量,既不能从别处拼出来,也不会"重装 DevEco 自动复原"。
+
+⇒ **加密口令备份到了、解密密钥没备份到,等于没备份。** 这恰好就是 `LOCAL-ASSETS` 第三节
+「两者必须同处」写的内容 —— 而这次是本仓库自己的两份口令备份(09-20、09-25)只拷了
+`build-profile.json5` + `signature/reverb.*`,**没拷 `signature/material/`**,学费重交一遍。
+
+**现在的状态与只剩的一步**:配置侧已经对了(真身份、真 profile、真 alias),
+只差在 DevEco 的 Signing Configs 里对 release 配置**重填一次明文口令**
+(它会用当前 material 重新加密写回并刷新 material),之后 `./build-release.sh` 直接出包。
+明文口令若确实找不到:只能拿新 CSR 向平台重新申请一张发布证书 + Profile,
+代价与前提见上文 —— 先核平台侧有没有以旧证书提交/过审的版本。
+
+**教训(补)**:⑤ **判断"能不能恢复"要按密码学链路逐环查,不能只看文件在不在** ——
+密文与密钥是两个独立资产,少任一环就是不可恢复,而"配置备份里啥都有"看起来最像能恢复的那个。
+⑥ **读构建工具的源码比试错快**:这 40 行同时给出"密钥取 keystore **同目录**的 material"和
+"authTag 失败即密钥不符",两条都直接改变了下一步动作(先去全盘找 material,而不是先去试口令)。
