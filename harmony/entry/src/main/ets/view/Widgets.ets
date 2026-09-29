@@ -139,11 +139,17 @@ export struct ScreenHeader {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
-      // 40×3 圆角细线,用「梁金」次强调色。金线紧跟标题行、标语降为线下方
+      // 35×3 圆角细线,用「梁金」次强调色。金线紧跟标题行、标语降为线下方
       // 说明文字(与 Android 同步换位):原来 标题→标语→金线 的顺序让有标语
       // 的页面金线位置与音阁页错开,两页不对齐。
+      // 为什么宽从 40 收到 35:这是**装饰(外壳)**不是文字,按屏幕宽等比对齐 ——
+      // Android 40/427.6 = 9.4%,鸿蒙同一屏幕逻辑宽只有 374.2vp,写 40 就是 10.7%
+      // (整块外壳的换算与来由见 GlassTabBar.BAR_H、CHIPS_STRIP_H)。
+      // 高度**没有**跟着收:3×0.876 = 2.6,只差 0.4vp,这是描边级的量、读不出来;
+      // 而"这根线占了多宽"是看得见的比例。标题字号留在 24 没动 —— 那是可读性常量,
+      // 按绝对物理大小对齐(24fp × 1.18 ≈ Android 28sp),见 H51 的补充。
       Row()
-        .width(40)
+        .width(35)
         .height(3)
         .backgroundColor(this.scheme.secondary)
         .borderRadius(2)

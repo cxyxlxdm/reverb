@@ -476,10 +476,22 @@ export struct EpisodeListItem {
   }
 }
 
-/// 玻璃分段条(ChipsRow)的高度。页面据此在滚动容器顶部留出同等余量
-/// (List 用 contentStartOffset、宫格用占位 GridItem):首项静止时停在条下方,
-/// 上滚时内容从条下经过 —— 悬浮玻璃后面得有东西经过,模糊才看得出来。
-export const CHIPS_STRIP_H = 44;
+/**
+ * 玻璃分段条(ChipsRow)的高度。页面据此在滚动容器顶部留出同等余量
+ * (List 用 contentStartOffset、宫格用占位 GridItem):首项静止时停在条下方,
+ * 上滚时内容从条下经过 —— 悬浮玻璃后面得有东西经过,模糊才看得出来。
+ *
+ * **44 → 38(2026-09-29):按占屏比例换算,不是随手收一档。** 装机反馈「顶部也明显偏大」。
+ * Android 这条是 44dp、本机原先也是 44vp —— 数值相同,但本机逻辑宽 374.2vp、Android 那台
+ * 427.6dp,同值即占屏大 14%。38/374.2 = 10.2% ≈ 44/427.6 = 10.3% ⇒ 这才是"和 Android 一样"。
+ * 同一档换算在底部栏(`GlassTabBar.BAR_H` 48→42)与它的留白上一起做的,理由与实测数据写在那处。
+ *
+ * ⚠️ **条里的 chip 自己不缩**:实测 chip 高 29.8vp,而 Android 的 Material FilterChip 是 34dp,
+ * 鸿蒙本来就比 Android 小(占屏 8.0% vs 7.9%,已经对齐),再缩就成了字顶着条边。
+ * 圆角也从这里倒推(见下面两处 `CHIPS_STRIP_H / 2`),不要写死 21 —— 那是 44 的一半,
+ * 条一改就会露出方角。
+ */
+export const CHIPS_STRIP_H = 38;
 
 /**
  * 分段条距屏幕左右的留白。**条宽收口**要拿它从可用宽里减掉,所以和上面那层
@@ -803,7 +815,7 @@ export struct ChipsRow {
             Row()
               .width(CHIPS_EDGE_FADE_W)
               .height(CHIPS_STRIP_H)
-              .borderRadius({ topRight: 21, bottomRight: 21 })
+              .borderRadius({ topRight: CHIPS_STRIP_H / 2, bottomRight: CHIPS_STRIP_H / 2 })
               .linearGradient({
                 angle: 90,
                 colors: [[withAlpha(this.scheme.surface, 0.0), 0.0],
@@ -829,7 +841,7 @@ export struct ChipsRow {
       }
       .width('100%')
       .height(CHIPS_STRIP_H)
-      .borderRadius(21)
+      .borderRadius(CHIPS_STRIP_H / 2)
       // 玻璃本体:参数与 GlassTabBar 一致(见彼处注释),两端观感统一
       .backgroundEffect({
         radius: 40,
@@ -888,8 +900,15 @@ struct ChipsCapsule {
   build() {
     Row()
       .width(this.live ? this.iw : this.capW)
-      .height(34)
-      .borderRadius(17)
+      // 30 不是新拍的数:它要等于 chip 的实测高(14fp 字 + 上下各 7 的 padding ≈ 29.8vp),
+      // 罩上去才「正好是那一颗 chip」。Android 侧胶囊也取自 chip 自己的高(见其 ChipRow),
+      // 两边都是"胶囊 == chip",不是"胶囊比 chip 大一圈"。
+      // 为什么从 34 收到 30:条体从 44 收到 38(外壳按 0.876 等比,见 CHIPS_STRIP_H),
+      // 而 chip 本身**不跟着收** —— 它 29.8/374.2 = 8.0% 已经对上了 Android 的 34/427.6 = 7.9%。
+      // 于是原来 34 的胶囊比 chip 上下各多出 2.1vp,收条之后那点多余就变成"罩不住"。
+      // 圆角仍取一半(全圆),与条体一样从各自的高度倒推,不要写死。
+      .height(30)
+      .borderRadius(15)
       // 染色比底部药丸(0.15)深:胶囊滑到两颗 chip 之间的空档时,底下只有玻璃条 +
       // 米色页面,0.15 几乎隐形(实测拖到中途截图基本看不见),加深才能读出"在移动"
       .backgroundColor(withAlpha(this.scheme.primary, 0.26))

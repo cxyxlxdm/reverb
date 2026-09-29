@@ -1,4 +1,4 @@
-import { Scheme, TypeScale, Tracking, withAlpha } from '../theme/Theme';
+import { Scheme, Tracking, withAlpha } from '../theme/Theme';
 import { Log } from '../util/Logger';
 import { FrameCallback } from '@kit.ArkUI';
 import image from '@ohos.multimedia.image';
@@ -115,21 +115,23 @@ const ASPECT: number = 1.9;
 /**
  * **常驻的选中底**:静止时唯一可见的标记 —— 扁的浅灰长椭圆,不鼓出栏外、不折射。
  *
- * ⚠️ 高度由**内容高度**倒推:内容块 = 图标 19 + 间距 2 + 文字 11 的行高 ≈ 36vp。
+ * ⚠️ 高度由**内容高度**倒推:内容块 = 图标 17 + 间距 2 + 文字 10 的行高 ≈ 31vp
+ * (ArkUI 单行行高实测 ≈ 字号 × 1.17,用 tab 文字节点 42px/3.25 = 12.9vp 反推得)。
  * 之前灰底只有 38,上下各剩 1vp,装机反馈"相对图标和文字基本没有 padding"。
  * 44 给出 4vp 呼吸量,同时在 48 的栏里留 2vp 到边 —— 参考片里那颗灰底就是几乎顶满栏的。
- * 宽度不单独定,由 ASPECT 算出(≈84)。
+ * **44 → 38 是跟着 [BAR_H] 48→42 同比例走的**(0.876 倍),呼吸量 3.6vp、到栏边 2vp 都不变;
+ * 只改栏高不改这里会让灰顶满栏,透镜也就跟着变形。宽度不单独定,由 ASPECT 算出(≈72)。
  *
  * ⚠️ 透镜不是常驻件 —— 它是"手指按住才从灰底长出来"的东西,松手缩回灰底。
  * 更早一版把大玻璃一直挂在选中项上,静止画面就成了"一颗大白药丸",被否。
  */
-const REST_H: number = 44;
+const REST_H: number = 38;
 const REST_W: number = REST_H * ASPECT;
 /** 静止底的颜色浓度。再深就开始和玻璃抢戏。 */
 const REST_TINT: number = 0.10;
 /**
  * 透镜相对静止底的整体放大倍数(宽和高**同一个数**,所以形状不变)。
- * 1.22 → 按住期间恒为 102×54,比 48 的栏上下各出 3vp —— 这正是需求说的
+ * 1.22 → 按住时 88×46(静止底 72×38 等比放大),比 42 的栏上下各出 2.2vp —— 这正是需求说的
  * "拖动时透镜放大,高度可以超出 tab"。
  *
  * ⚠️ 它是**按住期间的恒定倍率**,不是"拖得越远越大"。上一版宽度还乘了一段
@@ -138,11 +140,32 @@ const REST_TINT: number = 0.10;
 const LENS_SCALE: number = 1.22;
 /**
  * 栏高。**导出给 Index 的 underBarPad 用** —— 页面让出的底部余量必须跟着栏高走。
- * 44 → 48:内容放大到 19/11 之后 44 只剩 4vp 总余量。只加这一档 ——
- * 加到 56 被否("高度增加太多了,只需要增加一点点")。
+ *
+ * **48 → 42(2026-09-29):这一档不是审美回调,是量出来的对齐。** 装机反馈
+ * 「底部 tab 和图标文字相对 Android 有些大了,不如 Android 协调」。先把两端代码摊开比对:
+ * **数值本来就一模一样**(Android `GLASS_BAR_H = 48.dp` / 图标 19dp / 文字 11sp+0.5 字距,
+ * 鸿蒙 48/19/11/0.5),真机也证实应用内没有多余倍数 —— 栏渲染出来 156px = 48vp 分毫不差,
+ * tab 文字实测字宽 11.54vp = 11fp + 0.5 字距 ⇒ 系统字号倍率 1.0、App 内字号档也是「标准」。
+ * 差的是**画布**:本机逻辑宽 374.2vp,Android 那台 427.6dp,同一个绝对值在鸿蒙上占屏比例
+ * **大 14%**。42/374.2 = 11.2% 正好等于 48/427.6 = 11.2% ⇒ 取 42 才是"和 Android 一样"。
+ *
+ * ⚠️ 这条推翻了 H51 的一个前提。那节写的是「fp 与 sp 都是 160dpi 归一,同数值即同物理大小」,
+ * 所以字号按绝对值对齐、外壳另说。实测本机面板物理宽 70mm 配 3.25 密度 ⇒ **1vp ≈ 1.18 个
+ * 标准 dp**(厂商在大屏上默认把 UI 放大了一档),同数值既不同物理大小、也不同占屏比例。
+ * 结论:**外壳按占屏比例换算(×0.876),字号仍不跟着缩到不可读** —— 只有这颗两个字的重心
+ * 标签跟着走(11→10,换算后物理尺寸仍 ≈ Android 的 11sp)。正文/列表字号一律不动。
+ *
  * 栏高**不**参与透镜尺寸:透镜超出栏是特性,不是要避开的边界。
  */
-export const BAR_H: number = 48;
+export const BAR_H: number = 42;
+/**
+ * tab 图标边长。Android 是 `Icon.size(19.dp)`,鸿蒙原先同值 —— 但两台机器画布不同
+ * (374.2vp vs 427.6dp),同值即占屏大 14%,所以这里按 0.876 换算取 17。
+ * 理由与算法全在 [BAR_H] 那段,不要单独调这一个数。
+ */
+const TAB_ICON: number = 17;
+/** tab 文案字号(fp)。同上,11 → 10。字距仍用 `Tracking.caption`(与 Android 的 0.5sp 同值)。 */
+const TAB_LABEL_FP: number = 10;
 /**
  * 栏底到屏幕底的留白 = 手势避让区高度 × 这个系数。
  *
@@ -165,13 +188,18 @@ export const INSET_KEEP: number = 0.62;
 export function barFootprint(inset: number): number {
   return BAR_H + inset * INSET_KEEP;
 }
-/** 整条栏距屏幕左右:栏"太长"的直接修法(原 12)。胶囊放大后不能顶出屏幕。 */
-const SIDE_PAD: number = 24;
+/**
+ * 整条栏距屏幕左右:栏"太长"的直接修法(原 12)。胶囊放大后不能顶出屏幕。
+ * **24 → 21 与 [BAR_H] 48→42 同一档换算**(0.876 倍):留白不跟着缩,栏宽占屏比例就会比
+ * Android 更大(24 时 87.2% vs Android 88.8%,21 时 88.8% 正好相等)。
+ */
+const SIDE_PAD: number = 21;
 /**
  * 两个 tab 的中心从栏边缘内收这么多 —— 间距收小的做法。
  * 注意槽位判定(中线)不受影响:两项对称,分界永远在 barW/2。
+ * 22 → 19 同上,跟着栏一起按 0.876 换算。
  */
-const ITEM_INSET: number = 22;
+const ITEM_INSET: number = 19;
 
 // —— 折射层(实验,见 H98 之后)——
 /**
@@ -779,13 +807,16 @@ export struct GlassTabBar {
         // 跟着变高,观感发"胖"(装机社区的胶囊是贴合内容的扁长条)。
         Column({ space: 2 }) {
           Image(it.icon)
-            .width(19).height(19)
+            .width(TAB_ICON).height(TAB_ICON)
             .fillColor(this.activeIdx() === idx ? this.scheme.primary : this.scheme.onSurfaceVariant)
-          // caption(11) 原样。曾经为了收小整条栏压到 9,理由是"两个字的文案比图标还宽,
-          // 透镜就得跟着变宽" —— 那条链已经不成立了:透镜 86 远大于内容块,
-          // 而 9 号字在真机上读起来太小(装机反馈"图标和文字再大一点")。
+          // **10fp,不是 Android 那个 11。** 这颗标签是整条栏里唯一跟着外壳一起缩的文本:
+          // 栏 48→42 之后若文字仍 11,文字占栏高 26%(Android 22.9%),读起来就是"字顶着栏"。
+          // 换算后 10fp 在这台机器上的**物理**大小 ≈ Android 的 11sp(本机 1vp ≈ 1.18 标准 dp),
+          // 所以这不是把字改小,是把两台的物理尺寸对齐回来。
+          // ⚠️ 别再往下压到 9:9 号真机读过、被否("图标和文字再大一点"那一轮就是从 9 上来的),
+          //    当时的问题在栏和字一起小,不是字单独小。
           Text(it.label)
-            .fontSize(TypeScale.caption * this.fontScale)
+            .fontSize(TAB_LABEL_FP * this.fontScale)
             .letterSpacing(Tracking.caption)
             .fontColor(this.activeIdx() === idx ? this.scheme.primary : this.scheme.onSurfaceVariant)
         }
