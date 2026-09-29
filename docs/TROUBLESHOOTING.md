@@ -3958,3 +3958,71 @@ bounds;该菜单宽 491px、高 338px):
 ⑦ **占比已经定好的量不要用统一系数去乘**(竖向 padding)—— 系数法只在"这一项的判据是绝对值"时成立。
 ⑧ **一处收小会顺手解决别处的症状**(订阅段不再裁切),但**别把它当成那条待办的验收**:
    症状消失的范围可能只是这一段。
+
+---
+
+### H123. DevEco 的「自动生成签名」把 build-profile 的 **release 段一起覆盖**了 —— 发布包打不出来,而加密口令是这条链上的唯一载体
+
+**现象**:2026-09-29 给鸿蒙出 1.0.3 市场包,`./build-release.sh` 一路正常(release 模式含混淆编过、
+`entry/build/release/outputs/default/entry-default-unsigned.hap` 2.36 MB 已产出),
+停在 `:entry:default@SignHap`:
+
+```
+hvigor ERROR: 00303074 Configuration Error
+The bundleName in app.json5/hvigorfile.ts does not match the bundleName in the generated SigningConfigs
+```
+
+**排查**(四步,每步都留了证据):
+
+1. `app.json5` 的 bundleName 是 `com.yuyin.reverb` —— 装机测试期间临时改过 `…glasstest`,
+   每次提交前都还原了,`git status` 里 app.json5 干净。所以问题不在工程侧的包名。
+2. 直接读两个 profile 里的 `"bundle-name"`:
+   - `~/.ohos/config/default_harmony_*.p7b` → `com.yuyin.reverb.glasstest`
+   - `~/.ohos/config/release_harmony_*.p7b` → **同样是 `…glasstest`**,而且 `"type":"debug"`
+   - `harmony/signature/reverb.p7b` → `com.yuyin.reverb`、`"type":"release"`、`app_gallery`
+     (私钥 `.p12` / 证书 `.cer` 自 2026-08-15 起未改动)
+   ⇒ **build-profile 的 release 段已经指向自动生成签名那套了**,keyAlias 也变成 `debugKey`。
+3. 用 mtime 定位覆盖时刻:`build-profile.json5` = 09-26 **12:16**,
+   `~/.ohos/config/release_harmony_*` = 09-26 **12:16:06–09**,`signature/material/` = **12:14**;
+   而旧 hvigor 日志(`.hvigor/outputs/build-logs/build.log.3`,09-26 **08:55**)里 SignHap 的
+   输入文件还是 `signature/reverb.{cer,p7b,p12}`。⇒ 覆盖发生在 12:14–12:16 那一次自动签名操作,
+   正是为 glasstest 包名做装机测试的时段。
+4. 找口令的历史值 —— **四条路全部 0 命中,并且每条都打印了处理量**:
+   - git:`git log --all -- harmony/build-profile.json5` 处理 **0 条提交**(它被 ignore,历史里根本没有);
+   - DevEco 本地历史:`~/Library/Caches/Huawei/DevEcoStudio26.0/LocalHistory/changes.storageData`
+     (228 KB)扫 `signature/reverb.p12` → 0 命中。IDE 自己写的改动不进本地历史;
+   - hvigor 产物:`build.log.3` 里只有**路径**没有口令(`keyPassword` 0 命中),
+     `.hvigor/outputs/sync/output.json` 存的是**当前这份已被覆盖**的段,
+     `.hvigor/cache/task-cache.json` 不含签名材料;
+   - 拿 Android `keystore.properties` 的两个口令去 `openssl pkcs12 -nomacver` 试 `reverb.p12`:
+     3 项候选(含空口令)全部 `no match`。两端口令本就不同,试它是排除"当初图省事用同一个"。
+
+**根因**:临时改包名做真机测试之后,在 DevEco 的 Signing Configs 里点了自动生成签名 / Fix ——
+**它按配置逐个处理,把 default 段和 release 段一起回写了**,而 release 段里那两串加密口令
+(`0000001B…`)是**这条链上口令的唯一落点**(不入库,见硬规矩 14 与 `LOCAL-ASSETS` 第三节),
+被就地覆盖等于丢失。`docs/LOCAL-ASSETS.md` 原先写的是「再点一次 Fix 重新生成即可
+(**release 那套不受影响**)」—— 这句是断言过头,**已就地更正**,并补了"build-profile 是口令唯一载体,
+配好就要连 material 一起备份"。
+
+**修法**(用户侧一步,之后重跑即可):DevEco → File → Project Structure → Signing Configs →
+选中 **release** 配置 → Store file = `harmony/signature/reverb.p12`、Profile = `reverb.p7b`、
+Cert = `reverb.cer`、Key alias 与两个口令填明文 → Apply。它会重新加密写回 build-profile,
+并**重建 `harmony/signature/material/`**(解密用的是 keystore **同目录**的 material,
+见 `hvigor-ohos-plugin` 的 `getKeyStorePwd` → `DecipherUtil.decryptPwd(storeFile/..)`),
+然后 `./build-release.sh`(或 `--fast`,产物没变只补签)出包。
+
+口令如果真的找不回来:只能重新走「新 CSR → 平台签发新发布证书 + 新 Profile」重签。
+**前提是市场侧还没有以旧证书分发的记录** —— 同包名换签名会让已装用户无法覆盖升级(H82 的前提)。
+截至本次,鸿蒙端从未公开发布过(见 ROADMAP 第一节),这条退路在鸿蒙还开着;
+但走之前必须先在分发平台后台确认没有已过审/已上架的版本。
+
+**顺带**:hvigor 只挡在 SignHap,release 模式(含混淆)的编译与打包都过了 ——
+说明这轮代码与版本号(`1000003 / 1.0.3`)本身没问题,补回签名就是一次纯重签。
+
+**教训**:① **自动生成签名不是"只补 default 段"的动作**,它会写整个 `signingConfigs`;
+临时改包名做测试时,点 Fix 之前先把 build-profile 备份一份。
+② **"不受影响"这类范围断言要验证过再写** —— 原话的依据只是"它历来只写 default",没测过 release 配置也在勾选里。
+③ **口令的唯一载体就是资产**:加密串 + 解密密钥都不入库是对的,代价是配置文件一旦被覆盖就无从恢复,
+所以"配好即备份(与 material 同批)"必须是动作的一部分,不是出事后的补救。
+④ 0 命中要连处理量一起打印(见 `zero-hit-must-prove-scan`):这次「历史里找不到」的结论,
+是靠"git 处理 0 条 / 本地历史 228KB 扫过 / 日志里有路径无口令 / 当前 sync 快照已被覆盖"四条分别排除才敢下的。

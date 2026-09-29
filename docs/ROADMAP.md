@@ -6,7 +6,7 @@
 > 做的过程见 `HISTORY.md`,具体故障见 `TROUBLESHOOTING.md`。
 > **本文只记「未完成」与「以后」**,所以通篇偏悲观 —— 那是它的用途。
 >
-> 状态截止 **2026-09-13**。
+> 状态截止 **2026-09-29**。
 
 ---
 
@@ -14,12 +14,14 @@
 
 **三端都还没有公开发布过。** 下面的「就绪」指代码与产物就绪,不是已上线。
 
-| | 版本 | 产物 | 分发 | 状态 |
+| | 已出包 | 主干当前 | 分发 | 状态 |
 |---|---|---|---|---|
-| **Android 自分发版** | 1.0.1(versionCode 2) | `dist/reverb.apk` ≈ 64 MB | 官网 / GitHub Releases | **就绪**,可随时放出;体积大是因为内置 57 MB 语音模型 |
-| **Android 大陆商店版** | 1.0.1(versionCode 2) | `dist/reverb-store.apk` ≈ 3.9 MB | 大陆各家应用市场 | **就绪** |
-| **HarmonyOS** | 1.0.1(versionCode 1000001) | `dist/reverb.app` ≈ 952 KB | 仅应用市场 | **就绪** |
-| **macOS** | 1.0.1(build 1) | dmg | 自分发,不涉及商店 | **就绪** |
+| **Android 自分发版** | 1.0.2(versionCode 3)`dist/reverb.apk` ≈ 64 MB | **1.0.3 代码已齐**,versionCode 仍 3(出包时 bump 4) | 官网 / GitHub Releases | 就绪,可随时放出;体积大是因为内置 57 MB 语音模型 |
+| **Android 大陆商店版** | 1.0.2(versionCode 3)`dist/reverb-store.apk` ≈ 3.9 MB | 同上 | 大陆各家应用市场 | 同上 |
+| **HarmonyOS** | 1.0.2(versionCode 1000002)`dist/reverb.app` ≈ 952 KB | **1.0.3(versionCode 1000003)已 bump** | 仅应用市场 | ⚠️ **市场包暂时打不出来**:release 签名配置被自动签名覆盖,见下方 1.0.3 一节与 H123 |
+| **macOS** | 1.0.2(build 1) | 无改动,停在 1.0.2(播放模式未移植) | 自分发,不涉及商店 | 就绪 |
+
+> 产物尺寸是**上一版实测值**,新版出包后要重新量(尤其鸿蒙这次改了资源与混淆口径)。
 
 功能完整度(以自分发 Android 版为基准 100%):
 
@@ -59,6 +61,26 @@
    恢复完成 importedSettings=true」,订阅/历史/收听统计页面均实数据渲染(2026-09-20 debug hap 真机)。
    ⬜ 剩系统云备份链路:Android 已验(LocalTransport,见三-A);鸿蒙等市场包发布后走
    (debug 包不进备份选项清单,见 harmony-cloud-backup 卡口)
+
+### 1.0.3(代码已齐、版本号已 bump,**卡在鸿蒙发布签名**)
+
+2026-09-29:三端里这轮只有鸿蒙要出市场包(Android 代码同批已齐,出包时 bump versionCode 4;
+macOS 无改动,停在 1.0.2 —— 播放模式尚未移植桌面端,见 FEATURES.md 该行)。
+
+- ✅ 版本号:`harmony/AppScope/app.json5` → versionCode 1000003 / versionName 1.0.3
+- ✅ `CHANGELOG.md` 1.0.3 节已定稿(对外版本说明的上游)
+- ✅ 硬规矩 5 同步:关于页 `about_p_features` 补「播放模式」一项,五语种 × 两端共 10 份文件;
+  顺手改掉 fr 一处拼写(`statististiques` → `statistiques`,两端各一处,原本就在)
+- ✅ release 模式编译与打包都过(`entry/build/release/…/entry-default-unsigned.hap` 2.36 MB)
+- ⬜ **`SignHap` 失败,包出不来**:DevEco 的自动生成签名在 2026-09-26 把 `build-profile.json5`
+  的 **release 段**一起改写成了绑临时测试包名的 debug 材料,段里唯一那份加密口令随之丢失
+  (取证与修法见 H123)。**私钥与证书本体都在**(`harmony/signature/reverb.*`,2026-08-15 至今未动),
+  需要用户在 DevEco 的 Signing Configs 里把 release 配置重新指回那三个文件并填明文口令,
+  之后 `cd harmony && ./build-release.sh` 即可出包。**这一步只能人做,不要代填、不要重生成材料。**
+- ⬜ 出包后待做的解包核对(硬规矩 1 全套,期望值沿用 1.0.2 清单第 2 项:目录接口 grep 非 0、
+  权限仅 INTERNET / GET_NETWORK_INFO / KEEP_BACKGROUND_RUNNING、BackupExtension + backup_config、
+  版本号一致、无 debugKey)
+- ⬜ 分发平台的运营事项(截图重拍、物料包重建、审核提交)按惯例不在此文,记本地运营手册
 
 ---
 
