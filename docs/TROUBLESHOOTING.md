@@ -4184,9 +4184,23 @@ VoiceOver 读到 —— 界面一帧都没跑起来看过(逐条在 ROADMAP 三-
   全机没有 macOS 14 SDK;而 `TranscriptPage.swift` 那四处双参数 `onChange` 要它
   —— 整模块 typecheck 的错误集正好就是这 4 条(改前改后同一组,见上一条)。
 - **装不了新 Xcode,不是"没装"而是"装不上"**:宿主机 `sw_vers` = **macOS 12.7.6**,Xcode 15+ 要求 macOS 13+。
-- **就算硬凑出一个包,这台机器也跑不了它**:`Info.plist` 的 `LSMinimumSystemVersion` 与二进制的
-  `minos` 都是 **13.0**,高于宿主 12.7.6 —— 加载即拒。这一层与前两层**互相独立**:
-  解决编译器版本并不会让运行验收变得可能。
+- **就算硬凑出一个包,这台机器也跑不了它** —— 但**我先前把拦点写错了**,2026-09-30 用最小工程实测更正:
+  - `minos 13.0` **不拦命令行二进制**:同一个 target 为 macos13.0 编出来的可执行文件在宿主 12.7.6 上正常跑、退出 0。
+    所以"产物 minos 高于宿主 ⇒ 加载即拒"这句**不成立**,别再照抄。
+  - 真正拦 `.app` 起不来的是 **LaunchServices 读 `Info.plist` 的 `LSMinimumSystemVersion`**:
+    `open Reverb.app` → `error -10825 (kLSIncompatibleSystemVersionErr)`。这是**打包元数据**层的门,不是二进制的。
+  - 而就算把那道门降下去,**运行时缺符号**还是会崩:一份 minos 13 的 `NavigationStack` 程序在本机
+    `dyld: Symbol not found: _$s7SwiftUI14NavigationPathVMn` → SIGABRT(退出 134)。
+    本 App 有三处这种用法且没有降级分支(`RootView.swift:20`、`ListenStatsView.swift:16`、`FootprintView.swift:15`)。
+  - 这一层与前两层**互相独立**:解决编译器版本并不会让运行验收变得可能。
+- **另外两层是「只装 Command Line Tools、没有完整 Xcode」这台机器的专属坑**(同轮实测):
+  - CLT 的 SwiftPM **连最小 manifest 都编不了**:`$(xcode-select -p)/usr/lib/swift/pm/ManifestAPI/` 里只有
+    `libPackageDescription.dylib`,**没有 `.swiftmodule`** ⇒ `error: no such module 'PackageDescription'`。
+    也就是说本机的 SwiftPM 不只是版本旧,是**残的**;这条要靠装 Xcode 才修得掉,单独装新版 Swift 编译器没用。
+  - `swift build --arch arm64 --arch x86_64`(出 universal 那条)**走 xcbuild**,而 xcbuild 只随完整 Xcode 分发:
+    CLT 机器上报 `error: xcbuild executable at '.../XCBuild.framework/.../xcbuild' does not exist`,
+    **并且这个检查排在 tools-version 门之前**(所以它的报错会先于"版本不够"出现,别被顺序误导成"版本没问题")。
+    退路:分别 `--arch` 编两次再 `lipo -create` 合并 —— 已在 `package.sh` 的断言失败分支里写进提示。
 
 旁证很直接:`macos/build/` 里躺着一个 2026-09-20 的 `Reverb.dmg`(已归档到 `macos/dist/余音-Reverb-1.0.2-arm64.dmg`),
 解出来 `minos 13.0 / sdk 26.5 / arm64 单架构 / Signature=adhoc` —— **它是另一台得多的机器打的**,
@@ -4195,9 +4209,16 @@ VoiceOver 读到 —— 界面一帧都没跑起来看过(逐条在 ROADMAP 三-
 以及**打完没人解包核对**(硬规矩 1 在桌面端此前是空文)。现在 `package.sh` 末尾自带一段验收,
 输出形态是拿那个 1.0.2 旧包**空跑**验出来的(它如实报 `play_mode_map 0`、四语 `.strings` lint OK、`1.0.2`、`arm64`),
 但**产出新包的那几步仍未跑过** —— 脚本改动的最强证据到这一层为止。
+2026-09-30 脚本又改成默认出 **universal**(`--arch arm64 --arch x86_64`),并在组装 .app 之前加了一道
+**产物级架构硬断言**:`lipo -archs` 少一个期望架构就 `exit 1`、不出 dmg。断言本身同样是拿那个 arm64 单架构
+旧二进制**空跑**验的,两个方向都对(期望两架构 → 如实报 `✗ 缺 x86_64` 并退出 1;只期望 arm64 → 退出 0)。
+**它为什么必须存在:多 `--arch` 走 xcbuild,而 SwiftPM 的多架构在历史上静默失败过(swift-package-manager#8013)——
+所以判据只能落在产物上,不能信构建日志。** 而"真的产出一个 universal 包"这一步本机依然跑不了(见上面 xcbuild 那条)。
 
-⑤ **判断"这台机器能不能出某端的包",要分三层看,缺一不可:编译器/tools-version、SDK 有没有那个 API、
-宿主系统版本是否 ≥ 产物的 minos。** 前两层决定"能不能编出来",第三层决定"编出来能不能验收"。
+⑤ **判断"这台机器能不能出某端的包",要分四层看,缺一不可:编译器/tools-version、SDK 有没有那个 API、
+产物能不能在这台机器上被启动、启动后运行时符号齐不齐。** 前两层决定"能不能编出来",后两层决定
+"编出来能不能验收"。**别把第三层写成"minos 高于宿主就加载即拒"** —— 实测那是错的:命令行二进制照跑,
+拦 `.app` 的是 `LSMinimumSystemVersion`(LaunchServices -10825),拦运行的是缺失的新版 SwiftUI 符号。
 只查前两层就下结论,会得到一个"改天换台机器编一下就行"的假希望 —— 而运行验收其实永远不可能在这台上做。
 另外:**每个平台的产物落点与"打完就验"要在脚本里焊死**,不靠人记 —— 这次 macOS 的两个洞就是这么暴露的。
 

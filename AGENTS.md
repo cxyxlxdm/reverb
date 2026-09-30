@@ -71,7 +71,7 @@ hdc install -r entry/build/default/outputs/default/entry-default-signed.hap
 cd macos
 # ↓↓ 这两条在「构建机」上跑(本机跑不了,原因见下面 ⚠️ 块)↓↓
 swift build -c release             # 只编译
-./package.sh                       # 编译 → .app → ad-hoc 签名 → 解包验收 → dmg 进 dist/
+./package.sh                       # universal 编译 → .app → ad-hoc 签名 → 解包验收 → dmg 进 dist/
 ```
 
 > ⚠️ **这两条命令不在本机跑。本机的角色已由用户定死(2026-09-29):开发 Android / 鸿蒙 / 文档,
@@ -85,13 +85,26 @@ swift build -c release             # 只编译
 > 而 `TranscriptPage.swift` 那四处双参数 `onChange` 要 macOS 14 SDK —— 14 SDK 只随 Xcode 15 分发,
 > Xcode 15 又要 macOS 13.5+(`xcodebuild` 在这台直接报 requires Xcode)。
 > **单独去装 Swift 5.9 编译器也没用:缺的是 SDK,不是编译器。**
-> ③ 就算前两条都好办,**这台机器也跑不起来产物**:`Info.plist` 的 `LSMinimumSystemVersion` 是 13.0,
-> 高于宿主机 12.7.6 ⇒ 加载即拒。
-> ④ **靠降级换兼容也不通**:`RootView.swift:20`、`ListenStatsView.swift:16`、`FootprintView.swift:15`
-> 用的是 macOS 13+ 的 `NavigationStack` 且没有降级分支 ⇒ 要让包在 12.7.6 上跑,要重写的是整个根导航,
-> 不是那 4 行 `onChange`;而本机就算硬编出来,也只是一个面向 macOS 13+ 的 x86_64 包(在架那个是 arm64),
-> 自己跑不了、也不该拿去交付。
-> **所以「出包 + 运行验收」必须在装了 Xcode 15+ 且系统 ≥ macOS 13 的机器上做。**
+> ③ 就算前两条都好办,**这台机器也验收不了产物**(2026-09-30 实测,拦点比先前记的更具体):
+> `.app` 里写 `LSMinimumSystemVersion 13.0`,在本机 `open` 会被 LaunchServices 挡下 ——
+> `error=-10825 kLSIncompatibleSystemVersionErr`;而**二进制的 `minos 13.0` 本身并不拦命令行进程**
+> (拿 minos=13.0 的最小可执行文件在本机直接跑,正常退出 0 —— 先前"加载即拒"的说法不准确)。
+> ④ **真正拦路的是 macOS 13 的 API 符号**:`RootView.swift:20`、`ListenStatsView.swift:16`、
+> `FootprintView.swift:15` 用 `NavigationStack` 且没有降级分支,拿它编一个 minos=13 的命令行程序在本机跑,
+> 实测是 `dyld: Symbol not found: _$s7SwiftUI14NavigationPathVMn` + SIGABRT(退出码 134)——
+> **即"编得出来、跑不了",而要让它在 12.7.6 上跑,要重写的是整个根导航,不是那 4 行 `onChange`。**
+> **所以「出包 + 运行验收」要在装了完整 Xcode(不是只有 CLT)且系统 ≥ macOS 13 的机器上做。**
+> 另有两条本机专属的坏消息,免得有人想"那我在本机凑合编一下":
+> ⑤ 本机 CLT 的 SwiftPM **连最小 manifest 都编不了** —— `$(xcode-select -p)/usr/lib/swift/pm/ManifestAPI/`
+> 里只有 `libPackageDescription.dylib`,没有 `.swiftmodule`,于是任何工程都报
+> `no such module 'PackageDescription'`(与 tools-version 无关);
+> ⑥ `swift build --arch arm64 --arch x86_64`(出 universal)**走 xcbuild,而 xcbuild 只随完整 Xcode 分发**,
+> CLT 机器直接报 `xcbuild executable ... does not exist` —— 这个检查甚至排在 tools-version 门之前。
+> **「那装个旧版 Xcode 呢」这条也已经评估并否掉(2026-09-30,别重开)**:本机系统 12.7.6 最高只能装
+> Xcode 14.2(Swift 5.7.2 / SDK 13.1),它只修掉 ⑤⑥;② 的 SDK 天花板(要 macOS 14 SDK 的那 4 处 `onChange`)、
+> ③④ 的"编得出来也起不来"(`LSMinimumSystemVersion 13.0` / `NavigationStack` 无降级分支)一层不动,
+> 而且产物只能是 x86_64 单芯片。**投入 ≈15 GB + Apple ID 登录,换来零验收收益。** 判据:
+> **要换的是"能跑产物"的机器,不是往旧机器上加装工具链。** 详见 `docs/ROADMAP.md` 三-A 最后两行。
 > 旁证:`macos/dist/余音-Reverb-1.0.2-arm64.dmg`(2026-09-20 那个包)里 `minos 13.0 / sdk 26.5 / arm64 单架构`,
 > 是另一台得多的机器打的。
 > **本机对 macOS 改动的最强验收 = 整模块 typecheck 并与改前基线差分**:
@@ -99,12 +112,16 @@ swift build -c release             # 只编译
 > —— 基线用 `git archive HEAD macos | tar -x -C /tmp/…` 解一份出来单独跑,再逐条比对错误集;
 > **只说"错误没变多"是不够的,要同时说明它证明不了什么**(界面与行为一帧都没跑起来)。见 H124。
 >
-> **在构建机上出包 = 一条命令**:`cd macos && ./package.sh`。它做 编译 → 组装 .app → ad-hoc 签名 →
-> **解包验收**(处理量 / 八个判据词计数 / 四语 `.strings` lint / 版本号 + `minos` + `sdk` + 架构 / 签名身份)
-> → dmg 落进 `macos/dist/`。验收段里「期望非 0」的那几个词是播放模式的判据,已拿 1.0.2 旧包实测为全 0
-> (负控制成立),所以它报非 0 才算数。**出包时要当场定架构**:`swift build` 跟随宿主芯片,
-> 历史包是 arm64 单架构,要覆盖 Intel 得 `swift build --arch arm64 --arch x86_64 -c release` 再合并
-> (脚本目前没做这一步,列在任务 #59)。出完还要实跑那四项界面与自动续播验收,清单在 `docs/ROADMAP.md` 三-A。
+> **在构建机上出包 = 一条命令**:`cd macos && ./package.sh`。它做
+> **universal 编译**(`--arch arm64 --arch x86_64`)→ **架构硬断言**(少一个架构就 exit 1,不出 dmg)→
+> 组装 .app → ad-hoc 签名 → **解包验收**(处理量 / 八个判据词计数 / 四语 `.strings` lint /
+> 版本号 + `minos` + `sdk` + 架构 / 签名身份)→ dmg 落进 `macos/dist/`,文件名带版本(`-1.0.4-universal`)。
+> 为什么默认两个架构:`swift build` 不带 `--arch` 时**只跟随构建机芯片**,1.0.2 那个包就是这么变成
+> arm64 单架构的,而 arm64-only 二进制在 Intel Mac 上没有退路(Rosetta 只翻译 x86→arm 一个方向)。
+> 验收段里「期望非 0」的那几个词是播放模式的判据,已拿 1.0.2 旧包实测为全 0(负控制成立),所以它报非 0 才算数;
+> 架构断言同样拿那个 arm64-only 二进制空跑验过:**期望两个架构时报 `✗ 缺 x86_64` 并退出 1,只期望 arm64 时通过**。
+> **仍未跑过的**是「真的产出一个 universal 包」那一步(本机没有 xcbuild,见 ⑥)。出完还要实跑那四项界面与
+> 自动续播验收,清单在 `docs/ROADMAP.md` 三-A。
 
 ### 发布物料(截图/商店图/上传用图标)
 

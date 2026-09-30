@@ -14,15 +14,21 @@
 > macOS 没有单独发过 1.0.3(它停在 1.0.2),这批改动随它的下一个包出。
 > **`macos/Info.plist` 已占好版本号 1.0.4 / build 2**,Android / 鸿蒙 1.0.3 的对外说明不回改。
 > **验收状态如实说明**:macOS 侧目前**只过了类型检查**,包还没出、界面一帧没跑起来看过 ——
-> 出包那台开发机工具链不够三层都卡(Swift 5.7 vs 工程要求 5.9、无 macOS 14 SDK、
-> 宿主系统 12.7.6 低于包的 13.0 门槛),详见 AGENTS.md「macOS」一节。
-> `macos/package.sh` 已改成**在能干活的机器上一条命令跑完**:编译 → .app → ad-hoc 签名 →
-> 解包验收(版本号 / 四语 `.strings` / 播放模式字符串在不在二进制里 / 架构与 `minos`)→ dmg 进 `macos/dist/`。
+> 本机(只有 Command Line Tools、系统 12.7.6)六层都不够:SwiftPM 5.7 vs 工程要求 5.9、全机无 macOS 14 SDK、
+> 系统支持线升不到 13、`.app` 的 13.0 门槛会被 LaunchServices 拒、SwiftUI `NavigationStack` 缺运行时符号、
+> 而 universal 编译要的 xcbuild 只随完整 Xcode 分发 —— 详见 AGENTS.md「macOS」一节。
+> `macos/package.sh` 已改成**在能干活的机器上一条命令跑完**:**universal 编译**(arm64 + x86_64,并**硬断言**
+> 两个架构齐 —— 少一个就不出 dmg)→ .app → ad-hoc 签名 → 解包验收(版本号 / 四语 `.strings` /
+> 播放模式字符串在不在二进制里 / 架构与 `minos`)→ dmg 进 `macos/dist/`。
+> **为什么补 universal**:在架的 1.0.2 dmg 是 **arm64 单架构**,而 arm64-only 的二进制在 Intel Mac 上跑不起来
+> (Rosetta 只翻译 x86→arm 这一个方向)⇒ **Intel 用户装了打不开**;成因是 `swift build` 默认只跟随构建机芯片。
 
 ### 新增
 - 播放模式移植到 macOS:音阁「最新 / 收藏 / 下载」三段与频道主页的单集列表各有一颗播放模式按钮 ——
   点击在顺序 / 单曲循环 / 随机之间循环切换,每个列表记住自己那一格,重启后仍是原来的模式(macOS)
 - 列表播完自动连播(macOS):此前桌面端一集播完就停,只有排进播放队列或开随机电台才会接下一集
+- **macOS 的 dmg 改为 universal,Intel Mac 从此装得上**(工程要点,但对用户可见):
+  1.0.2 那个包只有 arm64,Intel 机器装了打不开且没有转译退路
 
 ### 待办(同一批)
 - 鸿蒙后台换集时长时任务被短暂释放的空窗(换集期间视为仍在播 + 释放/申请要加进行中守卫)

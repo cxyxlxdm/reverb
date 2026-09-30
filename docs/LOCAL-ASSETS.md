@@ -80,6 +80,8 @@
    - `cd android && ./build-release.sh --store && ./build-release.sh`(解包复核见硬规矩 1)
    - `cd harmony && ./build-release.sh`(签名通过 = 第二节材料齐)
    - `cd macos && ./package.sh` —— **要一台 Xcode 15+ 且系统 ≥ macOS 13 的机器**(SwiftPM 工程声明 tools 5.9,
-     源码用了 macOS 14 SDK 的双参数 `onChange`);**系统低于 13 的机器连产物都跑不起来**,
+     源码用了 macOS 14 SDK 的双参数 `onChange`);**而且必须是完整 Xcode 而不是只有 Command Line Tools** ——
+     脚本默认出 universal(`--arch arm64 --arch x86_64`),那条走 xcbuild,CLT 里没有;CLT 的 SwiftPM
+     还缺 `PackageDescription.swiftmodule`,连 manifest 都编不动。**系统低于 13 的机器连产物都跑不起来**,
      这类机器只能承担 macOS 的「读代码 + 整模块 typecheck 差分」。逐层实测见 AGENTS.md「macOS」一节与 H124 补记
 7. 装真机冒烟:订阅一档、播一集、看逐字稿;截图管线试拍一张(AGENTS.md「截图」)
