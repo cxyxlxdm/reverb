@@ -691,6 +691,22 @@ export class PlayerController {
     this.startEpisode(e, true);
   }
 
+  /**
+   * 「用户此刻还想不想听」—— **长时任务(后台保活)的判据**,不是 `isPlaying`。
+   *
+   * 为什么单开一个方法:自动续集那一跳里旧播放器已经 `completed`(`isPlaying` 掉回 false),
+   * 而新音源还在装载,`isPlaying` 要 0.8~1.2 秒之后才重新为真。保活若跟着它抖这一次,
+   * 系统就在那段空窗里回收连续任务(实测日志:`resource_schedule_service/CONTINUOUS_TASK:
+   * All continuous task has stopped of uid …, so notify related subsystems`),见 H125。
+   *
+   * `playbackDesiredPlaying` 存的正是"意图"这一位,而且维护得完整:起播置真,
+   * 明确暂停 / 播完不再续 / 重试耗尽 / 无音源 才置假 —— 所以它在换集全程为真,
+   * 用户按暂停后立刻为假,**不会白占系统资源**。
+   */
+  wantsPlayback(): boolean {
+    return this.isPlaying || this.playbackDesiredPlaying;
+  }
+
   // ── 传输控制 ──
 
   togglePlayPause(): void {

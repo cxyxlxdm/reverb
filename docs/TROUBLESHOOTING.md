@@ -4232,3 +4232,66 @@ macOS 14 SDK ⇒ 编译与运行两层同时封死。**这类"装软件"的请�
 `FootprintView.swift:15`),要重写的不是报错的 4 行 `onChange`,而是整个根导航。
 结论按 2026-09-29 用户决定落成分工:**这台机器只做 Android / 鸿蒙 + macOS 的读改与类型检查,
 出包与运行验收交给另一台 Xcode 15+ / macOS ≥ 13 的机器**(口径写进 AGENTS.md「macOS」一节与 LOCAL-ASSETS 第五节)。
+
+⑦ **评估"降级工具链来迁就旧机器"时,定价标准是"能验收什么",不是"能不能编出来"。**
+2026-09-30 顺着这个问题把这条出路走到底:本机 12.7.6 能装的最高是 **Xcode 14.2**(Swift 5.7.2 / SDK 13.1),
+它**确实**修掉了"只有 CLT"带来的两层(缺 `PackageDescription.swiftmodule`、缺 xcbuild)——
+但 SDK 天花板仍是 13.1(那四处 macOS 14 的 `onChange` 照旧),而"编得出来也起不来"两层一动不动
+(`LSMinimumSystemVersion` 被 LaunchServices 拒 / `NavigationStack` 缺运行时符号),产物还只能是
+x86_64 单芯片(与要交付的 universal 相反)。**≈15 GB 下载 + 必须登录 Apple ID,换零验收收益。**
+可复用的规律:**判据是"有没有一台能跑产物的机器",而不是"能不能凑出一台能编译的机器"** ——
+后者编出来的东西没有任何一级证据能确认它是对的,而前者天生就能做后者的全部事。
+(结论已落进 AGENTS.md 与 ROADMAP 三-A,防止下次重开这条。)
+
+### H125. 后台自动续集时长时任务被**自己先放开**再重申:换集的 0.8~1.2 秒空窗里,系统随时能掐掉播放
+
+**现象**(2026-09-29 真机取证,鸿蒙 1.0.3 debug 包):把进度拖到集尾、`Home` 退到后台,让 `completed`
+在后台触发自动续集。播放本身两轮都没断(通知栏进度节点 `66973 ms` 与本地起播时刻 1:1 对得上),
+但系统日志明明白白记录了那一段**真空窗**:
+`resource_schedule_service/CONTINUOUS_TASK: All continuous task has stopped of uid 20020215, so notify
+related subsystems` + `audio_server/AudioBackgroundTaskListener: DeleteTaskId` +
+`SUSPEND_MANAGER: CreateMaliciousContinuousTaskActivityCheck`。空窗实测 **792 ms**(自动续集)与
+**237 ms**(通知栏点「下一集」)。同时日志里还有两条 `释放失败 BussinessError 9800005`。
+**当时"没出事"是因为系统在那半秒里恰好没回收** —— 这是运气,不是设计。
+
+**根因**(两条独立,都在 `playback/AvSessionBridge.ets`):
+1. **保活的判据取错了对象。** `sync()` 里写的是 `if (player.isPlaying) start else stop`,而换集那一跳
+   旧播放器已经 `completed`(`isPlaying` 掉回 false)、新音源还在 `loading`,`isPlaying` 要 0.8~1.2 秒
+   后才回 true —— 于是**是应用自己把长时任务放了**,系统侧那两条日志正是我们这次释放触发的。
+   `PlayerController` 里其实一直有一位记录"用户还想不想听"的 `playbackDesiredPlaying`(起播置真,
+   明确暂停/播完不再续/重试耗尽才置假),但它在 bridge 外面是 private,判据没人用它。
+2. **`bgRunning` 的置位晚于 `await`。** `await startBackgroundRunning(...)` 之后才 `bgRunning = true`,
+   而 `sync` 由播放状态变化驱动、一秒可来多次;两次重叠的 tick 都看到"还是 false/还是 true",
+   各自去调一次系统接口 —— 那两条 `9800005`(当前并未持有却去释放)就是这么来的。
+
+**修法**:
+- `PlayerController` 开一个 `wantsPlayback(): boolean { isPlaying || playbackDesiredPlaying }`,
+  并把"为什么不能只看 `isPlaying`"写在方法上(换集全程为真、用户暂停立刻为假,所以既不空窗也不白占)。
+- bridge 改成**目标态 / 已确认态分离 + 一条串行队列**:`bgDesired`(同步置位,在 `await` 之前)、
+  `bgHeld`(仅在系统调用返回后置位)、`bgTask` 链 + `bgGeneration` 代次丢弃过期意图。
+  `setBackgroundWanted(want)` 只在两者不等时排队,`applyBackground` 运行时再读一次 `bgDesired` ——
+  同一时刻最多一个在途系统调用,重复释放与"目标态在途中被翻转"都被收敛掉。
+  `destroy()` 也走这条链并 `await bgTask`,不再与在途操作并发。
+- **释放失败也认它没了**(`bgHeld = false`):`9800005` 本义就是"当前没持有";若继续当 running,
+  下次想播时会因 `want === bgHeld` 跳过申请 —— 那才是真漏,而且是静默的。
+
+**验收方式**:✅ `hvigorw assembleHap -p buildMode=debug` **BUILD SUCCESSFUL**(18 s,警告集与改前同:
+`SettingsPage` 的 `fill` API 版本提示、`Components.ets:761` 的 private `sync`)。
+❌ **空窗是否真的没了,尚未真机复验** —— 改完这台机器上没有连着的设备(`hdc list targets` 为空)。
+复验手法沿用本轮已跑通的那条:`uitest` 把进度拖到约 97% → `keyEvent Home` → 等 `completed` 在后台触发,
+然后按这两条判据读日志(`hdc hilog | grep -a -E 'Background|CONTINUOUS_TASK|AudioBackgroundTaskListener'`):
+**期望 ① 换集全程不再出现 `长时任务已释放`,② 不再出现 `All continuous task has stopped of uid`、
+`DeleteTaskId`,③ 不再出现 `释放失败 9800005`**;而用户暂停那一跳**必须**仍能释放(否则是白占资源)。
+判据 ③ 的反面也要跑一次:暂停→继续要仍能保活(即 `bgHeld` 没有因为去重逻辑而漏申请)。
+
+**教训与可复用的规律**:
+① **"状态位的语义要贴在用户的意图上,不要贴在系统对象的瞬时状态上。"** `isPlaying` 描述的是
+AVPlayer 此刻的状态机,而我们要保的是"这一段还在出声的连续行为" —— 换集是它的内部实现细节。
+这类错位很隐蔽,因为**绝大多数时刻两者是重合的**,只在跨对象交接的那几百毫秒里分开。
+② **异步系统调用要"意图先行、执行串行"**:目标态同步写入(在任何 `await` 之前),
+真正的调用挂在一条链上按最新意图收敛。本项目里 AudioSession 与 pause/resume 早已用同一套
+(desired + generation + task 链,见 `PlayerController` 的 `audioSessionDesiredActive` /
+`playbackActionTask`),这次是把同一模式补到长时任务上 —— **同一个类里第二次写这种守卫,说明它该是约定。**
+③ **"没断"不是证据。** 上一轮据此把它当"已知隐患、不阻塞发布"记下了;本轮把它升级成必修,
+依据是系统侧那三行日志(证明空窗是真的存在),不是播放结果。观感/结果层判据在并发问题上一律不可信。
+④ 推迟决定要连着写清**复验手法与期望日志**,否则下一次接手的人只能重做一遍取证。

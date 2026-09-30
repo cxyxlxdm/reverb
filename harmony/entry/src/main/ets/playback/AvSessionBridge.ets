@@ -20,7 +20,17 @@ export class AvSessionBridge {
   }
 
   private session: avSession.AVSession | null = null;
-  private bgRunning = false;
+  /**
+   * 长时任务的**目标态 / 已确认态**分开存,再用一条串行队列收敛 ——
+   * 系统的 `startBackgroundRunning` / `stopBackgroundRunning` 都是异步的,
+   * 而调用方(`sync`)是按播放状态变化触发的,一秒内可以来两次。
+   * 见 H125:原先用单个 `bgRunning` 布尔、且在 `await` **之后**才置位,
+   * 于是两次重叠的 tick 都看到"还在 running",各自去释放,第二次抛 `9800005`。
+   */
+  private bgDesired = false;
+  private bgHeld = false;
+  private bgGeneration = 0;
+  private bgTask: Promise<void> = Promise.resolve();
   private bgFailed = false;
   private ctx: common.UIAbilityContext | null = null;
   private lastAssetId = '';
@@ -126,44 +136,71 @@ export class AvSessionBridge {
     } catch (err) {
       Log.w('AVSession', `同步失败 ${(err as Error).message}`);
     }
-    // 播放中申请长时任务,暂停即释放(不白占系统资源)
-    if (player.isPlaying) await this.startBackground();
-    else await this.stopBackground();
+    // 保活的判据是**「用户还想不想听」**,不是「AVPlayer 此刻在不在 playing」。
+    // 换集那一跳里旧播放器已 completed、新音源还在装,`isPlaying` 会假 0.8~1.2 秒 ——
+    // 原先跟着它走会先把长时任务放了再重新申请,系统在那段空窗里就把它回收了(见 H125)。
+    this.setBackgroundWanted(player.wantsPlayback());
   }
 
-  private async startBackground(): Promise<void> {
-    // bgFailed 守卫:失败就不再每 0.5s 重试(否则日志刷屏、白耗资源)
-    if (this.bgRunning || this.bgFailed || this.ctx === null) return;
-    try {
-      const agent = await wantAgent.getWantAgent({
-        wants: [{ bundleName: 'com.yuyin.reverb', abilityName: 'EntryAbility' }],
-        actionType: wantAgent.OperationType.START_ABILITY,
-        requestCode: 0,
-        actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
-      });
-      // 用字符串模式版接口(与 module.json5 的 backgroundModes 对应)
-      await backgroundTaskManager.startBackgroundRunning(this.ctx, ['audioPlayback'], agent);
-      this.bgRunning = true;
-      Log.i('Background', '长时任务已申请(audioPlayback)');
-    } catch (e) {
-      this.bgFailed = true;
-      Log.w('Background', `申请失败,后台播放可能被系统回收 ${(e as Error).message}`);
+  /**
+   * 声明"现在要不要保活"。**同步置位、异步执行**:目标态在 `await` 之前就写定,
+   * 真正的系统调用挂在 `bgTask` 这条串行链上,同一时刻最多只有一个在途操作。
+   *
+   * 为什么不用"直接 await 一次":`sync` 由播放状态变化驱动,一秒可来多次;
+   * 换集时 completed 与 loading 两次 tick 的目标态相反,并发 await 会让后一次
+   * 在前一次还没回来时就判"仍持有"而去重复释放 —— 第二次抛 `BussinessError 9800005`。
+   */
+  private setBackgroundWanted(want: boolean): void {
+    if (this.ctx === null) return;
+    this.bgDesired = want;
+    // 目标态与已确认态一致就不排队:排队本身也是去重(在途那一次回来时会读到最新 desired)
+    if (want === this.bgHeld) return;
+    const generation = ++this.bgGeneration;
+    this.bgTask = this.bgTask.then((): Promise<void> => this.applyBackground(generation));
+  }
+
+  private async applyBackground(generation: number): Promise<void> {
+    // 过期代次直接丢弃:排队期间目标态可能已经变了,以**运行时的 bgDesired** 为准
+    if (generation !== this.bgGeneration) return;
+    const want = this.bgDesired;
+    if (want === this.bgHeld) return;
+    const ctx = this.ctx;
+    if (ctx === null) return;
+    if (want) {
+      // bgFailed 守卫:申请失败过就不再每次状态变化重试(否则日志刷屏、白耗资源)
+      if (this.bgFailed) return;
+      try {
+        const agent = await wantAgent.getWantAgent({
+          wants: [{ bundleName: 'com.yuyin.reverb', abilityName: 'EntryAbility' }],
+          actionType: wantAgent.OperationType.START_ABILITY,
+          requestCode: 0,
+          actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+        });
+        // 用字符串模式版接口(与 module.json5 的 backgroundModes 对应)
+        await backgroundTaskManager.startBackgroundRunning(ctx, ['audioPlayback'], agent);
+        this.bgHeld = true;
+        Log.i('Background', '长时任务已申请(audioPlayback)');
+      } catch (e) {
+        this.bgFailed = true;
+        Log.w('Background', `申请失败,后台播放可能被系统回收 ${(e as Error).message}`);
+      }
+      return;
     }
-  }
-
-  private async stopBackground(): Promise<void> {
-    if (!this.bgRunning || this.ctx === null) return;
     try {
-      await backgroundTaskManager.stopBackgroundRunning(this.ctx);
-      this.bgRunning = false;
+      await backgroundTaskManager.stopBackgroundRunning(ctx);
       Log.i('Background', '长时任务已释放');
     } catch (e) {
+      // 释放失败**也认它没了**:`9800005` 本来就是"当前没持有"的意思,
+      // 若继续当 running,下次想播时 `want === bgHeld` 会直接跳过申请 —— 那才是真漏。
       Log.w('Background', `释放失败 ${(e as Error).message}`);
     }
+    this.bgHeld = false;
   }
 
   async destroy(): Promise<void> {
-    await this.stopBackground();
+    // 等在途的申请/释放收敛完再动,免得 destroy 与它并发(又是 9800005)
+    this.setBackgroundWanted(false);
+    await this.bgTask;
     const s = this.session;
     this.session = null;
     if (s !== null) {
