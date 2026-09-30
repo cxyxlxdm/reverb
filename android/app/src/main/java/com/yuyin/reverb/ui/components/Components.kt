@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -58,6 +59,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +71,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -134,6 +137,17 @@ fun PillChip(
 
 /** 分类玻璃条的让位总高(条 44dp + 与内容的 8dp 间距):pager 段的列表顶部要滚出这么多。 */
 val GLASS_CHIPS_TOP_PAD = 52.dp
+
+/**
+ * 分段条右端「还有内容」渐隐带的宽度。**只在内容真的溢出、且还没滚到右端时出现**
+ * (判据见 `ChipsEdgeFade`),不是常驻装饰 —— 装得下三段标签的订阅条上它根本不存在,
+ * 常驻会让条看起来永远糊了一角。
+ *
+ * 36 与鸿蒙 `CHIPS_EDGE_FADE_W` **同值同式**:chip 右内边距 14 + 一颗被切的 chip 露出的
+ * 半截圆角。再窄还是"硬切"(读不出渐隐),再宽就糊到 chip 的可读文字上。
+ * 这条是鸿蒙 2026-09-29 真机定稿后同构过来的(那份判据与画法的验收见 H116 / ROADMAP 三-A)。
+ */
+val GLASS_CHIPS_EDGE_FADE_W = 36.dp
 
 /**
  * 悬浮玻璃栏占掉的纵向空间:各页列表的底部 contentPadding 要额外加上的量,
@@ -214,48 +228,59 @@ fun GlassChipsRow(
         ) {
             ChipsCapsule(metrics = metrics, count = labels.size, progress = progress, scroll = scroll)
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Row(
-                    Modifier
-                        // 通栏 ⇒ chips 段吃掉「条宽 − 按钮段」,装得下就不滚,装不下才横滚
-                        .weight(1f)
-                        .horizontalScroll(scroll)
-                        .padding(horizontal = 8.dp, vertical = 5.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    labels.forEachIndexed { i, label ->
-                        val sel = i == selected
-                        // 选中态的底色交给胶囊,chip 自己只换文字色;颜色切换做 200ms 淡入淡出
-                        val bg by animateColorAsState(
-                            targetValue = if (sel) Color.Transparent else colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
-                            animationSpec = tween(200, easing = FastOutSlowInEasing),
-                            label = "chipBg$i"
-                        )
-                        val fg by animateColorAsState(
-                            targetValue = if (sel) colorScheme.primary else colorScheme.onSurfaceVariant,
-                            animationSpec = tween(200, easing = FastOutSlowInEasing),
-                            label = "chipFg$i"
-                        )
-                        Box(
-                            Modifier
-                                .onGloballyPositioned { c ->
-                                    // 用窗口坐标差换算成「玻璃条内容坐标」:positionInParent
-                                    // 是叶子布局坐标,不含 Row 自己的 padding(h=8dp),直接拿去
-                                    // 减 scroll 会让胶囊恒偏左一个 padding。窗口差天然带上
-                                    // padding、随滚动实时更新,补回 scroll.value 即成滚动
-                                    // 无关的内容坐标(见 ChipsCapsule 的减法)。
-                                    metrics[i] = c.positionInWindow().x - boxOriginX + scroll.value to
-                                        c.size.width.toFloat()
-                                }
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(bg)
-                                .clickable { onSelect(i) }
-                                .padding(horizontal = 14.dp, vertical = 7.dp)
-                        ) {
-                            Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
+                // chips 段的宿主:占位仍由这层的 `weight(1f)` 负责(条宽 − 按钮段),
+                // 装得下就不滚、装不下才横滚。为什么多包一层 Box:右端那条渐隐带要贴在
+                // **chips 视口**的右缘,而不是玻璃条的右缘 —— 有按钮的那几段两者差着一个按钮段宽。
+                // Box 的子项是覆盖层、不占位,所以它不会把按钮推走(鸿蒙同处用一个 Stack 达成同一目的)。
+                Box(Modifier.weight(1f)) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(scroll)
+                            .padding(horizontal = 8.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        labels.forEachIndexed { i, label ->
+                            val sel = i == selected
+                            // 选中态的底色交给胶囊,chip 自己只换文字色;颜色切换做 200ms 淡入淡出
+                            val bg by animateColorAsState(
+                                targetValue = if (sel) Color.Transparent else colorScheme.onSurfaceVariant.copy(alpha = 0.10f),
+                                animationSpec = tween(200, easing = FastOutSlowInEasing),
+                                label = "chipBg$i"
+                            )
+                            val fg by animateColorAsState(
+                                targetValue = if (sel) colorScheme.primary else colorScheme.onSurfaceVariant,
+                                animationSpec = tween(200, easing = FastOutSlowInEasing),
+                                label = "chipFg$i"
+                            )
+                            Box(
+                                Modifier
+                                    .onGloballyPositioned { c ->
+                                        // 用窗口坐标差换算成「玻璃条内容坐标」:positionInParent
+                                        // 是叶子布局坐标,不含 Row 自己的 padding(h=8dp),直接拿去
+                                        // 减 scroll 会让胶囊恒偏左一个 padding。窗口差天然带上
+                                        // padding、随滚动实时更新,补回 scroll.value 即成滚动
+                                        // 无关的内容坐标(见 ChipsCapsule 的减法)。
+                                        metrics[i] = c.positionInWindow().x - boxOriginX + scroll.value to
+                                            c.size.width.toFloat()
+                                    }
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(bg)
+                                    .clickable { onSelect(i) }
+                                    .padding(horizontal = 14.dp, vertical = 7.dp)
+                            ) {
+                                Text(label, style = MaterialTheme.typography.labelLarge, color = fg)
+                            }
+                            Spacer(Modifier.width(8.dp))
                         }
-                        Spacer(Modifier.width(8.dp))
+                        trailing?.invoke(this)
                     }
-                    trailing?.invoke(this)
+                    // `align` 要 BoxScope,所以在**这里**(调用点)传进去,组件内部只用普通 Modifier
+                    ChipsEdgeFade(
+                        scroll = scroll,
+                        color = colorScheme.surface,
+                        modifier = Modifier.align(Alignment.CenterEnd)
+                    )
                 }
                 // 条内右端的固定按钮。之前它是**父容器**的 CenterEnd 子项 —— 条一旦收口
                 // (不再通栏)它就会掉到条外面去,所以连 8dp 端距一起搬进这条 Row 的末尾,
@@ -268,6 +293,46 @@ fun GlassChipsRow(
             }
         }
     }
+}
+
+/**
+ * 「右端还有内容」的渐隐带(贴在 chips 视口的右缘)。
+ *
+ * 为什么要它:装机反馈「最后一颗 chip 被右端按钮盖住了一半」,而它其实是被视口**裁掉**了
+ * (条能横滑,滑过去就完整 —— 同 H116)。裁掉和盖住在画面上一模一样,区别只有没人告诉你
+ * "这边还能滑",所以修法是补这个提示,不是改布局。
+ *
+ * 判据两条(与鸿蒙 `refreshOverflow` 同式):① 内容比视口宽 —— Compose 里
+ * `scroll.maxValue > 0` 就是它,**不用自己量内容宽**(鸿蒙那两个 `onAreaChange` 回填的
+ * `chipsW` / `viewW` 在这里没有对应物,也就没有"首帧量不到"的那一档);② 还没贴右端 ——
+ * `value < maxValue - 2`(那 2px 是误差地板,与鸿蒙一致)。
+ * 误判方向与鸿蒙也一致:**宁可少画不多画** —— 装得下的条上 maxValue 恒为 0,它压根不出现。
+ *
+ * `derivedStateOf` 是让这一层**只在布尔翻转时**重组的那一道阀:滚动过程中每个像素都会读
+ * `scroll.value`,直接写在组合里会让这条渐隐带逐帧重组(鸿蒙是"只在翻转时 setState",同理由)。
+ * 颜色收到玻璃条自己的染色(surface α0.6),渐隐到尽头就是"一条干净的条";
+ * 若收到不透明色,条身会凭空亮一块。右端不需要另外加圆角 —— 外层条已经 `.clip(21.dp)` 裁过。
+ * 它不该吃掉手势(按在它上面仍要能横滚 chips,等价鸿蒙那层的 `HitTestMode.None`);
+ * 这一条**尚未装机确认** —— 真机要顺手验:按住渐隐带那一段左右拖,chips 应该跟着走。
+ */
+@Composable
+private fun ChipsEdgeFade(scroll: ScrollState, color: Color, modifier: Modifier = Modifier) {
+    val moreRight by remember(scroll) {
+        derivedStateOf { scroll.maxValue > 0 && scroll.value < scroll.maxValue - 2 }
+    }
+    if (!moreRight) return
+    Box(
+        modifier
+            .fillMaxHeight()
+            .width(GLASS_CHIPS_EDGE_FADE_W)
+            .background(
+                Brush.horizontalGradient(
+                    0f to color.copy(alpha = 0f),
+                    0.45f to color.copy(alpha = 0.28f),
+                    1f to color.copy(alpha = 0.60f)
+                )
+            )
+    )
 }
 
 /**
