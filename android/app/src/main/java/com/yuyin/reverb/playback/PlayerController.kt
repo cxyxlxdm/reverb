@@ -51,10 +51,16 @@ object PlayerController {
     private var history: HistoryStore? = null
     private var settings: SettingsStore? = null
     private var listenStats: com.yuyin.reverb.data.local.ListenStatsStore? = null
+    private var stateStore: com.yuyin.reverb.data.local.PlaybackStateStore? = null
     // 累计收听时长的基线：仅统计“同一集、播放中、合理正向增量”的内容毫秒
     private var lastCountedPosMs = 0L
     private var lastCountedEpId = ""
     private var pendingSeekMs: Long = 0
+    /**
+     * 本会话里这一集**是否真的响起过**。只给 [saveProgress] 当地闸用:
+     * 预载(装载到就绪但保持暂停)会让「当前集」先于播放存在,那时进度还不该被回写。
+     */
+    private var playbackStarted = false
     /**
      * [playAt] 设的一次性起点覆盖(≥0 生效)。批注「跳回那一秒」用的是它 ——
      * 那条路径不能走默认的「按历史进度续播」，否则点哪一条都落回上次听到的位置。
@@ -219,6 +225,7 @@ object PlayerController {
         _userQueue.value = _userQueue.value + episode
         log.i(TAG, "enqueue id=${episode.id} size=${_userQueue.value.size}")
         updateNavFlags()
+        persistState()
     }
 
     /** 插到队首:下一个就播它(去重后置顶)。 */
@@ -226,12 +233,14 @@ object PlayerController {
         _userQueue.value = listOf(episode) + _userQueue.value.filterNot { it.id == episode.id }
         log.i(TAG, "playNext id=${episode.id} size=${_userQueue.value.size}")
         updateNavFlags()
+        persistState()
     }
 
     fun removeFromQueue(episodeId: String) {
         _userQueue.value = _userQueue.value.filterNot { it.id == episodeId }
         log.i(TAG, "removeFromQueue id=$episodeId size=${_userQueue.value.size}")
         updateNavFlags()
+        persistState()
     }
 
     fun move(from: Int, to: Int) {
@@ -240,6 +249,7 @@ object PlayerController {
         list.add(to, list.removeAt(from))
         _userQueue.value = list
         log.i(TAG, "queue move $from -> $to")
+        persistState()
     }
 
     fun clearQueue() {
@@ -247,6 +257,7 @@ object PlayerController {
         _userQueue.value = emptyList()
         log.i(TAG, "clearQueue")
         updateNavFlags()
+        persistState()
     }
 
     /** 取出指定位置的一集并播放(队列上下文改为单曲,本集播完按剩余队列/上下文推进);索引无效返回 false。 */
@@ -300,6 +311,23 @@ object PlayerController {
 
     fun bindListenStats(s: com.yuyin.reverb.data.local.ListenStatsStore) { listenStats = s }
 
+    /**
+     * 跨启动的播放态存储(「正在播哪一集 / 它来自哪一列 / 排好的 up next」)。
+     * 没绑上时持久化与恢复都静默跳过 —— 单测与预览场景不需要它。
+     */
+    fun bindState(s: com.yuyin.reverb.data.local.PlaybackStateStore) { stateStore = s }
+
+    /**
+     * 把当前播放态写下去。**电台模式例外:那一档没有可恢复的身份** —— 电台的「上一集/下一集」
+     * 走的是内存里的 radioHistory(随机抓来的节目序列,退出即弃),把它写成上下文队列
+     * 会让重启后的「下一集」跳进一个毫不相干的列表。所以电台期间只留 up next、清空 current。
+     */
+    private fun persistState() {
+        val st = stateStore ?: return
+        if (_radioMode.value) st.save(null, "", emptyList(), 0, _userQueue.value)
+        else st.save(_current.value, _activeListTag.value, queue, queueIndex, _userQueue.value)
+    }
+
     fun bindSettings(s: SettingsStore) {
         settings = s
         _speed.value = s.defaultSpeed.value // 启动即套用默认倍速
@@ -324,6 +352,10 @@ object PlayerController {
                 c.addListener(playerListener)
                 log.i(TAG, "controller connected")
                 pending?.let { ep -> pending = null; queue = listOf(ep); queueIndex = 0; updateNavFlags(); playEpisode(ep) }
+                // 恢复要排在「连上控制器之后、syncOnce 之前」,且**只在服务里真的没挂着东西时做**:
+                // currentMediaItem 非空说明这是同一次会话里的重连(或后台服务还活着),
+                // 那时拿旧快照覆盖会把正在播的现场改掉 —— 比丢队列更糟。
+                if (_current.value == null && c.currentMediaItem == null) restoreState()
                 syncOnce()
             } catch (e: Exception) {
                 log.e(TAG, "controller connect failed", e)
@@ -331,10 +363,42 @@ object PlayerController {
         }, ContextCompat.getMainExecutor(appCtx))
     }
 
+    /**
+     * 冷启动把上次退出时的播放态读回来。用户报的是「加入队列的节目下次打开 app 就消失」,
+     * 而一起丢的其实是同一份内存里的三样东西:`up next`、**正在播哪一集**、
+     * 以及**这一集来自哪一列**(后者决定上/下一集与「播完自动接下一集」)。
+     * 只丢了它们中的任何一样,表现都是"重启后要回历史里凭标题把那一集再点一次"。
+     *
+     * 口径(2026-10-02 定):**恢复现场,不恢复意图** —— 不自动开播,但把这一集预载到就绪,
+     * 于是迷你条上的进度是播放器真值、按下播放键即刻出声。
+     */
+    private fun restoreState() {
+        val st = stateStore ?: return
+        val snap = st.snapshot
+        if (snap.isEmpty) return
+        if (snap.upNext.isNotEmpty()) {
+            _userQueue.value = snap.upNext
+            log.i(TAG, "restore upNext=${snap.upNext.size}")
+        }
+        // 引导音频不是一集真正的节目,不该在重启后又冒出来占住播放条
+        val cur = snap.current?.takeUnless { com.yuyin.reverb.data.model.GuideEpisode.isGuide(it.id) }
+        if (cur == null) {
+            updateNavFlags()
+            return
+        }
+        queue = if (snap.context.any { it.id == cur.id }) snap.context else listOf(cur)
+        queueIndex = queue.indexOfFirst { it.id == cur.id }.coerceAtLeast(0)
+        _activeListTag.value = snap.listTag
+        // 先按那一列存着的模式建好随机表,再装载(顺序错了会让随机模式的下一集指回原列表)
+        applyPlayMode(modeFor(snap.listTag))
+        log.i(TAG, "restore cur='${cur.title}' ctx=${queue.size}@$queueIndex tag='${snap.listTag}' mode=${_playMode.value}")
+        playEpisode(cur, autoplay = false)
+    }
+
     private val playerListener = object : Player.Listener {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _isPlaying.value = isPlaying
-            if (isPlaying) startTicker() else { stopTicker(); saveProgress(); listenStats?.flush() }
+            if (isPlaying) { playbackStarted = true; startTicker() } else { stopTicker(); saveProgress(); listenStats?.flush() }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -360,7 +424,15 @@ object PlayerController {
                 } else {
                     pendingSeekMs > 3_000 && (dur <= 0 || pendingSeekMs < dur - 10_000)
                 }
-                if (ok) c.seekTo(pendingSeekMs) else log.i(TAG, "跳点落空 seek=$pendingSeekMs dur=$dur explicit=$pendingSeekExplicit")
+                if (ok) {
+                    c.seekTo(pendingSeekMs)
+                    // 落位之后**自己记一次**:ticker 只在播放中跑,而预载(暂停态)永远不会播,
+                    // 不记的话进度线就一直停在预载时画的近似值上。
+                    _position.value = pendingSeekMs
+                } else {
+                    _position.value = 0
+                    log.i(TAG, "跳点落空 seek=$pendingSeekMs dur=$dur explicit=$pendingSeekExplicit")
+                }
                 pendingSeekExplicit = false
                 pendingSeekMs = 0
             }
@@ -504,11 +576,13 @@ object PlayerController {
         }
     }
 
-    private fun playEpisode(episode: Episode, isRadio: Boolean = false) {
-        log.i(TAG, "play id=${episode.id} title='${episode.title}' radio=$isRadio")
+    private fun playEpisode(episode: Episode, isRadio: Boolean = false, autoplay: Boolean = true) {
+        log.i(TAG, "play id=${episode.id} title='${episode.title}' radio=$isRadio auto=$autoplay")
         // 手动播放任意单集即退出电台;电台内部续播/换台传 isRadio=true 保持在台
         if (!isRadio && _radioMode.value) stopRadio()
         _current.value = episode
+        playbackStarted = false   // 换集即重新计数:见 saveProgress 那道地闸
+        persistState()
         val c = controller
         if (c == null) {
             log.w(TAG, "controller not ready, pending id=${episode.id}")
@@ -555,6 +629,20 @@ object PlayerController {
             )
             .build()
         c.setMediaItem(item)
+        if (!autoplay) {
+            // 恢复路径:装载到「就绪但没播」。**playWhenReady 必须在 prepare 之前按下去** ——
+            // MediaController 的 playWhenReady 会保留上一次的值(默认 true),
+            // 先 prepare 再置 false 会听到一集开头自己响起来,那正是"没经同意就自动播"。
+            c.volume = 1f
+            c.playWhenReady = false
+            c.prepare()
+            c.setPlaybackSpeed(_speed.value)
+            // 进度线先按历史位置画出来:真正的位置要等 READY 那次 seek,而 READY 之前
+            // 这一格是 0 —— 播放条上"0:00 / 42:10"会被读成进度丢了(而它其实只是还没落位)。
+            _position.value = pendingSeekMs
+            log.i(TAG, "预载(暂停) id=${episode.id} seek=$pendingSeekMs")
+            return
+        }
         c.prepare()
         c.setPlaybackSpeed(_speed.value)
         c.volume = 0f
@@ -707,6 +795,12 @@ object PlayerController {
         val ep = _current.value ?: return
         // 引导音频不写历史：playEpisode 已跳过 record，这里若还写就会又建出一条
         if (com.yuyin.reverb.data.model.GuideEpisode.isGuide(ep.id)) return
+        // **这一集在本会话里真的播出过声音,才允许回写进度。**
+        // 冷启动预载(暂停态)会让"当前集"存在而播放器还没开始,此时 currentPosition 是 0
+        // 或尚未落位的近似值,而 `onIsPlayingChanged(false)` 与退后台都可能触发这一次回写 ——
+        // 那会把用户上次听到的位置**静默抹成 0**,而「继续收听」按 10 秒为门槛筛,
+        // 抹零等于让那一集从列表里消失。症状正是本次要修的那条反馈的反面。
+        if (!playbackStarted) return
         history?.updatePosition(ep.id, c.currentPosition.coerceAtLeast(0), if (c.duration > 0) c.duration else 0)
     }
 

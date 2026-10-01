@@ -133,9 +133,29 @@ Android 的文件清单(**鸿蒙完全同名**;macOS 除热榜缓存与随包种
 ```
 subscriptions.json  favorites.json   history.json      inbox.json
 downloads.json      stamps.json      notes.json        listen_stats.json
-feed_cache.json     popular_cache.json
+feed_cache.json     popular_cache.json  playback_state.json
 transcripts/<单集>.<语言>.json
 ```
+
+**`playback_state.json` 是"会话态",但里面装着用户资产**(2026-10-02 加,目前**只有 Android 落了这一份**,
+鸿蒙与 macOS 待同构):`{version, current, listTag, context[], contextIndex, upNext[]}`。
+一条反馈同时暴露了两个症状 —— 「加入队列的节目下次打开就没了」和「找不到正在播放栏」——
+而后者早就存在,只是它的显示条件是 `current != null`,而 `current` 与前两样一起躺在内存里(见 H129)。
+下面几条口径值得在移植时照抄:
+- **上下文只存窗口**:以当前集为中心的前后各 40 集。整列可能是上千集 × 1 KB,
+  每次动作同步写几 MB 是 H65 那笔账的同一个形状;到边界表现为「上一集/下一集」置灰,重点列表即恢复。
+- **同步写,不走 `JsonWriter` 去抖**:去抖的代价(进程被杀丢掉最后一次)正是这条反馈的本体。
+- **恢复现场,不恢复意图**:预载到就绪但保持暂停。`playWhenReady=false` 要排在 `prepare()` 之前,
+  否则控制器会保留上一次的 `playWhenReady`(默认 true)并自己开播。
+  预载的隐私口径(打开应用即向发布方拉一次流)同步写在 `docs/PRIVACY.md` 第三节。
+- **不进任何备份**:它不在 `backup_rules.xml` / `data_extraction_rules.xml` 白名单里,
+  也不占手动备份的分区(那 8 项的顺序是三端互通契约)。判断标准与 `notes.json` 相反 ——
+  批注是用户写出来的字,丢了补不回来;队列里每一集都能从历史或订阅里再找到。
+- **电台模式不落 `current`**:电台的上下集走内存里的 `radioHistory`(随机抓来的序列,退出即弃),
+  把它写成上下文会让重启后的「下一集」跳进一个不相干的列表。
+- 由它引出的那道地闸值得单独记:**「当前集」现在会先于「播过」而存在**,
+  所以一切由播放器状态派生的回写都要按**事件**设闸(`playbackStarted`,本会话真的响起过才回写进度),
+  不能按**字段**(`current != null`)—— 后者会把用户上次听到的位置静默抹成 0(见 H129)。
 
 **`notes.json` 是三端共用的一份格式,而且它是「嵌套」不是「摊平」**:
 单条 = `{noteId, positionMs, text, createdAt, episode:{…整条单集}}`。
