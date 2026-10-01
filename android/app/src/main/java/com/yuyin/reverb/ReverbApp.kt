@@ -14,6 +14,7 @@ import com.yuyin.reverb.data.local.FeedCacheStore
 import com.yuyin.reverb.data.local.HistoryStore
 import com.yuyin.reverb.data.local.InboxStore
 import com.yuyin.reverb.data.local.ListenStatsStore
+import com.yuyin.reverb.data.local.NoteStore
 import com.yuyin.reverb.data.local.PopularCacheStore
 import com.yuyin.reverb.data.local.RegionStore
 import com.yuyin.reverb.data.local.SeedCatalog
@@ -58,6 +59,7 @@ class AppContainer(app: Application) {
     val listenStatsStore = ListenStatsStore(app)
     val favoriteStore = FavoriteStore(app)
     val stampStore = StampStore(app)
+    val noteStore = NoteStore(app)
     val updateStore = UpdateStore(app)
     val regionStore = RegionStore(app)
     val settingsStore = SettingsStore(app)
@@ -113,7 +115,8 @@ class ReverbApp : Application(), Configuration.Provider {
                 "app launch v${BuildConfig.VERSION_NAME} region=$region lang=$lang " +
                     "updatesScheduled=$updatesEnabled subs=${container.subscriptionStore.subscriptions.value.size} " +
                     "favs=${container.favoriteStore.favorites.value.size} history=${container.historyStore.history.value.size} " +
-                    "stamps=${container.stampStore.stamps.value.size} downloads=${container.downloadStore.downloads.value.size}"
+                    "stamps=${container.stampStore.stamps.value.size} notes=${container.noteStore.notes.value.size} " +
+                    "downloads=${container.downloadStore.downloads.value.size}"
             )
         } catch (e: Exception) {
             com.yuyin.reverb.util.Logger.e(TAG, "launch log failed", e)

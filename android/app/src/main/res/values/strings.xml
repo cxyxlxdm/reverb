@@ -23,6 +23,7 @@
     <string name="stamp_hint">为这一集盖下此刻的心境</string>
     <string name="stamp_remove">撤章</string>
     <string name="backup_row_stamps">听觉印记</string>
+    <string name="backup_row_notes">批注</string>
     <string name="set_footprint">听觉足迹</string>
     <string name="set_footprint_sub">你盖下的所有印记，汇成一张足迹图</string>
     <string name="footprint_title">听觉足迹</string>
@@ -76,7 +77,7 @@
     <string name="guide_card_sub">30 秒 · 内置音频，不联网也能播</string>
     <string name="privacy_consent_title">隐私政策与数据说明</string>
     <string name="privacy_consent_catalog">节目检索与热门榜。本版本会访问 Apple 播客检索（itunes.apple.com）、Apple 热门榜（rss.marketingtools.apple.com）、fyyd.de、gpodder.net 等公开接口；这些请求不携带任何鉴权凭据与用户标识。</string>
-    <string name="privacy_consent_body">余音以本机处理为主。没有开发者后端、账号、广告、统计、归因、第三方登录、第三方推送、崩溃上报或跨应用追踪。订阅、历史、收藏、下载、收听统计、设置、安装随机标识和运行日志在本机处理，不会自动上传给开发者；Android 使用 AndroidX、OkHttp、Coil 等开源基础库，但不含上述数据上报 SDK。自 1.0.2 起，若你在系统设置中开启备份（Android 云备份、厂商换机迁移），操作系统会把订阅、收藏、历史、下载记录（仅链接）、印记、收听统计与设置备份到你自己的系统云账号或新设备；音频、逐字稿缓存、榜单缓存与日志不在其中，开关也在系统设置里。\n\n联网时，搜索词、地区或分类会发给 Apple、fyyd、gpodder 等公开目录；RSS、封面、音频和逐字稿直接请求发布方或托管方，因此对方会看到 IP 地址、User-Agent 和访问资源。日志可能包含节目或单集标识及所访问服务的主机名，只有你主动分享或导出时才离开应用。详情请阅读完整隐私政策。\n\n点击「同意并继续」表示你已阅读并接受本政策。</string>
+    <string name="privacy_consent_body">余音以本机处理为主。没有开发者后端、账号、广告、统计、归因、第三方登录、第三方推送、崩溃上报或跨应用追踪。订阅、历史、收藏、下载、收听统计、设置、安装随机标识和运行日志在本机处理，不会自动上传给开发者；Android 使用 AndroidX、OkHttp、Coil 等开源基础库，但不含上述数据上报 SDK。自 1.0.2 起，若你在系统设置中开启备份（Android 云备份、厂商换机迁移），操作系统会把订阅、收藏、历史、下载记录（仅链接）、印记、批注、收听统计与设置备份到你自己的系统云账号或新设备；音频、逐字稿缓存、榜单缓存与日志不在其中，开关也在系统设置里。\n\n联网时，搜索词、地区或分类会发给 Apple、fyyd、gpodder 等公开目录；RSS、封面、音频和逐字稿直接请求发布方或托管方，因此对方会看到 IP 地址、User-Agent 和访问资源。日志可能包含节目或单集标识及所访问服务的主机名，只有你主动分享或导出时才离开应用。详情请阅读完整隐私政策。\n\n点击「同意并继续」表示你已阅读并接受本政策。</string>
     <string name="privacy_read_full">阅读完整隐私政策</string>
     <string name="privacy_accept">同意并继续</string>
     <string name="privacy_decline">不同意并退出</string>
@@ -171,9 +172,14 @@
     <string name="backup_row_favorites">收藏</string>
     <string name="lib_downloads">下载</string>
     <string name="lib_history">历史</string>
+    <string name="lib_notes">批注</string>
     <string name="empty_library">音阁尚空，先去「发现」订阅几档好节目</string>
     <string name="empty_downloads">还没有下载。在节目详情里点下载按钮，即可离线收听</string>
     <string name="empty_history">还没有收听记录，去听一集吧</string>
+    <string name="note_empty">还没有批注。在播放页点「更多」→「写批注」，就能把触动你的那一秒记下来</string>
+    <string name="note_delete_title">删除批注</string>
+    <string name="note_delete_message">将删除这条批注，无法恢复。\n\n「%1$s」</string>
+    <string name="a11y_note_delete">删除批注</string>
 
     <!-- 播客详情 -->
     <string name="action_subscribe">订阅</string>
@@ -187,6 +193,9 @@
     <string name="player_not_playing">未在播放</string>
     <string name="shownotes">节目笔记</string>
     <string name="shownotes_empty">暂无节目笔记</string>
+    <string name="note_add">写批注</string>
+    <string name="note_title">记下这一秒</string>
+    <string name="note_hint">此刻想到什么，写下来</string>
     <string name="sleep">睡眠</string>
     <string name="sleep_current">本集</string>
     <string name="sleep_end_of_episode">本集结束</string>
@@ -312,7 +321,7 @@
     <string name="about_h_what">这是什么</string>
     <string name="about_p_what">余音是一款轻量的播客客户端。发现好节目、订阅收听、离线下载、随时续播，专注「听」本身。</string>
     <string name="about_h_features">主要功能</string>
-    <string name="about_p_features">· 发现：按地区与分类浏览每日热门，可自定义分类排序、横滑切换\n· 搜索：按名字或直接粘贴 RSS 地址\n· 频道分享：生成含 Logo、频道名、简介与余音落款的图片\n· 订阅与「音阁」：订阅、下载、历史三栏管理\n· 离线下载：边听边缓存，可仅 Wi-Fi 下载\n· 逐字稿：本机离线转写，或直接读发布方提供的稿\n· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播、后台与锁屏控制\n· 节目笔记：播放页横滑查看\n· 订阅更新提醒：有新一期时通知\n· 系统级备份：订阅、收藏、历史、下载记录（仅链接）、印记、收听统计与设置随系统备份与换机迁移，音频与逐字稿不在备份内\n· 外观：深色/浅色/跟随系统、字号、主题配色、多语言</string>
+    <string name="about_p_features">· 发现：按地区与分类浏览每日热门，可自定义分类排序、横滑切换\n· 搜索：按名字或直接粘贴 RSS 地址\n· 频道分享：生成含 Logo、频道名、简介与余音落款的图片\n· 音阁：订阅、最新、收藏、下载、历史、批注六栏管理\n· 离线下载：边听边缓存，可仅 Wi-Fi 下载\n· 逐字稿：本机离线转写，或直接读发布方提供的稿\n· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播、后台与锁屏控制\n· 批注：听到某一句有感触，就记下那一秒和此刻的一句话；音阁「批注」栏把它们连成一条时间线，点一下从那一句接着听\n· 节目笔记：播放页横滑查看\n· 订阅更新提醒：有新一期时通知\n· 系统级备份：订阅、收藏、历史、下载记录（仅链接）、印记、批注、收听统计与设置随系统备份与换机迁移，音频与逐字稿不在备份内\n· 外观：深色/浅色/跟随系统、字号、主题配色、多语言</string>
     <string name="about_h_philosophy">设计理念</string>
     <string name="about_p_philosophy">美学上取「水墨 + 青瓷 + 梁金」的底色，名字与图标呼应「余音绕梁」——声波环绕横梁，余韵不散。\n\n取源上坚持全链路免费、无需登录、无需任何 API Key：检索一律基于公开来源，最终始终回到发布方自己的 RSS，直接流式播放原始音频——版权干净、成本为零。\n\n隐私上，订阅、历史和下载保存在设备本地，不向开发者自动上传，也不用于跨应用追踪。</string>
 

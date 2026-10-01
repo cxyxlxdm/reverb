@@ -1,0 +1,146 @@
+package com.yuyin.reverb.data.local
+
+import android.content.Context
+import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.util.Logger
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.util.UUID
+
+/**
+ * 一条批注:**某一集的某一秒 + 自己写的一句话**。
+ *
+ * 为什么不存 `episodeId` 去引用(像 stamps.json 那样),而要存整条 Episode 快照:
+ * 引用式存储的前提是「被引用的对象还在原处可查」。这里不成立 ——
+ * 发布方随时会从 RSS 里删掉旧集(常见做法,控制 feed 体积),而本项目**零后端、无云同步**,
+ * 一旦那一集不在任何订阅的 feed 里,批注就成一个指不到地方的时间戳:列表还能读出这句话,
+ * 但点回去什么都播不了,且用户没有任何自救入口(硬规矩 11 说的那个「修了等于没修」的同构情形)。
+ * 收藏与历史早就面对同一个问题,两者的答案都是存整条 [Episode](`EpisodeJson.toJson`),
+ * 批注照这个口径走 —— 空间代价约每条 1 KB,换「三年后点开仍能跳回那一秒」。
+ */
+data class EpisodeNote(
+    val id: String,
+    val episode: Episode,
+    /** 那一秒,毫秒。字段名带单位是刻意的:H86 那次的根因是 macOS 写秒、Android 写毫秒,
+     *  而备份里没有单位信息可辨;新格式不再留这个口子,三端一律毫秒。 */
+    val positionMs: Long,
+    val text: String,
+    val createdAt: Long
+)
+
+/**
+ * 听觉批注:一集可以有很多条,新写的置顶,JSON 持久化(`notes.json`,纯数组,与 stamps.json 同构)。
+ */
+class NoteStore(context: Context) {
+    private val file = File(context.filesDir, "notes.json")
+    private val lock = Any()
+
+    private val _notes = MutableStateFlow(load())
+    val notes: StateFlow<List<EpisodeNote>> = _notes
+
+    /**
+     * 落一条批注。返回 null 表示文字为空而放弃(空批注没有意义,且会让列表出现无法分辨的空行)。
+     *
+     * `positionMs` 在**这里**夹到 `[0, 该集时长]`:界面上的时间戳要能代表「那一秒真的在那一集里」,
+     * 而取值来自播放器的 currentPosition —— 拖动进度条与 prepare 之间有个窗口,那一刻它可能是
+     * 上一集的时长或一个超出本集的值(硬规矩 10:不变式在数据出口一次性保证,不在渲染侧兜底)。
+     */
+    fun add(episode: Episode, positionMs: Long, text: String, now: Long): EpisodeNote? {
+        val body = text.trim()
+        if (body.isEmpty()) return null
+        val cap = if (episode.durationSec > 0) episode.durationSec * 1000L else Long.MAX_VALUE
+        val note = EpisodeNote(
+            id = UUID.randomUUID().toString(),
+            episode = episode,
+            positionMs = positionMs.coerceIn(0L, cap),
+            text = body,
+            createdAt = now
+        )
+        synchronized(lock) {
+            val list = _notes.value.toMutableList()
+            list.add(0, note)
+            _notes.value = list
+            persist(list)
+            Logger.i("NoteStore", "add id=${note.id} pos=${note.positionMs}ms len=${body.length} total=${list.size}")
+        }
+        return note
+    }
+
+    fun remove(id: String) {
+        synchronized(lock) {
+            val list = _notes.value.filterNot { it.id == id }
+            _notes.value = list
+            persist(list)
+            Logger.i("NoteStore", "remove id=$id total=${list.size}")
+        }
+    }
+
+    /** 备份恢复:按 id 去重(重复恢复同一份备份不会写出两份)。 */
+    fun addAll(items: List<EpisodeNote>) {
+        synchronized(lock) {
+            val list = _notes.value.toMutableList()
+            for (n in items) if (list.none { it.id == n.id }) list.add(n)
+            _notes.value = list.sortedByDescending { it.createdAt }
+            persist(_notes.value)
+        }
+    }
+
+    private fun load(): List<EpisodeNote> {
+        if (!file.exists()) return emptyList()
+        return try {
+            val arr = JSONArray(file.readText())
+            val out = ArrayList<EpisodeNote>(arr.length())
+            for (i in 0 until arr.length()) {
+                val o = arr.optJSONObject(i) ?: continue
+                val epObj = o.optJSONObject("episode") ?: continue
+                val ep = EpisodeJson.fromJson(epObj)
+                // 缺 episode 体或没有可播的音频地址就跳过,而不是造一条「点不动」的批注 ——
+                // 列表里躺一条永远播不了的记录,比少一条更让人怀疑是 bug。
+                if (ep.audioUrl.isBlank()) continue
+                out.add(
+                    EpisodeNote(
+                        id = o.optString("noteId"),
+                        episode = ep,
+                        positionMs = o.optLong("positionMs"),
+                        text = o.optString("text"),
+                        createdAt = o.optLong("createdAt")
+                    )
+                )
+            }
+            out
+        } catch (e: Exception) {
+            Logger.e("NoteStore", "notes.json 读取失败,按空处理", e)
+            emptyList()
+        }
+    }
+
+    /**
+     * 单条 = `{noteId, positionMs, text, createdAt, episode:{…}}`,episode 用 [EpisodeJson] 整条嵌进去
+     * (与 history.json 同构)。
+     *
+     * ⚠️ 批注自己的 id **必须叫 `noteId`**:episode 体里已经有一个 `id`(= `Episode.id`,guid),
+     * 若把两者摊平在同一个对象里,后写的键会静默盖掉前一个 —— 表现是"跳回那一秒"点了没反应
+     * (下载状态、历史进度全按 `Episode.id` 查,而它变成了 UUID),且读回来看不出来。
+     */
+    private fun persist(list: List<EpisodeNote>) {
+        try {
+            val arr = JSONArray()
+            for (n in list) {
+                arr.put(
+                    JSONObject()
+                        .put("noteId", n.id)
+                        .put("positionMs", n.positionMs)
+                        .put("text", n.text)
+                        .put("createdAt", n.createdAt)
+                        .put("episode", EpisodeJson.toJson(n.episode))
+                )
+            }
+            file.writeText(arr.toString())
+        } catch (e: Exception) {
+            Logger.e("NoteStore", "notes.json 写入失败", e)
+        }
+    }
+}

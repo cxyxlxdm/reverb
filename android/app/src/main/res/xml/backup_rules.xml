@@ -10,6 +10,10 @@
     <include domain="file" path="history.json" />
     <include domain="file" path="downloads.json" />
     <include domain="file" path="stamps.json" />
+    <!-- 批注必须进白名单:它是**用户写出来的字**,丢了没有任何东西能补回来
+         (与 stamps.json 同一判断)。体积代价约 1 KB/条(整集快照),
+         相对 25 MB 配额可以忽略;真正占体积的音频/逐字稿仍靠上面那条排除。 -->
+    <include domain="file" path="notes.json" />
     <include domain="file" path="listen_stats.json" />
     <include domain="sharedpref" path="reverb_settings.xml" />
     <include domain="sharedpref" path="reverb_prefs.xml" />

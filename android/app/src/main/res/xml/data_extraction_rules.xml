@@ -12,6 +12,9 @@
         <include domain="file" path="history.json" />
         <include domain="file" path="downloads.json" />
         <include domain="file" path="stamps.json" />
+        <!-- 批注是**用户写出来的字**,丢了没有任何东西能补回来,所以与印记同待遇进白名单
+             (体积约 1 KB/条,不碰 25 MB 配额那条红线;见 backup_rules.xml) -->
+        <include domain="file" path="notes.json" />
         <include domain="file" path="listen_stats.json" />
         <include domain="sharedpref" path="reverb_settings.xml" />
         <include domain="sharedpref" path="reverb_prefs.xml" />
@@ -23,6 +26,7 @@
         <include domain="file" path="history.json" />
         <include domain="file" path="downloads.json" />
         <include domain="file" path="stamps.json" />
+        <include domain="file" path="notes.json" />
         <include domain="file" path="listen_stats.json" />
         <include domain="sharedpref" path="reverb_settings.xml" />
         <include domain="sharedpref" path="reverb_prefs.xml" />

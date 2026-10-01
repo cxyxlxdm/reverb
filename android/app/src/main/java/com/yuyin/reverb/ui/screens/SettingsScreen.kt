@@ -756,6 +756,8 @@ private val SECTION_ROWS = listOf(
     BackupManager.Section.SUBSCRIPTIONS to R.string.backup_row_subscriptions,
     BackupManager.Section.FAVORITES to R.string.backup_row_favorites,
     BackupManager.Section.STAMPS to R.string.backup_row_stamps,
+    // 批注紧跟印记:两者都是「用户自己写出来的字」,在勾选列表里也该挨在一起
+    BackupManager.Section.NOTES to R.string.backup_row_notes,
     BackupManager.Section.DOWNLOADS to R.string.backup_row_downloads,
     BackupManager.Section.HISTORY to R.string.backup_row_history,
     BackupManager.Section.LISTEN_STATS to R.string.backup_row_listen_stats,

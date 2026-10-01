@@ -23,6 +23,7 @@
     <string name="stamp_hint">Mark how this episode felt</string>
     <string name="stamp_remove">Remove</string>
     <string name="backup_row_stamps">Listening marks</string>
+    <string name="backup_row_notes">Notes</string>
     <string name="set_footprint">Listening footprint</string>
     <string name="set_footprint_sub">All your stamps, gathered into one poster</string>
     <string name="footprint_title">Listening footprint</string>
@@ -74,7 +75,7 @@
     <string name="guide_card_sub">30 sec · bundled, plays offline</string>
     <string name="privacy_consent_title">Privacy policy</string>
     <string name="privacy_consent_catalog">Show search and charts. This build contacts public APIs for Apple Podcasts search (itunes.apple.com), Apple charts (rss.marketingtools.apple.com), fyyd.de and gpodder.net. Those requests carry no credentials and no user identifiers.</string>
-    <string name="privacy_consent_body">Reverb processes most data on your device. It has no developer backend, account, ads, analytics, attribution, third-party login or push, crash reporting, or cross-app tracking. Subscriptions, history, favorites, downloads, listening statistics, settings, a random installation ID, and runtime logs are processed locally and are not automatically uploaded to the developer. Android uses open-source foundations such as AndroidX, OkHttp, and Coil, but no SDKs for those reporting purposes. Since 1.0.2, if backup is enabled in system settings (Android cloud backup or vendor device migration), the operating system copies subscriptions, favorites, history, download records (links only), stamps, listening statistics, and settings to your own system cloud account or new device; audio, transcript and chart caches, and logs are not included, and the switch lives in system settings.\n\nWhen online, search terms, region, or category are sent to public directories such as Apple, fyyd, and gpodder. RSS, artwork, audio, and transcripts are requested directly from publishers or hosts, which exposes your IP address, User-Agent, and requested resource to them. Logs may contain show or episode identifiers and the host names of accessed services; they leave the app only when you choose to share or export them. Read the full policy for details.\n\nTapping "Agree and continue" means you have read and accept this policy.</string>
+    <string name="privacy_consent_body">Reverb processes most data on your device. It has no developer backend, account, ads, analytics, attribution, third-party login or push, crash reporting, or cross-app tracking. Subscriptions, history, favorites, downloads, listening statistics, settings, a random installation ID, and runtime logs are processed locally and are not automatically uploaded to the developer. Android uses open-source foundations such as AndroidX, OkHttp, and Coil, but no SDKs for those reporting purposes. Since 1.0.2, if backup is enabled in system settings (Android cloud backup or vendor device migration), the operating system copies subscriptions, favorites, history, download records (links only), stamps, notes, listening statistics, and settings to your own system cloud account or new device; audio, transcript and chart caches, and logs are not included, and the switch lives in system settings.\n\nWhen online, search terms, region, or category are sent to public directories such as Apple, fyyd, and gpodder. RSS, artwork, audio, and transcripts are requested directly from publishers or hosts, which exposes your IP address, User-Agent, and requested resource to them. Logs may contain show or episode identifiers and the host names of accessed services; they leave the app only when you choose to share or export them. Read the full policy for details.\n\nTapping "Agree and continue" means you have read and accept this policy.</string>
     <string name="privacy_read_full">Read the full privacy policy</string>
     <string name="privacy_accept">Agree and continue</string>
     <string name="privacy_decline">Decline and exit</string>
@@ -165,9 +166,14 @@
     <string name="backup_row_favorites">Favorites</string>
     <string name="lib_downloads">Downloads</string>
     <string name="lib_history">History</string>
+    <string name="lib_notes">Notes</string>
     <string name="empty_library">Your Library is empty — subscribe to a few shows from Discover</string>
     <string name="empty_downloads">No downloads yet. Tap the download button on an episode to listen offline</string>
     <string name="empty_history">No listening history yet — go play an episode</string>
+    <string name="note_empty">No notes yet. On the player, tap More → Write a note to keep the second that struck you</string>
+    <string name="note_delete_title">Delete note</string>
+    <string name="note_delete_message">This note will be deleted for good.\n\n\"%1$s\"</string>
+    <string name="a11y_note_delete">Delete note</string>
 
     <string name="action_subscribe">Subscribe</string>
     <string name="action_subscribed">Subscribed</string>
@@ -179,6 +185,9 @@
     <string name="player_not_playing">Nothing playing</string>
     <string name="shownotes">Show notes</string>
     <string name="shownotes_empty">No show notes</string>
+    <string name="note_add">Write a note</string>
+    <string name="note_title">Mark this second</string>
+    <string name="note_hint">What struck you just now?</string>
     <string name="sleep">Sleep</string>
     <string name="sleep_current">Episode</string>
     <string name="sleep_end_of_episode">End of episode</string>
@@ -298,7 +307,7 @@
     <string name="about_h_what">What is this</string>
     <string name="about_p_what">Reverb is a lightweight podcast client with an ink-and-wash aesthetic. Discover shows, subscribe, download for offline, and resume anytime — focused on listening.</string>
     <string name="about_h_features">Features</string>
-    <string name="about_p_features">· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: by name or paste an RSS URL\n· Share shows: create an image with the show artwork, title and Reverb branding\n· Library: manage Subscriptions, Downloads and History\n· Offline downloads: cache while listening, Wi-Fi-only optional\n· Transcript: transcribe on device, or read the publisher\'s own transcript\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background &amp; lock-screen controls\n· Show notes: swipe on the player\n· New-episode notifications\n· System backup: subscriptions, favorites, history, download records (links only), stamps, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent color, multiple languages</string>
+    <string name="about_p_features">· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: by name or paste an RSS URL\n· Share shows: create an image with the show artwork, title and Reverb branding\n· Library: six shelves — subscriptions, latest, favorites, downloads, history, notes\n· Offline downloads: cache while listening, Wi-Fi-only optional\n· Transcript: transcribe on device, or read the publisher\'s own transcript\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background &amp; lock-screen controls\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player\n· New-episode notifications\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent color, multiple languages</string>
     <string name="about_h_philosophy">Design</string>
     <string name="about_p_philosophy">Visually it draws on ink, celadon and beam-gold — the name and icon echo “an echo circling the rafters.”\n\nFor sources it stays entirely free, no login, no API key: discovery relies on public sources, and it always returns to the publisher’s own RSS and streams the original audio — copyright-clean, zero cost.\n\nFor privacy, subscriptions, history and downloads stay on your device, are not automatically uploaded to the developer, and are not used for cross-app tracking.</string>
 

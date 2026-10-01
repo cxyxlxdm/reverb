@@ -55,6 +55,16 @@ object PlayerController {
     private var lastCountedPosMs = 0L
     private var lastCountedEpId = ""
     private var pendingSeekMs: Long = 0
+    /**
+     * [playAt] 设的一次性起点覆盖(≥0 生效)。批注「跳回那一秒」用的是它 ——
+     * 那条路径不能走默认的「按历史进度续播」，否则点哪一条都落回上次听到的位置。
+     * 消费点在 [playEpisode] 取 pendingSeekMs 的那一刻：**不能提前清**，
+     * controller 还没起来时 playEpisode 会走 pending 分支直接 return，
+     * 那时清掉就等于冷启动进 App 点批注必然跳不过去。
+     */
+    private var startMsOverride = -1L
+    /** pendingSeekMs 是「用户明确要跳到这一秒」还是「续播」——两者的容差规则不同，见 STATE_READY。 */
+    private var pendingSeekExplicit = false
     private var tickCount = 0
     private val scope = CoroutineScope(Dispatchers.Main + SupervisorJob())
 
@@ -340,9 +350,18 @@ object PlayerController {
 
             if (playbackState == Player.STATE_READY && pendingSeekMs > 0 && c != null) {
                 val dur = c.duration
-                if (pendingSeekMs > 3_000 && (dur <= 0 || pendingSeekMs < dur - 10_000)) {
-                    c.seekTo(pendingSeekMs)
+                // 两种起点，两套容差，**不能共用**：
+                //  · 续播沿用原启发式 —— 距片尾 10 秒内不如从头播（那是"听完"而不是"听到一半"）；
+                //  · 明确跳转(点批注)只受「别跳过片尾」约束。若让它也吃那条 10 秒规则，
+                //    写在片尾 8 秒处的批注就永远点不开(点了落回 0:00)，而这是用户**指定**的位置。
+                val ceiling = if (dur > 0) dur - 2_000 else Long.MAX_VALUE
+                val ok = if (pendingSeekExplicit) {
+                    pendingSeekMs < ceiling
+                } else {
+                    pendingSeekMs > 3_000 && (dur <= 0 || pendingSeekMs < dur - 10_000)
                 }
+                if (ok) c.seekTo(pendingSeekMs) else log.i(TAG, "跳点落空 seek=$pendingSeekMs dur=$dur explicit=$pendingSeekExplicit")
+                pendingSeekExplicit = false
                 pendingSeekMs = 0
             }
             if (playbackState == Player.STATE_ENDED) {
@@ -378,6 +397,22 @@ object PlayerController {
 
     /** 播放单集(单条,无上下文):等价于队列只有它自己,无上/下一集。 */
     fun play(episode: Episode) = playQueue(listOf(episode), 0)
+
+    /**
+     * 从**指定那一秒**开始播某一集(批注列表「跳回那一句」用)。
+     *
+     * 与 [play] 的差别只有一处:起点。默认路径的起点来自历史进度(续播),
+     * 这里由调用方指定 —— 所以它必须绕开 `history.positionFor`,否则列表里每一条
+     * 都落到同一个位置(上次听到的那一秒),整个功能的表现就是"点了没反应"。
+     *
+     * 队列只放这一集(与 [play] 一致):批注是跨集的时间线,把整条列表塞进队列
+     * 会让「下一集」跳出用户点的那一集，语义上不对，也与发现页/历史页的单播口径一致。
+     */
+    fun playAt(episode: Episode, startMs: Long) {
+        log.i(TAG, "playAt ${startMs}ms id=${episode.id}")
+        startMsOverride = startMs.coerceAtLeast(0L)
+        play(episode)
+    }
 
     /**
      * 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。
@@ -486,7 +521,17 @@ object PlayerController {
         // 否则"收听时长"榜首会是引导音频，「继续收听」里也会挂着它。
         val isGuide = com.yuyin.reverb.data.model.GuideEpisode.isGuide(episode.id)
         if (!isGuide) history?.record(episode, System.currentTimeMillis())
-        pendingSeekMs = if (isGuide) 0L else history?.positionFor(episode.id) ?: 0L
+        pendingSeekMs = if (startMsOverride >= 0) {
+            val s = startMsOverride
+            startMsOverride = -1L
+            pendingSeekExplicit = true
+            s
+        } else if (isGuide) {
+            0L
+        } else {
+            pendingSeekExplicit = false
+            history?.positionFor(episode.id) ?: 0L
+        }
         listenStats?.flush()   // 结算上一集残余
         lastCountedEpId = episode.id     // 统计基线对齐续播起点，避免把 resume 跳转记成收听
         lastCountedPosMs = pendingSeekMs

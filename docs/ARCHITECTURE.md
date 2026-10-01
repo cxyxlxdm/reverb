@@ -71,6 +71,13 @@ macOS `AppEnvironment`,都是全局单例,界面直接取用。理由很实际�
   两次采样之间按真实流逝时间往前推。三端都实现了,手法一致
   (macOS `anchorMs`/`anchorAt`、Android `rememberExtrapolatedPosition`、鸿蒙 80ms `setInterval`)。
 - **续播有护栏**:>3 秒才回跳,避免「刚点开就被甩回开头」;听到接近结尾自动标记已播完并归零。
+- **但「用户明确指定那一秒」是另一套护栏,不能共用**:批注「跳回那一秒」走的是
+  `PlayerController.playAt(episode, startMs)`,起点由调用方给、绕开 `history.positionFor`
+  (否则点哪一条都落回上次听到的位置)。它只受「别跳过片尾」约束(距结尾 2 秒内不跳),
+  **不吃那条 10 秒规则** —— 否则写在片尾 8 秒处的批注永远点不开,而那恰恰是用户指定的位置。
+  Android 侧用一个一次性的 `pendingSeekExplicit` 区分这两种意图,落空时打
+  `跳点落空 seek=… dur=… explicit=…`。**鸿蒙 / macOS 同构时这条要一起带过去**
+  —— 移植的是"两套容差"这个判定,不是那一行 `if`。
 - **睡眠定时最后 8 秒线性渐弱**,不是硬停。
 - **开播淡入约 0.9 秒**,避免炸耳。
 - **上一集/下一集由「队列上下文」决定**:用户队列优先,其次是进入播放时所在的列表顺序。
@@ -119,8 +126,9 @@ Android 的文件清单(**鸿蒙完全同名**;macOS 除热榜缓存与随包种
 
 ```
 subscriptions.json  favorites.json   history.json      inbox.json
-downloads.json      stamps.json      listen_stats.json feed_cache.json
-popular_cache.json  transcripts/<单集>.<语言>.json
+downloads.json      stamps.json      notes.json        listen_stats.json
+feed_cache.json     popular_cache.json
+transcripts/<单集>.<语言>.json
 ```
 
 为什么是**一堆小 JSON 而不是数据库**:数据量小(订阅几十条、历史上百条)、

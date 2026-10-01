@@ -10,7 +10,7 @@ import org.json.JSONObject
  * 或从 JSON 选择性导入。每一项都可单独选择是否备份/恢复。
  */
 object BackupManager {
-    enum class Section { SUBSCRIPTIONS, FAVORITES, STAMPS, DOWNLOADS, HISTORY, LISTEN_STATS, SETTINGS }
+    enum class Section { SUBSCRIPTIONS, FAVORITES, STAMPS, NOTES, DOWNLOADS, HISTORY, LISTEN_STATS, SETTINGS }
 
     private const val TAG = "Backup"
 
@@ -38,6 +38,22 @@ object BackupManager {
                 )
             }
             root.put("stamps", arr)
+        }
+        if (Section.NOTES in include) {
+            // 批注是**用户写出来的字**,丢了没有任何东西能补回来,所以必须进默认导出。
+            // episode 整条嵌进去(与 history 同构),否则换机后那些被发布方删掉的旧集无法定位。
+            val arr = JSONArray()
+            container.noteStore.notes.value.forEach { n ->
+                arr.put(
+                    JSONObject()
+                        .put("noteId", n.id)
+                        .put("positionMs", n.positionMs)
+                        .put("text", n.text)
+                        .put("createdAt", n.createdAt)
+                        .put("episode", EpisodeJson.toJson(n.episode))
+                )
+            }
+            root.put("notes", arr)
         }
         if (Section.DOWNLOADS in include) {
             // 只备份节目元数据/链接，不含音频文件
@@ -85,6 +101,7 @@ object BackupManager {
             "export built subs=${root.optJSONArray("subscriptions")?.length() ?: 0} " +
                 "favs=${root.optJSONArray("favorites")?.length() ?: 0} " +
                 "stamps=${root.optJSONArray("stamps")?.length() ?: 0} " +
+                "notes=${root.optJSONArray("notes")?.length() ?: 0} " +
                 "downloads=${root.optJSONArray("downloads")?.length() ?: 0} " +
                 "history=${root.optJSONArray("history")?.length() ?: 0}"
         )
@@ -97,6 +114,7 @@ object BackupManager {
             if (root.has("subscriptions")) add(Section.SUBSCRIPTIONS)
             if (root.has("favorites")) add(Section.FAVORITES)
             if (root.has("stamps")) add(Section.STAMPS)
+            if (root.has("notes")) add(Section.NOTES)
             if (root.has("downloads")) add(Section.DOWNLOADS)
             if (root.has("history")) add(Section.HISTORY)
             if (root.has("listenStats")) add(Section.LISTEN_STATS)
@@ -127,6 +145,28 @@ object BackupManager {
                 }
             }
             if (list.isNotEmpty()) container.stampStore.addAll(list)
+        }
+        if (Section.NOTES in include) root.optJSONArray("notes")?.let { arr ->
+            val list = (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val epObj = o.optJSONObject("episode") ?: return@mapNotNull null
+                val ep = EpisodeJson.fromJson(epObj)
+                if (ep.audioUrl.isBlank() || o.optString("text").isBlank()) return@mapNotNull null
+                // **只有 `createdAt` 这个 epoch 字段**要做秒/毫秒归一(H86:macOS 侧写的是秒)。
+                // `positionMs` 绝不能套同一条阈值 —— 那是给「Unix 时间戳」设计的,
+                // 播放位置恒落在 1..1e11 之间,套上去会把 66 分钟(4.0e6 ms)误判成秒、乘一千变成
+                // 40 亿毫秒,跳过去直接超出时长而落回开头,且列表显示的时间戳看着还是"合理"的。
+                val raw = o.optLong("createdAt")
+                val createdAt = if (raw in 1 until 100_000_000_000) raw * 1000 else raw
+                EpisodeNote(
+                    id = o.optString("noteId").ifBlank { java.util.UUID.randomUUID().toString() },
+                    episode = ep,
+                    positionMs = o.optLong("positionMs").coerceAtLeast(0L),
+                    text = o.optString("text"),
+                    createdAt = createdAt
+                )
+            }
+            if (list.isNotEmpty()) container.noteStore.addAll(list)
         }
         if (Section.DOWNLOADS in include) root.optJSONArray("downloads")?.let { arr ->
             for (i in 0 until arr.length()) {

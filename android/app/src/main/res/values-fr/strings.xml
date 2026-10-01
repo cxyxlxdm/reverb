@@ -23,6 +23,7 @@
     <string name="stamp_hint">Marquez le ressenti de cet épisode</string>
     <string name="stamp_remove">Retirer</string>
     <string name="backup_row_stamps">Empreintes d\'écoute</string>
+    <string name="backup_row_notes">Annotations</string>
     <string name="set_footprint">Empreinte d\'écoute</string>
     <string name="set_footprint_sub">Tous vos sceaux réunis en une affiche</string>
     <string name="footprint_title">Empreinte d\'écoute</string>
@@ -74,7 +75,7 @@
     <string name="guide_card_sub">30 s · intégré, hors ligne</string>
     <string name="privacy_consent_title">Politique de confidentialité</string>
     <string name="privacy_consent_catalog">Recherche et classements. Cette version contacte les API publiques de recherche Apple Podcasts (itunes.apple.com), des classements Apple (rss.marketingtools.apple.com), de fyyd.de et de gpodder.net. Ces requêtes ne contiennent ni identifiant ni jeton d\'authentification.</string>
-    <string name="privacy_consent_body">Reverb traite principalement les données sur votre appareil. Il n’a ni serveur du développeur, ni compte, publicité, analytique, attribution, connexion ou notification push tierce, rapport de plantage ou suivi inter-applications. Abonnements, historique, favoris, téléchargements, statistiques d’écoute, réglages, identifiant d’installation aléatoire et journaux sont traités localement et ne sont pas envoyés automatiquement au développeur. Android utilise des bibliothèques open source comme AndroidX, OkHttp et Coil, sans SDK de remontée de données de ces types. À partir de la version 1.0.2, si la sauvegarde est activée dans les réglages du système (sauvegarde cloud Android ou migration constructeur), le système d’exploitation copie abonnements, favoris, historique, enregistrements de téléchargement (liens uniquement), marqueurs, statistiques d’écoute et réglages vers votre propre compte cloud système ou votre nouvel appareil ; l’audio, les caches de transcriptions et de classements, ainsi que les journaux ne sont pas inclus, et le réglage se trouve dans les paramètres du système.\n\nEn ligne, les termes recherchés, la région ou la catégorie sont envoyés aux annuaires publics Apple, fyyd et gpodder. RSS, pochettes, audio et transcriptions sont demandés directement aux éditeurs ou hébergeurs, qui voient donc votre adresse IP, le User-Agent et la ressource demandée. Les journaux peuvent contenir des identifiants d’émission ou d’épisode et les noms d’hôte des services consultés ; ils ne quittent l’application que si vous choisissez de les partager ou exporter. Consultez la politique complète.\n\nEn touchant « Accepter et continuer », vous confirmez avoir lu et accepté cette politique.</string>
+    <string name="privacy_consent_body">Reverb traite principalement les données sur votre appareil. Il n’a ni serveur du développeur, ni compte, publicité, analytique, attribution, connexion ou notification push tierce, rapport de plantage ou suivi inter-applications. Abonnements, historique, favoris, téléchargements, statistiques d’écoute, réglages, identifiant d’installation aléatoire et journaux sont traités localement et ne sont pas envoyés automatiquement au développeur. Android utilise des bibliothèques open source comme AndroidX, OkHttp et Coil, sans SDK de remontée de données de ces types. À partir de la version 1.0.2, si la sauvegarde est activée dans les réglages du système (sauvegarde cloud Android ou migration constructeur), le système d’exploitation copie abonnements, favoris, historique, enregistrements de téléchargement (liens uniquement), marqueurs, annotations, statistiques d’écoute et réglages vers votre propre compte cloud système ou votre nouvel appareil ; l’audio, les caches de transcriptions et de classements, ainsi que les journaux ne sont pas inclus, et le réglage se trouve dans les paramètres du système.\n\nEn ligne, les termes recherchés, la région ou la catégorie sont envoyés aux annuaires publics Apple, fyyd et gpodder. RSS, pochettes, audio et transcriptions sont demandés directement aux éditeurs ou hébergeurs, qui voient donc votre adresse IP, le User-Agent et la ressource demandée. Les journaux peuvent contenir des identifiants d’émission ou d’épisode et les noms d’hôte des services consultés ; ils ne quittent l’application que si vous choisissez de les partager ou exporter. Consultez la politique complète.\n\nEn touchant « Accepter et continuer », vous confirmez avoir lu et accepté cette politique.</string>
     <string name="privacy_read_full">Lire la politique complète</string>
     <string name="privacy_accept">Accepter et continuer</string>
     <string name="privacy_decline">Refuser et quitter</string>
@@ -165,9 +166,14 @@
     <string name="backup_row_favorites">Favoris</string>
     <string name="lib_downloads">Téléchargements</string>
     <string name="lib_history">Historique</string>
+    <string name="lib_notes">Annotations</string>
     <string name="empty_library">Bibliothèque vide — abonnez-vous depuis Découvrir</string>
     <string name="empty_downloads">Aucun téléchargement. Touchez le bouton de téléchargement d\'un épisode pour l\'écouter hors ligne</string>
     <string name="empty_history">Pas encore d\'historique — écoutez un épisode</string>
+    <string name="note_empty">Aucune annotation. Dans le lecteur, touchez Plus → Écrire une annotation pour garder la seconde qui vous a touché</string>
+    <string name="note_delete_title">Supprimer l\'annotation</string>
+    <string name="note_delete_message">Cette annotation sera supprimée, sans récupération possible.\n\n« %1$s »</string>
+    <string name="a11y_note_delete">Supprimer l\'annotation</string>
 
     <string name="action_subscribe">S\'abonner</string>
     <string name="action_subscribed">Abonné</string>
@@ -179,6 +185,9 @@
     <string name="player_not_playing">Aucune lecture</string>
     <string name="shownotes">Notes de l\'épisode</string>
     <string name="shownotes_empty">Aucune note</string>
+    <string name="note_add">Écrire une annotation</string>
+    <string name="note_title">Marquer cette seconde</string>
+    <string name="note_hint">Écrivez ce qui vous vient à l\'esprit</string>
     <string name="sleep">Minuteur</string>
     <string name="sleep_current">Épisode</string>
     <string name="sleep_end_of_episode">Fin de l\'épisode</string>
@@ -298,7 +307,7 @@
     <string name="about_h_what">Qu\'est-ce que c\'est</string>
     <string name="about_p_what">Reverb est un client de podcasts léger à l\'esthétique encre et lavis. Découvrez, abonnez-vous, téléchargez hors ligne et reprenez à tout moment — centré sur l\'écoute.</string>
     <string name="about_h_features">Fonctionnalités</string>
-    <string name="about_p_features">· Découvrir : classements du jour par région et catégorie ; réorganiser et glisser\n· Rechercher : par nom ou URL RSS\n· Partager une émission : créez une image avec sa pochette, son titre et la marque Reverb\n· Bibliothèque : Abonnements, Téléchargements et Historique\n· Hors ligne : mise en cache pendant l\'écoute, Wi-Fi seul en option\n· Transcription : transcrivez sur l\'appareil ou lisez celle de l\'éditeur\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan\n· Notes de l\'épisode : glisser sur le lecteur\n· Notifications de nouveaux épisodes\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), tampons, statistiques d\'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l\'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille, couleur, langues</string>
+    <string name="about_p_features">· Découvrir : classements du jour par région et catégorie ; réorganiser et glisser\n· Rechercher : par nom ou URL RSS\n· Partager une émission : créez une image avec sa pochette, son titre et la marque Reverb\n· Bibliothèque : abonnements, nouveautés, favoris, téléchargements, historique et annotations\n· Hors ligne : mise en cache pendant l\'écoute, Wi-Fi seul en option\n· Transcription : transcrivez sur l\'appareil ou lisez celle de l\'éditeur\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d\'un geste\n· Notes de l\'épisode : glisser sur le lecteur\n· Notifications de nouveaux épisodes\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), tampons, annotations, statistiques d\'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l\'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille, couleur, langues</string>
     <string name="about_h_philosophy">Conception</string>
     <string name="about_p_philosophy">L’esthétique s’inspire de l’encre, du céladon et de l’or des poutres — le nom et l’icône évoquent « un écho tournant autour des poutres ».\n\nLes sources restent entièrement gratuites, sans compte ni clé API : la recherche s’appuie sur des sources publiques, puis revient au RSS d’origine de l’éditeur pour diffuser l’audio original.\n\nCôté vie privée, abonnements, historique et téléchargements restent sur votre appareil, ne sont pas envoyés automatiquement au développeur et ne servent pas au suivi inter-applications.</string>
 

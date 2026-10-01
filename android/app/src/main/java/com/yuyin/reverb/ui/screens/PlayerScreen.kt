@@ -34,15 +34,18 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -120,6 +123,14 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
     val ctx = LocalContext.current
     val saveImage = rememberImageSaver()
     var sealDialogOpen by remember { mutableStateOf(false) }
+    /**
+     * 批注弹层。**时间是按下那一刻的快照,不是跟随播放器的实时值**:
+     * `position` 每 500ms 随 ticker 重算(PlayerController 的 ticker),而写一句话要十几秒 ——
+     * 若弹层直接读 `position`,标题里的时间会在用户打字时一路往后走,
+     * 保存下来的秒与看到的那一秒不是同一秒(功能名义上就是"记下这一秒",这正是它唯一的意义)。
+     */
+    var noteDialogOpen by remember { mutableStateOf(false) }
+    var noteAtMs by remember { mutableStateOf(0L) }
 
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
@@ -185,7 +196,8 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                             saveImage(bmp, "reverb-moment-${kotlin.math.abs(episode.id.hashCode())}.png")
                         }
                     },
-                    onStamp = { sealDialogOpen = true }
+                    onStamp = { sealDialogOpen = true },
+                    onNote = { noteAtMs = position; noteDialogOpen = true }
                 )
             }
         }
@@ -327,6 +339,17 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
             onDismiss = { sealDialogOpen = false }
         )
     }
+
+    if (noteDialogOpen) {
+        NoteDialog(
+            atMs = noteAtMs,
+            onSave = { text ->
+                container.noteStore.add(episode, noteAtMs, text, System.currentTimeMillis())
+                noteDialogOpen = false
+            },
+            onDismiss = { noteDialogOpen = false }
+        )
+    }
 }
 
 @Composable
@@ -422,9 +445,15 @@ private fun SpeedChip(speed: Float) {
     }
 }
 
-/** 更多:剪藏(分享此刻)、保存此刻、盖章(听觉印记)收进溢出菜单,避免顶栏按钮过多。 */
+/** 更多:剪藏(分享此刻)、保存此刻、写批注、盖章(听觉印记)收进溢出菜单,避免顶栏按钮过多。 */
 @Composable
-private fun MoreMenu(stamped: Boolean, onClip: () -> Unit, onSave: () -> Unit, onStamp: () -> Unit) {
+private fun MoreMenu(
+    stamped: Boolean,
+    onClip: () -> Unit,
+    onSave: () -> Unit,
+    onStamp: () -> Unit,
+    onNote: () -> Unit
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { open = true }) {
@@ -440,11 +469,56 @@ private fun MoreMenu(stamped: Boolean, onClip: () -> Unit, onSave: () -> Unit, o
                 onClick = { open = false; onClip() }
             )
             DropdownMenuItem(
+                text = { Text(stringResource(R.string.note_add)) },
+                onClick = { open = false; onNote() }
+            )
+            DropdownMenuItem(
                 text = { Text(stringResource(if (stamped) R.string.stamp_edit else R.string.stamp_add)) },
                 onClick = { open = false; onStamp() }
             )
         }
     }
+}
+
+/**
+ * 写一条批注:标题带**按下的那一刻**的时间,正文一句话。
+ *
+ * 空文字**直接不放进去**(`NoteStore.add` 返回 null)而不是弹个"请输入内容"——
+ * 用户点了保存又什么也没写,最自然的意图是"这条不要",关掉即可;
+ * 而列表里出现一条空白批注,以后无从分辨它是不是误触(且它没有可删的正文,删除确认框会显示成空)。
+ */
+@Composable
+private fun NoteDialog(atMs: Long, onSave: (String) -> Unit, onDismiss: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.note_title)) },
+        text = {
+            Column {
+                Text(
+                    formatTime(atMs),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text(stringResource(R.string.note_hint)) },
+                    minLines = 3,
+                    maxLines = 6
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(text) }) { Text(stringResource(R.string.action_save)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_cancel)) }
+        }
+    )
 }
 
 // 以 Ekman 基本情绪为骨架、替换掉听播客用不上的「惧/厌」,凑成 3×3 情绪方阵;每枚附小字注明。
