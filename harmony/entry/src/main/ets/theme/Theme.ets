@@ -213,6 +213,16 @@ export class LineHeight {
 }
 
 export class Theme {
+  /**
+   * AppStorage 键:设备此刻是否深色。
+   * **写**在 EntryAbility(启动种一次 + `onConfigurationUpdate` 里跟着系统翻),
+   * **读**在外壳的 `@StorageLink`(设置选「跟随系统」时主题取它)。
+   * 为什么不干脆让外壳自己 `context.config.colorMode` 读一次:那只是**启动快照**。
+   * 应用运行期间系统切深浅(手动切或定时日落日出)没人再去读它,于是「跟随系统」
+   * 这一档要重进应用才生效 —— 市场审核就是照这条报的,见 TROUBLESHOOTING H126。
+   */
+  static readonly SYSTEM_DARK_KEY: string = 'systemDark';
+
   /// mode:0 跟随系统 / 1 浅色(宣纸)/ 2 深色(水墨)/ 3 纯白。
   /// systemDark 由调用方传入(来自设备深色模式)。
   static scheme(mode: number, accentIndex: number, systemDark: boolean): Scheme {

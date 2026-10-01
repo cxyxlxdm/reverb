@@ -54,7 +54,12 @@ struct Index {
   @State downloadManager: DownloadManager = AppContainer.get().downloadManager;
   @State radio: RadioStation = AppContainer.get().radio;
   @State tab: number = 0;
-  @State systemDark: boolean = false;
+  /**
+   * 设备此刻是否深色。**由 EntryAbility 写 AppStorage**(启动种一次,系统切深浅时在
+   * `onConfigurationUpdate` 里再写),这里只 @StorageLink 读 —— 理由见 `Theme.SYSTEM_DARK_KEY`。
+   * @Watch 那一下是给状态栏/导航条的:它们不在组件树里,主题跟着翻了、图标色不会自己翻。
+   */
+  @StorageLink(Theme.SYSTEM_DARK_KEY) @Watch('onSystemDarkChanged') systemDark: boolean = false;
   @State stack: NavPathStack = new NavPathStack();
   /// 当前要展示的频道(进详情页前设置;ArkTS 的 NavPathStack 传参用 param,这里用状态更直观)
   @State detailSeed: Podcast = emptyPodcast();
@@ -79,11 +84,18 @@ struct Index {
       if (prev !== null) prev();
       this.tick = this.tick + 1;
     };
-    const cfgMode: number | undefined = ctx.config?.colorMode;
-    this.systemDark = cfgMode === 0;   // ColorMode.COLOR_MODE_DARK = 0
     this.readInsets();
     this.applySystemBar();
     Log.i('UI', `外壳就绪 systemDark=${this.systemDark}`);
+  }
+
+  /**
+   * 系统深浅色翻转(经 AppStorage 传过来)之后要补的一件事。
+   * 主题本身是 `scheme()` 现算的,整树重建会跟着翻;唯一不在组件树里的是状态栏与
+   * 导航条的**图标颜色**,它不会自己翻,必须重设(否则深色图标压在水墨底上糊成一团)。
+   */
+  private onSystemDarkChanged(): void {
+    this.applySystemBar();
   }
 
   /// 读状态栏与手势导航条高度,换算为 vp 作内边距(避免页头压住状态栏)。

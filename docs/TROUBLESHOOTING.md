@@ -4295,3 +4295,59 @@ AVPlayer 此刻的状态机,而我们要保的是"这一段还在出声的连续
 ③ **"没断"不是证据。** 上一轮据此把它当"已知隐患、不阻塞发布"记下了;本轮把它升级成必修,
 依据是系统侧那三行日志(证明空窗是真的存在),不是播放结果。观感/结果层判据在并发问题上一律不可信。
 ④ 推迟决定要连着写清**复验手法与期望日志**,否则下一次接手的人只能重做一遍取证。
+
+---
+
+### H126. 鸿蒙「跟随系统」的深色模式要**重进应用**才生效:深浅色只在启动那一刻读过一次快照
+
+**现象**(2026-10-01 应用市场审核反馈,HarmonyOS 6.1 / Mate 80 Pro Max / API 6.1.0(24) / 中文环境):
+音阁 → 设置 → 主题 选「跟随系统」,在系统设置里切换深色模式,应用不跟着变;
+**退出重进之后才生效**。
+
+**根因**:`pages/Index.ets` 的 `aboutToAppear()` 里写着
+`this.systemDark = ctx.config?.colorMode === 0` —— 只在**外壳建好的那一刻**读了一次
+`UIAbilityContext.config` 的快照。之后没有任何地方再读它:全仓 grep
+`onConfigurationUpdate` / `ConfigurationConstant` 在改前**零命中**。
+所以系统切深浅时没有任何东西会翻这个 `@State`,主题自然不动;而"重进应用就好"恰恰是根因的指纹
+—— 重进 = 再走一遍 `aboutToAppear` = 又拿到一份新快照。
+
+顺带排除另一种读法(「点『跟随系统』这一档本身不生效」):设置页那颗 choiceRow 走
+`setThemeMode(i)` + `onChanged()`,`onChanged` 里 `this.tick + 1` 强制重建,`themeMode` 又挂在
+`@Observed` 的 `SettingsStore` 上 —— **改设置当场生效**,不是这一条。
+
+**修法**(深浅态收敛成单一来源,解析表达式只存在一份):
+- `EntryAbility.onConfigurationUpdate(newConfig)` —— 系统环境变化的官方回调,把它转成 AppStorage 里
+  一个 boolean。键名常量挂在 `Theme.SYSTEM_DARK_KEY`,写的一方(Ability)与读的一方(外壳)共用。
+- **启动那一次也走同一个方法**,并且放在 `loadContent` **之前**:第一帧就要读到深浅态,
+  否则深色设备上会先闪一帧浅色(与 H112 那类"首帧从错误的态起步"同因)。
+  外壳原来是 `@State` + 自己读快照,现在改 `@StorageLink(Theme.SYSTEM_DARK_KEY)` ——
+  若不这样收敛,启动路径与回调路径迟早各写一种判定(同 H96「一处改了另一端就漂」)。
+- `@Watch('onSystemDarkChanged')` 只补一件事:重跑 `applySystemBar()`。状态栏/导航条的**图标颜色**
+  不在组件树里,主题翻了它不会自己翻(深色图标压在水墨底上糊成一团,缘由写在 `applySystemBar` 注释上)。
+- 两处守卫:`COLOR_MODE_NOT_SET`(-1)与 undefined 时**保持原值**,不当浅色处理
+  (把"读不出"当成"浅色"会让深色界面凭空闪一次浅色,而保持原值最坏只是没跟上);
+  值相同不写 AppStorage(写了要付一次整树重建的代价)。
+
+**为什么只有鸿蒙要手工接线**:Android 的 `isSystemInDarkTheme()` 本身就是 Compose 的可观察状态,
+配置一变自动重绘;macOS 用 `preferredColorScheme(nil)` 表达"跟随系统",交给 SwiftUI。
+只有鸿蒙这套色板是**在 JS 里现算出来的对象**(`Theme.scheme(mode, accent, systemDark)`),
+系统的深浅变化不会自动落到它身上。
+
+**验收方式**:✅ `hvigorw assembleHap -p buildMode=debug` **BUILD SUCCESSFUL**(18 s,
+警告集与改前同:`SettingsPage` 的 `fill` API 版本提示、`Components.ets:761` 的 private `sync`)。
+❌ **未真机复验** —— 这台机器 `hdc list targets` 为空,且反馈来自审核用的 Mate 80 Pro Max(6.1 / API 24),
+本机那台是 BRA-AL00。复验判据四条:
+① 应用在前台、主题「跟随系统」,系统里切深色 → 应用**当场**转水墨深色,状态栏图标同时转白;
+② 退到后台切深浅再回前台 → 也要对(进程活着时 `onConfigurationUpdate` 就会来);
+③ 反向:选「浅色(宣纸)/ 深色(水墨)/ 纯白」时系统切深浅**不应**影响应用(这三档不取 `systemDark`);
+④ 深色设备冷启动,第一帧就是深色,不闪浅色。
+
+**教训与可复用的规律**:
+① **「必须重启才生效」= 有个东西只在启动时读了一次。** 这类反馈几乎不需要复现就能定位:
+先按这个假设去翻启动路径(`onCreate` / `onWindowStageCreate` / `aboutToAppear`)上的一次性赋值,
+比在渲染层猜"是不是没刷新"快一个数量级。
+② **自建色板 = 自建订阅。** 用系统资源引用(`sys.color.*`)的部分会自动跟随;
+把颜色算成自己的对象,就得自己去接系统事件 —— 这条在"我们把主题色板手写以对齐三端"的决定里
+并没有附带说明,现在是了。
+③ **可观察状态的来源要单一。** 把"设备是否深色"从组件私有 `@State` 提到 AppStorage,
+是为了让"读快照"这种写法只有一个落点;否则修好回调那一头,启动那一头的旧表达式会继续留在树里。
