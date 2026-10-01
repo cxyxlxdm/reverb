@@ -11,6 +11,7 @@ import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint, Glyph, Sym } from '../view/Widgets';
 import { DiscoverPage } from '../view/DiscoverPage';
 import { PodcastDetailPage } from '../view/PodcastDetailPage';
+import { NoteStore, EpisodeNote } from '../store/NoteStore';
 import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
 import { GlassTabBar, barFootprint } from '../view/GlassTabBar';
@@ -50,6 +51,9 @@ struct Index {
   @State inbox: InboxStore = AppContainer.get().inbox;
   @State downloads: DownloadStore = AppContainer.get().downloads;
   @State stamps: StampStore = AppContainer.get().stamps;
+  /// 批注(音阁第 6 段的数据源)。必须是 @State:它在 播放页写、音阁列表读,
+  /// 裸对象赋值观察不到(H27)。
+  @State notes: NoteStore = AppContainer.get().notes;
   @State listenStats: ListenStatsStore = AppContainer.get().listenStats;
   @State downloadManager: DownloadManager = AppContainer.get().downloadManager;
   @State radio: RadioStation = AppContainer.get().radio;
@@ -196,6 +200,17 @@ struct Index {
   private playEpisode(e: Episode, queue: Episode[], tag: string): void {
     Log.i('UI', `播放 "${e.title}" 队列=${queue.length} tag='${tag}'`);
     this.player.playOrToggle(e, queue, tag);
+  }
+
+  /**
+   * 音阁 · 批注那一行:从**批注记下的那一秒**起播,不是从上次听到的位置。
+   *
+   * 走 `playAt` 而不是 `playOrToggle`:后者第一句就是"同一集则暂停/继续" ——
+   * 正在播这一集时点批注会被判成按了暂停。与 Android 侧同一分岔(那边是 `playAt` vs `play`)。
+   */
+  private playNote(n: EpisodeNote): void {
+    Log.i('UI', `播放批注 @${n.positionMs}ms "${n.episode.title}"`);
+    this.player.playAt(n.episode, n.positionMs);
   }
 
   build() {
@@ -444,7 +459,9 @@ struct Index {
               downloadManager: this.downloadManager,
               bottomPad: this.underBarPad(),
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
+              notes: this.notes,
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag),
+              onPlayNote: (n: EpisodeNote) => this.playNote(n),
               onOpenSettings: () => { this.stack.pushPathByName('settings', null); },
               onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); }
             })

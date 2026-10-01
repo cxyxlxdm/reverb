@@ -171,6 +171,18 @@ export class PlayerController {
   private readonly radioHistoryCap = 100;
 
   private pendingSeekMs = 0;
+  /**
+   * `playAt` 设的一次性起点覆盖(≥0 生效)。批注「跳回那一秒」用的是它 ——
+   * 那条路径不能走默认的「按历史进度续播」,否则点哪一条都落回上次听到的位置。
+   *
+   * 消费点在 `playEpisode` 取 resumeMs 的那一刻。
+   * ⚠️ **不能在入口就清掉**:装载失败会重入 `playEpisode`(重试队列走 `startEpisode`),
+   * 而在 `generation` 不匹配时 `playEpisode` 第一行就 return —— 若在入口处清,
+   * 冷启动进 App 点批注、或装载重试那一次,起点就没了,表现成"点了没反应"。
+   */
+  private startMsOverride = -1;
+  /// pendingSeekMs 是「用户明确要跳到这一秒」还是「续播」——两者的容差规则不同,见 prepared 分支。
+  private pendingSeekExplicit = false;
   private tickTimer = -1;
   private loadRetries = 0;
   private loadGeneration = 0;
@@ -244,6 +256,21 @@ export class PlayerController {
   }
 
   /**
+   * 从**指定那一秒**开始播某一集(批注列表「跳回那一句」用),与 Android `PlayerController.playAt` 同构。
+   *
+   * 与 `play` 的差别只有一处:起点。默认路径的起点来自历史进度(续播),这里由调用方指定 ——
+   * 所以它必须绕开 `history.positionFor`,否则整个功能的表现就是"点了没反应"。
+   *
+   * 队列只放这一集(与 `play` 一致):批注是跨集的时间线,把整条列表塞进队列
+   * 会让「下一集」跳出用户点的那一集,语义上不对,也与发现页/历史页的单播口径一致。
+   */
+  playAt(e: Episode, startMs: number): void {
+    Log.i('Player', `playAt ${startMs}ms id=${e.id}`);
+    this.startMsOverride = startMs > 0 ? startMs : 0;   // 负数是「没有覆盖」的哨兵值,不能拿来当 0 用
+    this.play(e);
+  }
+
+  /**
    * 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。
    *
    * @param tag 队列身份("inbox" / "fav" / "dl" / 频道主页用 "podcast:<feedUrl>")。
@@ -314,7 +341,19 @@ export class PlayerController {
     // 否则"收听时长"榜首会是引导音频,「继续收听」里也会挂着它。
     const isGuide = GuideEpisode.isGuide(e.id);
     if (!isGuide && this.history !== null) this.history.record(e, Date.now());
-    const resumeMs = (isGuide || this.history === null) ? 0 : this.history.positionFor(e.id);
+    // 两种来源,一条判别:调用方**明确指定的那一秒**优先于「上次听到哪儿」。
+    // 与 Android 同口径 —— `startMsOverride >= 0` 就吃掉它并置 explicit,否则走续播。
+    let resumeMs: number;
+    if (this.startMsOverride >= 0) {
+      resumeMs = this.startMsOverride;
+      this.startMsOverride = -1;
+      this.pendingSeekExplicit = true;
+    } else if (isGuide) {
+      resumeMs = 0;
+    } else {
+      this.pendingSeekExplicit = false;
+      resumeMs = this.history === null ? 0 : this.history.positionFor(e.id);
+    }
     this.pendingSeekMs = resumeMs;
     // 统计基线对齐续播起点,避免把 resume 跳转记成收听
     this.clock.countedEpId = e.id;
@@ -526,12 +565,26 @@ export class PlayerController {
     }
     if (state === 'prepared') {
       this.durationMs = p.duration > 0 ? p.duration : 0;
-      // 续播两条护栏:>3s 才回跳、距末尾 10s 内不回跳(AVPlayer 必须在 prepared 后 seek)
+      // 两种起点,两套容差,**不能共用**(与 Android `STATE_READY` 那段同构):
+      //  · 续播沿用原启发式 —— >3s 才回跳、距片尾 10 秒内不如从头播(那是"听完"而不是"听到一半");
+      //  · 明确跳转(点批注)只受「别跳过片尾」约束。若让它也吃那条 10 秒规则,
+      //    写在片尾 8 秒处的批注就永远点不开(点了落回 0:00),而那是用户**指定**的位置。
+      // AVPlayer 必须在 prepared 之后才能 seek。
       const seekMs = this.pendingSeekMs;
+      const ceiling = this.durationMs > 0 ? this.durationMs - 2000 : Number.MAX_SAFE_INTEGER;
+      const explicit = this.pendingSeekExplicit;
+      const ok = explicit
+        ? seekMs < ceiling
+        : (seekMs > 3000 && (this.durationMs <= 0 || seekMs < this.durationMs - 10000));
+      this.pendingSeekExplicit = false;
       this.pendingSeekMs = 0;
-      if (seekMs > 3000 && (this.durationMs <= 0 || seekMs < this.durationMs - 10000)) {
+      if (ok) {
         p.seek(seekMs, media.SeekMode.SEEK_PREV_SYNC);
         this.clock.positionMs = seekMs;
+      } else {
+        // 落空必须留一行:装机验收「片尾 8 秒内的批注实跳」靠的就是这条,
+        // 而界面上两种情况都表现为"从开头播",无从分辨。
+        Log.i('Player', `跳点落空 seek=${seekMs} dur=${this.durationMs} explicit=${explicit}`);
       }
       // 用户可能在 prepare 或 AudioSession 激活期间按了暂停。prepared 不能把旧的自动起播意图复活。
       if (!this.playbackDesiredPlaying) {

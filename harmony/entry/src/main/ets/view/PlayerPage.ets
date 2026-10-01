@@ -55,6 +55,25 @@ export struct PlayerPage {
   @State showSpeed: boolean = false;
   @State showSleep: boolean = false;
   @State showSeals: boolean = false;
+  /**
+   * 批注弹层的显位,与 `showSeals` 同一手法(半模态,见 moreMenuChip 的注释)。
+   *
+   * ⚠️ **`.bindSheet` 只能挂在另一个节点上,不能和盖章那个共用 `moreMenuChip`**:
+   * 一个节点只有一个 bindSheet 属性,后写的会把先写的顶掉,表现是"点了写批注什么也没弹"。
+   * 现在它挂在本页根 Column 上。
+   */
+  @State showNote: boolean = false;
+  /**
+   * 批注要记的那一秒 —— **按下「写批注」那一刻的快照,不是跟随播放器的实时值**。
+   *
+   * 与离屏剪藏卡的 `momentPosMs` 同因:进度已经不再驱动本页重渲(见 `SeekBar` / `PlaybackClock`),
+   * 所以这里必须显式取一次;而就算能跟随,写一句话要十几秒,期间时间会一路往后走 ——
+   * 保存下来的秒与看到的那一秒不是同一秒,而"记下这一秒"正是这个功能唯一的意义(硬规矩 6)。
+   */
+  @State notePosMs: number = 0;
+  /// 批注弹层里的正文草稿。**不叫 `noteText`**:本页已有一个 `noteText()` 方法
+  /// (节目笔记那一页的正文),同名会撞成一个标识符 —— 编译器报 duplicate identifier。
+  @State noteDraft: string = '';
   @State momentHint: string = '';
 
   private app: AppContainer = AppContainer.get();
@@ -186,6 +205,10 @@ export struct PlayerPage {
     .height('100%')
     // 左右 24 与 Android 的 `padding(horizontal = 24.dp)` 对齐 —— 原先 20,标题看着贴边
     .padding({ left: 24, right: 24, bottom: 16 })
+    // 批注弹层。挂在这里而不是 moreMenuChip 上:那个节点已经被盖章的 sheet 占了
+    // (一个节点只有一个 bindSheet)。高度按「标题 + 时间 + 三行输入 + 按钮」给足,
+    // 键盘弹起时由系统抬升 —— 这条**未真机验过**,装机判据是"输入框不被键盘盖住"。
+    .bindSheet($$this.showNote, this.noteSheet(), { height: 320, backgroundColor: this.scheme.surface })
   }
 
   @Builder
@@ -510,6 +533,17 @@ export struct PlayerPage {
       MenuItem({ content: L.s('clip_moment') })
         .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
         .onClick(() => { this.shareMoment(); })
+      // 批注排在盖章之前:与 Android `MoreMenu` 同序(保存此刻 / 分享此刻 / 写批注 / 盖章)。
+      MenuItem({ content: L.s('note_add') })
+        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
+        .onClick(() => {
+          // 就在这一行取位置:下面两句都要跨一个异步渲染才落地,晚取就不是"这一秒"了
+          const e = this.player.current;
+          if (e === null) return;
+          this.notePosMs = this.player.positionMs;
+          this.noteDraft = '';
+          this.showNote = true;
+        })
       MenuItem({ content: this.currentSeal().length > 0 ? L.s('stamp_edit') : L.s('stamp_add') })
         .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
         .onClick(() => { this.showSeals = true; })
@@ -579,6 +613,66 @@ export struct PlayerPage {
     }
     .width('100%')
     .backgroundColor(this.scheme.surface)
+  }
+
+  /**
+   * 写一条批注:标题带**按下的那一刻**的时间,正文一句话。与 Android `NoteDialog` 同内容,
+   * 只是形态从居中对话框换成半模态(本端已有 `sealSheet` 同形,不必为它新造一个弹层组件)。
+   *
+   * 空文字**直接关掉、不落一条**(store 返回空串)而不是弹「请输入内容」——
+   * 用户点了保存又什么也没写,最自然的意图是"这条不要";
+   * 而列表里出现一条空白批注,以后无从分辨它是不是误触(且删除确认框会显示成空)。
+   */
+  @Builder
+  noteSheet() {
+    Column({ space: 12 }) {
+      Text(L.s('note_title'))
+        .fontSize(TypeScale.titleMedium * this.fontScale)
+        .fontColor(this.scheme.onBackground)
+        .margin({ top: 16 })
+      Text(formatTime(this.notePosMs))
+        .fontSize(TypeScale.titleMedium * this.fontScale)
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.scheme.primary)
+      TextArea({ placeholder: L.s('note_hint'), text: this.noteDraft })
+        .placeholderColor(this.scheme.onSurfaceVariant)
+        .fontColor(this.scheme.onBackground)
+        .fontSize(TypeScale.body * this.fontScale)
+        .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.08))
+        .borderRadius(10)
+        .height(96)
+        .onChange((v: string) => { this.noteDraft = v; })
+      Row({ space: 12 }) {
+        Text(L.s('action_cancel'))
+          .fontSize(TypeScale.labelLarge * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          .onClick(() => { this.showNote = false; })
+        Blank()
+        Text(L.s('action_save'))
+          .fontSize(TypeScale.labelLarge * this.fontScale)
+          .fontColor(this.scheme.primary)
+          .padding({ left: 16, right: 16, top: 10, bottom: 10 })
+          .onClick(() => { this.saveNote(); })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .padding({ left: 20, right: 20, bottom: 12 })
+    .backgroundColor(this.scheme.surface)
+  }
+
+  private saveNote(): void {
+    const e = this.player.current;
+    if (e === null) {
+      this.showNote = false;
+      return;
+    }
+    // 夹时长、去空白、生成 id 都在 store 里(硬规矩 10);这里只管收摊。
+    // **不给成功提示**:与 Android 同一判断 —— 结果就摆在音阁第 6 段的第一行,
+    // 而播放页上那条 hint 是给"看不见结果"的动作(存图 / 分享)用的。
+    this.app.notes.add(e, this.notePosMs, this.noteDraft, Date.now());
+    this.showNote = false;
   }
 
   /**

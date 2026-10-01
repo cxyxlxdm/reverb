@@ -1,6 +1,7 @@
 import { Episode, Podcast, HistoryEntry, ChannelListen, emptyPodcast } from '../model/Models';
 import { Codec } from './Codec';
 import { Stamp } from './StampStore';
+import { EpisodeNote } from './NoteStore';
 import { AppContainer } from '../AppContainer';
 import { J } from '../net/Http';
 import { xmlUnescape } from '../util/HtmlText';
@@ -8,31 +9,33 @@ import taskpool from '@ohos.taskpool';
 import { stringifyPrettyConcurrent, parseObjectConcurrent } from './JsonTask';
 import { Log } from '../util/Logger';
 
-/// 可备份的数据分区(与 Android / macOS 的 7 项一致)。
+/// 可备份的数据分区(与 Android / macOS 的 8 项一致,**顺序也要一致** ——
+/// 三端共用同一份 reverb-backup.json,枚举值就是分区在文件里的出现次序,漂了就对不上)。
 export enum BackupSection {
   SUBSCRIPTIONS = 0,
   FAVORITES = 1,
   STAMPS = 2,
-  DOWNLOADS = 3,
-  HISTORY = 4,
-  LISTEN_STATS = 5,
-  SETTINGS = 6
+  NOTES = 3,
+  DOWNLOADS = 4,
+  HISTORY = 5,
+  LISTEN_STATS = 6,
+  SETTINGS = 7
 }
 
 export const ALL_SECTIONS: BackupSection[] = [
   BackupSection.SUBSCRIPTIONS, BackupSection.FAVORITES, BackupSection.STAMPS,
-  BackupSection.DOWNLOADS, BackupSection.HISTORY, BackupSection.LISTEN_STATS,
-  BackupSection.SETTINGS
+  BackupSection.NOTES, BackupSection.DOWNLOADS, BackupSection.HISTORY,
+  BackupSection.LISTEN_STATS, BackupSection.SETTINGS
 ];
 
 const KEY: Record<number, string> = {
-  0: 'subscriptions', 1: 'favorites', 2: 'stamps',
-  3: 'downloads', 4: 'history', 5: 'listenStats', 6: 'settings'
+  0: 'subscriptions', 1: 'favorites', 2: 'stamps', 3: 'notes',
+  4: 'downloads', 5: 'history', 6: 'listenStats', 7: 'settings'
 };
 
 const LABEL_KEY: Record<number, string> = {
-  0: 'lib_subscriptions', 1: 'lib_favorites', 2: 'footprint_title',
-  3: 'lib_downloads', 4: 'lib_history', 5: 'listen_stats_title', 6: 'settings_title'
+  0: 'lib_subscriptions', 1: 'lib_favorites', 2: 'footprint_title', 3: 'lib_notes',
+  4: 'lib_downloads', 5: 'lib_history', 6: 'listen_stats_title', 7: 'settings_title'
 };
 
 export function sectionLabelKey(s: BackupSection): string {
@@ -95,6 +98,20 @@ export class BackupManager {
         } as Record<string, Object>);
       }
       root[KEY[BackupSection.STAMPS]] = arr;
+    }
+    if (has(BackupSection.NOTES)) {
+      // 批注是**用户写出来的字**,丢了没有任何东西能补回来,所以必须进默认导出。
+      // episode 整条嵌进去(与 history 同构),否则换机后那些被发布方删掉的旧集无法定位。
+      const arr: Object[] = [];
+      const list = app.notes.notes;
+      for (let i = 0; i < list.length; i++) {
+        const n = list[i];
+        arr.push({
+          'noteId': n.noteId, 'positionMs': n.positionMs, 'text': n.text,
+          'createdAt': n.createdAt, 'episode': Codec.episodeToJson(n.episode)
+        } as Record<string, Object>);
+      }
+      root[KEY[BackupSection.NOTES]] = arr;
     }
     if (has(BackupSection.DOWNLOADS)) {
       // 只备份单集元信息/链接,不含音频文件
@@ -216,6 +233,34 @@ export class BackupManager {
         });
       }
       if (list.length > 0) app.stamps.addAll(list);
+    }
+    if (has(BackupSection.NOTES)) {
+      const arr = J.arr(root, KEY[BackupSection.NOTES]);
+      const list: EpisodeNote[] = [];
+      for (let i = 0; i < arr.length; i++) {
+        const o = J.asObj(arr[i]);
+        if (o === null) continue;
+        const ep = Codec.episodeFromJson(J.obj(o, 'episode'));
+        // 没有可播地址或没有正文的一律不收 —— 收进来就是列表里一条"点不动/看不出是什么"的记录
+        if (ep.audioUrl.length === 0 || J.str(o, 'text').length === 0) continue;
+        /**
+         * **只有 `createdAt` 这个 epoch 字段**要做秒/毫秒归一(H86:macOS 侧写的是秒)。
+         * `positionMs` 绝不能套同一条阈值 —— 那条阈值是给「Unix 时间戳」设计的,
+         * 播放位置恒落在 1..1e11 之间,套上去会把 66 分钟(4.0e6 ms)误判成秒、乘一千变成
+         * 40 亿毫秒,跳过去直接超出时长而落回开头,且列表显示的时间戳看着还是"合理"的。
+         */
+        const raw = J.num(o, 'createdAt');
+        const createdAt = (raw > 0 && raw < 100000000000) ? raw * 1000 : raw;
+        const pos = J.num(o, 'positionMs');
+        list.push({
+          noteId: J.str(o, 'noteId').length > 0 ? J.str(o, 'noteId') : `${createdAt}-${i}`,
+          episode: ep,
+          positionMs: pos > 0 ? pos : 0,
+          text: J.str(o, 'text'),
+          createdAt: createdAt
+        });
+      }
+      if (list.length > 0) app.notes.addAll(list);
     }
     if (has(BackupSection.DOWNLOADS)) {
       // 按链接重新下载(备份不含音频文件)

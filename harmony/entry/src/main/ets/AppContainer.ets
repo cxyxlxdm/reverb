@@ -11,6 +11,7 @@ import { GuideEpisode } from './store/GuideEpisode';
 import { ListenStatsStore } from './store/ListenStatsStore';
 import { DownloadStore } from './store/DownloadStore';
 import { StampStore } from './store/StampStore';
+import { NoteStore } from './store/NoteStore';
 import { TranscriptStore } from './store/TranscriptStore';
 import { SpeechTranscriber } from './playback/SpeechTranscriber';
 import { DownloadManager } from './playback/DownloadManager';
@@ -38,6 +39,8 @@ export class AppContainer {
   readonly feedCache: FeedCacheStore = new FeedCacheStore();
   readonly listenStats: ListenStatsStore = new ListenStatsStore();
   readonly stamps: StampStore = new StampStore();
+  /// 听觉批注:「那一秒 + 我那句话」(notes.json,与 Android 同格式)
+  readonly notes: NoteStore = new NoteStore();
   /// 逐字稿:状态机 + 缓存。识别实现由 boot 注入(见下)
   readonly transcripts: TranscriptStore = new TranscriptStore();
   readonly downloads: DownloadStore = new DownloadStore();
@@ -81,6 +84,7 @@ export class AppContainer {
     // 异步进行,不阻塞首帧;未就绪时引导卡不显示(见 GuideEpisode.available)。
     GuideEpisode.prepare(ctx);
     this.stamps.load();
+    this.notes.load();
     /**
      * 逐字稿:这里装配的只是**状态机与本地缓存**(私有目录读写),不联网、不碰权限,
      * 所以放在同意隐私政策之前没有问题(与上面几个 store 同一性质)。
@@ -97,7 +101,7 @@ export class AppContainer {
     this.listenStats.load();
     this.listenStats.seedFromHistory(this.history.history);
 
-    Log.i('App', `本地数据就绪 订阅=${this.subscriptions.subscriptions.length} 收藏=${this.favorites.favorites.length} 历史=${this.history.history.length} 最新=${this.inbox.episodes.length}`);
+    Log.i('App', `本地数据就绪 订阅=${this.subscriptions.subscriptions.length} 收藏=${this.favorites.favorites.length} 历史=${this.history.history.length} 最新=${this.inbox.episodes.length} 批注=${this.notes.notes.length}`);
 
     // 以上全是**本地读写**,不联网、不读系统网络信息,可以在同意隐私政策之前做。
     // 联网相关的装配一律推到 startGated(同意后由 Index 调用)。

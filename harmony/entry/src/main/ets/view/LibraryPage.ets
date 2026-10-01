@@ -1,4 +1,4 @@
-import { Scheme, TypeScale, Metrics } from '../theme/Theme';
+import { Scheme, TypeScale, Metrics, Tracking, LineHeight, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
 import { AppContainer } from '../AppContainer';
@@ -7,9 +7,10 @@ import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores'
 import { InboxStore } from '../store/InboxStore';
 import { DownloadStore } from '../store/DownloadStore';
 import { DownloadManager } from '../playback/DownloadManager';
+import { NoteStore, EpisodeNote } from '../store/NoteStore';
 import { PlayerController } from '../playback/PlayerController';
-import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym } from './Widgets';
-import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, PlayModeButton, ConfirmDialog, ConfirmSpec } from './Components';
+import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym, Artwork } from './Widgets';
+import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, PlayModeButton, ConfirmDialog, ConfirmSpec, formatTime } from './Components';
 import { Log } from '../util/Logger';
 
 /**
@@ -49,9 +50,12 @@ export struct LibraryPage {
   @ObjectLink favorites: FavoriteStore;
   @ObjectLink downloads: DownloadStore;
   @ObjectLink history: HistoryStore;
+  @ObjectLink notes: NoteStore;
   @ObjectLink downloadManager: DownloadManager;
   onOpenPodcast: (p: Podcast) => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
+  /// 批注行:从**那一秒**起播(由 Index 走 `player.playAt`,与 `onPlayEpisode` 不是一条路)
+  onPlayNote: (n: EpisodeNote) => void = () => {};
   onOpenSettings: () => void = () => {};
   onOpenListenStats: () => void = () => {};
 
@@ -73,7 +77,16 @@ export struct LibraryPage {
   @State pendingDelete: ConfirmSpec | null = null;
 
   private app: AppContainer = AppContainer.get();
-  private segments(): string[] { return [L.s('lib_subscriptions'), L.s('lib_inbox'), L.s('lib_favorites'), L.s('lib_downloads'), L.s('lib_history')]; }
+  /**
+   * 六个分段。与 Android `LibraryScreen` 同序(订阅 / 最新 / 收藏 / 下载 / 历史 / 批注)。
+   *
+   * 顺序在两端必须一致:`docs/FEATURES.md` 的分栏叙述、分段条右端那颗动作按 `this.seg === N`
+   * 判断、以及用户的肌肉记忆都挂在这些序号上。加新段只能**加在末尾**。
+   */
+  private segments(): string[] {
+    return [L.s('lib_subscriptions'), L.s('lib_inbox'), L.s('lib_favorites'),
+      L.s('lib_downloads'), L.s('lib_history'), L.s('lib_notes')];
+  }
 
   aboutToAppear(): void {
     // 进音阁即按需刷新「最新」(订阅集未变则跳过,避免切 tab 反复全量刷)
@@ -112,6 +125,7 @@ export struct LibraryPage {
             this.favoritesSection()
             this.downloadsSection()
             this.historySection()
+            this.notesSection()
           }
           .index(this.seg)
           .loop(false)
@@ -232,6 +246,14 @@ export struct LibraryPage {
     if (this.seg === 3) {
       PlayModeButton({ scheme: this.scheme, player: this.player, tag: TAG_DL })
     }
+    /**
+     * 第 6 段(批注)**刻意没有动作**,不是漏做:
+     *  · 不放播放模式那颗 —— 批注是跨集的时间线,点一行只把**那一集**放进队列
+     *    (`playAt`),没有"这一列接下来播什么"可言,模式按钮在这里没有作用对象;
+     *  · 不放「清空」—— 那是用户自己写的字,批量删除一刀切下去没有任何找回办法。
+     *    `NoteStore` 也刻意没有 `clear()`(与 HistoryStore 有 clear 相对)。
+     * 装机时别把它当成缺的一项补回来。
+     */
   }
 
   /// 拖动位移 → 目标页。位移过半才算切,并夹在合法范围内。
@@ -521,6 +543,126 @@ export struct LibraryPage {
 
   private historyEpisodes(): Episode[] {
     return this.history.history.map((h: HistoryRow) => h.episode);
+  }
+
+  // ── 批注 ──
+  /**
+   * 全局批注时间线:所有集的批注按**书写时间**倒排,新写的置顶。
+   *
+   * 为什么不是按单集分组、也不是按 `positionMs` 排:这个列表要回答的是
+   * "我都在哪些时刻停下来写过话",那正是书写时刻的顺序;分组会把刚写的那条埋进某一集里。
+   */
+  @Builder
+  notesSection() {
+    Column() {
+      if (this.notes.notes.length === 0) {
+        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('note_empty') })
+      } else {
+        List() {
+          // 顶部占位:理由见订阅段同名注释
+          ListItem() {
+            Row().width('100%').height(CHIPS_RESERVE_H)
+          }
+          ForEach(this.notes.notes, (n: EpisodeNote) => {
+            ListItem() {
+              this.noteRowItem(n)
+            }
+          }, (n: EpisodeNote) => n.noteId)
+        }
+        .scrollBar(BarState.Off)
+        .contentEndOffset(this.bottomPad)
+        .width('100%').height('100%')
+      }
+    }
+    .width('100%').height('100%')
+  }
+
+  /**
+   * 一行批注:封面(叠播放态)+ 自己写的那句话 + 那一秒的徽标 + 所属单集名 + 行末删除。
+   *
+   * 字号取本端的 `TypeScale.body`(14vp)而不是数值上的 16 —— 与其余各段的**主行**同档
+   * (见 `EpisodeListItem` 那条"正文号对齐 Android bodyLarge"的注释:1vp ≈ 1.18 标准 dp,
+   * 14vp 占屏与 16sp 相等)。照数值抄会让这一段的行比另五段大一圈。
+   */
+  @Builder
+  noteRowItem(n: EpisodeNote) {
+    Row({ space: 12 }) {
+      Stack() {
+        Artwork({ scheme: this.scheme, url: n.episode.artworkUrl, dim: 52, corner: 10 })
+        Row()
+          .width(52).height(52)
+          .borderRadius(10)
+          .backgroundColor(withAlpha('#000000', this.isNoteCurrent(n) ? 0.42 : 0.28))
+        Glyph({
+          symbol: this.isNoteCurrent(n) && this.player.isPlaying ? Sym.pauseFill : Sym.playFill,
+          dim: 24, color: Color.White
+        })
+      }
+      .width(52).height(52)
+
+      Column({ space: 4 }) {
+        Text(n.text)
+          .fontSize(TypeScale.body * this.fontScale)
+          .letterSpacing(Tracking.body)
+          .lineHeight(TypeScale.body * this.fontScale * LineHeight.body)
+          .fontColor(this.scheme.onBackground)
+          .maxLines(3)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .width('100%')
+        Row({ space: 8 }) {
+          // 那一秒:primary 低饱和底 + primary 字,与时间徽标在 Android 同一形态。
+          // 它是这一行的**语义核心**(功能就叫"写下这一秒"),所以不能用灰字。
+          Text(formatTime(n.positionMs))
+            .fontSize(TypeScale.caption * this.fontScale)
+            .fontColor(this.scheme.primary)
+            .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+            .backgroundColor(withAlpha(this.scheme.primary, 0.12))
+            .borderRadius(6)
+          Text(n.episode.title)
+            .fontSize(TypeScale.caption * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+            .flexShrink(1)
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+      }
+      .alignItems(HorizontalAlign.Start)
+      .layoutWeight(1)
+
+      // 行末删除。图标名取自 SDK 系统资源表(见 Widgets.Sym.noteDelete),
+      // 命中区外扩到 36 见方、并截断冒泡 —— 否则这点触摸会被"点行播放"吃掉。
+      Glyph({ symbol: Sym.noteDelete, dim: 20, color: this.scheme.onSurfaceVariant })
+        .accessibilityText(L.s('a11y_note_delete'))
+        .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+        .onTouch((event: TouchEvent) => event.stopPropagation())
+        .onClick(() => { this.askDeleteNote(n); })
+    }
+    .width('100%')
+    .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+    .alignItems(VerticalAlign.Top)
+    .onClick(() => this.onPlayNote(n))
+  }
+
+  private isNoteCurrent(n: EpisodeNote): boolean {
+    return this.player.current !== null && this.player.current.id === n.episode.id;
+  }
+
+  /**
+   * 删一条批注前先确认,**并把被删的那句话写进正文**。
+   *
+   * 与「删除下载」同一口径(那边装机反馈过"没有确认提示")。这里更进一步:
+   * 批注是用户自己写的字,删掉没有任何东西能补回来,而列表里同时躺着好几条形似的短句 ——
+   * 只问"确定删除这条批注吗"不够,框里必须看得见要消失的是哪句话。
+   */
+  private askDeleteNote(n: EpisodeNote): void {
+    this.pendingDelete = new ConfirmSpec(
+      L.s('note_delete_title'),
+      L.f('note_delete_message', n.text),
+      L.s('action_delete'),
+      () => { this.notes.remove(n.noteId); }
+    );
   }
 }
 

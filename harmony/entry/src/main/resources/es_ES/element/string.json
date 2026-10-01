@@ -917,6 +917,42 @@
       "value": "Sello · Marca de escucha"
     },
     {
+      "name": "lib_notes",
+      "value": "Anotaciones"
+    },
+    {
+      "name": "note_empty",
+      "value": "Aún no hay anotaciones. En el reproductor toca Más → Escribir una anotación para guardar el segundo que te ha llegado"
+    },
+    {
+      "name": "note_add",
+      "value": "Escribir una anotación"
+    },
+    {
+      "name": "note_title",
+      "value": "Guardar este segundo"
+    },
+    {
+      "name": "note_hint",
+      "value": "¿Qué te ha venido a la mente?"
+    },
+    {
+      "name": "note_delete_title",
+      "value": "Eliminar la anotación"
+    },
+    {
+      "name": "note_delete_message",
+      "value": "Esta anotación se eliminará y no podrá recuperarse.\n\n« %1$s »"
+    },
+    {
+      "name": "a11y_note_delete",
+      "value": "Eliminar la anotación"
+    },
+    {
+      "name": "action_save",
+      "value": "Guardar"
+    },
+    {
       "name": "stamp_edit",
       "value": "Editar sello · Marca de escucha"
     },
@@ -962,7 +998,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Descubrir: explora listas diarias por región y categoría\n· Buscar: encuentra programas o episodios por palabra clave, o pega una URL RSS\n· Compartir programas: crea una imagen con portada, título, descripción y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Biblioteca: suscripciones, novedades, favoritos, descargas e historial\n· Sin conexión: descarga episodios, opcionalmente solo con Wi-Fi\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano y pantalla de bloqueo\n· Transcripción: en los episodios cuyo editor la ofrece, puedes leer mientras escuchas\n· Notas del programa: desliza en la página del reproductor\n· Avisos de novedades: notificación cuando llega un episodio nuevo\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño de texto, color de acento, varios idiomas"
+      "value": "· Descubrir: explora listas diarias por región y categoría\n· Buscar: encuentra programas o episodios por palabra clave, o pega una URL RSS\n· Compartir programas: crea una imagen con portada, título, descripción y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Biblioteca: seis apartados — suscripciones, novedades, favoritos, descargas, historial y anotaciones\n· Sin conexión: descarga episodios, opcionalmente solo con Wi-Fi\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano y pantalla de bloqueo\n· Transcripción: en los episodios cuyo editor la ofrece, puedes leer mientras escuchas\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del programa: desliza en la página del reproductor\n· Avisos de novedades: notificación cuando llega un episodio nuevo\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño de texto, color de acento, varios idiomas"
     },
     {
       "name": "about_h_philosophy",
@@ -1006,7 +1042,7 @@
     },
     {
       "name": "privacy_consent_body",
-      "value": "Reverb procesa la mayoría de los datos en tu dispositivo. No tiene servidor del desarrollador, cuenta, anuncios, analítica, atribución, inicio de sesión o notificaciones push de terceros, informes de fallos ni seguimiento entre aplicaciones. Suscripciones, historial, favoritos, descargas, estadísticas de escucha, ajustes, un identificador aleatorio de instalación y registros se procesan localmente y no se suben automáticamente al desarrollador. La versión HarmonyOS usa capacidades del sistema y código propio. Desde la versión 1.0.2, si la copia de seguridad está activada en los ajustes del sistema («Copia de seguridad y restauración», el espacio en la nube del sistema o Phone Clone de HarmonyOS), el sistema operativo copia suscripciones, favoritos, historial, registros de descargas (solo enlaces), sellos, estadísticas de escucha y ajustes a tu propia cuenta de nube del sistema o al nuevo dispositivo; el audio, las cachés de transcripciones y de listas, y los registros no se incluyen, y el interruptor está en los ajustes del sistema.\n\nAl conectarse, los términos de búsqueda, la región o la categoría se envían a directorios públicos como Apple, fyyd y gpodder. RSS, portadas, audio y transcripciones se solicitan directamente a editores o alojadores, que ven tu IP, User-Agent y el recurso solicitado. Los registros pueden contener identificadores de programa o episodio y los nombres de host de los servicios consultados; solo salen de la app si eliges compartirlos o exportarlos. Consulta la política completa.\n\nAl pulsar «Aceptar y continuar» confirmas que has leído y aceptas esta política."
+      "value": "Reverb procesa la mayoría de los datos en tu dispositivo. No tiene servidor del desarrollador, cuenta, anuncios, analítica, atribución, inicio de sesión o notificaciones push de terceros, informes de fallos ni seguimiento entre aplicaciones. Suscripciones, historial, favoritos, descargas, estadísticas de escucha, ajustes, un identificador aleatorio de instalación y registros se procesan localmente y no se suben automáticamente al desarrollador. La versión HarmonyOS usa capacidades del sistema y código propio. Desde la versión 1.0.2, si la copia de seguridad está activada en los ajustes del sistema («Copia de seguridad y restauración», el espacio en la nube del sistema o Phone Clone de HarmonyOS), el sistema operativo copia suscripciones, favoritos, historial, registros de descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes a tu propia cuenta de nube del sistema o al nuevo dispositivo; el audio, las cachés de transcripciones y de listas, y los registros no se incluyen, y el interruptor está en los ajustes del sistema.\n\nAl conectarse, los términos de búsqueda, la región o la categoría se envían a directorios públicos como Apple, fyyd y gpodder. RSS, portadas, audio y transcripciones se solicitan directamente a editores o alojadores, que ven tu IP, User-Agent y el recurso solicitado. Los registros pueden contener identificadores de programa o episodio y los nombres de host de los servicios consultados; solo salen de la app si eliges compartirlos o exportarlos. Consulta la política completa.\n\nAl pulsar «Aceptar y continuar» confirmas que has leído y aceptas esta política."
     },
     {
       "name": "privacy_consent_asr",

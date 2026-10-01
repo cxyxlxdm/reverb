@@ -104,6 +104,14 @@ export class Sym {
   static readonly down: Resource = $r('sys.symbol.chevron_down');               // Rounded.KeyboardArrowDown
   static readonly speed: Resource = $r('sys.symbol.slider_horizontal_2');       // Rounded.Tune(倍速)
   static readonly footprint: Resource = $r('sys.symbol.checkmark_square_fill'); // 听觉足迹(印记)
+  /**
+   * 批注行末的删除。Android 侧是 `Icons.Rounded.DeleteOutline`。
+   *
+   * 名字取自 SDK 的系统资源表(`toolchains/id_defined.json` 里 type=symbol 的 `trash`),
+   * 不是猜的 —— Widgets 顶部写着:`sys.symbol.*` **写错不报错、直接空白**,
+   * 所以此前每次换这类资源都得真机看一眼;这次装机前只做到"表里有这个名"。
+   */
+  static readonly noteDelete: Resource = $r('sys.symbol.trash');                // Rounded.DeleteOutline
 }
 
 /// 顶层页大标题头:标题 + 可选副标 + 右侧动作插槽 + 下方一道「梁金」细线。
