@@ -381,8 +381,15 @@ object PlayerController {
             log.i(TAG, "restore upNext=${snap.upNext.size}")
         }
         // 引导音频不是一集真正的节目,不该在重启后又冒出来占住播放条
-        val cur = snap.current?.takeUnless { com.yuyin.reverb.data.model.GuideEpisode.isGuide(it.id) }
+        val saved = snap.current
+        val cur = saved?.takeUnless { com.yuyin.reverb.data.model.GuideEpisode.isGuide(it.id) }
         if (cur == null) {
+            // 读侧跳过之外还要**重写一次**:否则引导音频会一直留在文件里,
+            // 每次冷启动都白跳一遍,而它占着的那格本可以放真正在播的那一集。
+            if (saved != null) {
+                log.i(TAG, "restore 忽略引导音频,重写播放态")
+                persistState()
+            }
             updateNavFlags()
             return
         }
@@ -391,6 +398,11 @@ object PlayerController {
         _activeListTag.value = snap.listTag
         // 先按那一列存着的模式建好随机表,再装载(顺序错了会让随机模式的下一集指回原列表)
         applyPlayMode(modeFor(snap.listTag))
+        // **上/下一集的可点状态要在这里刷一次,不是"反正播起来会刷"**:恢复走的是直接装载
+        // (不调 playQueue),而 `syncOnce` 只同步进度与播放态、不碰这两个 flag;
+        // 预载又是暂停态,`onIsPlayingChanged` 也不会为它触发一次。
+        // 少这一行的症状是"重启后那两颗按钮灰着,按下播放才亮" —— 而这一列的上下文明明已经读回来了。
+        updateNavFlags()
         log.i(TAG, "restore cur='${cur.title}' ctx=${queue.size}@$queueIndex tag='${snap.listTag}' mode=${_playMode.value}")
         playEpisode(cur, autoplay = false)
     }
