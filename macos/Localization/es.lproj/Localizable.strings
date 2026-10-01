@@ -220,3 +220,13 @@
 "已收听 %@" = "Escuchado %@";
 "还没有收听记录" = "Aún no hay registros de escucha";
 "未知频道" = "Canal desconocido";
+
+/* Notes · 批注(写下这一秒) */
+"批注" = "Anotaciones";
+"写批注" = "Escribir una anotación";
+"记下这一秒" = "Guardar este segundo";
+"此刻想到什么，写下来" = "¿Qué te ha venido a la mente?";
+"还没有写过批注" = "Aún no hay anotaciones";
+"回到那一秒" = "Volver a ese segundo";
+"删除批注" = "Eliminar la anotación";
+"将删除这条批注，无法恢复。\n\n「%@」" = "Esta anotación se eliminará y no podrá recuperarse.\n\n« %@ »";

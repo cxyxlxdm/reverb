@@ -75,6 +75,11 @@ final class PlayerController: ObservableObject {
     private var itemStatusObserver: AnyCancellable?
     private var loadRetries = 0
     private var lastIsRadio = false
+    /// 批注「跳回那一秒」用的一次性起点覆盖。`-1` = 没有覆盖(所以入口不能写 0)。
+    private var startMsOverride = -1
+    /// 本次起播的起点是**用户明确指定的那一秒**还是一条**续播进度**。
+    /// 两者容差不同,见 `playAt(_:startMs:)` 与 `playEpisode` 里取 resumeMs 的那一段。
+    private var pendingSeekExplicit = false
 
     private var history: HistoryStore?
     private var settings: SettingsStore?
@@ -229,6 +234,20 @@ final class PlayerController: ObservableObject {
 
     func playOrToggle(_ episode: Episode) { playOrToggle(episode, queue: [episode]) }
 
+    /// 播这一集,并从**调用方指定的那一秒**起播(批注「跳回那一秒」)。
+    ///
+    /// 三点都是必须的,不是风格:
+    /// - 不走 `playOrToggle`:那一集正在播时它会被判成「按暂停」,点了没反应;
+    /// - 队列只放这一集(与 Android / 鸿蒙同口径,批注不是列表播放);
+    /// - 起点写进 `startMsOverride`,由 `playEpisode` 在取续播点那里消费 ——
+    ///   **不能在入口就清掉**:`handleLoadFailure` 那次自动重试会再进一次 `playEpisode`,
+    ///   入口清掉的话重试那轮读到的就是「没有覆盖」,批注从此变成"从头播"。
+    func playAt(_ episode: Episode, startMs: Int) {
+        Log.i("Player", "playAt \(startMs)ms id=\(episode.id)")
+        startMsOverride = startMs > 0 ? startMs : 0
+        play(episode)
+    }
+
     // MARK: - 播放模式
 
     /// 某一列该按什么走法播;没设过的列用回落值(`""` 那一格)。
@@ -338,7 +357,21 @@ final class PlayerController: ObservableObject {
         // 否则"收听时长"榜首会是引导音频,「继续收听」里也会挂着它。
         let isGuide = GuideEpisode.isGuide(episode.id)
         if !isGuide { history?.record(episode, at: Date().timeIntervalSince1970) }
-        let resumeMs = isGuide ? 0 : (history?.positionFor(episode.id) ?? 0)
+        // 起点有三个来源,优先级就按写的这个顺序:
+        // ① 调用方明确指定的那一秒(批注)—— 消费掉 override,只生效一次;
+        // ② 引导音频永远从头;③ 否则才是续播进度。
+        let resumeMs: Int
+        if startMsOverride >= 0 {
+            resumeMs = startMsOverride
+            startMsOverride = -1
+            pendingSeekExplicit = true
+        } else if isGuide {
+            resumeMs = 0
+            pendingSeekExplicit = false
+        } else {
+            resumeMs = history?.positionFor(episode.id) ?? 0
+            pendingSeekExplicit = false
+        }
         // 统计基线对齐到续播起点,避免把 resume 跳转记成收听
         lastCountedEpId = episode.id
         lastCountedPosMs = resumeMs
@@ -370,7 +403,22 @@ final class PlayerController: ObservableObject {
             }
         player.replaceCurrentItem(with: item)
         observeEnd(of: item)
-        if resumeMs > 3000 { player.seek(to: CMTime(value: Int64(resumeMs), timescale: 1000)) }
+        // **明确跳转与续播是两套容差,不能共用一个 `if`**:
+        // 续播只看「>3 秒才回跳」(macOS 从来没有另两端"距片尾 10 秒内不如从头播"那条启发式,
+        // 这次也不给它加);而用户指定的一秒必须跳得进去 —— 写在片尾 8 秒处的批注若吃续播那条
+        // 规则就永远点不开,而那恰恰是用户要的位置。它只受「别跳出片尾」约束,上限用 RSS 元数据
+        // 时长减 2 秒:此刻 `durationMs` 还没被 `onTick` 填上(AVPlayer 的时长要等 item 加载),
+        // 而元数据缺失(0)时**不设上限** —— 让 AVPlayer 自己收在末尾,好过把合法跳点判死。
+        let metaMs = episode.durationSec * 1000
+        let ceiling = metaMs > 0 ? metaMs - 2000 : Int.max
+        let explicit = pendingSeekExplicit
+        pendingSeekExplicit = false
+        let ok = explicit ? resumeMs < ceiling : resumeMs > 3000
+        if ok {
+            player.seek(to: CMTime(value: Int64(resumeMs), timescale: 1000))
+        } else {
+            Log.i("Player", "跳点落空 seek=\(resumeMs) metaDur=\(metaMs) explicit=\(explicit) id=\(episode.id)")
+        }
         player.volume = 0
         player.play()
         player.rate = Float(speed)

@@ -75,6 +75,13 @@ enum Fmt {
             : String(format: NSLocalizedString("%lld 分钟", comment: ""), Int64(m))
     }
 
+    /// 集内时刻 `mm:ss`(批注行上的那一秒徽标与写批注弹窗共用;超过一小时就一直往上涨,
+    /// 与播放页 `timeText` 同格式 —— 这里要的是"那一秒在第几分钟",不是可读的时长摘要)。
+    static func clock(_ ms: Int) -> String {
+        let total = max(0, ms) / 1000
+        return String(format: "%d:%02d", total / 60, total % 60)
+    }
+
     /// 去除 HTML 标签与常见实体,得到干净文本(RSS 简介常含 HTML)。
     /// 保留段落/换行:<br> 与块级标签转为换行,避免整段糊成一坨。
     static func plainText(_ raw: String) -> String {

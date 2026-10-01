@@ -10,6 +10,7 @@ final class AppEnvironment: ObservableObject {
     let favorites = FavoriteStore()
     let history = HistoryStore()
     let stamps = StampStore()
+    let notes = NoteStore()
     let inbox = InboxStore()
     let settings = SettingsStore()
     let player = PlayerController()
@@ -31,16 +32,17 @@ final class AppEnvironment: ObservableObject {
         listenStats.seedFromHistory(history.history)   // 首启用历史近似种子(仅当无既有统计)
         player.localFileProvider = { [downloads] ep in downloads.localURL(ep.id) }
 
-        // 把低频本地存储的变更转发到自身,使观察 env 的视图能即时刷新(订阅/收藏/印记/历史/下载)。
+        // 把低频本地存储的变更转发到自身,使观察 env 的视图能即时刷新(订阅/收藏/印记/批注/历史/下载)。
         // 不转发高频的 player(每 0.5s 进度)/settings,以免整树无谓重渲。
         for pub in [subscriptions.objectWillChange, favorites.objectWillChange,
-                    history.objectWillChange, stamps.objectWillChange, inbox.objectWillChange,
+                    history.objectWillChange, stamps.objectWillChange, notes.objectWillChange,
+                    inbox.objectWillChange,
                     downloads.objectWillChange, downloadManager.objectWillChange] {
             pub.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         }
 
         let lang = settings.language.isEmpty ? "auto(\(Locale.preferredLanguages.first ?? "?"))" : settings.language
-        Log.i("App", "本地数据就绪 region=\(region) language=\(lang) 订阅=\(subscriptions.subscriptions.count) 收藏=\(favorites.favorites.count) 历史=\(history.history.count) 印记=\(stamps.stamps.count) 下载=\(downloads.downloads.count)")
+        Log.i("App", "本地数据就绪 region=\(region) language=\(lang) 订阅=\(subscriptions.subscriptions.count) 收藏=\(favorites.favorites.count) 历史=\(history.history.count) 印记=\(stamps.stamps.count) 批注=\(notes.notes.count) 下载=\(downloads.downloads.count)")
     }
 
     /// 当前生效地区:设置覆盖优先,否则跟随系统区域,再退化为 us。

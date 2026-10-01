@@ -3,14 +3,18 @@ import Foundation
 /// 备份 / 恢复(合并语义)+ OPML 导入导出。
 enum BackupManager {
     /// 可备份的数据分区。
+    ///
+    /// **顺序与 Android `BackupManager.Section` / 鸿蒙那份一一对应**(notes 都紧跟 stamps):
+    /// 恢复弹窗按这个顺序列勾选框,两端同一份 `reverb-backup.json` 时用户看到的次序才一致。
     enum Section: String, CaseIterable, Identifiable {
-        case subscriptions, favorites, stamps, downloads, history, listenStats, settings
+        case subscriptions, favorites, stamps, notes, downloads, history, listenStats, settings
         var id: String { rawValue }
         var label: String {
             switch self {
             case .subscriptions: return "订阅"
             case .favorites: return "收藏"
             case .stamps: return "听觉印记"
+            case .notes: return "批注"
             case .downloads: return "下载"
             case .history: return "历史"
             case .listenStats: return "收听时长"
@@ -42,6 +46,7 @@ enum BackupManager {
         var subscriptions: [Podcast]?
         var favorites: [Episode]?
         var stamps: [Stamp]?
+        var notes: [EpisodeNote]?
         var downloads: [Episode]?   // 仅保存单集元信息,恢复时重新下载
         var history: [HistoryEntry]?
         var listenStats: [ChannelListen]?   // 按设备分账,恢复时按设备取 max(幂等)
@@ -56,6 +61,7 @@ enum BackupManager {
         if include.contains(.subscriptions) { p.subscriptions = env.subscriptions.subscriptions }
         if include.contains(.favorites) { p.favorites = env.favorites.favorites }
         if include.contains(.stamps) { p.stamps = env.stamps.stamps }
+        if include.contains(.notes) { p.notes = env.notes.notes }
         if include.contains(.downloads) { p.downloads = env.downloads.downloads.map { $0.episode } }
         if include.contains(.history) { p.history = env.history.history }
         if include.contains(.listenStats) { p.listenStats = env.listenStats.snapshot() }
@@ -73,7 +79,7 @@ enum BackupManager {
             Log.e("Backup", "导出编码失败")
             return "{}"
         }
-        Log.i("Backup", "导出备份 分区=[\(include.map { $0.rawValue }.sorted().joined(separator: ","))] 订阅=\(p.subscriptions?.count ?? 0) 收藏=\(p.favorites?.count ?? 0) 印记=\(p.stamps?.count ?? 0) 下载=\(p.downloads?.count ?? 0) 历史=\(p.history?.count ?? 0)")
+        Log.i("Backup", "导出备份 分区=[\(include.map { $0.rawValue }.sorted().joined(separator: ","))] 订阅=\(p.subscriptions?.count ?? 0) 收藏=\(p.favorites?.count ?? 0) 印记=\(p.stamps?.count ?? 0) 批注=\(p.notes?.count ?? 0) 下载=\(p.downloads?.count ?? 0) 历史=\(p.history?.count ?? 0)")
         return str
     }
 
@@ -85,6 +91,7 @@ enum BackupManager {
         if let v = p.subscriptions, !v.isEmpty { s.insert(.subscriptions) }
         if let v = p.favorites, !v.isEmpty { s.insert(.favorites) }
         if let v = p.stamps, !v.isEmpty { s.insert(.stamps) }
+        if let v = p.notes, !v.isEmpty { s.insert(.notes) }
         if let v = p.downloads, !v.isEmpty { s.insert(.downloads) }
         if let v = p.history, !v.isEmpty { s.insert(.history) }
         if let v = p.listenStats, !v.isEmpty { s.insert(.listenStats) }
@@ -105,6 +112,7 @@ enum BackupManager {
         if include.contains(.subscriptions), let v = p.subscriptions { Log.i("Backup", "恢复订阅 \(v.count) 条"); env.subscriptions.addAll(v) }
         if include.contains(.favorites), let v = p.favorites { Log.i("Backup", "恢复收藏 \(v.count) 条"); env.favorites.addAll(v) }
         if include.contains(.stamps), let v = p.stamps { Log.i("Backup", "恢复印记 \(v.count) 条"); env.stamps.addAll(v) }
+        if include.contains(.notes), let v = p.notes { Log.i("Backup", "恢复批注 \(v.count) 条"); env.notes.addAll(v) }
         if include.contains(.downloads), let v = p.downloads {
             let toDownload = v.filter { !env.downloads.contains($0.id) }
             Log.i("Backup", "恢复下载 需重新下载 \(toDownload.count) 集")

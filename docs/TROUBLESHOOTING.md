@@ -4183,6 +4183,9 @@ VoiceOver 读到 —— 界面一帧都没跑起来看过(逐条在 ROADMAP 三-
 否则下一个人(或下一个我)会把它当成代码问题去查。
 ④ 工具链不够时,**基线差分的 typecheck** 仍是有价值的验收:它能证明"没引入新错误",
 但**不能**证明界面与行为正确 —— 这两件事要分开说,不许合成一句"已验证"。
+(**这条判据本身后来发现有一个洞:上面那句"改前改后都是同一组 4 条"其实证明不了
+第 5 个文件之后有没有被检查 —— `swiftc -typecheck` 在第一个报错的文件之后就不再有意义地继续。
+正确的比法是"两边都中性化到 0 + 三道阳性对照",见 H128。**)
 
 **补记(同日,「出包并验证」这一跳为什么跳不过去)**:上一条把原因写成"Swift 版本不够 + 没 Xcode",
 那只是前两层;真去试出包时撞到第三层,而且这一层更硬。逐层实测:
@@ -4410,3 +4413,81 @@ AVPlayer 此刻的状态机,而我们要保的是"这一段还在出声的连续
 但它把"这条 id 是谁的"写在了磁盘格式上,后来的人不需要读实现就知道不能合并。
 ③ **"写了之后自己读一遍"是编译之外最便宜的一道验收。** 这一条省下的是装机之后
 一整轮"整个功能不可用"的取证 —— 而那轮取证的第一嫌疑会是播放器,不是存储。
+
+---
+
+### H128. macOS 那套「基线差分 typecheck」有一条覆盖洞:**第一个报错的文件之后,其余文件根本没被检查**
+
+**现象**(2026-10-01,做批注 macOS 同构、想给出比 H124 更强的验收时暴露):
+H124 记下的判据是"改前改后错误集**逐条相同**(4 条,全在没碰过的 `TranscriptPage.swift`)⇒ 没引入新错误"。
+这次照同一个办法跑,基线里却冒出**新的**错误(`MainActor.assumeIsolated` ×4),
+而把我自己写错的两处(`TextEditor(text:prompt:)`、`LibraryView.body` 超时)修完之后,
+两边的条数也对不上了。于是我给当前树**注入 5 个故意错误**(分布在不同文件),
+`swiftc -typecheck` **只报了 1 条**。
+=> 那句"两边都是 4 条"**从来没有证明过其余文件被检查过**。它比的是编译器**愿意报多少**,
+不是编译器**检查了多少**。
+
+**根因**:整模块 `swiftc -typecheck` 是**一次批次**,遇到第一个含错误的文件之后就不再
+有意义地继续。两类都实测过(在已经中性化到 0 错误的 scratch 树上):
+- **语法错**:我在类型作用域里插了一行 `_ = startMs.__ctrl4()`(语句出现在成员位置)⇒
+  整模块**只报这个文件的 4 条 parse 错误**,别的文件里同时存在的语义错一条都不出现。
+  这一类最危险:症状长得像"这个文件别处写错了",而它其实把**全模块**的检查提前收工了。
+- **语义错**:在两个不同文件各注入一个不存在的成员 ⇒ **只报先被处理的那个文件里的那一条**;
+  把先那个撤掉,后一个才浮出来。
+所以"错误集相同"这个比法只在**两边都为 0** 时才成立;条数一致、位置一致都不算。
+
+**修法(两步,顺序不能反)**:
+
+1. **先把两份树(base 与 cur)都中性化到 0 错误**,差分才有意义。本机(Swift 5.7.2 /
+   CLT / SDK 13.1)对**未改动的 HEAD 源码**就要中性化 **7 类 / 18 处调用点 + 1 个整文件**,
+   而且这些**全是既有代码**,不是本轮引入的负担 —— 它们在真实构建机(Xcode 15+ / 更旧 SDK 无所谓、这里是 26)上本来就能编:
+
+   | 位置 | 处数 | 本机过不了的原因 | scratch 里怎么中性化(**不动工作区**) |
+   |---|---|---|---|
+   | `UI/TranscriptPage.swift` 双参数 `onChange` | 4 | macOS 14 | 退回旧签名 `{ new in` |
+   | `UI/PlayerView.swift` 轮播 | 6(`containerRelativeFrame` ×3 + `scrollTargetLayout` / `scrollTargetBehavior` / `scrollPosition` 各 1) | macOS 14 | `carousel(_:)` 整段替成 `playerPage(ep)`(这 6 处全在该函数内) |
+   | `UI/Theme.swift` `focusEffectDisabled` | 1 | macOS 14 | 替成 `self`;连带 `themedSheet` 补 `@MainActor` |
+   | `RootView.swift` `SettingsLink` | 2 | macOS 14 | 替成 `Image` |
+   | `Playback/PlayerController.swift` `MainActor.assumeIsolated` | 4 | Swift 5.10 API | 加一个 `func mainShim<T>(_ body: @MainActor () -> T) -> T` 只替名字 —— **闭包仍按 MainActor 检查,判据没降级** |
+   | `Data/Stores.swift` `nonisolated(unsafe)` | 1 | **Swift 5.10 语法,连解析都过不了**(报 `expected 'var' keyword`) | 删掉这个修饰符 |
+   | `Data/Transcriber.swift` `SpeechAnalyzer` / `SpeechTranscriber` / `AssetInventory` | 整文件 6 处符号(`@available(macOS 26, *)` 的整个 enum) | macOS 26 SDK | 用**同签名**的 stub 替掉整文件 |
+
+2. **跑三道阳性对照**,证明那个 0 不是"没检查":在 `UI/LibraryView.swift` 的 `body` 里、
+   `Data/Stores.swift` 的 `NoteStore.add` 里、`Playback/PlayerController.swift` 的 `playAt` 里
+   各注入一个**语义错**(访问不存在的成员),**每次只留一个**,各自都必须在下一轮被报出来。
+   三道全部命中 ⇒ 这三份文件确实在这批检查之内。撤掉注入后:**base 0 条 / cur 0 条**,
+   这个 0 才是可比的。
+
+**验收方式**(处理量先行 —— 没有"扫了多少",那个 0 不成立):
+`macos/Sources` **38 个 `.swift` / 297,071 B**;两棵 scratch 树各 **39 个文件**(38 + 1 个中性化 shim),
+即 base 与 cur 覆盖的是同一份文件集。
+✅ 中性化后整模块 typecheck:基线 0 条、当前 0 条;✅ 三道阳性对照各自命中;
+✅ 四份 `.strings` `plutil -lint` 全 OK、键数 185→193 四语一致、四语键名 diff 为空、
+值里无汉字残留(`perl -CSD /\p{Han}/`)。**顺带被 lint 抓到一处真错**:en 那条删除二次确认写成
+`"…\n\n"%@""` —— 内层引号没转义,`plutil` 直接 `Unexpected character / at line 232`,
+按本仓既有写法(`"没有找到「%@」" = "No results for \"%@\""` 与 Android 的 `\"%1$s\"`)改成 `\"%@\"`。
+**这条值得单独记**:`package.sh` 的四语 lint 是这一轮唯一抓到东西的自动化检查,别省。
+❌ **界面与行为一帧都没跑起来**(本机跑不了产物,H124 补记那几层门一条没变)。
+
+**教训与可复用的规律**:
+① **差分类验收要先问"比较的那两个量,是不是同一个东西的两个子集"。**
+"错误集相同"听着对称,实际比的是编译器**报告的前缀** —— 前缀相同不代表后面相同。
+判据要么写成"两边都为 0",要么写成"逐文件",**不许写成"条数一致"**。
+② **任何"0 命中"的结论都要配一道阳性对照。** 本仓已有硬规矩"包里有 / 没有都必须可验证",
+这条是它在**静态检查**侧的同构:声明"没有错误"和声明"有错误"一样,都得有一条命令能反证。
+一次注入 = 一条反证,成本 30 秒。
+③ **"这台机器的 SDK 天花板"要按**类**记,不是按"那 4 行 `onChange`"记。**
+H124 的补记把天花板写成"`TranscriptPage.swift` 那四处",这次量出来是 **7 类 / 18 处调用点 + 1 个整文件**,
+其中 `nonisolated(unsafe)` 是**语法级**的 —— 它比"API 缺失"更早挡住解析,
+而症状长得像文件里别处写错了。下次别按 4 条估,也别以为修掉那 4 处就能全绿。
+④ **`swiftc -typecheck` 报 `unable to type-check this expression in reasonable time` 时,
+先看是不是往 `body` 里的闭包内联了格式化调用。** 本轮把
+`Text(String(format: NSLocalizedString(…), n.text))` 内联进 `confirmationDialog` 的 message 闭包,
+整个 `LibraryView.body` 就超时(与 H86「别在插值里叠 `.map(String.init)`」同源)。
+解法是**把这条字符串抽成 `body` 外的计算属性**,而不是拆视图。
+⑤ **移植功能时,新代码里"顺手加的兼容分支"要逐条问"哪一端会触发它"。**
+本轮 macOS 解码里先写了秒/毫秒归一(`ts < 1e11 → ×1000`),理由是"H86 犯过这错"。
+逐端核过写入点之后发现**三端都写毫秒**(Android `System.currentTimeMillis()` /
+鸿蒙 `Date.now()` / macOS 自己乘 1000),那条分支永远不会触发,而**它真正的代价是把未来的单位 bug
+悄悄吃掉**。已删除,并在字段注释与 `ARCHITECTURE.md` 写下"改口径要按硬规矩 11 加版本号,
+不是在解码侧兜"。

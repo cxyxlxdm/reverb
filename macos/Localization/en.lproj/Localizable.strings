@@ -220,3 +220,13 @@
 "已收听 %@" = "Listened %@";
 "还没有收听记录" = "No listening records yet";
 "未知频道" = "Unknown channel";
+
+/* Notes · 批注(写下这一秒) */
+"批注" = "Notes";
+"写批注" = "Write a note";
+"记下这一秒" = "Mark this second";
+"此刻想到什么，写下来" = "What struck you just now?";
+"还没有写过批注" = "No notes yet";
+"回到那一秒" = "Back to that second";
+"删除批注" = "Delete note";
+"将删除这条批注，无法恢复。\n\n「%@」" = "This note will be deleted for good.\n\n\"%@\"";

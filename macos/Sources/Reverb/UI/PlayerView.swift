@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// 全屏播放页:水墨波纹背景 + 封面 + 进度 + 控制 + 倍速/收藏/睡眠/印记。
+/// 全屏播放页:水墨波纹背景 + 封面 + 进度 + 控制 + 倍速/收藏/睡眠/印记/批注。
 struct PlayerView: View {
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
@@ -10,6 +10,11 @@ struct PlayerView: View {
     @State private var dragging = false
     @State private var dragValue: Double = 0
     @State private var showStamps = false
+    @State private var showNote = false
+    /// 按下「写批注」那一下冻结的时间。不能直接显示 `player.positionMs`:它每 0.5s 跟着播放器刷新,
+    /// 弹窗挂着不动就会看到时间一路往上涨,而用户要的是"我按下的那一秒"。
+    @State private var notePosMs = 0
+    @State private var noteDraft = ""
     @State private var momentURL: URL?
     @State private var momentArtwork: NSImage?
     @State private var page: Int? = 0   // 轮播当前页(macOS 14+)
@@ -315,6 +320,20 @@ struct PlayerView: View {
             .help("听觉印记")
             .popover(isPresented: $showStamps, arrowEdge: .bottom) { stampGrid(ep) }
 
+            // 批注:写下这一秒(与剪藏并列的"记下来"动作,不是分享动作)
+            Button {
+                // 时间在这里取一次:positionMs 每 0.5s 跟着播放器刷,
+                // 弹窗里显示的必须是"按下那一下"的那一秒,否则打字期间它会一路往上涨。
+                notePosMs = player.positionMs
+                noteDraft = ""
+                showNote = true
+            } label: {
+                Image(systemName: "square.and.pencil")
+            }
+            .buttonStyle(.plain)
+            .help("写批注")
+            .popover(isPresented: $showNote, arrowEdge: .bottom) { noteComposer(ep) }
+
             // 剪藏分享
             if let momentURL {
                 ShareLink(item: momentURL) { Image(systemName: "square.and.arrow.up") }
@@ -388,6 +407,55 @@ struct PlayerView: View {
     }
 
     // MARK: - 工具
+
+    /// 写批注的弹层:标题是**按下那一刻**冻结的时间,正文一句话。
+    ///
+    /// 空文字**静默丢弃**,不弹「请输入内容」—— 与 Android / 鸿蒙同一口径:
+    /// 保存按钮点了没反应就是这个界面唯一的反馈,多弹一层反而是打断。
+    private func noteComposer(_ ep: Episode) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("记下这一秒").font(.headline)
+            Text(Fmt.clock(notePosMs))
+                .font(.title3.monospacedDigit())
+                .foregroundStyle(accent)
+            Text(ep.title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            // 占位文字自己叠:TextEditor 的 `prompt:` 参数是 macOS 14 才有的,
+            // 而本包的 minos 是 13 —— 用了它就等于在 13 上要么编译失败要么运行时缺符号。
+            // (本机 SDK 13.1 的 typecheck 直接把这条挡下来了:报 `extra argument 'prompt' in call`。)
+            ZStack(alignment: .topLeading) {
+                TextEditor(text: $noteDraft)
+                    .font(.body)
+                    .frame(width: 300, height: 96)
+                if noteDraft.isEmpty {
+                    Text("此刻想到什么，写下来")
+                        .font(.body)
+                        .foregroundStyle(.secondary.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 10)
+                        .allowsHitTesting(false)
+                }
+            }
+            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.secondary.opacity(0.35)))
+            HStack {
+                Spacer()
+                Button("取消") { showNote = false }
+                    .keyboardShortcut(.cancelAction)
+                Button("保存") { saveNote(ep) }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+    }
+
+    private func saveNote(_ ep: Episode) {
+        env.notes.add(ep, positionMs: notePosMs,
+                      text: noteDraft, at: Int(Date().timeIntervalSince1970 * 1000))
+        showNote = false
+    }
 
     private func timeText(_ ms: Int) -> String {
         let total = max(0, ms) / 1000

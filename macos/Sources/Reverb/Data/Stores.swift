@@ -198,6 +198,54 @@ enum AppSupport {
     private func persist() { AppSupport.save("stamps.json", stamps) }
 }
 
+/// 听觉批注:一集可以有很多条,新写的置顶,落盘 `notes.json`(与 Android / 鸿蒙同格式)。
+@MainActor final class NoteStore: ObservableObject {
+    @Published private(set) var notes: [EpisodeNote]
+    init() {
+        // 没有可播音频地址的条目丢掉,而不是留一条"点不动"的批注 ——
+        // 列表里躺一条永远播不了的记录,比少一条更让人怀疑是 bug(与另两端同一口径)。
+        let all = AppSupport.load("notes.json", as: [EpisodeNote].self) ?? []
+        notes = all.filter { !$0.episode.audioUrl.isEmpty }
+        Log.i("Store", "批注加载 \(notes.count) 条" + (all.count > notes.count ? " 丢弃 \(all.count - notes.count) 条无音频" : ""))
+    }
+
+    /// 落一条批注。返回 nil 表示文字为空而放弃(空批注没有意义,还会在列表里成一个无法分辨的空行)。
+    ///
+    /// `positionMs` 在**这里**夹进 `[0, 该集时长]`:界面上那个时间要能代表"那一秒真的在这一集里"。
+    /// 拖进度条与 prepare 之间有个窗口,那一刻播放器给的位置可能是上一集的时长或超出本集的值
+    /// —— 硬规矩 10:不变式在数据出口一次性保证,不在渲染侧兜底。
+    @discardableResult
+    func add(_ e: Episode, positionMs: Int, text: String, at now: Int) -> EpisodeNote? {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return nil }
+        let cap = e.durationSec > 0 ? e.durationSec * 1000 : Int.max
+        let note = EpisodeNote(noteId: UUID().uuidString, episode: e,
+                               positionMs: min(max(positionMs, 0), cap), text: body, createdAt: now)
+        notes.insert(note, at: 0)
+        Log.i("Store", "批注 add id=\(note.noteId) pos=\(note.positionMs)ms len=\(body.count) total=\(notes.count)")
+        persist()
+        return note
+    }
+
+    func remove(_ noteId: String) {
+        let before = notes.count
+        notes.removeAll { $0.noteId == noteId }
+        Log.i("Store", "批注 remove id=\(noteId) -\(before - notes.count) 共 \(notes.count)")
+        persist()
+    }
+
+    /// 备份恢复:按 `noteId` 去重(同一份备份重复恢复不会写出两份),再按落笔时刻倒序。
+    func addAll(_ items: [EpisodeNote]) {
+        let before = notes.count
+        for n in items where !notes.contains(where: { $0.noteId == n.noteId }) { notes.append(n) }
+        notes.sort { $0.createdAt > $1.createdAt }
+        Log.i("Store", "批注批量合并 +\(notes.count - before)(共 \(notes.count))")
+        persist()
+    }
+
+    private func persist() { AppSupport.save("notes.json", notes) }
+}
+
 /// 应用设置(UserDefaults)。theme:0 跟随系统 /1 浅色 /2 深色 /3 纯白。
 @MainActor final class SettingsStore: ObservableObject {
     private let d = UserDefaults.standard

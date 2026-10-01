@@ -107,18 +107,27 @@ swift build -c release             # 只编译
 > **要换的是"能跑产物"的机器,不是往旧机器上加装工具链。** 详见 `docs/ROADMAP.md` 三-A 最后两行。
 > 旁证:`macos/dist/余音-Reverb-1.0.2-arm64.dmg`(2026-09-20 那个包)里 `minos 13.0 / sdk 26.5 / arm64 单架构`,
 > 是另一台得多的机器打的。
-> **本机对 macOS 改动的最强验收 = 整模块 typecheck 并与改前基线差分**:
+> **本机对 macOS 改动的最强验收 = 整模块 typecheck 差分,但差分必须两边都跑到 0 错误**:
 > `swiftc -typecheck -sdk "$(xcrun --show-sdk-path)" -target x86_64-apple-macos13.0 $(find Sources -name '*.swift')`
-> —— 基线用 `git archive HEAD macos | tar -x -C /tmp/…` 解一份出来单独跑,再逐条比对错误集;
-> **只说"错误没变多"是不够的,要同时说明它证明不了什么**(界面与行为一帧都没跑起来)。见 H124。
+> —— 基线用 `git archive HEAD macos | tar -x -C /tmp/…` 解一份出来单独跑。
+> **2026-10-01 修正过这条判据本身(见 H128)**:`swiftc -typecheck` 在**第一个含错误的文件之后
+> 就不再有意义地继续**,所以"改前改后都是同样 4 条"**证明不了其余文件被检查过** ——
+> 比法只能写成"两边都为 0"。而本机对**未改动的 HEAD 源码**就要中性化 **7 类 / 18 处调用点 + 1 个整文件**
+> 14+/26-only 依赖才能走到 0(双参 `onChange`、轮播那四个 modifier、`focusEffectDisabled`、
+> `SettingsLink`、`MainActor.assumeIsolated`、`nonisolated(unsafe)`(**语法级,连解析都过不了**)、
+> 整个 `@available(macOS 26)` 的 `Transcriber`)—— 中性化只在 /tmp 的 scratch 树里做,**不动工作区**。
+> 最后必须配**阳性对照**:往本次改动的两三个文件里各注入一个语义错(每次只留一个),
+> 各自都得被报出来,否则那个 0 不成立。
+> **并且这只证明类型没变多,证明不了界面与行为**(一帧都没跑起来)。
 >
 > **在构建机上出包 = 一条命令**:`cd macos && ./package.sh`。它做
 > **universal 编译**(`--arch arm64 --arch x86_64`)→ **架构硬断言**(少一个架构就 exit 1,不出 dmg)→
-> 组装 .app → ad-hoc 签名 → **解包验收**(处理量 / 八个判据词计数 / 四语 `.strings` lint /
+> 组装 .app → ad-hoc 签名 → **解包验收**(处理量 / 判据词计数(2026-10-01 起 11 个)/ 四语 `.strings` lint /
 > 版本号 + `minos` + `sdk` + 架构 / 签名身份)→ dmg 落进 `macos/dist/`,文件名带版本(`-1.0.4-universal`)。
 > 为什么默认两个架构:`swift build` 不带 `--arch` 时**只跟随构建机芯片**,1.0.2 那个包就是这么变成
 > arm64 单架构的,而 arm64-only 二进制在 Intel Mac 上没有退路(Rosetta 只翻译 x86→arm 一个方向)。
-> 验收段里「期望非 0」的那几个词是播放模式的判据,已拿 1.0.2 旧包实测为全 0(负控制成立),所以它报非 0 才算数;
+> 验收段里「期望非 0」的那几个词是播放模式与批注的判据,已拿 1.0.2 旧包实测为全 0(负控制成立,
+> 批注那三个词是 2026-10-01 重跑同一份归档包验的),所以它报非 0 才算数;
 > 架构断言同样拿那个 arm64-only 二进制空跑验过:**期望两个架构时报 `✗ 缺 x86_64` 并退出 1,只期望 arm64 时通过**。
 > **仍未跑过的**是「真的产出一个 universal 包」那一步(本机没有 xcbuild,见 ⑥)。出完还要实跑那四项界面与
 > 自动续播验收,清单在 `docs/ROADMAP.md` 三-A。

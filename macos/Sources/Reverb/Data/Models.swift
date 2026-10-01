@@ -126,3 +126,53 @@ struct Stamp: Codable, Identifiable, Hashable {
     var createdAt: Double
     var id: String { episodeId }
 }
+
+/// 一条听觉批注:**某一集的某一秒 + 自己写的一句话**。
+///
+/// 落盘格式与 Android `EpisodeNote` / 鸿蒙 `EpisodeNote` 逐字同构(三端共用同一份 `notes.json`):
+/// `{noteId, positionMs, text, createdAt, episode:{…整条快照}}`。两条口径都不是随手定的:
+/// ① **自有 id 叫 `noteId` 而不是 `id`** —— 内嵌的 `episode` 体里已经有一个 `id`(= guid,
+///    全仓按它查历史进度与下载状态)。摊平在同一个对象里时后写的键会静默盖掉先写的,
+///    读回来还看不出写坏了(见 H127)。
+/// ② **存整条快照而不是 `episodeId` 引用** —— 零后端、无云同步,发布方从 RSS 删了旧集就无处找回,
+///    引用式存储的"点回那一秒"会永久失效且用户没有自救入口。
+struct EpisodeNote: Codable, Identifiable, Hashable {
+    var noteId: String
+    var episode: Episode
+    /// 那一秒,毫秒(字段名带单位是刻意的,见 H86)
+    var positionMs: Int
+    var text: String
+    /// 落笔时刻,毫秒。**跟本端 Stamp / HistoryEntry 的「秒」口径不一致是有意为之**:
+    /// 这一份文件三端共用、时间线按它排序,而三端写入点实测都是毫秒
+    /// (Android `System.currentTimeMillis()`、鸿蒙 `Date.now()`、此处 `timeIntervalSince1970 * 1000`)。
+    /// **不做秒/毫秒归一**:没有任何一端写秒,加了只会把真正的单位 bug 悄悄吃掉 ——
+    /// 真要改口径,按硬规矩 11 加版本号让旧数据作废,而不是在解码侧兜住。
+    var createdAt: Int
+    var id: String { noteId }
+
+    enum CodingKeys: String, CodingKey { case noteId, episode, positionMs, text, createdAt }
+
+    init(noteId: String, episode: Episode, positionMs: Int, text: String, createdAt: Int) {
+        self.noteId = noteId; self.episode = episode
+        self.positionMs = positionMs; self.text = text; self.createdAt = createdAt
+    }
+}
+
+// 自定义解码必须放在 extension:写在类型体内会**吞掉成员初始化器**(同 HistoryEntry,H86)。
+extension EpisodeNote {
+    /// 逐键 `decodeIfPresent`:备份 JSON 是跨端边界,任何一个非可选键缺失都会让
+    /// **整份** notes 解码失败、恢复静默无效(H86 就是这个坑)。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        episode = (try? c.decode(Episode.self, forKey: .episode))
+            ?? Episode(id: "", title: "", description: "", audioUrl: "", artworkUrl: "", podcastTitle: "")
+        positionMs = (try? c.decode(Int.self, forKey: .positionMs)) ?? 0
+        text = (try? c.decode(String.self, forKey: .text)) ?? ""
+        let ts = (try? c.decode(Int.self, forKey: .createdAt)) ?? 0
+        createdAt = ts
+        // noteId 缺失时给一个确定性的兜底,而不是留空串 ——
+        // 空 id 让"删除哪一条"无从分辨,列表里就会有一条删不掉的记录。
+        let raw = (try? c.decode(String.self, forKey: .noteId)) ?? ""
+        noteId = raw.isEmpty ? "legacy-\(ts)" : raw
+    }
+}

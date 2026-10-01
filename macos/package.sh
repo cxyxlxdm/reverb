@@ -89,7 +89,11 @@ echo "==> 验收:处理量 —— 二进制 $(wc -c <"$BIN" | tr -d ' ') B / .lp
 # 所以它恒 ≥ play_mode_map —— 这是预期的,不是重复计数错误。
 # 期望 0:老包(1.0.2)里这些词全部 0 命中 —— 2026-09-29 拿 build/ 里那个旧 dmg
 # 实测过这组负控制(play_mode_map / SEQUENTIAL / 顺序播放 均 0),所以非 0 才有意义。
-for w in play_mode_map play_mode SEQUENTIAL REPEAT_ONE SHUFFLE 顺序播放 单曲循环 随机播放; do
+# 2026-10-01 补批注那三个词时,负控制又拿归档的 dist/余音-Reverb-1.0.2-arm64.dmg 重跑了一遍:
+# notes.json / 批注 / 记下这一秒 在二进制与四份 .strings 里**都是 0**(处理量:二进制 4,443,392 B,
+# .strings 4 份共 29,446 B),所以这三个词报非 0 才算数(硬规矩 1:声明"有"同样要能反证)。
+for w in play_mode_map play_mode SEQUENTIAL REPEAT_ONE SHUFFLE 顺序播放 单曲循环 随机播放 \
+         notes.json 批注 记下这一秒; do
   printf '   %-14s %s\n' "$w" "$(LC_ALL=C grep -a -o "$w" "$BIN" | wc -l | tr -d ' ')"
 done
 
