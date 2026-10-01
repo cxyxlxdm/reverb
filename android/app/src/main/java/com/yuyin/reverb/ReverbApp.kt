@@ -15,6 +15,7 @@ import com.yuyin.reverb.data.local.HistoryStore
 import com.yuyin.reverb.data.local.InboxStore
 import com.yuyin.reverb.data.local.ListenStatsStore
 import com.yuyin.reverb.data.local.NoteStore
+import com.yuyin.reverb.data.local.PlaybackStateStore
 import com.yuyin.reverb.data.local.PopularCacheStore
 import com.yuyin.reverb.data.local.RegionStore
 import com.yuyin.reverb.data.local.SeedCatalog
@@ -60,6 +61,9 @@ class AppContainer(app: Application) {
     val favoriteStore = FavoriteStore(app)
     val stampStore = StampStore(app)
     val noteStore = NoteStore(app)
+    // 「正在播哪一集 / 它来自哪一列 / 排好的 up next」的跨启动快照。
+    // 刻意**不进**任何备份(白名单里没有它):那是这台设备上的一次性排程,理由写在 store 顶部。
+    val playbackStateStore = PlaybackStateStore(app)
     val updateStore = UpdateStore(app)
     val regionStore = RegionStore(app)
     val settingsStore = SettingsStore(app)
@@ -95,6 +99,7 @@ class ReverbApp : Application(), Configuration.Provider {
         PlayerController.bindHistory(container.historyStore)
         PlayerController.bindSettings(container.settingsStore)
         PlayerController.bindListenStats(container.listenStatsStore)
+        PlayerController.bindState(container.playbackStateStore)
         container.listenStatsStore.seedFromHistory(container.historyStore.history.value)
         Notifications.ensureChannel(this)
         // **不在这里排 WorkManager 任务**:带网络约束的周期任务会让 WorkManager 的约束追踪器
@@ -116,7 +121,11 @@ class ReverbApp : Application(), Configuration.Provider {
                     "updatesScheduled=$updatesEnabled subs=${container.subscriptionStore.subscriptions.value.size} " +
                     "favs=${container.favoriteStore.favorites.value.size} history=${container.historyStore.history.value.size} " +
                     "stamps=${container.stampStore.stamps.value.size} notes=${container.noteStore.notes.value.size} " +
-                    "downloads=${container.downloadStore.downloads.value.size}"
+                    "downloads=${container.downloadStore.downloads.value.size} " +
+                    // 队列不属任何备份分区,但它是用户排出来的东西 —— 装机取证要靠这一行判断
+                    // "冷启动到底读回了没有"(读回失败与"本来就没排队"在界面上是同一个样子)。
+                    "upNext=${container.playbackStateStore.snapshot.upNext.size} " +
+                    "playingCur=${container.playbackStateStore.snapshot.current?.id ?: "-"}"
             )
         } catch (e: Exception) {
             com.yuyin.reverb.util.Logger.e(TAG, "launch log failed", e)
