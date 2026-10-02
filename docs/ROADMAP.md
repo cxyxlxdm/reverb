@@ -198,6 +198,55 @@ macOS 的 1.0.3 尚未出包 —— 它的播放模式是**同日在 1.0.3 定�
 
 | **播放态跨启动(队列 + 正在播那一集):Android 代码已完 · 待装机;鸿蒙 / macOS 未同构** | 用户反馈两条:「加入队列的节目下次打开 App 就消失了」「可不可以增加正在播放栏,每次都从历史点进去不方便,系列节目名称相似容易找错」。**两条同根**,第二条例缺的是那条栏的前置状态而不是栏本身(三端 `MiniPlayer` / `MiniPlayerBar` / `NowPlayingBar` 早已存在,显示条件是「有正在播的一集」,冷启动后整条不出现)。已定口径与逐条理由见 **H129**,移植时照抄的清单在 `docs/ARCHITECTURE.md` 第五节。**装机判据(全表以此行为准,逐条打勾)**:① 排队 3 集 + 正在播第 4 集 → 上滑杀进程 → 冷启,迷你条在且显示的是那一集;② 待播队列条数一致、顺序一致;③ 点迷你条**直接出声**(判据是「按下到出声」的时长,不是重下一单 —— 预载的意义全在这儿);④ 杀掉前那一集的进度**没被抹成 0**(专防预载自造的坑,判据落在「继续收听」那条位置);⑤ 「下一集 / 上一集」仍在原来那一列里走、播完自动接那一列的下一集(判据 `playQueue count=… tag='…'` 的 tag 与杀进程前一致);⑥ **冷启动后什么都不按**,那两颗按钮就是可点的(恢复走直接装载,漏刷 flag 就会灰着,按下播放才亮);⑦ 只有队列、从没播过(重启后 `current` 为空)时**不崩、不闪、进度不丢**;⑧ 电台模式杀掉后重启**不**恢复 `current`(判据是那一条 `restore cur=` 日志压根没打,而 `restore upNext=` 那条有);⑨ 盘上挂着引导音频时播放条**不出现**,且日志多出 `restore 忽略引导音频,重写播放态`。日志三行是贯穿全表的取证口:`启动读回播放态 …` / `restore cur=… ctx=…@… tag=…` / `落盘播放态 …`。**另两条只能真机定**:预载拉流的实测流量、以及某些 ROM 会不会把 `playWhenReady=false` 翻成自动开播。**已知边界(不是 bug)**:「只排队没播过」时迷你条仍不出现 —— 要做「待播栏」需要五语新文案,另议。**鸿蒙 / macOS 同根未动** —— 按「Android 装机验通再同构」的节奏排在后面。**鸿蒙侧移植要留神硬规矩 7**(播放态是三个对象字段,别挂进被整页观察的对象里);macOS 侧本机只到 typecheck 差分(判据见 H128) |
 
+### A2. 2026-10-02 三端全局复核(**只核不改**,逐条都拿 `文件:行号` 反查过)
+
+起因是两条用户反馈(播放态跨启动,见 H129)之后做的一轮全仓复核:七路并行只读排查 + 逐条反查。
+分三级的判据是「会不会让功能不成立 / 政策说的话与包或代码不一致」,不是改动大小。
+**下面没有一条已经修过**,只有第 1、2、4 条是本机可做的三行级改动。
+
+#### A2-1 政策与包内容不一致(**优先级最高,因为它对应用户读到的那句话**)
+
+| # | 现象 | 证据 | 为什么成立 |
+|---|---|---|---|
+| 1 | 隐私政策写「日志不记录搜索词」,Android 把搜索词原文打进了日志 | `docs/PRIVACY.md:50` ↔ `data/remote/PodcastRepository.kt:44` `search query='$q'`、`:87` `searchEpisodes query='$q'` | 日志可一键导出/发开发者邮箱 ⇒ 用户主动分享时把自己的检索词带走了。另两端**没有**这条(macOS / 鸿蒙全仓 grep `query=` 只命中这两处),所以是 Android 单端破口 |
+| 2 | 同一条政策说「不记录完整 URL」,**macOS 端不成立** | `docs/PRIVACY.md:50` ↔ `macos/.../Data/Log.swift` 里没有任何脱敏函数;整串 URL 落日志的点:`DownloadManager.swift:34`、`RssParser.swift:9/11/20/26/68`、`HTTPClient.swift:18/24/29`、`InboxStore.swift:127`、`PlayerController.swift:381` | 另两端都在**写盘前集中收成 `scheme://host`**:Android `util/Logger.kt:62`(配合 `:52 endpoint()`)、鸿蒙 `util/Logger.ets:55 sanitize`。订阅地址的集合就是收听行为,这条不是形式问题 |
+| 3 | 政策说「大陆应用商店版本**不含**离线语音识别」,而鸿蒙 release 包里**有**这套实现 | 解包实测 1.0.3 市场包 `harmony/entry/build/release/outputs/default/entry-default-signed.hap`(**处理量 2,357,035 B / 18 个文件**):`ets/modules.abc`(**741,152 B**)里 `speechRecognizer`×1、`SpeechTranscriber`×2、`PcmReader`×2;`libs/arm64-v8a/libreverb_pcm.so` 57,888 B 也在包里 | `Features.LOCAL_ASR=false`(`playback/…`→`AppContainer.ets:96` 门住实例化)⇒ **运行时永不执行**,但 ArkTS 没有 DCE(硬规矩 2,`docs/ARCHITECTURE.md:237` 与 `harmony/shelved/README.md` 记的正是这条),所以「不含」按硬规矩 1 的解包口径不成立。<br>**需要产品决定**:① 把 `SpeechTranscriber.ets` + `PcmReader.ets` + `cpp/` 那条链移出编译树(照 `shelved/` 的做法,代价是换引擎时要搬回来) ⇒ 政策那句话保持原样;或 ② 不动代码、把政策措辞改成「不会在本机执行识别」。两种都能收敛,不能只做一半 |
+| 4 | 政策列了一个**已经不申请**的权限 | `docs/PRIVACY.md:84`(开机广播)↔ `AndroidManifest.xml:24-26` 用 `tools:node="remove"` 显式移除(H120 那轮为避灰色软件启发式做的) | 多声明不危险,但政策页是逐字被读的东西;删该行即可。`site/reverb/privacy.html` 同步 —— **与预载那条一起走一次重新部署**(本就在待办里) |
+| 5 | 政策把 macOS 的识别写成「内置开源离线识别组件、识别模型随安装包提供」 | `docs/PRIVACY.md:25/:72` ↔ `macos/Sources/Reverb/Data/Transcriber.swift:20-22` 用 Apple `SpeechAnalyzer` / `SpeechTranscriber`,模型由**系统**按需联网下载(`:55 downloadAndInstall`)、不在包内 | 该下载目的地也没进政策第三节清单。macOS 没有同意页也没有 `privacy_url`,而政策页尾(`PRIVACY.md:138`)自称适用三端 |
+
+#### A2-2 三端实现不一致 / 会让功能不成立
+
+6. **macOS 的逐字稿缓存没有版本号** —— `TranscriptStore.swift:37` 的 `Cached{localeId, complete, segments}` 既不写也不校验 version,而 Android `TranscriptStore.kt:319` / 鸿蒙 `TranscriptStore.ets:74` 都是 `CACHE_VERSION=2` 且读时比对 ⇒ **硬规矩 11 在 macOS 落空**:改了组行或时间轴算法,用户设备上已生成的旧稿永远不作废,而且没有自救入口。`docs/FEATURES.md:104` 那句「三端同一格式,带 `version`,口径变了自动作废重转」比代码乐观(文档失真)。
+7. **macOS 不读发布方的官方逐字稿** —— 全仓 grep `transcriptUrl` 在 `macos/Sources` **零命中**,`Models.swift:18-28` 的 `Episode` 连这个字段都没有,也没有 `TranscriptFetcher` 的对应物 ⇒ `docs/TRANSCRIPT.md:19` 那条「顺序永远是先官方稿、后本机识别」对 macOS 不成立:有现成稿的英文集也要跑几分钟本机识别、发热耗电,而官方稿又准又快。这是**功能缺口**不是文档漂(与 A2-1#5 是同一片地)。
+8. **macOS 词级时间没有出口不变式** —— `Transcriber.swift:67-77` 把各 run 的 `audioTimeRange` 直接 append,不排序不钳制;渲染侧用的是「从后往前找第一个 `startMs<=now`」(`TranscriptPage.swift:32`,还有 `:250` 的 while)⇒ **硬规矩 10 的教科书场景**:队尾一个异常小的值就让高亮钉死。Android 有两层(C++ `reverb_asr.cpp:86-103 tidyWords` + `TranscriptLines.kt:109`),鸿蒙走 `TranscriptLines.ets:148 monotonic`,只有 macOS 裸奔。
+9. **鸿蒙 `sleepRemainingMs` 挂在被整页观察的对象上、睡眠定时期间每秒写** —— 字段 `playback/PlayerController.ets:89`,每秒赋值 `:1206-1214`,而**只有** `view/PlayerPage.ets:439/447` 那颗睡眠 chip 读它。`@Observed` 的观察粒度是对象(H64 那条老账),`@ObjectLink player` 的页面有 8 处(TranscriptPane / Components / PodcastDetailPage / DiscoverPage / PlayerPage / LibraryPage / QueuePage / MiniPlayerBar)⇒ **硬规矩 7**:开了睡眠定时,播放中整页每秒重建一次。`positionMs` 当年正是为这个搬进 `PlaybackClock.ets` 的,这一条是漏网的同类。Android / macOS 同字段同形状(`PlayerScreen.kt:89` 顶层 collect、`PlayerController.swift:65 @Published` + 1Hz Timer),但两端没有 V1 那种"对象级观察 + 整页 build"的放大,危害面不同。
+10. **鸿蒙退出时不释放播放链** —— `entryability/EntryAbility.ets:82-87` 的 `onDestroy` 既不调 `PlayerController.release()`(`:1341` 有完整的 `unbindSourceEvents` / `off('timeUpdate')` / 清 tick·fade·sleep 定时器),也不 destroy `AvSessionBridge` ⇒ 收敛只靠进程死亡。
+
+#### A2-3 窄窗口 / 纪律 / 观感(记下来,不当必修)
+
+11. **批注编辑器打开期间换集 ⇒ 那条批注挂到下一集**(三端同形,不是漂移):位置是按下瞬间冻结的(`PlayerScreen.kt:200` / `PlayerPage.ets:543` / `PlayerView.swift:327`),而单集是保存那一刻取的(`PlayerScreen.kt:347` 用重组后的 `episode` / `PlayerPage.ets:665-674` 重取 `player.current` / `PlayerView.swift:455` 用弹层参数)。要成立得"弹层开着的时候恰好自然播完接下一集",概率低但一旦发生就是"我明明写的是上一集那一句"。
+12. **明确跳点的 override 会被装载重试吃掉一次**:消费点在取续播处(`PlayerController.kt:613-616` 转存进 `pendingSeekMs`,所以 Android 重试还在;鸿蒙 `:347` / macOS `PlayerController.swift:364-367` 首轮就清,而 `handleLoadFailure` 的重试不带 override ⇒ 那一轮回落续播)。文档里"不被重试吃掉"这句只对代次早退成立。
+13. **Android 备份恢复对缺 `noteId` 的条目用随机 UUID 兜底**(`BackupManager.kt:162`),鸿蒙是 `${createdAt}-${i}`(`BackupManager.ets:256`)、macOS 是 `legacy-<ts>`(`Models.swift:176`)⇒ 只有 Android 重复恢复同一份备份会把批注**翻倍**(破坏幂等)。前提得是数据里没有 noteId,概率很低,但确定值兜底是免费的。
+14. **三端 load / 恢复侧都不夹 `positionMs`、不排序** —— 夹只在 `add`(Android `NoteStore.kt:57` / 鸿蒙 `:78` / macOS `Stores.swift:221-223`),排只在 `addAll`(`:86` / `:106` / `:241`)⇒ 跨端来的越界值照样落盘并显示。另:三端都用 **RSS 元数据时长**夹上限(不是真实播放器时长),这一条是共同设计而非某一端独有。
+15. **macOS 频道缓存落盘在 MainActor 上同步跑** —— `PodcastRepository.swift:5` 是 `@MainActor`,`:116` 调 `feedCache.put` → `FeedCacheStore.swift:93-100` 把整份 ~1-2 MB `JSONEncoder().encode` + `.atomic` 写盘,**无去抖也无线程切换**;刷新"最新"时逐源命中。鸿蒙同类当初是用 `writeJsonDebouncedLazy` 搬走的(H65 那笔账)。
+16. **鸿蒙逐字稿当前行是 O(词²)** —— `TranscriptPane.ets:242/245` 每个词各调一次 `spokenIndex(seg)`(每次整句从后往前扫),而这一页在播放可见时 80ms 重建一次(`:88`)。
+17. **`macos/package.sh` 的验收只打印不断言** —— 判据词计数(`:95-98`)与 `minos`/`sdk`/架构(`:106-107`)都只展示,"报非 0 才算数"靠人眼;dmg 文件名写死 `-universal`(`:122`)而 `ARCHS` 是可改的(`:21-22`)⇒ 正是 1.0.2 那个"名字叫 universal、实际单架构"的形状。
+18. **Android 渲染形状**(不是缺陷):`PlayerScreen.kt:86` 在顶层作用域 collect `position` ⇒ 播放中整屏 2Hz 重组(无解析,成本可接受);`components/Components.kt:396-399` 每次 `formatPubDate` new 一个 `SimpleDateFormat`。
+19. `android/app/build/` 里有 `huaweiRelease` 残留产物(flavor 早已改名 `store`)—— 只在本地 build 目录,不进包;换机重建时按 `docs/LOCAL-ASSETS.md` 走。
+
+#### A2-4 本轮**证伪**的子代理结论(留在这里,免得下轮又被当证据)
+
+- 「macOS 批注上限独用 RSS 元数据、另两端用真实时长」→ 三端 `add` 都按 `durationSec*1000` 夹(见 A2-3#14)。
+- 「批注三端出口都没排序」→ 三端都在 `addAll` 排;「`EpisodeNote.id` 键名漂移破坏互通」→ Android 序列化成 `noteId`,三端逐字一致。
+- 「macOS 批注行的 `playAt` 没挂载」→ `LibraryView.swift:319` 挂着。
+- 「鸿蒙 `bgFailed` 永久锁死」→ 全仓源码**无此符号**(只在 build cache 命中)。
+- 「Android 恢复会让上/下一集错位」→ `next()/previous()/advanceQueue()` 全走内存 `queue/queueIndex` + `setMediaItem`,不依赖播放器 timeline。
+- 「macOS 导出 history 用秒 ⇒ 跨端恢复不一致」→ 单位差异是 H86 记录过的既有事实,**三端解码各自归一**(Android `BackupManager.kt:160/190`、鸿蒙 `BackupManager.ets:253`、macOS `Models.swift:62`),不构成分叉。
+- 「备份文件里分区的出现次序是跨端契约」→ 三端都按**键名**读,次序不参与解析;Android 走 `org.json.JSONObject`(HashMap)本来也不保证写出顺序。这句说法在 `BackupManager.swift:7-8` / `BackupManager.ets:12-13` 的注释里写重了。
+
+**这一节的验收方式**:每条都是「读源码 + 行号」级,唯一跑到包内取证的是 A2-1#3(解包 grep,处理量已随结论一起给出)。
+**没覆盖的范围**:没跑任何一端的应用、没看 UI、鸿蒙那条没解 `reverb.app`(只有 release hap);`docs/HISTORY.md` 与两份中文关于页文案没有逐字复读。
+
 ### B. 平台限制导致的功能缺口(**短期不打算解决**)
 
 | 项 | 原因 |
@@ -229,7 +278,8 @@ macOS 的 1.0.3 尚未出包 —— 它的播放模式是**同日在 1.0.3 定�
 | 一堆小 JSON、整体读入内存 + 整体落盘 | 订阅上千 / 历史上万条时;当前规模无感 |
 | 鸿蒙 `PcmReader.read()` 是**同步阻塞**的 | 目前跑在 `await` 链上、后面紧接更慢的识别会话,观感可接受;真发现掉帧要把整条转写搬进 TaskPool(注意 native 句柄不能跨线程传)。**取源与 RSS 解析已在 TaskPool 里**(见 H65),可照 `net/FeedTask.ets` 的写法 |
 | 子线程里的日志进不了 App 内「分享日志」 | `Log` 的内存环形缓冲是每线程一份。RSS 解析搬进 TaskPool 之后,那些行只在 `hdc shell hilog` 里看得到 —— 用户导出的日志会缺这一段,排查用户报障时要知道 |
-| 鸿蒙其它 `@Observed` store 未逐个复核观察粒度 | 这轮按现象定位到了 `PlayerController` 与 `ListenStatsStore`(H64),但**没有系统排查剩下的 store 有没有同类的高频字段**。判据:一秒变多次的字段不能留在被观察对象上 |
+| 鸿蒙其它 `@Observed` store 未逐个复核观察粒度 | 这轮按现象定位到了 `PlayerController` 与 `ListenStatsStore`(H64),但**没有系统排查剩下的 store 有没有同类的高频字段**。判据:一秒变多次的字段不能留在被观察对象上。<br>**2026-10-02 复核补了一处同类**:`PlayerController.sleepRemainingMs` 每秒写(`:89` + `:1206-1214`)而只有睡眠 chip 读它 ⇒ 见 A2-2#9。其余 store 仍未逐个查 |
+| **macOS 逐字稿的三处硬规矩落空**(缓存无 version / 不读官方稿 / 词级时间无出口不变式) | 见 A2-2#6⑦⑧。会疼的时机:改了组行或时间轴算法之后(旧稿永新作废不掉)、以及拿 macOS 听有官方稿的英文集时(白烧几分钟 CPU) |
 | whisper.cpp 固定 commit | 升级后**必须重新在真机上量速度**,并复核 `token_timestamps` 行为 |
 | 逐字稿缓存不进备份 | **有意为之**(可重生成、体积大),但换机后要重转一遍 |
 | 鸿蒙有一部分是「补偿代码」 | native 解码模块、图标映射表 —— 不产生功能,只为对齐,升级 SDK 时要跟着维护 |
