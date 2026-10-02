@@ -352,11 +352,14 @@ object PlayerController {
                 c.addListener(playerListener)
                 log.i(TAG, "controller connected")
                 pending?.let { ep -> pending = null; queue = listOf(ep); queueIndex = 0; updateNavFlags(); playEpisode(ep) }
-                // 恢复要排在「连上控制器之后、syncOnce 之前」,且**只在服务里真的没挂着东西时做**:
+                // **syncOnce 要排在恢复之前**:它用播放器的 currentPosition 刷进度线,而预载那一刻
+                // currentPosition 还是 0 —— 排在后面的话它会把 restoreState 里"先按历史画"那一笔覆盖掉,
+                // 界面读到的是 0:00,正是那条注释里说要防的"看着像进度丢了"。
+                syncOnce()
+                // 恢复要排在「连上控制器之后」,且**只在服务里真的没挂着东西时做**:
                 // currentMediaItem 非空说明这是同一次会话里的重连(或后台服务还活着),
                 // 那时拿旧快照覆盖会把正在播的现场改掉 —— 比丢队列更糟。
                 if (_current.value == null && c.currentMediaItem == null) restoreState()
-                syncOnce()
             } catch (e: Exception) {
                 log.e(TAG, "controller connect failed", e)
             }

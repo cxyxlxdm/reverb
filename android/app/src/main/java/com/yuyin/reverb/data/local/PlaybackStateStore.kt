@@ -56,7 +56,8 @@ class PlaybackStateStore(context: Context) {
      *
      * [context] 收**整条**列上下文,裁剪在这里做(硬规矩 10:不变式在数据出口保证):
      * 只保留以 [contextIndex] 为中心的 ±[CONTEXT_HALF] 集。理由是一份 RSS 常有上千集,
-     * 每条快照约 1 KB,整列落盘就是每次动作同步写几 MB —— 那是 H65 那笔账的同一个形状。
+     * 整列落盘就是每次动作同步写几 MB —— 那是 H65 那笔账的同一个形状。
+     * 剩下的窗口条目再走 [slim] 去掉简介,把体量压到几百 KB 以内(见那里的理由)。
      * 代价:重启后连续按「上一集/下一集」超出窗口会到边界(按钮置灰),
      * 用户重新点一下列表即拿回全量上下文。
      */
@@ -81,8 +82,9 @@ class PlaybackStateStore(context: Context) {
             .put("version", VERSION)
             .put("listTag", listTag)
             .put("contextIndex", idx - from)
-            .put("context", JSONArray().apply { window.forEach { put(EpisodeJson.toJson(it)) } })
-            .put("upNext", JSONArray().apply { queued.forEach { put(EpisodeJson.toJson(it)) } })
+            .put("context", JSONArray().apply { window.forEach { put(slim(it)) } })
+            .put("upNext", JSONArray().apply { queued.forEach { put(slim(it)) } })
+        // 只有 current 带完整字段(含 shownotes):播放页要画节目简介,而列表行与队列页不读它。
         if (cur != null) body.put("current", EpisodeJson.toJson(cur))
         synchronized(lock) {
             snapshot = Snapshot(cur, listTag, window, idx - from, queued)
@@ -103,6 +105,27 @@ class PlaybackStateStore(context: Context) {
             runCatching { if (file.exists()) file.delete() }
         }
     }
+
+    /**
+     * 列表条目用的**瘦身版**序列化:去掉 `description`(节目简介)。
+     *
+     * 理由是体量:简介常有 1~5 KB,而这一份快照一次要写 上下文 81 条 + 队列最多 300 条,
+     * 带着简介就是**每次用户动作同步写几百 KB 到上限 1 MB 级**(冷启动读回时 `load()` 也在主线程,
+     * 那份体量会变成启动耗时)。列表行与队列页只需要标题/频道名/时长/封面/音频地址,
+     * 简介在下次刷新 feed 时自然回来;唯一真需要它的是"正在播那一集"的播放页,
+     * 所以那份(下面的 `current`)保留完整字段。
+     */
+    private fun slim(e: Episode): JSONObject = JSONObject()
+        .put("id", e.id)
+        .put("title", e.title)
+        .put("audioUrl", e.audioUrl)
+        .put("artworkUrl", e.artworkUrl)
+        .put("podcastTitle", e.podcastTitle)
+        .put("durationSec", e.durationSec)
+        .put("pubDate", e.pubDate)
+        .put("feedUrl", e.feedUrl)
+        .put("transcriptUrl", e.transcriptUrl)
+        .put("transcriptType", e.transcriptType)
 
     private fun load(): Snapshot {
         val text = runCatching { if (file.exists()) file.readText() else "" }.getOrDefault("")
