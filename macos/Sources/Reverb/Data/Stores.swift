@@ -205,8 +205,27 @@ enum AppSupport {
         // 没有可播音频地址的条目丢掉,而不是留一条"点不动"的批注 ——
         // 列表里躺一条永远播不了的记录,比少一条更让人怀疑是 bug(与另两端同一口径)。
         let all = AppSupport.load("notes.json", as: [EpisodeNote].self) ?? []
-        notes = all.filter { !$0.episode.audioUrl.isEmpty }
+        notes = NoteStore.normalize(all.filter { !$0.episode.audioUrl.isEmpty })
         Log.i("Store", "批注加载 \(notes.count) 条" + (all.count > notes.count ? " 丢弃 \(all.count - notes.count) 条无音频" : ""))
+    }
+
+    /// 从盘上或备份里读来的批注过一次**归一**:按落笔时刻倒序,并把 `positionMs` 的负值归 0。
+    ///
+    /// 为什么补在「读盘 + 恢复」这一道:时间线和"点一句跳到那一秒"直接吃这个列表,而
+    /// `notes.json` 是**三端共用**的文件 —— 本端的写入点管不住它的前任(另一端写的顺序、
+    /// 手工编辑过的内容、系统级云备份还原那种**整份文件覆盖回来**的路径,压根不经过 `addAll`)。
+    /// 硬规矩 10 说的"不变式在数据出口一次性保证",对读盘而言那个出口就是这份文件的**入口**。
+    /// `Array.sorted` 走的是稳定排序,同一毫秒写下的两条保持原有先后。
+    ///
+    /// **刻意不套用 `add` 那条「上限夹到该集时长」**:`add` 里那个夹成立,是因为按下"写批注"的
+    /// 那一刻手上有播放器实时位置作真值参照;而读盘时唯一可比的是 **RSS 元数据时长** ——
+    /// 它是发布方自报的近似值,常常比真实音频短。拿一个近似上限去改写用户早就写下的那一秒,
+    /// 比留着那个越界值更糟(界面上的时间戳自己跳了位,而用户无从知道是谁改的)。
+    /// 越界值走到播放那一步,由播放器按真实时长夹。与 Android / 鸿蒙同一口径,三端逐字对齐。
+    private static func normalize(_ list: [EpisodeNote]) -> [EpisodeNote] {
+        list.map { $0.positionMs < 0 ? EpisodeNote(noteId: $0.noteId, episode: $0.episode,
+                                                   positionMs: 0, text: $0.text, createdAt: $0.createdAt) : $0 }
+            .sorted { $0.createdAt > $1.createdAt }
     }
 
     /// 落一条批注。返回 nil 表示文字为空而放弃(空批注没有意义,还会在列表里成一个无法分辨的空行)。
@@ -234,11 +253,12 @@ enum AppSupport {
         persist()
     }
 
-    /// 备份恢复:按 `noteId` 去重(同一份备份重复恢复不会写出两份),再按落笔时刻倒序。
+    /// 备份恢复:按 `noteId` 去重(同一份备份重复恢复不会写出两份),再走同一条 `normalize`
+    /// —— 与 `init()` 一个口径,这样"从备份恢复出来的列表"和"下次冷启动从盘上读到的列表"是同一份内容。
     func addAll(_ items: [EpisodeNote]) {
         let before = notes.count
         for n in items where !notes.contains(where: { $0.noteId == n.noteId }) { notes.append(n) }
-        notes.sort { $0.createdAt > $1.createdAt }
+        notes = NoteStore.normalize(notes)
         Log.i("Store", "批注批量合并 +\(notes.count - before)(共 \(notes.count))")
         persist()
     }

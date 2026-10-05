@@ -56,8 +56,42 @@ export class NoteStore {
         createdAt: J.num(o, 'createdAt')
       });
     }
-    this.notes = out;
+    this.notes = NoteStore.normalize(out);
     Log.i('Store', `批注加载 ${out.length} 条`);
+  }
+
+  /**
+   * 从盘上或备份里读来的批注过一次**归一**:按落笔时刻倒序,并把 `positionMs` 的负值归 0。
+   *
+   * 为什么补在「读盘 + 恢复」这一道:时间线和「点一句跳到那一秒」直接吃这个列表,而
+   * `notes.json` 是**三端共用**的文件 —— 本端的写入点管不住它的前任(另一端写的顺序、
+   * 手工编辑过的内容、系统级云备份还原那种**整份文件覆盖回来**的路径,压根不经过 `addAll`)。
+   * 硬规矩 10 说的「不变式在数据出口一次性保证」,对读盘而言那个出口就是这份文件的**入口**。
+   * 判负用三目而不是 `Math.max(0, x)`:`NaN > 0` 为假,于是这一句顺带把非数也归 0
+   * (`J.num` 本身已把非数归 0,这里是把"不产生 NaN"写成代码而不是依赖调用方)。
+   * `Array.prototype.sort` 是稳定排序(ES2019 起规范保证),同一毫秒写下的两条保持原有先后。
+   *
+   * **刻意不套用 `add` 那条「上限夹到该集时长」**:`add` 里那个夹成立,是因为按下「写批注」的
+   * 那一刻手上有播放器实时位置作真值参照;而读盘时唯一可比的是 **RSS 元数据时长** ——
+   * 它是发布方自报的近似值,常常比真实音频短。拿一个近似上限去改写用户早就写下的那一秒,
+   * 比留着那个越界值更糟(界面上的时间戳自己跳了位,而用户无从知道是谁改的)。
+   * 越界值走到播放那一步,由播放器按真实时长夹。与 Android / macOS 同一口径,三端逐字对齐。
+   */
+  private static normalize(list: EpisodeNote[]): EpisodeNote[] {
+    const out: EpisodeNote[] = [];
+    for (let i = 0; i < list.length; i++) {
+      const n = list[i];
+      if (n.positionMs > 0) {
+        out.push(n);
+      } else {
+        const fixed: EpisodeNote = {
+          noteId: n.noteId, episode: n.episode, positionMs: 0, text: n.text, createdAt: n.createdAt
+        };
+        out.push(fixed);
+      }
+    }
+    out.sort((a: EpisodeNote, b: EpisodeNote) => b.createdAt - a.createdAt);
+    return out;
   }
 
   /**
@@ -97,14 +131,16 @@ export class NoteStore {
     this.persist();
   }
 
-  /** 备份恢复:按 noteId 去重(重复恢复同一份备份不会写出两份),再按书写时间倒排。 */
+  /**
+   * 备份恢复:按 noteId 去重(重复恢复同一份备份不会写出两份),再走同一条 `normalize`
+   * —— 与 `load()` 一个口径,这样"从备份恢复出来的列表"和"下次冷启动从盘上读到的列表"是同一份内容。
+   */
   addAll(items: EpisodeNote[]): void {
     const next = this.notes.slice();
     for (let i = 0; i < items.length; i++) {
       if (!next.some((x: EpisodeNote) => x.noteId === items[i].noteId)) next.push(items[i]);
     }
-    next.sort((a: EpisodeNote, b: EpisodeNote) => b.createdAt - a.createdAt);
-    this.notes = next;
+    this.notes = NoteStore.normalize(next);
     this.persist();
   }
 
