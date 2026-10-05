@@ -36,8 +36,12 @@ RES="$BUNDLE/Contents/Resources"
 # 可执行文件名以 Info.plist 的 CFBundleExecutable 为准,不拿 `.app` 目录名去猜:
 # 两者不一致时 LaunchServices 起不来,而按目录名去找会去查一个根本不该存在的路径,
 # 报出来的错和真实问题(键写错/没同步)完全脱节。
-APP_NAME=$(plutil -extract CFBundleExecutable raw "$PLIST" 2>/dev/null || echo '')
-[ -n "$APP_NAME" ] || { echo "✗ Info.plist 的 CFBundleExecutable 取不到或为空"; exit 1; }
+# 这里也认**退出码**而不是"字符串非空" —— 与下面版本号那一段同一个坑:`plutil -extract`
+# 在键缺失时把报错句子打到 stdout,只看非空等于把报错当成了文件名。
+if ! APP_NAME=$(plutil -extract CFBundleExecutable raw "$PLIST" 2>/dev/null); then
+  echo "✗ Info.plist 没有 CFBundleExecutable(取不到,不是"值为空")"
+  exit 1
+fi
 BIN="$BUNDLE/Contents/MacOS/$APP_NAME"
 
 FAILS=0
@@ -91,7 +95,8 @@ done
 # ---- 3. 本地化:语言集合相等 + 每套都要有能 lint 过的 .strings -------------
 # 只检查「已有的 .lproj 每套都齐」会漏掉最真实的失败形状:cp -R 漏了一门语言,
 # 剩下的三套全都 lint OK,输出看起来和四套齐时一模一样。所以传了 --langs 就断言集合相等。
-HAVE_LANGS=$(for d in $LPROJ_LIST; do basename "$d" .lproj; done | LC_ALL=C sort | tr '\n' ' ')
+# 同样用 while-read(路径带空格时按空白拆词会把一门语言拆成两半,见下面第 3 段那条注释)
+HAVE_LANGS=$(while IFS= read -r d; do [ -n "$d" ] && basename "$d" .lproj; done <<< "$LPROJ_LIST" | LC_ALL=C sort | tr '\n' ' ')
 if [ ${#WANT_LANGS[@]} -gt 0 ]; then
   wl=$(printf '%s\n' "${WANT_LANGS[@]}" | LC_ALL=C sort | tr '\n' ' ')
   echo "   语言断言:期望 [$wl] / 实际 [${HAVE_LANGS}]"

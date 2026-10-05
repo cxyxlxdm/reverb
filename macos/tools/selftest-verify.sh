@@ -5,7 +5,7 @@
 # 来验:package.sh 要走完 swift build 才到验收段,本仓库的开发机跑不了 swift build。
 # 所以把验收段做成可以在任何 Mac 上独立跑的脚本,判据词与 bundle 都用假的造。
 #
-# 跑法:bash macos/tools/selftest-verify.sh      退出 0 = 正向通过 + 七道变异各自被抓到
+# 跑法:bash macos/tools/selftest-verify.sh      退出 0 = 正向通过 + 八道变异各自被抓到
 # 依赖:clang / lipo / codesign / plutil(命令行工具链即可,不需要 Xcode,也不需要能编本工程)
 set -uo pipefail
 cd "$(dirname "$0")/.."          # → macos/
@@ -69,7 +69,10 @@ expect() {
   local name="$1" bundle="$2" want="$3" needle="$4"; shift 4
   local want_fails="${WANT_FAILS:-1}" out rc concl
   out=$("$VERIFY" "$bundle" "$@" 2>&1); rc=$?
-  if [ "$want_fails" -eq 0 ]; then concl="全部断言通过"; else concl="结论:$want_fails 条断言不通过"; fi
+  # WANT_EARLY=1:这条判据是"读不到就直接退出"的前置检查(压根走不到结论行),只比对退出码与那条原文
+  if [ "${WANT_EARLY:-0}" = 1 ]; then concl="$needle"
+  elif [ "$want_fails" -eq 0 ]; then concl="全部断言通过"
+  else concl="结论:$want_fails 条断言不通过"; fi
   if [ "$rc" -ne "$want" ] || ! printf '%s' "$out" | grep -q -- "$needle" \
      || ! printf '%s' "$out" | grep -q -- "$concl"; then
     echo "   FAIL $name —— 期望 exit=$want + 含「$needle」+ 含「$concl」;实际 exit=$rc"
@@ -124,6 +127,12 @@ echo '==> 变异 6:签完名再改二进制(签名失效)。前一版只跑 `cod
 M="$WORK/M6.app"; build_good "$M"
 printf 'x' >> "$M/Contents/MacOS/Fake"
 WANT_FAILS=1 expect "bad-signature" "$M" 1 "codesign --verify 不通过" "${VARGS[@]}"
+
+echo '==> 变异 7:Info.plist 没有 CFBundleExecutable(前置检查,直接退出 —— 走到下面那套判据毫无意义)'
+M="$WORK/M7.app"; build_good "$M"
+plutil -remove CFBundleExecutable "$M/Contents/Info.plist" >/dev/null 2>&1
+codesign --force --deep --sign - "$M" >/dev/null 2>&1
+WANT_FAILS=1 WANT_EARLY=1 expect "no-executable-key" "$M" 1 "没有 CFBundleExecutable" "${VARGS[@]}"
 
 echo "==> 自检结论:pass=$PASS fail=$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

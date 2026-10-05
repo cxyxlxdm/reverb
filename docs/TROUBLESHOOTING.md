@@ -4933,10 +4933,13 @@ H64 之后 `PlaybackClock` 的注释里写着"播放期间每秒都在变的量�
   文件名与内容会各说一套)。语言同理 —— 新增 `--langs` 断言"该有的都有"。
 
 **验收方式**:
-- ✅ 本机 `bash macos/tools/selftest-verify.sh` → `pass=8 fail=0`,exit 0。八条是:正向、
+- ✅ 本机 `bash macos/tools/selftest-verify.sh` → `pass=9 fail=0`,exit 0。九条是:正向、
   少一个判据词、一份 `.strings` 语法坏、**整套 `.lproj` 少一门**、单架构冒充 universal、
-  universal 但只期望单架构(反向)、`Info.plist` 缺 `CFBundleVersion`、签完名再改二进制。
-  最后一条专门证明为什么不能用 `codesign -dvv`(只读描述,签名坏了照样打印)而要用 `codesign --verify`。
+  universal 但只期望单架构(反向)、`Info.plist` 缺 `CFBundleVersion`、签完名再改二进制、
+  缺 `CFBundleExecutable`(这条走的是**前置退出**:读不到就直接 exit 1,不进入下面那套判据 ——
+  所以自检里为它单独放了一档 `WANT_EARLY`,因为它压根没有结论行可比条数)。
+  「签完名再改二进制」那条专门证明为什么不能用 `codesign -dvv`(只读描述,签名坏了照样打印)
+  而要用 `codesign --verify`。
   第 ② 道检查(条数)又抓出一个**自检自己的错**:改 `.strings` / 删 `.lproj` 之后不重签,
   签名判据会连带失败,那条变异就报 2 条不通过 —— 于是"验的是 lint 那条"这个说法不成立。
   修法是每道变异之后重新 `codesign`(变异 6 例外,它就是要破坏签名)。
@@ -4956,7 +4959,7 @@ H64 之后 `PlaybackClock` 的注释里写着"播放期间每秒都在变的量�
   处理量 4,443,392 B —— 与 2026-10-01 那次词表负控制记录的字节数一致,所以这次跑的是同一个产物。
 - ❌ **真产物的运行验收仍未跑过**:本机没有 xcbuild,`swift build --arch ×2` 走不通(AGENTS.md ⑥),
   所以"package.sh 全程 + 一个真 universal 包过断言"要在构建机上第一次跑 `./package.sh` 时才成立。
-  届时若断言报错,先怀疑包、再怀疑断言 —— 断言侧已有上面那八条自检兜着。
+  届时若断言报错,先怀疑包、再怀疑断言 —— 断言侧已有上面那九条自检兜着。
 
 **教训与可复用的规律**:
 ① **打印出来的判据不是判据。** 验收要么改退出码,要么就别写 —— 因为一句"这里要人看一眼"
