@@ -202,8 +202,12 @@ macOS 的 1.0.3 尚未出包 —— 它的播放模式是**同日在 1.0.3 定�
 
 起因是两条用户反馈(播放态跨启动,见 H129)之后做的一轮全仓复核:七路并行只读排查 + 逐条反查。
 分三级的判据是「会不会让功能不成立 / 政策说的话与包或代码不一致」,不是改动大小。
-**A2-1#1 / A2-1#2 / A2-2#9 三条已于 2026-10-05 修掉**(逐条见下面标 ✅ 的行与 `TROUBLESHOOTING` H131/H132);
-其余**一条还没修**,而且第 1、2、4 条那种"三行级改动"的估计在真动之后仍然成立。
+**处理进度(2026-10-06 更新)**:A2-1#1/#2(日志与政策对齐,H131)、A2-1#4/#5(政策页两处失真,文本已改、站点待重新部署)、
+A2-2#6/#8(macOS 逐字稿的 version 门与出口不变式,H134)、A2-2#9(鸿蒙睡眠倒计时,H132)、A2-3#11/#13(批注那一集 + 备份幂等,H133)、
+A2-3#15(macOS 频道缓存走去抖通道,H135)**已改掉**;
+A2-2#10 与 A2-3#12 是**查过之后判定"不该照原方案改"**(理由写在码旁与 `ARCHITECTURE` 第五节,别再当漏做加回去)。
+**剩下的**:A2-1#3(要产品选路线:移出编译树 or 改政策措辞)、A2-2#7(macOS 读官方稿 —— 整块功能移植,排在构建机出包之后)、
+A2-3#14/#16/#17/#18/#19。第 1、2 条那种"三行级改动"的估计在真动之后仍然成立。
 
 #### A2-1 政策与包内容不一致(**优先级最高,因为它对应用户读到的那句话**)
 
@@ -212,8 +216,8 @@ macOS 的 1.0.3 尚未出包 —— 它的播放模式是**同日在 1.0.3 定�
 | 1 | 隐私政策写「日志不记录搜索词」,Android 把搜索词原文打进了日志 | `docs/PRIVACY.md:50` ↔ `data/remote/PodcastRepository.kt:44` `search query='$q'`、`:87` `searchEpisodes query='$q'` | 日志可一键导出/发开发者邮箱 ⇒ 用户主动分享时把自己的检索词带走了。另两端**没有**这条(macOS / 鸿蒙全仓 grep `query=` 只命中这两处),所以是 Android 单端破口<br>**✅ 2026-10-05 已修,但"另两端没有"这句当时就不成立**:按 `query=` 搜是**格式偏差**造成的漏检 —— macOS 那两行写的是 `search \"\(q)\"`(`PodcastRepository.swift:30/:47`),同样的破口换个形状。修法是两端一起把原文换成**词数**(`queryWords=N`),鸿蒙本来就是只记命中条数的那一端。<br>**判据教训**:跨端"某一端没有"的结论,词表要按**每一端的书写习惯**给多个形态(单引号 / 转义引号 / 变量名),否则会得出"这是单端破口"这种错到方向上的结论。逐条见 H131 |
 | 2 | 同一条政策说「不记录完整 URL」,**macOS 端不成立** | `docs/PRIVACY.md:50` ↔ `macos/.../Data/Log.swift` 里没有任何脱敏函数;整串 URL 落日志的点:`DownloadManager.swift:34`、`RssParser.swift:9/11/20/26/68`、`HTTPClient.swift:18/24/29`、`InboxStore.swift:127`、`PlayerController.swift:381` | 另两端都在**写盘前集中收成 `scheme://host`**:Android `util/Logger.kt:62`(配合 `:52 endpoint()`)、鸿蒙 `util/Logger.ets:55 sanitize`。订阅地址的集合就是收听行为,这条不是形式问题<br>**✅ 2026-10-05 已修**:没有去改那 12 个调用点,而是在 `Log.write` 里加**同一个集中脱敏**(`sanitize()` + `endpoint()`),这样"新加日志的人不需要知道这条规矩",且与另两端同形。**顺带把 error 那半截也过了脱敏** —— `URLError` 的 description 会把失败地址整段带出来,Android 那边早就对堆栈做过这件事。判据:函数从 `Log.swift` **逐字取出**单独编译跑 10 例(URL 带 path/query/fragment、带端口、带 userinfo、IPv6 字面量、大写 scheme、一行两个 URL、`<>` 包裹、非 http 的 scheme 不动、无 URL 的原样)全过,加上整模块中性化到 0 错误的差分与两道阳性对照,逐条见 H131 |
 | 3 | 政策说「大陆应用商店版本**不含**离线语音识别」,而鸿蒙 release 包里**有**这套实现 | 解包实测 1.0.3 市场包 `harmony/entry/build/release/outputs/default/entry-default-signed.hap`(**处理量 2,357,035 B / 18 个文件**):`ets/modules.abc`(**741,152 B**)里 `speechRecognizer`×1、`SpeechTranscriber`×2、`PcmReader`×2;`libs/arm64-v8a/libreverb_pcm.so` 57,888 B 也在包里 | `Features.LOCAL_ASR=false`(`playback/…`→`AppContainer.ets:96` 门住实例化)⇒ **运行时永不执行**,但 ArkTS 没有 DCE(硬规矩 2,`docs/ARCHITECTURE.md:237` 与 `harmony/shelved/README.md` 记的正是这条),所以「不含」按硬规矩 1 的解包口径不成立。<br>**需要产品决定**:① 把 `SpeechTranscriber.ets` + `PcmReader.ets` + `cpp/` 那条链移出编译树(照 `shelved/` 的做法,代价是换引擎时要搬回来) ⇒ 政策那句话保持原样;或 ② 不动代码、把政策措辞改成「不会在本机执行识别」。两种都能收敛,不能只做一半 |
-| 4 | 政策列了一个**已经不申请**的权限 | `docs/PRIVACY.md:84`(开机广播)↔ `AndroidManifest.xml:24-26` 用 `tools:node="remove"` 显式移除(H120 那轮为避灰色软件启发式做的) | 多声明不危险,但政策页是逐字被读的东西;删该行即可。`site/reverb/privacy.html` 同步 —— **与预载那条一起走一次重新部署**(本就在待办里) |
-| 5 | 政策把 macOS 的识别写成「内置开源离线识别组件、识别模型随安装包提供」 | `docs/PRIVACY.md:25/:72` ↔ `macos/Sources/Reverb/Data/Transcriber.swift:20-22` 用 Apple `SpeechAnalyzer` / `SpeechTranscriber`,模型由**系统**按需联网下载(`:55 downloadAndInstall`)、不在包内 | 该下载目的地也没进政策第三节清单。macOS 没有同意页也没有 `privacy_url`,而政策页尾(`PRIVACY.md:138`)自称适用三端 |
+| 4 | 政策列了一个**已经不申请**的权限 | `docs/PRIVACY.md:84`(开机广播)↔ `AndroidManifest.xml:24-26` 用 `tools:node="remove"` 显式移除(H120 那轮为避灰色软件启发式做的) | 多声明不危险,但政策页是逐字被读的东西;删该行即可。`site/reverb/privacy.html` 同步 —— **与预载那条一起走一次重新部署**(本就在待办里)<br>**✅ 2026-10-06 两份文本已同步改掉**:权限表里那行删除,并在「本应用不申请…」那句后面**点名写明不申请开机广播**(静默删行会让下一个人以为"从来没申请过",而它是显式 `tools:node="remove"` 移除的 —— 那句话同时解释了原因)。**站点尚未重新部署** |
+| 5 | 政策把 macOS 的识别写成「内置开源离线识别组件、识别模型随安装包提供」 | `docs/PRIVACY.md:25/:72` ↔ `macos/Sources/Reverb/Data/Transcriber.swift:20-22` 用 Apple `SpeechAnalyzer` / `SpeechTranscriber`,模型由**系统**按需联网下载(`:55 downloadAndInstall`)、不在包内 | 该下载目的地也没进政策第三节清单。macOS 没有同意页也没有 `privacy_url`,而政策页尾(`PRIVACY.md:138`)自称适用三端<br>**✅ 2026-10-06 两份文本已按端拆开写清**:①「内置开源组件、模型随安装包」限定为 **Android 自分发版**;② macOS 单列一条 —— 用系统自带语音识别框架、模型**不在包内、由系统按需下载**;③ 第三节网络表补上「macOS 语音识别语言模型」这一行(注明由系统发起、本应用不指定地址、不附加音频与身份);④ 顺带修了一处**比代码乐观**的旧句:原文「若发布方提供官方逐字稿,本应用会直接请求该文件」对 macOS 不成立(桌面端压根没有 `transcriptUrl`,见 A2-2#7),已改成「Android 与 HarmonyOS 版会直接请求;macOS 版当前只在本机生成」。**站点尚未重新部署**;另:#3(鸿蒙"不含识别"那句)**没动**,那条要产品先定路线 |
 
 #### A2-2 三端实现不一致 / 会让功能不成立
 
