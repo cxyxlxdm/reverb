@@ -33,7 +33,12 @@
 - 完全设备端,音频不出机器;语言模型由系统按需下载一次,之后离线;
 - **有词级时间戳**(`audioTimeRange`)⇒ 能做逐词卡拉OK,是三端里唯一能做到的;
 - 还给未定稿的实时尾巴(`volatileResults`),打字机效果;
-- 门控 `@available(macOS 26, *)`,旧系统显示"需要 macOS 26"。
+- 门控 `@available(macOS 26, *)`,旧系统显示"需要 macOS 26";
+- 缓存**带版本号**(`TranscriptFormat.version = 2`,与 Android `TranscriptStore.CACHE_VERSION` /
+  鸿蒙同值同义;旧文件没这个键 ⇒ 缺省按 v1 判、整份作废重转),以及词级时刻在**入库那一步**
+  就夹成「≥0 且起点单调不减」(`TranscriptFormat.monotonic`,读缓存时再整体收敛一次)——
+  渲染侧找当前句用的是 `lastIndex { $0.startMs <= now }`,**只在单调时才正确**(硬规矩 10)。
+  这两条是 2026-10-06 才补齐的(此前桌面端两处都缺,见 `ROADMAP.md` 三-A2)
 
 **功能不做渠道删减** —— macOS 是自分发,不受大陆商店的合规口径约束。
 

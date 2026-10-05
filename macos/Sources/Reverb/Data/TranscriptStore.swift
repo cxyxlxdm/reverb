@@ -1,5 +1,58 @@
 import Foundation
 
+/// 逐字稿的**缓存口径与时间轴不变式**。
+///
+/// 为什么写在类外:`TranscriptStore` 是 `@MainActor`,而它的缓存解码刻意搬到后台线程
+/// (一份词级稿实测 192 KB,主线程解码会让切集卡一下)。校验版本与夹单调这两步
+/// 要跟着解码一起在后台跑完,所以它们不能是 MainActor 的成员。
+/// 与 Android `TranscriptStore.CACHE_VERSION` / 鸿蒙 `TranscriptStore.CACHE_VERSION` 同值同义。
+enum TranscriptFormat {
+    /// 缓存格式 / 时间轴口径的版本。**改了时刻的算法就要 +1**(硬规矩 11),
+    /// 否则用户机器上已经生成的旧稿会一直按旧口径显示,修复等于没生效,而用户没有自救入口。
+    ///
+    /// - v1(缺失 `version` 字段的一律当 v1):词级时刻直接取 `audioTimeRange`,
+    ///   句与句、词与词之间**不校验单调性**;
+    /// - v2:在数据出口一次性保证「起点 ≥0 且单调不减、终点不早于起点」(见 `monotonic`)。
+    static let version = 2
+
+    /// 把句子起点夹成 **不小于 `floor`**、终点不早于起点,词级同理。
+    ///
+    /// 非做不可的理由:渲染侧找当前句用的是 `segments.lastIndex { $0.startMs <= now }`
+    /// (`UI/TranscriptPage.swift:32`),这个写法**只在起点单调时才正确** ——
+    /// 队尾混进一个异常小的值,它就永远满足条件,于是高亮钉死在那一句再也不动
+    /// (Android 端的真实事故,见 TROUBLESHOOTING H60)。Apple 的 `audioTimeRange`
+    /// 不保证按 run 递增,而将来若接官方稿(另一份别人生成的时间轴),同样不能假定它排好,
+    /// 所以这条放在**两个来源共同经过的出口**上。
+    static func monotonic(_ segments: [TranscribedSegment], floor: Int = 0) -> [TranscribedSegment] {
+        var out: [TranscribedSegment] = []
+        out.reserveCapacity(segments.count)
+        var at = floor
+        for s in segments {
+            let start = max(s.startMs, at)
+            at = start
+            out.append(TranscribedSegment(
+                text: s.text, startMs: start, endMs: max(s.endMs, start),
+                words: s.words.map { tidyWords($0, floor: start) }))
+        }
+        return out
+    }
+
+    /// 词级同一规则:起点不小于句起点也不减,终点不早于起点。
+    /// 不做"已经有序就原样返回"的快路径 —— 这条只在**读缓存(后台线程)与每句入库一次**
+    /// 上跑,不在渲染路径上(硬规矩 6 管的是每秒两次的代码)。
+    private static func tidyWords(_ words: [TranscribedWord], floor: Int) -> [TranscribedWord] {
+        var out: [TranscribedWord] = []
+        out.reserveCapacity(words.count)
+        var at = floor
+        for w in words {
+            let start = max(w.startMs, at)
+            at = start
+            out.append(TranscribedWord(text: w.text, startMs: start, endMs: max(w.endMs, start)))
+        }
+        return out
+    }
+}
+
 /// 「转录」状态机与缓存。每单集 × 每语言各存一份 JSON 到
 /// ~/Library/Application Support/Reverb/Transcripts/,命中缓存秒显。
 /// 转录本身走 Transcriber(仅 macOS 26,完全设备端)。
@@ -34,7 +87,8 @@ import Foundation
         return d
     }()
 
-    private struct Cached: Codable { let localeId: String; let complete: Bool; let segments: [TranscribedSegment] }
+    /// `version` 是**可选**的:v2 之前写出的缓存压根没这个键,缺省按 v1 处理(见 `TranscriptFormat.version`)。
+    private struct Cached: Codable { let version: Int?; let localeId: String; let complete: Bool; let segments: [TranscribedSegment] }
 
     // MARK: - 对外
 
@@ -135,7 +189,12 @@ import Foundation
                     volatileTail = tail
                     if state != .running { state = .running }
                 case .segment(let seg):
-                    segments.append(seg)
+                    // **时间轴不变式在入库这一刻保证**(硬规矩 10):渲染侧找当前句用的是
+                    // `lastIndex { $0.startMs <= now }`,只在起点单调时才正确。
+                    // 每句只夹"新增这一条",下限取上一条的起点 —— 于是整条链一次性有序,
+                    // 存进缓存的也已经是收敛后的那份。
+                    let floorMs = segments.last?.startMs ?? 0
+                    segments.append(TranscriptFormat.monotonic([seg], floor: floorMs)[0])
                     volatileTail = ""   // 该尾巴已定稿并入 segments
                     if state != .running { state = .running }
                 }
@@ -158,18 +217,28 @@ import Foundation
     }
     /// 读缓存:**在后台线程解码**。逐字稿是本 App 最大的一份 JSON
     /// (一集词级稿实测 192 KB,长单集更大),放在主 actor 上解码会让切集卡一下。
+    /// 版本校验与时间轴收敛也在这同一个后台任务里做完 —— 于是主线程拿到的已经是可用的那份。
     private func loadCache(episodeId: String, localeId: String) async -> Cached? {
         let url = cacheURL(episodeId: episodeId, localeId: localeId)
         return await Task.detached(priority: .userInitiated) { () -> Cached? in
             guard let data = try? Data(contentsOf: url) else { return nil }
-            return try? JSONDecoder().decode(Cached.self, from: data)
+            guard let cached = try? JSONDecoder().decode(Cached.self, from: data) else { return nil }
+            // 旧口径的稿**整体作废**(硬规矩 11):界面上看不出这份稿是按哪套算法生成的,
+            // 而改了时刻算法之后继续显示旧稿,等于修复没生效,用户也没有清缓存的入口自救。
+            if (cached.version ?? 1) < TranscriptFormat.version {
+                Log.i("Transcript", "缓存是旧口径(v\(cached.version ?? 1)),丢弃重转")
+                return nil
+            }
+            return Cached(version: TranscriptFormat.version, localeId: cached.localeId,
+                          complete: cached.complete,
+                          segments: TranscriptFormat.monotonic(cached.segments))
         }.value
     }
 
     /// 写缓存:同样在后台编码 + 写盘。segments 是值类型,捕获即快照,不存在数据竞争。
     private func saveCache(episodeId: String, localeId: String, segments: [TranscribedSegment]) {
         let url = cacheURL(episodeId: episodeId, localeId: localeId)
-        let c = Cached(localeId: localeId, complete: true, segments: segments)
+        let c = Cached(version: TranscriptFormat.version, localeId: localeId, complete: true, segments: segments)
         Task.detached(priority: .utility) {
             if let data = try? JSONEncoder().encode(c) {
                 try? data.write(to: url, options: .atomic)
