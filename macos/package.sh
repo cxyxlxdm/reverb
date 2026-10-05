@@ -77,36 +77,19 @@ echo "==> ad-hoc codesign"
 codesign --force --deep --sign - "$BUNDLE"
 
 # ---- 解包验收(硬规矩 1)---------------------------------------------------
-# 处理量先行:没有「扫了多少」,后面的 0 不成立(见 zero-hit-must-prove-scan)。
-BIN="$BUNDLE/Contents/MacOS/$APP"
-RES="$BUNDLE/Contents/Resources"
-LPROJ=$(find "$RES" -maxdepth 1 -name '*.lproj' -type d | wc -l | tr -d ' ')
-echo "==> 验收:处理量 —— 二进制 $(wc -c <"$BIN" | tr -d ' ') B / .lproj $LPROJ 套 / Resources $(find "$RES" -maxdepth 1 | wc -l | tr -d ' ') 项"
-
-# 期望非 0:播放模式这批改动确实在包里。字符串字面量会留在二进制里,
-# 所以「键即简体原文」的那三个词与两个 UserDefaults 键名都是可判据。
-# 注意 `play_mode` 那一行会把 `play_mode_map` 的命中一起算进去(它是它的前缀),
-# 所以它恒 ≥ play_mode_map —— 这是预期的,不是重复计数错误。
-# 期望 0:老包(1.0.2)里这些词全部 0 命中 —— 2026-09-29 拿 build/ 里那个旧 dmg
-# 实测过这组负控制(play_mode_map / SEQUENTIAL / 顺序播放 均 0),所以非 0 才有意义。
-# 2026-10-01 补批注那三个词时,负控制又拿归档的 dist/余音-Reverb-1.0.2-arm64.dmg 重跑了一遍:
-# notes.json / 批注 / 记下这一秒 在二进制与四份 .strings 里**都是 0**(处理量:二进制 4,443,392 B,
-# .strings 4 份共 29,446 B),所以这三个词报非 0 才算数(硬规矩 1:声明"有"同样要能反证)。
-for w in play_mode_map play_mode SEQUENTIAL REPEAT_ONE SHUFFLE 顺序播放 单曲循环 随机播放 \
-         notes.json 批注 记下这一秒; do
-  printf '   %-14s %s\n' "$w" "$(LC_ALL=C grep -a -o "$w" "$BIN" | wc -l | tr -d ' ')"
+# 断言在 ./verify-bundle.sh 里,不在这里:那个脚本要能脱离 swift build 单独跑,
+# 才好在没有完整 Xcode 的机器上拿假 bundle 自检(见 tools/selftest-verify.sh)。
+# 期望架构与 verify 共用同一个 EXPECTED;期望语言取自 Localization/ —— 和上面那行
+# `cp -R Localization/*.lproj` 同源,所以加一门语言只需要改 Localization/,判据自己跟上。
+LANGS=()
+for d in Localization/*.lproj; do
+  [ -d "$d" ] && LANGS+=("$(basename "$d" .lproj)")   # 没有匹配时 glob 会原样留下,所以要判 -d
 done
-
-echo "   本地化:$(find "$RES" -name 'Localizable.strings' | wc -l | tr -d ' ') 份 .strings,lint 结果:"
-for f in "$RES"/*.lproj/Localizable.strings; do
-  printf '      %s %s\n' "$(basename "$(dirname "$f")")" "$(plutil -lint "$f" | awk -F': ' '{print $NF}')"
-done
-
-echo "   版本与运行门槛:"
-plutil -p "$BUNDLE/Contents/Info.plist" | grep -E 'CFBundleShortVersionString|CFBundleVersion|LSMinimumSystemVersion' | sed 's/^/      /'
-vtool -show-build "$BIN" 2>/dev/null | grep -E 'minos|sdk|platform' | sed 's/^/      /' || true
-echo "      架构:$(lipo -archs "$BIN" 2>/dev/null || echo unknown)(上面已断言过两个架构齐 —— universal)"
-codesign -dvv "$BUNDLE" 2>&1 | grep -E 'Signature=|Format=|Identifier=' | sed 's/^/      /'
+if [ ${#LANGS[@]} -eq 0 ]; then
+  echo "   ✗ Localization/ 下一套 .lproj 都没有 —— 验收无法断言语言集合,不出 dmg。"
+  exit 1
+fi
+./verify-bundle.sh "$BUNDLE" "${EXPECTED[@]}" --langs "${LANGS[@]}"
 # --------------------------------------------------------------------------
 
 echo "==> build dmg"
@@ -116,10 +99,12 @@ cp -R "$BUNDLE" "$STAGE/"
 ln -s /Applications "$STAGE/Applications"
 # 上架/交付物一律落 dist/(与 android、harmony 同规矩);build/ 只是中间产物。
 # 文件名带版本与架构:dist/ 里会同时躺着历史包,不带版本的文件名一旦重名就只能靠 mtime 猜是哪个。
-# universal 必须写在名字里 —— 1.0.2 那个 arm64 单架构包就是没有这个标记,才让 Intel 用户装不上却看不出来。
+# 架构标记**由 EXPECTED 推导,不再写死 universal** —— 1.0.2 那个包正是"名字叫 universal、
+# 实际 arm64 单架构"才让 Intel 用户装不上却看不出来;写死的字符串只会重复同一个错误。
 mkdir -p dist
 VER="$(plutil -extract CFBundleShortVersionString raw "$BUNDLE/Contents/Info.plist")"
-DMG="dist/余音-Reverb-${VER}-universal.dmg"
+if [ "${#EXPECTED[@]}" -gt 1 ]; then TAG="universal"; else TAG="${EXPECTED[0]}"; fi
+DMG="dist/余音-Reverb-${VER}-${TAG}.dmg"
 rm -f "$DMG"
 hdiutil create -volname "余音 Reverb" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null
 rm -rf "$STAGE"
