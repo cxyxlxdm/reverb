@@ -118,6 +118,10 @@ export struct TranscriptPane {
    * 这个写法只在**句子起点单调不减**时才正确 —— 队尾混进一个异常小的值就会永远命中它,
    * 高亮钉死不动。官方稿由 `TranscriptLines.monotonic` 保证,系统识别那条按喂入量递推,
    * 天然单调(见 `SpeechTranscriber`)。
+   *
+   * **只有 `autoScroll` 用它** —— 滚动要的是"第几行"这个下标(`scrollToIndex` 的入参),
+   * 每档一次整表扫描是必要成本。渲染侧不在这儿拿下标,而是逐行问 `isCurrentLine`,
+   * 原因见那里的注释(H137)。
    */
   private currentIndex(): number {
     const segs = this.store.segments;
@@ -174,7 +178,7 @@ export struct TranscriptPane {
     List({ space: 10, scroller: this.scroller }) {
       ForEach(this.store.segments, (seg: TranscribedSegment, index?: number) => {
         ListItem() {
-          this.lineText(seg, (index === undefined ? -1 : index) === this.currentIndex())
+          this.lineText(seg, this.isCurrentLine(index === undefined ? -1 : index))
         }
         // 点一句跳到那儿 —— 逐字稿最实用的一点
         .onClick(() => { this.player.seekTo(seg.startMs); })
@@ -239,10 +243,10 @@ export struct TranscriptPane {
       Text() {
         ForEach(seg.words, (w: TranscribedWord, k?: number) => {
           Span(w.text)
-            .fontColor(this.spokenIndex(seg) === (k === undefined ? -1 : k)
+            .fontColor(this.isSpokenWord(seg, k === undefined ? -1 : k)
               ? this.scheme.primary
               : withAlpha(this.scheme.primary, 0.55))
-            .fontWeight(this.spokenIndex(seg) === (k === undefined ? -1 : k)
+            .fontWeight(this.isSpokenWord(seg, k === undefined ? -1 : k)
               ? FontWeight.Medium : FontWeight.Normal)
         }, (w: TranscribedWord, k?: number) => `${k}-${w.startMs}`)
       }
@@ -259,12 +263,35 @@ export struct TranscriptPane {
     }
   }
 
-  /// 这一句里读到第几个词了(同样是从后往前找第一个起点已过去的)
-  private spokenIndex(seg: TranscribedSegment): number {
-    for (let i = seg.words.length - 1; i >= 0; i--) {
-      if (seg.words[i].startMs <= this.nowMs) return i;
-    }
-    return -1;
+  /**
+   * 第 `i` 句是不是当前句 —— **O(1) 判据**,不是"先算出当前句下标再逐行比"。
+   *
+   * 为什么不用 `currentIndex()` 去比:那个函数是**整张表从后往前**扫的,而渲染侧要给每一行
+   * 都判一次,于是每档重渲变成"每行 O(句)"。改成只看"本句起点已过去、且下一句还没到",
+   * 一次比较就够(表尾没有下一句,所以最后那句一旦起点过去就是当前句)。
+   *
+   * Android 端没有这一层:它把 `currentIndex` 放在顶层一次 `remember(segments, nowMs / 100)`
+   * 算好再往下传,整档只有 O(句)。本端原本想照抄那个形状,但 ArkUI 的 `@Builder` 里
+   * **不能声明局部变量** —— 实测 `const cur = this.currentIndex();` 直接编译失败
+   * (`10905209 Only UI component syntax can be written here`,见 H137),没有"算一次存进变量"
+   * 这条路;而存成字段又变成"每个改 nowMs 与改稿子的地方都要记得去更新/失效它"的缓存问题。
+   * 所以这里换的是**等价的判据**:同样只看当前位置,不需要任何缓存,也不依赖谁记得失效它。
+   *
+   * 依赖的不变式与 `currentIndex()` 完全同一个(起点单调不减),见上面那条注释与硬规矩 10。
+   */
+  private isCurrentLine(i: number): boolean {
+    if (i < 0) return false;
+    const segs = this.store.segments;
+    if (segs[i].startMs > this.nowMs) return false;
+    return i + 1 >= segs.length || segs[i + 1].startMs > this.nowMs;
+  }
+
+  /// 这一句的第 `k` 个词是不是正在读的那个 —— 同样 O(1),理由见 `isCurrentLine`
+  private isSpokenWord(seg: TranscribedSegment, k: number): boolean {
+    if (k < 0) return false;
+    const words = seg.words;
+    if (words[k].startMs > this.nowMs) return false;
+    return k + 1 >= words.length || words[k + 1].startMs > this.nowMs;
   }
 
   @Builder
