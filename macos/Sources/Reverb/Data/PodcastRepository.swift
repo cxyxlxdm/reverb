@@ -27,7 +27,10 @@ final class PodcastRepository {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return ([], "") }
 
-        Log.i("Repo", "search \"\(q)\" region=\(region.isEmpty ? "-" : region)")
+        // 只记词数,不记原文:已发布的隐私政策第二节承诺「日志不记录搜索词」,
+        // 而这份日志用户可在设置里一键导出。与 Android util/Logger 那条同一口径。
+        let words = q.split(whereSeparator: { $0 == " " || $0.isNewline }).count
+        Log.i("Repo", "search queryWords=\(words) region=\(region.isEmpty ? "-" : region)")
         if q.hasPrefix("http://") || q.hasPrefix("https://") {
             if let result = await rss.fetch(q) {
                 return ([result.podcast], "RSS")
@@ -44,7 +47,7 @@ final class PodcastRepository {
         let gp = await gpodder.search(q)
         if !gp.isEmpty { return (gp, "gpodder.net") }
 
-        Log.w("Repo", "search \"\(q)\" 所有数据源均无结果")
+        Log.w("Repo", "search queryWords=\(words) 所有数据源均无结果")
         return ([], "")
     }
 

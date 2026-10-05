@@ -91,9 +91,11 @@ enum Log {
 
     private static func write(_ level: Level, _ category: String, _ message: String, _ error: Error?) {
         let ts = formatter.string(from: Date())
-        var line = "\(ts) [\(level.rawValue)] [\(category)] \(message)\n"
+        var line = "\(ts) [\(level.rawValue)] [\(category)] \(sanitize(message))\n"
         if let error {
-            line += "    ↳ \(String(describing: error))\n"
+            // error 的 description 可能整段带 URL(URLError 的 userInfo 会塞失败地址),
+            // 所以这一行也必须过同一个函数,不能只处理 message。
+            line += "    ↳ \(sanitize(String(describing: error)))\n"
         }
         // 控制台镜像(便于开发期实时观察)。
         FileHandle.standardError.write(Data(line.utf8))
@@ -101,6 +103,51 @@ enum Log {
             rotateIfNeeded()
             append(line)
         }
+    }
+
+    /// 把文本里出现的 `http(s)://…` 收成 `scheme://host`。
+    ///
+    /// **为什么在 write 里统一做,而不是在各个调用点**:已发布的隐私政策第二节写明
+    /// 「日志不记录搜索词、完整 URL」,而这句承诺对三端一起生效。Android 在
+    /// `util/Logger.write` 里有同一个函数,鸿蒙在 `util/Logger.ets` 的 `sanitize()` ——
+    /// 靠十几个调用点各自记得写 `host=` 必然漏(此前 macOS 的 `HTTPClient`、`RssParser`、
+    /// `PlayerController`、`DownloadManager` 五处直接把完整 URL 打进文件)。
+    /// 集中一处还有一个好处:新加日志的人不需要知道这条规矩。
+    static func sanitize(_ text: String) -> String {
+        guard text.contains("://") else { return text }
+        guard let regex = try? NSRegularExpression(pattern: "https?://[^\\s\"'<>]+", options: [.caseInsensitive]) else { return text }
+        let matches = regex.matches(in: text, options: [], range: NSRange(text.startIndex..., in: text))
+        guard !matches.isEmpty else { return text }
+        var result = ""
+        var cursor = text.startIndex
+        for m in matches {
+            guard let r = Range(m.range, in: text) else { continue }
+            result += text[cursor..<r.lowerBound]
+            result += endpoint(String(text[r]))
+            cursor = r.upperBound
+        }
+        result += text[cursor...]
+        return result
+    }
+
+    /// URL → `scheme://host`(去 path / query / fragment / 端口 / userinfo)。解析不出来时
+    /// 返回 `invalid` 而不是原样吐回 —— 后者的失败方向是"悄悄把 URL 写进文件"。
+    static func endpoint(_ url: String) -> String {
+        guard let marker = url.range(of: "://") else { return "invalid" }
+        let scheme = url[..<marker.lowerBound].lowercased()
+        var authority = url[marker.upperBound...]
+        if let cut = authority.firstIndex(where: { $0 == "/" || $0 == "?" || $0 == "#" }) {
+            authority = authority[..<cut]
+        }
+        if let at = authority.lastIndex(of: "@") { authority = authority[authority.index(after: at)...] }
+        if authority.hasPrefix("[") {
+            // IPv6 字面量:整个地址带冒号,不能按"最后一个冒号"去端口(鸿蒙 endpointOf 同处理)
+            if let close = authority.firstIndex(of: "]") { authority = authority[...close] }
+        } else if let colon = authority.lastIndex(of: ":") {
+            authority = authority[..<colon]
+        }
+        guard !scheme.isEmpty, !authority.isEmpty else { return "invalid" }
+        return "\(scheme)://\(authority)"
     }
 
     /// 追加一行到当前文件(队列内调用)。

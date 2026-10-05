@@ -86,7 +86,15 @@ export class PlayerController {
   hasNext: boolean = false;
   hasPrev: boolean = false;
   userQueue: Episode[] = [];
-  sleepRemainingMs: number = 0;
+  /**
+   * 睡眠「定时中」的标志位 —— 只在设时 / 取消 / 到点这三处写,所以留在被观察对象上没问题。
+   *
+   * 倒计时的**数值本体**不在这里,而在 `clock.sleepRemainingMs`(每秒写一次)。
+   * 曾经它就是本类的一个普通字段、由 1 秒 ticker 每秒赋值,于是开了睡眠定时之后
+   * 挂着播放态的那些界面每秒整页重建一次(ArkUI V1 观察粒度是对象,不区分 private,见 H64);
+   * 这是 `positionMs` 那条老账的漏网同类。
+   */
+  sleepTimed: boolean = false;
   sleepEndOfEpisode: boolean = false;
   playbackError: string = '';
   /// 是否在台(随机/情境电台):播完自动接下一首
@@ -1178,14 +1186,16 @@ export class PlayerController {
 
   setSleepTimer(minutes: number): void {
     this.sleepEndOfEpisode = false;
-    this.sleepRemainingMs = minutes * 60000;
+    this.clock.sleepRemainingMs = minutes * 60000;
+    this.sleepTimed = true;
     this.startSleepTicker();
     this.notify();
   }
 
   setSleepEndOfEpisode(): void {
     this.clearSleepTicker();
-    this.sleepRemainingMs = 0;
+    this.clock.sleepRemainingMs = 0;
+    this.sleepTimed = false;
     this.sleepEndOfEpisode = true;
     this.notify();
   }
@@ -1193,7 +1203,8 @@ export class PlayerController {
   cancelSleep(): void {
     this.clearSleepTicker();
     this.clearFade();
-    this.sleepRemainingMs = 0;
+    this.clock.sleepRemainingMs = 0;
+    this.sleepTimed = false;
     this.sleepEndOfEpisode = false;
     const p = this.player;
     if (p !== null) p.setVolume(1.0);
@@ -1203,22 +1214,25 @@ export class PlayerController {
   private startSleepTicker(): void {
     this.clearSleepTicker();
     this.sleepTimer = setInterval(() => {
-      const remain = this.sleepRemainingMs - 1000;
+      const remain = this.clock.sleepRemainingMs - 1000;
       if (remain <= 0) {
-        this.sleepRemainingMs = 0;
+        this.clock.sleepRemainingMs = 0;
+        this.sleepTimed = false;
         const p = this.player;
         if (p !== null) p.setVolume(1.0);
         this.pausePlayback();
         this.clearSleepTicker();
+        // 只有"到点"这一格需要通知:标志位翻了,那颗 chip 要从倒计时切回静态文案。
+        // 中间的每一秒**不 notify** —— 那正是本方法以前每秒整页重建的来源(H64 同族)。
+        this.notify();
       } else {
-        this.sleepRemainingMs = remain;
+        this.clock.sleepRemainingMs = remain;
         // 最后 8 秒线性渐弱
         if (remain <= this.sleepFadeMs) {
           const p = this.player;
           if (p !== null) p.setVolume(remain / this.sleepFadeMs);
         }
       }
-      this.notify();
     }, 1000);
   }
 
