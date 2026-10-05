@@ -14,6 +14,10 @@ struct PlayerView: View {
     /// 按下「写批注」那一下冻结的时间。不能直接显示 `player.positionMs`:它每 0.5s 跟着播放器刷新,
     /// 弹窗挂着不动就会看到时间一路往上涨,而用户要的是"我按下的那一秒"。
     @State private var notePosMs = 0
+    /// 按下那一下冻结的**那一集**。`actionRow(_ ep:)` 的参数在弹层开着时会跟着换集重新算进来
+    /// (自动续播、手点下一集),保存若用它,批注就挂到了下一集上 —— 而弹层里显示的时间戳
+    /// 还是上一集的,这种"时间对、集错"比两处都错更难被发现(见 A2-3#11)。
+    @State private var noteEpisode: Episode?
     @State private var noteDraft = ""
     @State private var momentURL: URL?
     @State private var momentArtwork: NSImage?
@@ -325,6 +329,7 @@ struct PlayerView: View {
                 // 时间在这里取一次:positionMs 每 0.5s 跟着播放器刷,
                 // 弹窗里显示的必须是"按下那一下"的那一秒,否则打字期间它会一路往上涨。
                 notePosMs = player.positionMs
+                noteEpisode = ep
                 noteDraft = ""
                 showNote = true
             } label: {
@@ -332,7 +337,12 @@ struct PlayerView: View {
             }
             .buttonStyle(.plain)
             .help("写批注")
-            .popover(isPresented: $showNote, arrowEdge: .bottom) { noteComposer(ep) }
+            .popover(isPresented: $showNote, arrowEdge: .bottom) {
+                // 见 `noteEpisode`:弹层只认按下那一刻的集
+                if let frozen = noteEpisode {
+                    noteComposer(frozen)
+                }
+            }
 
             // 剪藏分享
             if let momentURL {

@@ -79,6 +79,26 @@ export default class EntryAbility extends UIAbility {
     JsonFile.flushPending();
   }
 
+  /**
+   * **这里刻意不调 `PlayerController.release()`,也不 destroy `AvSessionBridge`。**
+   *
+   * 看着像漏了(播放器实例、`timeUpdate` 监听、tick/fade/sleep 三张定时器都留着),
+   * 但放进去比留着危险,两条理由:
+   *
+   * 1. **`release()` 是单向门**(`playback/PlayerController.ets:1356` 把 `released` 置真,
+   *    全仓没有一处复位),而 `startEpisode` 第 316 行就 `if (this.released) return`。
+   *    PlayerController 与 AvSessionBridge 都是**进程级单例**(`AppContainer.get()`),
+   *    而 ability 销毁 ≠ 进程死亡:系统回收 ability 却留着进程、或用户划掉卡片后又热启动,
+   *    复用的都是同一个已经 `released` 的对象 ⇒ **整个 App 再也播不出声音**,
+   *    比"泄漏一个播放器"严重一个量级。
+   * 2. **销毁 ability 时还在放音,恰恰是长时任务要的**。后台连续任务让进程活着、
+   *    让音频继续跑;此时 release 等于"从任务中心划掉卡片就把正在听的这一集掐了"。
+   *
+   * 所以收敛靠进程死亡(系统会把 AVPlayer、监听、定时器一并回收),这是有意的边界。
+   * 真要补一条显式释放路径,前提是**先给 `released` 一个复位入口**(并让重建播放器
+   * 那段能重新起表),而且必须装机验「后台播放中划掉卡片」与「热启动后再播」两格 ——
+   * 本机验不了,别顺手加。
+   */
   onDestroy(): void {
     JsonFile.flushPending();
     SettingsStore.onLanguageChanged = null;
