@@ -16,6 +16,7 @@ import { SeekBar } from './SeekBar';
 import { SleepCountdownText } from './SleepCountdownText';
 import { TranscriptPane } from './TranscriptPane';
 import { Features } from '../Features';
+import { Episode } from '../model/Models';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
 
@@ -75,6 +76,16 @@ export struct PlayerPage {
   /// 批注弹层里的正文草稿。**不叫 `noteText`**:本页已有一个 `noteText()` 方法
   /// (节目笔记那一页的正文),同名会撞成一个标识符 —— 编译器报 duplicate identifier。
   @State noteDraft: string = '';
+  /**
+   * 按下那一刻的**集**,与 `notePosMs` 一起冻结。
+   *
+   * 普通成员而不是 `@State`:这个值不参与渲染(弹层只显示时间不显示标题),
+   * 挂成 `@State` 等于白白让本页多一次重渲的触发源(硬规矩 7 那条观察粒度的账)。
+   *
+   * 只冻结时间不冻结集,会在"弹层开着的时候恰好播完接下一集"时把批注挂到**下一集**上 ——
+   * 表现是"我明明写的是上一集那一句",而界面里显示的时间戳看着还是合理的(见 A2-3#11)。
+   */
+  private noteEpisode: Episode | null = null;
   @State momentHint: string = '';
 
   private app: AppContainer = AppContainer.get();
@@ -547,6 +558,7 @@ export struct PlayerPage {
           const e = this.player.current;
           if (e === null) return;
           this.notePosMs = this.player.positionMs;
+          this.noteEpisode = e;
           this.noteDraft = '';
           this.showNote = true;
         })
@@ -669,7 +681,9 @@ export struct PlayerPage {
   }
 
   private saveNote(): void {
-    const e = this.player.current;
+    // 用**按下那一刻**冻住的集,而不是这里重新取 `player.current` —— 后者在弹层开着的时候
+    // 可能已经接下一集了,那时批注会挂错集(见 noteEpisode 的注释)。
+    const e = this.noteEpisode;
     if (e === null) {
       this.showNote = false;
       return;

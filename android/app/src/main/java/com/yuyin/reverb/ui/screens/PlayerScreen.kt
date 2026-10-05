@@ -131,6 +131,14 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
      */
     var noteDialogOpen by remember { mutableStateOf(false) }
     var noteAtMs by remember { mutableStateOf(0L) }
+    /**
+     * 按下那一刻的**集**,和 `noteAtMs` 一起冻结。
+     *
+     * 只冻结时间不够:`episode` 来自 `PlayerController.current`,自动续播或手点下一集时它会变,
+     * 而弹层还开着(写一句话要十几秒)。保存若读重组后的 `episode`,批注就挂到了**下一集**上,
+     * 而标题里显示的还是上一集的那一秒 —— 时间对、集错,比两者都错更难被发现(见 A2-3#11)。
+     */
+    var noteEpisode by remember { mutableStateOf<Episode?>(null) }
 
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
@@ -197,7 +205,7 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                         }
                     },
                     onStamp = { sealDialogOpen = true },
-                    onNote = { noteAtMs = position; noteDialogOpen = true }
+                    onNote = { noteAtMs = position; noteEpisode = episode; noteDialogOpen = true }
                 )
             }
         }
@@ -340,11 +348,14 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
         )
     }
 
-    if (noteDialogOpen) {
+    // 保存路径用的是 `noteTarget`(按下那一刻的集),不是 `episode`。
+    // `!= null` 那个判断只是给智能转换用 —— 两个字段在同一句里一起写,弹层开着就一定有值。
+    val noteTarget = noteEpisode
+    if (noteDialogOpen && noteTarget != null) {
         NoteDialog(
             atMs = noteAtMs,
             onSave = { text ->
-                container.noteStore.add(episode, noteAtMs, text, System.currentTimeMillis())
+                container.noteStore.add(noteTarget, noteAtMs, text, System.currentTimeMillis())
                 noteDialogOpen = false
             },
             onDismiss = { noteDialogOpen = false }

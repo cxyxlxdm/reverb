@@ -159,7 +159,10 @@ object BackupManager {
                 val raw = o.optLong("createdAt")
                 val createdAt = if (raw in 1 until 100_000_000_000) raw * 1000 else raw
                 EpisodeNote(
-                    id = o.optString("noteId").ifBlank { java.util.UUID.randomUUID().toString() },
+                    // 缺 `noteId` 时用**确定值**兜底,不用随机 UUID:恢复按 id 去重,
+                    // 随机 id 等于让同一份备份恢复两次就把批注**翻倍**(破坏幂等)。
+                    // 格式照鸿蒙 `${createdAt}-${i}` —— 确定值本身是免费的,没理由不这么做。
+                    id = o.optString("noteId").ifBlank { "$createdAt-$i" },
                     episode = ep,
                     positionMs = o.optLong("positionMs").coerceAtLeast(0L),
                     text = o.optString("text"),
