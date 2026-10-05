@@ -78,15 +78,38 @@ class NoteStore(context: Context) {
         }
     }
 
-    /** 备份恢复:按 id 去重(重复恢复同一份备份不会写出两份)。 */
+    /**
+     * 备份恢复:按 id 去重(重复恢复同一份备份不会写出两份),再走同一条 `normalize`
+     * —— 与 `load()` 一个口径,这样「从备份恢复出来的列表」和「下次冷启动从盘上读到的列表」是同一份内容。
+     */
     fun addAll(items: List<EpisodeNote>) {
         synchronized(lock) {
             val list = _notes.value.toMutableList()
             for (n in items) if (list.none { it.id == n.id }) list.add(n)
-            _notes.value = list.sortedByDescending { it.createdAt }
+            _notes.value = normalize(list)
             persist(_notes.value)
         }
     }
+
+    /**
+     * 从盘上或备份里读来的批注过一次**归一**:按落笔时刻倒序,并把 `positionMs` 的负值归 0。
+     *
+     * 为什么补在「读盘 + 恢复」这一道:时间线和「点一句跳到那一秒」直接吃这个列表,而
+     * `notes.json` 是**三端共用**的文件 —— 本端的写入点管不住它的前任(另一端写的顺序、
+     * 手工编辑过的内容、Android 系统级备份还原那种**整份文件覆盖回来**的路径,压根不经过 `addAll`)。
+     * 硬规矩 10 说的「不变式在数据出口一次性保证」,对读盘而言那个出口就是这份文件的**入口**。
+     * 排序与另两端同口径:`sortedByDescending` / `Array.sort` / Swift `sort` 都是稳定排序,
+     * 同一毫秒写下的两条保持原有先后。
+     *
+     * **刻意不套用 `add` 那条「上限夹到该集时长」**:`add` 里那个夹成立,是因为按下「写批注」的
+     * 那一刻手上有播放器实时位置作真值参照;而读盘时唯一可比的是 **RSS 元数据时长** ——
+     * 它是发布方自报的近似值,常常比真实音频短。拿一个近似上限去改写用户早就写下的那一秒,
+     * 比留着那个越界值更糟(界面上的时间戳自己跳了位,而用户无从知道是谁改的)。
+     * 越界值走到播放那一步,由播放器按真实时长夹,不落在数据里做二次改写。
+     */
+    private fun normalize(list: List<EpisodeNote>): List<EpisodeNote> =
+        list.map { if (it.positionMs < 0L) it.copy(positionMs = 0L) else it }
+            .sortedByDescending { it.createdAt }
 
     private fun load(): List<EpisodeNote> {
         if (!file.exists()) return emptyList()
@@ -110,7 +133,7 @@ class NoteStore(context: Context) {
                     )
                 )
             }
-            out
+            normalize(out)
         } catch (e: Exception) {
             Logger.e("NoteStore", "notes.json 读取失败,按空处理", e)
             emptyList()
