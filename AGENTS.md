@@ -71,7 +71,9 @@ hdc install -r entry/build/default/outputs/default/entry-default-signed.hap
 cd macos
 # ↓↓ 这两条在「构建机」上跑(本机跑不了,原因见下面 ⚠️ 块)↓↓
 swift build -c release             # 只编译
-./package.sh                       # universal 编译 → .app → ad-hoc 签名 → 解包验收 → dmg 进 dist/
+./package.sh                       # universal 编译 → .app → ad-hoc 签名 → 解包验收(断言)→ dmg 进 dist/
+# ↓↓ 这条在「本机」就能跑:验收脚本的自检(只要 CLT 自带工具)↓↓
+bash tools/selftest-verify.sh      # 手搭假 bundle 跑正向 + 把七类失败形状逐个弄坏,期望 pass=8 fail=0
 ```
 
 > ⚠️ **这两条命令不在本机跑。本机的角色已由用户定死(2026-09-29):开发 Android / 鸿蒙 / 文档,
@@ -122,13 +124,19 @@ swift build -c release             # 只编译
 >
 > **在构建机上出包 = 一条命令**:`cd macos && ./package.sh`。它做
 > **universal 编译**(`--arch arm64 --arch x86_64`)→ **架构硬断言**(少一个架构就 exit 1,不出 dmg)→
-> 组装 .app → ad-hoc 签名 → **解包验收**(处理量 / 判据词计数(2026-10-01 起 11 个)/ 四语 `.strings` lint /
-> 版本号 + `minos` + `sdk` + 架构 / 签名身份)→ dmg 落进 `macos/dist/`,文件名带版本(`-1.0.4-universal`)。
+> 组装 .app → ad-hoc 签名 → **解包验收** → dmg 落进 `macos/dist/`,文件名带版本与架构(由架构列表推导)。
+> 验收段是独立的 **`macos/verify-bundle.sh`**(2026-10-06 起,**每条判据都判成败、不过就退出 1**,
+> 不再是"打印给人看"):处理量 → 架构**集合相等**(缺一个 ✗,多一个也 ✗)→ 11 个判据词任一为 0 即 ✗ →
+> 语言**集合相等** + 每套 `.strings` 的 `plutil -lint` → `Info.plist` 三键(认 `plutil` 的**退出码**,
+> 不是"取到的字符串非空")→ `codesign --verify`。最后打印未覆盖范围。
 > 为什么默认两个架构:`swift build` 不带 `--arch` 时**只跟随构建机芯片**,1.0.2 那个包就是这么变成
 > arm64 单架构的,而 arm64-only 二进制在 Intel Mac 上没有退路(Rosetta 只翻译 x86→arm 一个方向)。
 > 验收段里「期望非 0」的那几个词是播放模式与批注的判据,已拿 1.0.2 旧包实测为全 0(负控制成立,
 > 批注那三个词是 2026-10-01 重跑同一份归档包验的),所以它报非 0 才算数;
 > 架构断言同样拿那个 arm64-only 二进制空跑验过:**期望两个架构时报 `✗ 缺 x86_64` 并退出 1,只期望 arm64 时通过**。
+> **本机唯一还能跑的一步 = `bash macos/tools/selftest-verify.sh`** —— 它只要 CLT 自带的
+> clang / lipo / codesign / plutil(2026-10-06 实测可跑):手搭一个假 bundle 跑正向,再把七类失败形状
+> 逐个弄坏,证明上面那些断言**各自都有牙齿**(本机结果 `pass=8 fail=0`;写变异时确实抓出三条写错的断言,见 H136)。
 > **仍未跑过的**是「真的产出一个 universal 包」那一步(本机没有 xcbuild,见 ⑥)。出完还要实跑那四项界面与
 > 自动续播验收,清单在 `docs/ROADMAP.md` 三-A。
 
