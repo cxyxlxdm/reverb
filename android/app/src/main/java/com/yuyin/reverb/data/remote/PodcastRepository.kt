@@ -41,7 +41,11 @@ class PodcastRepository(
     suspend fun search(query: String, region: String = ""): SearchOutcome {
         val q = query.trim()
         if (q.isBlank()) return SearchOutcome(emptyList(), "")
-        log.i(TAG, "search query='$q' region='$region'")
+        // 只记词数,不记原文 —— 已发布的隐私政策第二节承诺「日志不记录搜索词」,
+        // 而日志是用户可一键导出的。词数足够定位「搜了个短的/长的」这类问题。
+        // 鸿蒙 net/PodcastRepository.ets 早就是这个形态(只记命中条数),这里是补齐而不是新口径。
+        val words = q.split(Regex("\\s+")).count { it.isNotEmpty() }
+        log.i(TAG, "search queryWords=$words region='$region'")
 
         // 0) 直接是订阅源地址
         if (q.startsWith("http://", true) || q.startsWith("https://", true)) {
@@ -74,7 +78,7 @@ class PodcastRepository(
             if (it.isNotEmpty()) { log.i(TAG, "search via gpodder count=${it.size}"); return SearchOutcome(it, "gpodder.net") }
         }
 
-        log.w(TAG, "search failed, no result for '$q'")
+        log.w(TAG, "search failed, no result (queryWords=$words)")
         return SearchOutcome(emptyList(), "", failed = true)
     }
 
@@ -84,7 +88,7 @@ class PodcastRepository(
         if (!com.yuyin.reverb.BuildConfig.CATALOG) return emptyList()
         val q = query.trim()
         if (q.isBlank() || q.startsWith("http", true)) return emptyList()
-        log.i(TAG, "searchEpisodes query='$q' region='$region'")
+        log.i(TAG, "searchEpisodes queryWords=${q.split(Regex("\\s+")).count { it.isNotEmpty() }} region='$region'")
         return itunes.searchEpisodes(q, region).also { log.i(TAG, "searchEpisodes count=${it.size}") }
     }
 

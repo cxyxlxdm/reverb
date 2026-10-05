@@ -13,6 +13,7 @@ import { htmlToText } from '../util/HtmlText';
 import { sealOptions, SealOption } from '../store/StampStore';
 import { MomentCard, snapshotToPng, saveToGallery } from './MomentCard';
 import { SeekBar } from './SeekBar';
+import { SleepCountdownText } from './SleepCountdownText';
 import { TranscriptPane } from './TranscriptPane';
 import { Features } from '../Features';
 import { Log } from '../util/Logger';
@@ -424,9 +425,20 @@ export struct PlayerPage {
   sleepChip() {
     Row({ space: 4 }) {
       Glyph({ symbol: Sym.sleep, dim: 18, color: this.sleepTint() })
-      Text(this.sleepLabel())
-        .fontSize(TypeScale.caption * this.fontScale)
-        .fontColor(this.sleepTint())
+      if (this.player.sleepTimed) {
+        // 倒计时那一格是本页唯一每秒变的量,交给它自己按秒轮询 —— 
+        // 数值在非观察的 clock 里,挂在本页会带着整棵播放页每秒重建(H64)
+        SleepCountdownText({
+          color: this.sleepTint(),
+          fontSize: TypeScale.caption * this.fontScale,
+          running: true,
+          clock: this.player.clock,
+        })
+      } else {
+        Text(this.player.sleepEndOfEpisode ? L.s('sleep_current') : L.s('sleep'))
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.sleepTint())
+      }
     }
     .padding({ left: 10, right: 10, top: 5, bottom: 5 })
     .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.12))
@@ -436,17 +448,11 @@ export struct PlayerPage {
   }
 
   private sleepActive(): boolean {
-    return this.player.sleepRemainingMs > 0 || this.player.sleepEndOfEpisode;
+    return this.player.sleepTimed || this.player.sleepEndOfEpisode;
   }
 
   private sleepTint(): string {
     return this.sleepActive() ? this.scheme.primary : this.scheme.onSurfaceVariant;
-  }
-
-  private sleepLabel(): string {
-    if (this.player.sleepRemainingMs > 0) return formatTime(this.player.sleepRemainingMs);
-    if (this.player.sleepEndOfEpisode) return L.s('sleep_current');
-    return L.s('sleep');
   }
 
   @Builder

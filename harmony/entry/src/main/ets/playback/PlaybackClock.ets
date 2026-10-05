@@ -34,4 +34,12 @@ export class PlaybackClock {
   /// 收听时长计数的基线:上次计入的位置与单集 id
   countedPosMs: number = 0;
   countedEpId: string = '';
+  /**
+   * 睡眠定时的剩余毫秒。**每秒被写一次**,所以它不能留在 `PlayerController` 自己身上 ——
+   * 那个类是 `@Observed`,而 V1 的观察粒度是对象(与本文件开头同一条规律,硬规矩 7)。
+   * 挂在控制器上时的后果:只要开了睡眠定时,所有挂着播放态的界面(播放页 / 迷你条 / 底栏)
+   * 在播放中**每秒整页重建一次**,而这颗倒计时只有播放页那一小块用得上。
+   * 「到点要刷新」于是改由那个最小组件自己按秒轮询(见 `view/SleepCountdownText.ets`)。
+   */
+  sleepRemainingMs: number = 0;
 }
