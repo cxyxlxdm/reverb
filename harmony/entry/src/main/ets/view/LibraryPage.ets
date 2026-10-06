@@ -529,12 +529,30 @@ export struct LibraryPage {
                  * (macOS 的单集右键菜单是无条件带这一项的,这里向它对齐。)
                  */
                 showPlayedToggle: true,
-                onTogglePlayed: () => { this.history.markPlayed(h.episode.id, !h.played); },
+                // 读 store 而不是 `!h.played`:闭包里的 `h` 是**生成这一行那一刻**的快照,
+                // 而快照会过期(见下面键值的注释)。动作要拿当前值,只能回 store 问一次。
+                // 这里是**一次点击**问一次,不在渲染路径上,`isPlayed` 的整表扫描可以接受。
+                onTogglePlayed: () => { this.history.markPlayed(h.episode.id, !this.history.isPlayed(h.episode.id)); },
                 onPlayNext: () => { this.player.playNext(h.episode); },
                 onEnqueue: () => { this.player.enqueue(h.episode); }
               })
             }
-          }, (h: HistoryRow) => h.episode.id)
+          }, (h: HistoryRow) => `${h.episode.id}|${h.played ? 1 : 0}`)
+          /**
+           * 键值里必须带 `played`,否则长按菜单点「标记已播完」之后**这一行原地不动**:
+           * store 那边数组整个换了新的(每项都是新建对象),`@ObjectLink` 也确实通知了本页,
+           * 但 ForEach 按**键值**决定要不要重跑 itemGenerator —— 键没变就不重跑,
+           * 于是从迭代项身上取的那些参数(`h.played`、`h.episode`)一律停在创建那一刻。
+           *
+           * ⚠️ 同一行里 `isPlaying` 却是会变的,别被这个误导成"个别字段坏了":
+           * 它读的是**另一个** @Observed 对象(`this.player`),走的是属性级订阅那条路,
+           * 不经过 ForEach 的键值判断。规律是「**从被迭代的那个数组里取的字段,
+           * 改了不会就地刷新;从别的被观察对象取的会**」。真机两侧都量过,见 H154。
+           *
+           * 代价只有"点一下标记,这一行重建一次",而重建正是我们要的效果。
+           * 不改成"从 store 读 `played`"来绕:那个值仍然来自同一个数组,同样不刷新,
+           * 还额外给每一行加一次整表扫描(≤100 行 × O(n),渲染路径上不做解析——硬规矩 6)。
+           */
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)

@@ -1076,7 +1076,17 @@ export struct DiscoverPage {
               onEnqueue: () => { this.app.player.enqueue(h.episode); },
               onMarkPlayed: () => { this.history.markPlayed(h.episode.id, true); }
             })
-          }, (h: HistoryEntry) => h.episode.id)
+          }, (h: HistoryEntry) => `${h.episode.id}|${Math.round(h.positionMs / h.durationMs * 100)}`)
+          /**
+           * 键值里带**百分数进度**,否则这张卡的进度条整场都不动:进度每 5 秒写回 store,
+           * 数组换了新的、键没换,ForEach 就不重跑 itemGenerator,卡上的 `positionMs`
+           * 停在卡片创建那一刻(实测:拖到 79.6% 再切走切回,绿点仍在最左边,见 H154)。
+           *
+           * 为什么按 1% 取整而不是直接放 `positionMs`:进度是每 5 秒一跳的高频量,
+           * 键每跳一次就重建一次卡片(硬规矩 7 的反面)。条子本身只有 1% 的分辨率,
+           * 再细的变化界面根本画不出来 —— 90 分钟的集取整后大约一分钟才重建一次,
+           * 而且只有正在播的那一张会变。
+           */
         }
         .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding })
       }
