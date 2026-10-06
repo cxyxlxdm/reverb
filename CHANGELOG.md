@@ -215,8 +215,13 @@
   漏一次会把之后所有真实操作吞掉,比原 bug 更难查)。Android 侧 Compose 的 `Switch` 赋值本来就不回调,
   **所以这是补齐行为,不是分叉**。**真机双向验过**:恢复那一路整段日志里授权接口 0 次调用、导入的值保持住;
   手指拨同一颗开关仍照常走到授权请求,而且被拒之后不再连带取消任务。见 H153
-  ⚠️ **这两条晚于 `harmony/dist` 里现有的那份 1.0.4 包**(它是 H150 之后重打的):改动只在鸿蒙,
-  所以**鸿蒙的 1.0.4 上传前必须再重打一次并复跑解包验收**;Android 两渠道那两份这轮没有源码改动,不受影响
+  ✅ **这两条晚于上一次出的 1.0.4 包,所以鸿蒙已按新码重打**(2026-10-07 05:03,`harmony/dist/reverb.app` 1,090,628 B,
+  md5 与上一份不同)。解包验收:包版本 1000004 / 1.0.4、`app.debug=false`;权限**恰好三条**
+  (`INTERNET` / `GET_NETWORK_INFO` / `KEEP_BACKGROUND_RUNNING`,集合相等,不多不少);`debugKey` 0 次;
+  目录接口 URL 非 0(`modules.abc` 里 `itunes.apple.com` 4 / `fyyd` 4 / `gpodder` 3 次,按 `grep -oa` 逐次计);
+  **新码在场**的判据是 abc 里 `stopAndClearWorks` 1 次、`already added` 1 次,而失效的那条 `stopWork` **0 次**;
+  `libs/` 仍只有 `libreverb_pcm.so` + `libc++_shared.so`(无任何识别模型),`backup_config.json` 的 includes 仍 9 项含 `notes.json`。
+  **Android 两渠道这轮没有源码改动,`android/dist` 那两份仍是有效的 1.0.4 包**
 - **图标按钮在读屏下终于有名字了**(Android + 鸿蒙):此前鸿蒙全端只有 **2 处**无障碍标签,
   也就是说播放页那颗主播放键、快退/快进、上一集/下一集、队列、更多、收藏,列表行末尾的收藏/入队/下载,
   队列页的上移/下移/移出,音阁的排列切换与页头两颗,发现页的分类排序与电台按钮,足迹页的保存/分享,
