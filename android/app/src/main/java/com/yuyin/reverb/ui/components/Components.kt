@@ -878,7 +878,7 @@ fun MiniPlayer(
                     IconButton(onClick = onToggle) {
                         Icon(
                             if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = null,
+                            contentDescription = stringResource(if (isPlaying) R.string.a11y_pause else R.string.a11y_play),
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }

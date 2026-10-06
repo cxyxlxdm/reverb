@@ -1005,6 +1005,66 @@
       "value": "This note will be deleted for good.\n\n\"%1$s\""
     },
     {
+      "name": "a11y_play",
+      "value": "Play"
+    },
+    {
+      "name": "a11y_pause",
+      "value": "Pause"
+    },
+    {
+      "name": "a11y_prev",
+      "value": "Previous episode"
+    },
+    {
+      "name": "a11y_next",
+      "value": "Next episode"
+    },
+    {
+      "name": "a11y_skip_back",
+      "value": "Back %d sec"
+    },
+    {
+      "name": "a11y_skip_fwd",
+      "value": "Forward %d sec"
+    },
+    {
+      "name": "a11y_collapse_player",
+      "value": "Collapse"
+    },
+    {
+      "name": "a11y_queue_up",
+      "value": "Move up"
+    },
+    {
+      "name": "a11y_queue_down",
+      "value": "Move down"
+    },
+    {
+      "name": "a11y_queue_remove",
+      "value": "Remove from queue"
+    },
+    {
+      "name": "a11y_played",
+      "value": "Played"
+    },
+    {
+      "name": "a11y_downloaded",
+      "value": "Downloaded — tap to delete"
+    },
+    {
+      "name": "subs_layout_toggle",
+      "value": "Toggle layout"
+    },
+    {
+      "name": "radio_start",
+      "value": "Shuffle radio"
+    },
+    {
+      "name": "radio_next",
+      "value": "Next"
+    },
+    {
       "name": "a11y_note_delete",
       "value": "Delete note"
     },

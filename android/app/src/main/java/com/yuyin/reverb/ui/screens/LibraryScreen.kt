@@ -118,7 +118,7 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                         Icon(Icons.Rounded.BarChart, contentDescription = stringResource(R.string.listen_stats_title), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = onOpenSettings) {
-                        Icon(Icons.Rounded.Settings, contentDescription = "设置", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Rounded.Settings, contentDescription = stringResource(R.string.a11y_settings), tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
@@ -467,7 +467,7 @@ private fun NoteRowItem(
             )
             Icon(
                 if (isCurrent && isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                contentDescription = stringResource(R.string.a11y_play),
+                contentDescription = stringResource(if (isCurrent && isPlaying) R.string.a11y_pause else R.string.a11y_play),
                 tint = Color.White,
                 modifier = Modifier.size(24.dp)
             )

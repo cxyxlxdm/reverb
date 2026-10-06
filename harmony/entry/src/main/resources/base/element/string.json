@@ -1005,6 +1005,66 @@
       "value": "将删除这条批注，无法恢复。\n\n「%1$s」"
     },
     {
+      "name": "a11y_play",
+      "value": "播放"
+    },
+    {
+      "name": "a11y_pause",
+      "value": "暂停"
+    },
+    {
+      "name": "a11y_prev",
+      "value": "上一集"
+    },
+    {
+      "name": "a11y_next",
+      "value": "下一集"
+    },
+    {
+      "name": "a11y_skip_back",
+      "value": "快退 %d 秒"
+    },
+    {
+      "name": "a11y_skip_fwd",
+      "value": "快进 %d 秒"
+    },
+    {
+      "name": "a11y_collapse_player",
+      "value": "收起"
+    },
+    {
+      "name": "a11y_queue_up",
+      "value": "上移"
+    },
+    {
+      "name": "a11y_queue_down",
+      "value": "下移"
+    },
+    {
+      "name": "a11y_queue_remove",
+      "value": "移出队列"
+    },
+    {
+      "name": "a11y_played",
+      "value": "已播完"
+    },
+    {
+      "name": "a11y_downloaded",
+      "value": "已下载，点击删除"
+    },
+    {
+      "name": "subs_layout_toggle",
+      "value": "切换排列方式"
+    },
+    {
+      "name": "radio_start",
+      "value": "随机电台"
+    },
+    {
+      "name": "radio_next",
+      "value": "下一首"
+    },
+    {
       "name": "a11y_note_delete",
       "value": "删除批注"
     },

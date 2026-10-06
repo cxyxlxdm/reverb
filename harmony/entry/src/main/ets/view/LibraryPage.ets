@@ -221,6 +221,7 @@ export struct LibraryPage {
         dim: 20, color: this.scheme.onSurfaceVariant
       })
         .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        .accessibilityText(L.s('subs_layout_toggle'))
         .onClick(() => { this.settings.setSubsGrid(!this.settings.subsGrid); })
     }
     if (this.seg === 4 && this.history.history.length > 0) {
@@ -272,8 +273,10 @@ export struct LibraryPage {
   headerActions() {
     Row({ space: 18 }) {
       Glyph({ symbol: Sym.listenStats, dim: 22, color: this.scheme.onSurfaceVariant })
+        .accessibilityText(L.s('listen_stats_title'))
         .onClick(() => this.onOpenListenStats())
       Glyph({ symbol: Sym.settings, dim: 22, color: this.scheme.onSurfaceVariant })
+        .accessibilityText(L.s('action_settings'))
         .onClick(() => this.onOpenSettings())
     }
   }
@@ -597,6 +600,8 @@ export struct LibraryPage {
           symbol: this.isNoteCurrent(n) && this.player.isPlaying ? Sym.pauseFill : Sym.playFill,
           dim: 24, color: Color.White
         })
+          .accessibilityText(this.isNoteCurrent(n) && this.player.isPlaying
+            ? L.s('a11y_pause') : L.s('a11y_play'))
       }
       .width(52).height(52)
 

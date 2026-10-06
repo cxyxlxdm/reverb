@@ -202,6 +202,7 @@ export struct TopBar {
       .type(ButtonType.Circle)
       .backgroundColor(Color.Transparent)
       .width(40).height(40)
+      .accessibilityText(L.s('action_back'))
       .onClick(() => this.onBack())
 
       Text(this.title)

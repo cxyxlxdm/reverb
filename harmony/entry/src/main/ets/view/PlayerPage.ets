@@ -123,7 +123,8 @@ export struct PlayerPage {
       Row() {
         // 收起播放页:与 Android 一致用「下折角」(KeyboardArrowDown),不是返回箭头 ——
         // 这是"把全屏播放页收下去"的语义,和二级页返回不同。
-        this.iconAction(() => Sym.down, () => this.scheme.onBackground, 0, 0, () => this.onBack())
+        this.iconAction(() => Sym.down, () => this.scheme.onBackground,
+          L.s('a11y_collapse_player'), 0, 0, () => this.onBack())
         Blank()
         // 间距统一由这里决定(各元素的视觉盒都贴紧内容,见 iconAction 注释)
         Row({ space: 14 }) {
@@ -135,7 +136,7 @@ export struct PlayerPage {
           // (队列墨宽 19.7 / 更多 16.0 / 收藏 22.7,字形盒均为 21)。
           this.iconAction(() => Sym.queue,
             () => this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant,
-            0, -2, () => this.onOpenQueue())
+            L.s('queue_title'), 0, -2, () => this.onOpenQueue())
           this.speedChip()
           this.sleepChip()
           this.favoriteChip()
@@ -357,7 +358,8 @@ export struct PlayerPage {
         .width('100%')
       }
       Row({ space: 22 }) {
-        this.iconBtn($r('sys.media.ohos_ic_public_play_last'), 22, this.player.hasPrev, () => this.player.previous())
+        this.iconBtn($r('sys.media.ohos_ic_public_play_last'), 22, this.player.hasPrev,
+          L.s('a11y_prev'), () => this.player.previous())
         this.skipBtn(false)
         // 主播放键
         Stack() {
@@ -370,9 +372,11 @@ export struct PlayerPage {
           }
         }
         .width(72).height(72)
+        .accessibilityText(L.s(this.player.isPlaying ? 'a11y_pause' : 'a11y_play'))
         .onClick(() => this.player.togglePlayPause())
         this.skipBtn(true)
-        this.iconBtn($r('sys.media.ohos_ic_public_play_next'), 22, this.player.hasNext, () => this.player.next())
+        this.iconBtn($r('sys.media.ohos_ic_public_play_next'), 22, this.player.hasNext,
+          L.s('a11y_next'), () => this.player.next())
       }
       .justifyContent(FlexAlign.Center)
       .width('100%')
@@ -382,10 +386,11 @@ export struct PlayerPage {
   }
 
   @Builder
-  iconBtn(icon: Resource, size: number, enabled: boolean, action: () => void) {
+  iconBtn(icon: Resource, size: number, enabled: boolean, label: string, action: () => void) {
     Image(icon)
       .width(size).height(size)
       .fillColor(enabled ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.35))
+      .accessibilityText(label)
       .onClick(() => { if (enabled) action(); })
   }
 
@@ -396,6 +401,10 @@ export struct PlayerPage {
       Image(forward ? $r('sys.media.ohos_ic_public_play_next') : $r('sys.media.ohos_ic_public_play_last'))
         .width(19).height(19)
         .fillColor(this.scheme.onSurfaceVariant)
+        // 标签带秒数,与 Android `SkipButton` 同一句文案;下方那枚秒数 Text 照旧由系统读。
+        .accessibilityText(forward
+          ? L.f('a11y_skip_fwd', this.settings.skipForwardSec)
+          : L.f('a11y_skip_back', this.settings.skipBackSec))
       Text(`${forward ? this.settings.skipForwardSec : this.settings.skipBackSec}`)
         .fontSize(9 * this.fontScale)
         .fontColor(this.scheme.onSurfaceVariant)
@@ -436,6 +445,7 @@ export struct PlayerPage {
   sleepChip() {
     Row({ space: 4 }) {
       Glyph({ symbol: Sym.sleep, dim: 18, color: this.sleepTint() })
+        .accessibilityText(L.s('sleep'))
       if (this.player.sleepTimed) {
         // 倒计时那一格是本页唯一每秒变的量,交给它自己按秒轮询 —— 
         // 数值在非观察的 clock 里,挂在本页会带着整棵播放页每秒重建(H64)
@@ -508,13 +518,17 @@ export struct PlayerPage {
    * 命中区宽度取 21 + 14 = 35(图标宽 + Row 的 space),即向两侧各外扩 7 —— **刚好填满
    * 半个间距、不与相邻图标重叠**。先前用 43 宽,相邻两个的命中区互相压 8vp,
    * 重叠处由后一个兄弟节点吃掉点击,小目标更难点中。
+   *
+   * `label` 是**值参数**(只求值一次,见上面 symbol/color 那条),所以只给**静态**标签用它 ——
+   * 会随状态变的标签(收藏心、播放/暂停)一律留在各自的渲染处直接写,不进这个 builder。
    */
   @Builder
-  iconAction(symbolOf: () => Resource, colorOf: () => ResourceColor,
+  iconAction(symbolOf: () => Resource, colorOf: () => ResourceColor, label: string,
              nudgeL: number, nudgeR: number, action: () => void) {
     Glyph({ symbol: symbolOf(), dim: 21, color: colorOf() })
       .margin({ left: nudgeL, right: nudgeR })
       .responseRegion({ x: -7, y: -11, width: 35, height: 43 })
+      .accessibilityText(label)
       .onClick(action)
   }
 
@@ -537,6 +551,7 @@ export struct PlayerPage {
     GlyphImage({ icon: $r('app.media.ic_more_vert'), dim: 21, color: this.scheme.onSurfaceVariant })
       .margin({ left: -2.5 })
       .responseRegion({ x: -11, y: -11, width: 43, height: 43 })
+      .accessibilityText(L.s('more'))
       .bindMenu(this.moreMenu())
       .bindSheet($$this.showSeals, this.sealSheet(), { height: 330 })
   }
@@ -755,6 +770,7 @@ export struct PlayerPage {
       })
     }
     .width(36).height(36)
+    .accessibilityText(L.s(this.isFav() ? 'a11y_unfavorite' : 'a11y_favorite'))
     .onClick(() => {
       const e = this.player.current;
       if (e !== null) this.favorites.toggle(e);
