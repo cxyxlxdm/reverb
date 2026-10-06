@@ -452,13 +452,24 @@ export struct SettingsPage {
 
   /// 开关行(Android SettingSwitch)。原先把开关做成「关/开」两项的单选对话框 ——
   /// 两次点击才能切一个布尔值,且看不出这是开关。
+  ///
+  /// **`onChange` 里那道「值没变就不做事」是必需的,不是防御性代码**:ArkUI 的 Toggle
+  /// 在**程序化**改 `isOn` 时同样回调 onChange(用户手指与代码赋值分不出来),于是
+  /// 「恢复一份备份」或「授权失败把值写回去」都会连带跑一遍这个开关的副作用 ——
+  /// 实测的后果是恢复完成后 42ms 弹出系统通知授权框,答「不允许」又把刚恢复的值改回原样
+  /// (见 H153)。判据用 `v === onOf()`:**手指按下时 store 还是旧值**,所以两者不等;
+  /// **程序化赋值时 store 已经是新值**(就是它触发的这次重渲),所以两者相等。
+  /// Android 侧的 Compose `Switch(checked=…)` 没有这个坑(赋值不回调),不需要对应改动。
   @Builder
   switchRow(title: string, subOf: () => string, onOf: () => boolean, onChange: (v: boolean) => void) {
     Row() {
       this.rowText(title, subOf)
       Toggle({ type: ToggleType.Switch, isOn: onOf() })
         .selectedColor(this.scheme.primary)
-        .onChange((v: boolean) => { onChange(v); })
+        .onChange((v: boolean) => {
+          if (v === onOf()) return;
+          onChange(v);
+        })
     }
     .width('100%')
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 6, bottom: 6 })
@@ -680,6 +691,13 @@ export struct SettingsPage {
      * ⚠️ 与 Android 共有的一条窄窗口(不是本端独有,所以这里不单方面改):
      * 恢复路径**不重新索取通知授权**。若那份备份来自另一台机器,本机可能从未授予通知权限,
      * 于是任务排上了而通知发不出去。两端一致 ⇒ 不算漂移;要修得两端一起修。
+     *
+     * 2026-10-07 真机补记:上面这句**曾经是不成立的** —— 恢复把 `updatesEnabled` 从关改到开,
+     * 会让设置页那颗 Toggle 以"程序化赋值"的形态回调 onChange,连带走一遍用户路径上的
+     * `requestAuth`,于是「恢复完成」之后 42ms 弹出系统通知授权框(见 H153)。
+     * 现在 `switchRow` 挡住了程序化回调,这句才真的成立。
+     * 另外这里 schedule() 撞上"任务已在册"(用户本来就开着提醒)会打一行「已在册,无需重复注册」,
+     * 不是失败 —— 见 UpdateNotifier.schedule 的注释。
      */
     if (BackupManager.applyRoot(this.app, root, include)) {
       if (this.settings.updatesEnabled) UpdateNotifier.schedule();

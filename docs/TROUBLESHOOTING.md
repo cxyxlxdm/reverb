@@ -6324,3 +6324,127 @@ Gradle 构建成功、脚本**退出码 0**,可 `dist/` 里变成这样:`reverb.
 ④ **本机知识要写在它适用的每一处。** "这台机器的 Android SDK 不在默认位置"此前只记在装机那一步
 (`adb` / `run-as` 要手给 `ANDROID_HOME`),而**出包脚本同样依赖它**。同一条约束的两个用途,
 写成一个用途就等于另一个没写。
+
+---
+
+### H152. 鸿蒙 `workScheduler.stopWork` 五种参数形状全部 401:关掉「订阅更新提醒」之后,那个 6 小时一次的联网检查照旧在跑
+
+**现象**(2026-10-07 真机,SDK 6.0.2(22))。设置里把「订阅更新提醒」从开拨到关,日志:
+
+```
+[Update] 取消失败 BussinessError 401: Parameter error. The workinfo condition cannot be empty.
+```
+
+要紧的是:**这一条与"恢复备份"那条路径无关**,冷启动后手指点一下开关就能复现。
+后果是用户看得见的 —— 他明确关掉了提醒,而任务还在册,系统仍会在条件满足时拉起
+`FeedUpdateExtension` 遍历订阅、发通知。也就是说界面上那个开关**只改了显示**。
+
+**根因**。客户端原生层建不出匹配条件,与 `@ohos.resourceschedule.workScheduler.d.ts` 上
+`stopWork(work: WorkInfo)` 的说法不符。临时探针(`obtainAllWorks()` 前后各数一次)实测:
+
+| # | 调用形状 | 结果 | 之后在册任务数 |
+|---|---|---|---|
+| A | `stopWork({workId, bundleName, abilityName}, true)` | 401 | 1 |
+| B | 同 A,再加 `isPersisted: true`(注册时也是 true) | 401 | 1 |
+| C | 同 A 但 `needCancel = false` | 401 | 1 |
+| E | 注册时带 `parameters:{wk:'upd'}`,停止时带**同一份** | 401 | 1 |
+| F | 注册时不带、停止时带 `parameters` | 401 | 1 |
+| D | `stopAndClearWorks()` | **无错** | **0** |
+
+原生层每次都是同一串:
+
+```
+[UnwrapWantParams:123] parameters not set.        (E 那一次是 Property size=1,即 parameters 确实解析到了)
+[GetWorkInfo:276]      Set none conditions, so fail to init WorkInfo.
+[HandleParamErr:616]   errCode = 9700406  →  ETS 层看到的就是 401
+```
+
+**所以那条"条件"不是从 workId / bundleName / abilityName / isPersisted 建的** ——
+E 那一行尤其说明问题:parameters 明明解析成功(`Property size=1`),条件仍是空。
+也就是说这不是"我参数写错了",而是**这条接口在本机不可用**。
+
+**修法**(两处,都在 `harmony/entry/src/main/ets/update/UpdateNotifier.ets`):
+① `cancel()` 改用 `stopAndClearWorks()`。代价写进注释:它不带条件、清的是**本应用全部**延迟任务,
+   所以它成立的前提是"本端只注册这一个 work"(全仓 grep 过,`startWork` 只有这一处;
+   `obtainAllWorks` 实测也只有 1001 一个)。前提同时写在 `schedule()` 上方 —— 破坏它的人会去加第二个任务,
+   他不会读 `cancel()`。
+② `schedule()` 不再把重复注册报成失败:同一 workId 再注册,系统抛 9700005
+   「The work has been already added」,任务原样在册(实测),这是**已在册**不是坏了。
+   恢复一份"提醒=开"的备份正好撞这条,原先会打一行「注册失败」。
+
+**验收**(2026-10-07 真机,删掉探针之后的正式构建):
+- 用户路径:手指拨开关关 → `[Update] 已取消订阅更新检查`,无 401。
+- 恢复路径:`[Backup] 恢复完成 importedSettings=true` → 6ms 后 `已注册订阅更新检查(6 小时)`,
+  prefs 里 `updates_enabled` 变 true;再恢复一份 false 的 → `已取消`,prefs 回 false。
+- 「任务真的被摘掉」这一条是**在带只读探针的验证构建上**量的:注册后 77 秒取消,
+  `取消后在册任务数=0`。正式构建删掉了那一行日志(它只读、不影响行为),
+  所以正式构建上的可观察量是"已取消 + 不再出现 401"。
+- 已在册分支:同一份 ue_true 连恢复两次,第二次打 `订阅更新检查已在册,无需重复注册`,
+  同一毫秒的原生层确实是 `HandleErrCode errCode = 970000501`。
+- **没覆盖**:Android 侧的 `WorkManager.cancelUniqueWork(UPDATE_WORK)`(`ReverbApp.kt:155`)本轮没重跑 ——
+  不同 API、不同栈,这条 401 不迁移过去,但"关掉之后任务是否真的不在了"在 Android 上同样只有实跑才知道。
+
+**教训与可复用的规律**:
+① **"API 有这个签名"不等于"这个签名在设备上能用"。** 判据只能是**状态本身变了没有**:
+   注册/取消这类功能,验收要包含一次"取消之后回头看一眼它还在不在",
+   而不是"cancel() 没抛异常" —— 它抛了,而 catch 只把消息写进日志,于是失效了三个月没人知道。
+② **静默 catch 会把功能失效降级成一行 W。** 这里 `Log.w('Update', '取消失败 …')` 一直在那儿,
+   但没有任何一条判据去看它。能数出来的东西就去数一次(探针是只读的,加一行、验完删掉)。
+③ **只在"全应用只有一个 X"前提下成立的接口,前提要写在制造 X 的那一侧**,不是写在消费它的那一侧。
+
+---
+
+### H153. ArkUI 的 `Toggle.onChange` 对**程序化赋值**同样回调:恢复一份备份会弹系统授权框,还把你刚导入的值改回去
+
+**现象**(2026-10-07 真机,鸿蒙)。拿一份只含 `{"version":1,"settings":{"updatesEnabled":true}}` 的
+备份(48 字节)恢复到"提醒=关"的本机上,点「恢复」之后:
+
+```
+04:27:36.935  [Backup] 恢复完成 importedSettings=true
+04:27:36.943  [Update] 已注册订阅更新检查(6 小时)
+              ← 42ms 后 **系统通知授权框弹出**
+   (答"不允许") [Update] 通知授权失败 Notification disabled
+              [Update] 取消失败 BussinessError 401 …(见 H152)
+```
+
+而设置页里那颗开关最后**显示成关**,prefs 也被回写成 false。
+两件事同时错了:① 一个"导入数据"的动作弹出了与它毫无关系的系统授权框;
+② 它把用户刚导进来的那个值撤销了。
+
+**根因**。`SettingsPage.switchRow` 写的是
+`Toggle({ isOn: onOf() }).onChange((v) => { onChange(v); })`。
+ArkUI 的 Toggle **不区分**"手指拨动"与"父组件重渲时 `isOn` 变了",两种都回调 onChange。
+于是 `applyRoot` 把 `settings.updatesEnabled` 从 false 改到 true(它是 `@Observed` 字段,设置页正看着它)
+→ 重渲 → Toggle 的 isOn 由 false 变 true → **回调 onChange(true)** → 走进用户路径上的
+`toggleUpdates(true)` → `requestAuth` → 弹框;答"不允许"又 `setUpdatesEnabled(false)`
+→ 再一次程序化回调 → `cancel()` → 撞上 H152 那个 401。
+
+这就是**硬规矩 9**("不要用程序化操作也会触发的信号识别用户操作")在控件回调层的形态。
+之前踩的是 `isScrollInProgress`,这次是 `onChange` —— 同一族,换了个来源。
+
+**修法**(不加状态位、不删功能,`harmony/entry/src/main/ets/view/SettingsPage.ets` 的 `switchRow`):
+`onChange` 里挡一道 `if (v === onOf()) return;`。判据是**时序**而不是标志位:
+手指按下时 store 还是旧值(两者不等 ⇒ 是用户);
+程序化赋值时 store 已经是新值、正是它触发的这次重渲(两者相等 ⇒ 不是用户)。
+Android 侧 Compose 的 `Switch(checked = …)` 赋值不回调,没有这个坑 ——
+所以本端补这一道是**对齐行为**,不是分叉。
+同文件里的备份分区勾选框(`ToggleType.Checkbox`)不受影响:它 `hitTestBehavior(None)`、根本没有 onChange。
+
+**验收**(2026-10-07 真机):
+- **负向(级联消失)**:恢复 ue_true → `恢复完成` → `已注册`,整段日志里
+  `requestEnableNotification` / `Notification disabled` **一次都没有**(`grep -c` = 0),
+  prefs 停在 true,开关显示开。
+- **正向(用户操作没被挡掉)**:手指拨同一颗开关 → 仍然走到 `requestAuth`
+  (这台机器的 Ans 侧报 `bundleName not in allowList`,系统拒绝给 debug 包弹框,与本条无关),
+  说明 onChange 依旧响应用户;而这一次授权被拒之后**没有再触发 cancel()**
+  —— 修复前同一条路径紧跟着一行 `取消失败 401`。
+- 恢复后开关的显示与 prefs 一致(修复前会被回写成导入前的值)。
+
+**教训与可复用的规律**:
+① 在 ArkUI 里,**控件回调默认不是"用户操作"的证据**。凡是 onChange 上挂了副作用
+   (系统弹窗、网络、排任务、写盘),都要问一句"这个值有没有可能被代码改出来"。
+② 判别"用户 vs 程序"优先用**已有数据源做等值比较**,不要新增 `suppress` 标志位 ——
+   标志位要管复位,漏一次就把之后所有真实操作吞掉,比原 bug 更难查。
+③ 这一类的复现成本极低(一份 48 字节的 JSON 就够),但**只有真机看得见**:
+   编译、类型检查、逻辑走读全过。凡是"导入 / 恢复 / 默认值回填"会改到界面正在显示的字段,
+   都该进装机验收清单。

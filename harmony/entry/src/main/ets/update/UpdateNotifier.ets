@@ -19,6 +19,9 @@ const SEEN_PREFIX = 'seen_';
 
 export class UpdateNotifier {
   /// 注册周期任务(6 小时,需联网)。设置里关掉提醒时调 cancel。
+  ///
+  /// **全应用只注册这一个 work**,而且这是一个前提而不是风格:cancel() 用的是「清掉本应用
+  /// 全部延迟任务」那一条接口(见下面注释),再加第二个 work 就会连带把它清掉。
   static schedule(): void {
     try {
       const info: workScheduler.WorkInfo = {
@@ -33,17 +36,35 @@ export class UpdateNotifier {
       workScheduler.startWork(info);
       Log.i('Update', '已注册订阅更新检查(6 小时)');
     } catch (e) {
-      Log.w('Update', `注册失败 ${(e as Error).message}`);
+      const msg: string = (e as Error).message;
+      // 9700005「The work has been already added」:同一个 workId 重复注册。任务本来就在那儿,
+      // 不是失败 —— 恢复一份「提醒=开」的备份就会走到这里,报成失败会让看日志的人以为功能坏了。
+      if (msg.indexOf('already added') >= 0) {
+        Log.i('Update', '订阅更新检查已在册,无需重复注册');
+      } else {
+        Log.w('Update', `注册失败 ${msg}`);
+      }
     }
   }
 
+  /**
+   * 取消周期任务。
+   *
+   * **为什么不是 `stopWork`**:本机 SDK(6.0.2(22))上 `stopWork` 对任何参数形状都抛
+   * `401 The workinfo condition cannot be empty`,而任务原样留在册 —— 五种写法在真机上
+   * 逐个跑过(只带 workId+bundle+ability / 加 isPersisted / needCancel=false /
+   * 加 parameters 且与注册时那份一致 / 再加 needCancel=true),全部同一个 401;
+   * 客户端原生层每次都报 `[GetWorkInfo] Set none conditions`(它建不出匹配条件,
+   * 与文档说的"按 workId 停"不符,见 H152)。**症状是用户看得见的**:关掉「订阅更新提醒」
+   * 之后,那个 6 小时一次的联网检查照旧在跑。
+   *
+   * `stopAndClearWorks()` 是唯一真的把任务摘掉的调用(实测在册 1 → 0),代价是它不带条件、
+   * 清的是**本应用全部**延迟任务 —— 所以它只在"本端只有这一个 work"的前提下成立,
+   * 前提写在 schedule() 上面。
+   */
   static cancel(): void {
     try {
-      workScheduler.stopWork({
-        workId: WORK_ID,
-        bundleName: 'com.yuyin.reverb',
-        abilityName: 'FeedUpdateExtension'
-      }, true);
+      workScheduler.stopAndClearWorks();
       Log.i('Update', '已取消订阅更新检查');
     } catch (e) {
       Log.w('Update', `取消失败 ${(e as Error).message}`);
