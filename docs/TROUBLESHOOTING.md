@@ -5429,11 +5429,33 @@ WARN: ArkTS:WARN Components.ets:761:15
 **验收方式**:
 - ✅ Android `:app:compileDefaultReleaseKotlin` + `:app:compileStoreReleaseKotlin` 无错误;
 - ✅ 鸿蒙 `hvigorw assembleHap` BUILD SUCCESSFUL(新增告警为零);
-- ❌ **一次都没跑过。** 判据必须**双向各一遍**(本端自产自读结构性地测不出这条):
+- ✅ **Android 写出侧已在真机取证(2026-10-07)**:只勾「设置」导出的 `reverb-backup.json` 实测 383 B,
+  顶层键 `['version', 'settings']`(`version: 1`)⇒ **分区勾选确实会裁掉没勾的段**,
+  这一半在 Android 侧也不再是"看代码猜"。`settings` 段 14 键与 `BackupManager.kt:101-114` 逐键对上,
+  值为 `themeMode=2 · fontScale=1 · fontIndex=1 · accentIndex=0 · allowCellularDownload=false ·
+  updatesEnabled=false · defaultSpeed=1 · skipBackSec=10 · skipForwardSec=30 · language="" ·
+  subsGrid=false · contextualRadio=false · regionOverride=null · categoryOrder=[]`。
+  两个"跨端值域"的坑当场露出来,且**都已确认是对侧设计好的路径、不是 bug**:
+  ① `regionOverride` 是 JSON `null` 而鸿蒙本端用 `""` —— 靠 `J.str` 对 null 返回 `""` 桥接;
+  ② `categoryOrder` 是 `[]`(本机从没排过序 ⇒ `keys()` 返回原始空序)——
+  鸿蒙恢复侧 `BackupManager.ets:366-374` 那条 `ca.length > 0` 判据正是为它写的,
+  **空数组 = 不动本机顺序**,与 `save([])` 早退同口径。
+- ✅ 两端 SETTINGS 段**键名集合**静态核对相同(Android 写侧 `:101-114` vs 鸿蒙写侧 `:174-187`,14 键同名同序)。
+- ❌ **跨端恢复那一步还是没跑成,而且这次卡点换了一个:不是"读不到落盘字节",是"文件传不进去"。**
+  判据必须**双向各一遍**(本端自产自读结构性地测不出这条):
   ① 拿一份 Android 导出的 `reverb-backup.json` 在鸿蒙恢复 → 逐项核对深色态、字号档、语言(界面与实际一致,
   不是"显示跟随系统而生效简中")、仅 Wi-Fi 开关、**更新提醒开关与日志里那条周期任务是否真的排上了**、发现页分类顺序;
   ② 反向拿鸿蒙那份在 Android 恢复;③ 「旧鸿蒙读 `fontIndex` 回落」这一条只能拿 1.0.3 的包装一次才验得到;
   ④ 语言归一那条的目标人群是**从 1.0.x 升级上来**的设备,干净新装验不到 —— 要专门推一份存着 `zh-Hans` 的 preferences 上去。
+  **取证侧已经打通了**(见 H138 教训 ⑥:鸿蒙沙箱可读),但**传输侧不通**,实测三处全挡:
+  `hdc file send` 只能落到 `/data/local/tmp`,而应用读不到那个目录;
+  写沙箱直接 `[Fail]Error opening file: permission denied`(shell uid 2000 vs 属主 20020217);
+  `/storage/media/100/localfiles`、`/storage/Users/currentUser` 均 Permission denied,
+  且导出走的 `Files.saveText`(`util/Files.ets:111-133`)是**直接写进用户挑的 URI**、沙箱里不留副本,
+  所以连"从上一轮导出留的文件里改一份推回去"这条路也不存在
+  (对比:`shareText` 会先落 `ctx.cacheDir/reverb-log.txt` 那类文件,**那份是可读的**)。
+  ⇒ **①② 必须人工搬一次文件**(华为分享 / 云盘 / 微信传给自己都行,总之要过一遍应用能读的目录),
+  这不是代码问题,别再把它记成"主机侧取证工具不足"。
   并入 #84 那次复验,不单独装机。
 - ⬜ **两端共有、刻意没单方面改的一条窄窗口**:恢复路径都不重新索取通知授权 ⇒ 备份来自另一台机器时
   可能排上了任务而通知发不出去。两端一致 ⇒ 不算漂移,要修得两端一起修(记在这里免得下一轮当成鸿蒙漏做)。
@@ -5447,6 +5469,11 @@ WARN: ArkTS:WARN Components.ets:761:15
 并为对方**已发布的旧版本**留一个回落键(这是零后端 + 不强制升级的直接代价:新格式必须能被旧端读懂)。
 ③ **「自产自读全绿」对备份/恢复这类功能不构成证据** —— 它只能证明两端各自自洽。
 判据手法与硬规矩 1 同源:**声明互通和声明不互通都必须拿文件去 grep / 去恢复一遍。**
+④ **一条判据的"可跑性"要拆成输入侧和取证侧分别判断。** 这条挂了三天"未真机",期间我把阻塞写成"拿不到鸿蒙侧落地的字节";
+把沙箱读通之后取证侧确实通了,但**判据要求的是"把对方的文件送进应用"** —— 那一侧三处全挡,和读不读得到无关。
+只验通了一半就宣布"取证点已打通、这条能跑了",下一轮仍要重跑一遍才发现动不了。
+凡是"恢复 / 导入"类判据,装机前先各跑一次**最小可达性探针**:一份文件能不能写进应用读得到的目录(这里 `hdc file send` 的落点全部不可读),
+这比研究业务代码便宜,而且失败形状一眼可辨。
 ④ **恢复一个开关 ≠ 恢复它的副作用。** 凡是"设置值驱动一个外部注册"(后台任务、通知渠道、监听器),
 恢复侧要重放那条注册/注销,而不是只把值写进 prefs。这条与 H138(不变式只在其中一个写入方生效)是同族:
 **同一份状态有多个入口时,门要按状态定,不是按最自然的那个函数定。**
