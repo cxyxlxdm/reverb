@@ -1191,6 +1191,18 @@
     {
       "name": "download_delete_message",
       "value": "This removes the offline file for “%1$s”. It can’t be undone."
+    },
+    {
+      "name": "action_done",
+      "value": "Done"
+    },
+    {
+      "name": "reorder_title",
+      "value": "Reorder categories"
+    },
+    {
+      "name": "reorder_hint",
+      "value": "Long-press and drag to reorder"
     }
   ]
 }

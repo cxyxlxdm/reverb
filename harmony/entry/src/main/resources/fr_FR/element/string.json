@@ -1191,6 +1191,18 @@
     {
       "name": "download_delete_message",
       "value": "Le fichier hors ligne de « %1$s » sera supprimé. Action irréversible."
+    },
+    {
+      "name": "action_done",
+      "value": "Terminé"
+    },
+    {
+      "name": "reorder_title",
+      "value": "Réorganiser les catégories"
+    },
+    {
+      "name": "reorder_hint",
+      "value": "Appui long puis glisser pour réordonner"
     }
   ]
 }

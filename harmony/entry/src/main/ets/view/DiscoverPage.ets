@@ -46,6 +46,24 @@ export struct DiscoverPage {
   onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
 
   @State catIndex: number = 0;
+  /**
+   * 分类表(**用户自定义顺序**)。`DISCOVER_CATEGORIES` 是默认序,这里的是它按
+   * `AppContainer.categoryStore` 重排后的结果 —— 与 Android `DiscoverViewModel.orderedCategories` 同义。
+   *
+   * ⚠️ 页面里所有按下标取榜单的地方(`lists` / `loadingFlags` / `seedFlags`)都跟着**这一份**的顺序走,
+   * 所以保存新顺序时必须把这三份数组一起按同一置换搬迁(见 `applyOrder`),
+   * 否则「已经加载好的榜」会跟着位置错位,表现为点了 A 分类显示 B 的内容。
+   */
+  @State cats: DiscoverCategory[] = DISCOVER_CATEGORIES;
+  /// 排序对话框:是否打开 / 草稿(打开时拷贝,取消不动原顺序)
+  @State reorderShown: boolean = false;
+  @State draft: DiscoverCategory[] = [];
+  /// 正在拖的那一行的下标(-1 = 没在拖)与其视觉位移(vp)。口径同 Android 的拖动实现。
+  @State dragIndex: number = -1;
+  @State dragOffsetY: number = 0;
+  /// 本次 Pan 相对上一次回调的增量基准(PanGesture 的 offsetY 是相对手势起点的累计值,
+  /// 而每次换位都要把视觉位移减掉一格 —— 两者不同源,必须自己差分,否则会一次跳两行)。
+  private dragLastCumulative: number = 0;
   /// chips 高亮专用索引,与驱动 Swiper `.index()` 的 catIndex 分开(理由见 LibraryPage 同名注释)
   @State chipSel: number = 0;
   /// 顶部分类条胶囊与 Swiper 的手势联动总线(每帧只重建胶囊,见 Components 注释)
@@ -80,7 +98,18 @@ export struct DiscoverPage {
   private app: AppContainer = AppContainer.get();
 
   aboutToAppear(): void {
-    const n = DISCOVER_CATEGORIES.length;
+    this.cats = this.app.categoryStore.ordered();
+    this.initSlots(this.cats.length);
+    // `CATALOG=false` 的降级渠道**不拉榜单** —— 那是内容目录请求,而且界面上压根不展示它。
+    // 漏了这一句的后果不是报错,是"看不见的目录请求"仍然在发,抓包一看就露。
+    if (Features.CATALOG) this.loadCategory(0, false);
+    // 反过来,`CATALOG=false` 的降级渠道的首屏主体是「最新」,进页就得按需刷一次。
+    // refreshIfStale 自带订阅集签名判断与防重入,和音阁那边同时调用不会重复拉。
+    else this.refreshInbox(false);
+  }
+
+  /// 三份按位置并行的数组(榜单 / 加载态 / 内置标记)按分类数开槽。
+  private initSlots(n: number): void {
     const l: Podcast[][] = [];
     const f: boolean[] = [];
     const sd: boolean[] = [];
@@ -92,12 +121,102 @@ export struct DiscoverPage {
     this.lists = l;
     this.loadingFlags = f;
     this.seedFlags = sd;
-    // `CATALOG=false` 的降级渠道**不拉榜单** —— 那是内容目录请求,而且界面上压根不展示它。
-    // 漏了这一句的后果不是报错,是"看不见的目录请求"仍然在发,抓包一看就露。
-    if (Features.CATALOG) this.loadCategory(0, false);
-    // 反过来,`CATALOG=false` 的降级渠道的首屏主体是「最新」,进页就得按需刷一次。
-    // refreshIfStale 自带订阅集签名判断与防重入,和音阁那边同时调用不会重复拉。
-    else this.refreshInbox(false);
+  }
+
+  /**
+   * 应用新顺序:分类表与三份位置数组**一起**按同一置换搬迁,并把当前页跟到它的新下标。
+   *
+   * 为什么必须搬数组:这三份是「第 i 个分类的榜单/加载态/内置标记」,
+   * 而 `i` 现在是按新顺序算的。只换 `cats` 不搬数组的话,把「科技」拖到第一位之后,
+   * 第一页显示的是原来第 0 位(推荐)的内容 —— 分类名与内容错位。
+   * 已加载的榜跟着分类走,重排不该触发任何网络请求。
+   */
+  private applyOrder(next: DiscoverCategory[]): void {
+    const prev: DiscoverCategory[] = this.cats;
+    const viewingKey: string = prev[this.catIndex] === undefined ? '' : prev[this.catIndex].key;
+    const l: Podcast[][] = [];
+    const f: boolean[] = [];
+    const sd: boolean[] = [];
+    for (let i = 0; i < next.length; i++) {
+      const j = prev.findIndex((c: DiscoverCategory) => c.key === next[i].key);
+      l.push(j < 0 ? [] : (this.lists[j] === undefined ? [] : this.lists[j]));
+      f.push(j < 0 ? false : (this.loadingFlags[j] === undefined ? false : this.loadingFlags[j]));
+      sd.push(j < 0 ? false : (this.seedFlags[j] === undefined ? false : this.seedFlags[j]));
+    }
+    this.cats = next;
+    this.lists = l;
+    this.loadingFlags = f;
+    this.seedFlags = sd;
+    const moved = next.findIndex((c: DiscoverCategory) => c.key === viewingKey);
+    this.catIndex = moved < 0 ? 0 : moved;
+    this.chipSel = this.catIndex;
+    this.chipSync.end(this.catIndex);
+    // 换位后当前页可能压根没加载过(原来排在后面的分类被拖到第一位且当前正停在这页)。
+    if (this.lists[this.catIndex].length === 0) this.loadCategory(this.catIndex, false);
+  }
+
+  /// 打开排序框:草稿取当前顺序的副本,框内怎么拖都不影响线上顺序,点「保存」才落盘。
+  private openReorder(): void {
+    this.draft = this.cats.slice();
+    this.dragIndex = -1;
+    this.dragOffsetY = 0;
+    this.reorderShown = true;
+  }
+
+  /// 落盘 + 应用。"空草稿不覆盖已有顺序"那条早退在 `CategoryStore.save` 里(同 Android 口径)。
+  private saveReorder(): void {
+    const keys: string[] = this.draft.map((c: DiscoverCategory) => c.key);
+    this.app.categoryStore.save(keys);
+    this.applyOrder(this.draft.slice());
+    this.reorderShown = false;
+    Log.i('Discover', `分类顺序已保存 ${keys.length} 项`);
+  }
+
+  private reorderRowHeight(): number {
+    // Android 那一行的行高是 48dp;本端属**外壳**(不是字号那张等值表),
+    // 按 1vp≈1.18dp 换算取 42vp(见 TROUBLESHOOTING 里"外壳按 0.876、字号不缩"那条口径)。
+    return 42;
+  }
+
+  /**
+   * Pan 增量 → 换位。算法与 Android `ReorderCategoriesDialog` 的 `onDrag` 逐句对应:
+   * 视觉位移累计到 `dragOffsetY`,按整行高四舍五入得到目标位,换位后把已过的那几格
+   * 从位移里减掉 —— 于是手指继续移动同样距离才换下一行,不会一次跳两行。
+   *
+   * ⚠️ 这三个方法**不能叫 `onDragStart` / `onDragEnd`**:它们是 `CustomComponent` 基类上
+   * 已有的通用属性方法(组件原生拖拽的回调),成员方法同名会直接编译失败
+   * (`Property 'onDragStart' in type ... is not assignable to the same property in base type`)。
+   * 一次撞名就是一次整模块编译中断,所以统一加 `row` 前缀,一眼看出是"某一行的拖拽"。
+   */
+  private rowDragUpdate(cumulativeY: number): void {
+    if (this.dragIndex < 0) return;
+    const rowH = this.reorderRowHeight();
+    this.dragOffsetY += cumulativeY - this.dragLastCumulative;
+    this.dragLastCumulative = cumulativeY;
+    const cur = this.dragIndex;
+    const target = cur + Math.round(this.dragOffsetY / rowH);
+    if (target === cur || target < 0 || target >= this.draft.length) return;
+    const next: DiscoverCategory[] = this.draft.slice();
+    const moved: DiscoverCategory[] = next.splice(cur, 1);
+    if (moved.length === 0) return;
+    next.splice(target, 0, moved[0]);
+    this.draft = next;
+    this.dragOffsetY -= (target - cur) * rowH;
+    this.dragIndex = target;
+  }
+
+  /// 长按后开始拖:按下标取会过期(草稿刚换过位),按 key 取当前真实位置。同 Android 那条注释。
+  private rowDragStart(c: DiscoverCategory, cumulativeY: number): void {
+    this.dragIndex = this.draft.findIndex((x: DiscoverCategory) => x.key === c.key);
+    // 差分基准取 Pan 起始那一刻的 offsetY(它是"相对按下位置"的累计量,序列手势里
+    // 长按阶段手指已可能压掉 1~2vp),不能写死 0,否则第一帧就凭空多出一小段位移。
+    this.dragLastCumulative = cumulativeY;
+    this.dragOffsetY = 0;
+  }
+
+  private rowDragEnd(): void {
+    this.dragIndex = -1;
+    this.dragOffsetY = 0;
   }
 
   /// 刷新「最新」。转圈状态一律读 store 的 inbox.refreshing —— 若在本页另置一个标志,
@@ -112,7 +231,7 @@ export struct DiscoverPage {
 
   /// 先取缓存秒显,再后台刷新。force=true 为下拉刷新(跳过缓存直接刷)。
   private async loadCategory(idx: number, force: boolean): Promise<void> {
-    const cat: DiscoverCategory = DISCOVER_CATEGORIES[idx];
+    const cat: DiscoverCategory = this.cats[idx];
     const region = this.app.region();
     let hadCache = false;
     if (!force) {
@@ -298,91 +417,103 @@ export struct DiscoverPage {
   }
 
   build() {
-    Column() {
-      ScreenHeader({
-        scheme: this.scheme,
-        fontScale: this.fontScale,
-        // 与 Android 一致:发现页顶部是**应用名 + slogan**,不是「发现」二字
-        // (「发现」只作底部 tab 的标签)。
-        title: L.s('app_title'),
-        subtitle: L.s('app_slogan'),
-        // 电台是**内容推荐**功能,`CATALOG=false` 的降级渠道不出现(见 Features.CATALOG)
-        action: () => { this.headerAction() }
-      })
+    Stack() {
+      Column() {
+        ScreenHeader({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          // 与 Android 一致:发现页顶部是**应用名 + slogan**,不是「发现」二字
+          // (「发现」只作底部 tab 的标签)。
+          title: L.s('app_title'),
+          subtitle: L.s('app_slogan'),
+          // 电台是**内容推荐**功能,`CATALOG=false` 的降级渠道不出现(见 Features.CATALOG)
+          action: () => { this.headerAction() }
+        })
 
-      this.searchBar()
+        this.searchBar()
 
-      if (this.searched) {
-        this.searchResults()
-      } else if (!Features.CATALOG) {
-        // 无内容目录:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
-        // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
-        this.subscribeStarter()
-      } else {
-        // 玻璃分段条悬浮在内容上,内容从条下滚过(与底部玻璃栏同思路);
-        // 顶部余量由榜单 List 的第一个占位 ListItem 给,高度用 CHIPS_RESERVE_H
-        // (比条的盒子高,原因见 Components.ets 该常量注释)。
-        Stack({ alignContent: Alignment.Top }) {
-          Swiper() {
-            ForEach(DISCOVER_CATEGORIES, (cat: DiscoverCategory, idx: number) => {
-              this.categoryPage(idx)
-            }, (cat: DiscoverCategory) => cat.key)
-          }
-          .index(this.catIndex)
-          .loop(false)
-          .indicator(false)
-          .cachedCount(1)
-          .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
-          // chips 高亮跟着手指走(位移过半即切),只改 chipSel、不碰 catIndex —— 详见 LibraryPage 注释
-          .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
-            this.chipSel = this.dragTarget(index, e.currentOffset);
-            // 胶囊 1:1 联动:插值目标取拖动方向的相邻页,与过半预切的 dragTarget 无关 ——
-            // 拖 30% 就该走 30% 路程;边缘橡皮筋(相邻页不存在)不报,胶囊原地不动。
-            // currentOffset 实测是**当前页相对其锚点的带符号位移**:向左滑(去下一页,
-            // 序号+1)为负、向右滑为正 —— 与既有 dragTarget 的方向约定一致
-            // (offset < 0 ? index+1 : index-1)。若按"负=往前一页"理解,0→1 的拖动
-            // 会被 to<0 的边缘保护整个吞掉,胶囊纹丝不动(踩过)。
-            if (this.pageW <= 0) return;
-            const to = index + (e.currentOffset < 0 ? 1 : -1);
-            if (to < 0 || to >= DISCOVER_CATEGORIES.length) return;
-            this.chipSync.report(index, to,
-              Math.min(1, Math.abs(e.currentOffset) / this.pageW));
-          })
-          .onAnimationStart((_i: number, target: number) => {
-            this.chipSel = target;
-            // 动画一开始就收束胶囊:提交时随落位弹簧过去,回落时原地弹回 ——
-            // 都不等 onAnimationEnd,否则手势帧已停,胶囊会僵在插值位直到动画结束
-            this.chipSync.end(target);
-          })
-          .onAnimationEnd((_i: number, _e: SwiperAnimationEvent) => {
-            // 兜底:回落若不触发 onAnimationStart,靠这里把胶囊从插值位收回来(幂等)
-            this.chipSync.end(this.chipSel);
-          })
-          // 榜单加载**只在落位后**做:放到 gestureSwipe/animationStart 会让快速连滑时
-          // 每划过一页都发一次网络请求。
-          .onChange((i: number) => {
-            this.catIndex = i;
-            this.chipSel = i;
-            if (this.lists[i].length === 0) this.loadCategory(i, false);
-          })
-          .width('100%')
-          .height('100%')
-
-          ChipsRow({
-            scheme: this.scheme,
-            fontScale: this.fontScale,
-            labels: DISCOVER_CATEGORIES.map((c: DiscoverCategory) => categoryLabel(c)),
-            selected: this.chipSel,
-            sync: this.chipSync,
-            onSelect: (i: number) => {
+        if (this.searched) {
+          this.searchResults()
+        } else if (!Features.CATALOG) {
+          // 无内容目录:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
+          // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
+          this.subscribeStarter()
+        } else {
+          // 玻璃分段条悬浮在内容上,内容从条下滚过(与底部玻璃栏同思路);
+          // 顶部余量由榜单 List 的第一个占位 ListItem 给,高度用 CHIPS_RESERVE_H
+          // (比条的盒子高,原因见 Components.ets 该常量注释)。
+          Stack({ alignContent: Alignment.Top }) {
+            Swiper() {
+              ForEach(this.cats, (cat: DiscoverCategory, idx: number) => {
+                this.categoryPage(idx)
+              }, (cat: DiscoverCategory) => cat.key)
+            }
+            .index(this.catIndex)
+            .loop(false)
+            .indicator(false)
+            .cachedCount(1)
+            .onAreaChange((_o: Area, n: Area) => { this.pageW = Number(n.width); })
+            // chips 高亮跟着手指走(位移过半即切),只改 chipSel、不碰 catIndex —— 详见 LibraryPage 注释
+            .onGestureSwipe((index: number, e: SwiperAnimationEvent) => {
+              this.chipSel = this.dragTarget(index, e.currentOffset);
+              // 胶囊 1:1 联动:插值目标取拖动方向的相邻页,与过半预切的 dragTarget 无关 ——
+              // 拖 30% 就该走 30% 路程;边缘橡皮筋(相邻页不存在)不报,胶囊原地不动。
+              // currentOffset 实测是**当前页相对其锚点的带符号位移**:向左滑(去下一页,
+              // 序号+1)为负、向右滑为正 —— 与既有 dragTarget 的方向约定一致
+              // (offset < 0 ? index+1 : index-1)。若按"负=往前一页"理解,0→1 的拖动
+              // 会被 to<0 的边缘保护整个吞掉,胶囊纹丝不动(踩过)。
+              if (this.pageW <= 0) return;
+              const to = index + (e.currentOffset < 0 ? 1 : -1);
+              if (to < 0 || to >= this.cats.length) return;
+              this.chipSync.report(index, to,
+                Math.min(1, Math.abs(e.currentOffset) / this.pageW));
+            })
+            .onAnimationStart((_i: number, target: number) => {
+              this.chipSel = target;
+              // 动画一开始就收束胶囊:提交时随落位弹簧过去,回落时原地弹回 ——
+              // 都不等 onAnimationEnd,否则手势帧已停,胶囊会僵在插值位直到动画结束
+              this.chipSync.end(target);
+            })
+            .onAnimationEnd((_i: number, _e: SwiperAnimationEvent) => {
+              // 兜底:回落若不触发 onAnimationStart,靠这里把胶囊从插值位收回来(幂等)
+              this.chipSync.end(this.chipSel);
+            })
+            // 榜单加载**只在落位后**做:放到 gestureSwipe/animationStart 会让快速连滑时
+            // 每划过一页都发一次网络请求。
+            .onChange((i: number) => {
               this.catIndex = i;
               this.chipSel = i;
               if (this.lists[i].length === 0) this.loadCategory(i, false);
-            }
-          })
+            })
+            .width('100%')
+            .height('100%')
+
+            ChipsRow({
+              scheme: this.scheme,
+              fontScale: this.fontScale,
+              labels: this.cats.map((c: DiscoverCategory) => categoryLabel(c)),
+              selected: this.chipSel,
+              sync: this.chipSync,
+              onSelect: (i: number) => {
+                this.catIndex = i;
+                this.chipSel = i;
+                if (this.lists[i].length === 0) this.loadCategory(i, false);
+              },
+              // Android 在同一颗分段条的右端放了「自定义分类排序」的入口(Trailing
+              // `Icons.Rounded.Tune`),本端此前完全没有这个入口 ⇒ 分类顺序只能吃默认序。
+              endAction: () => { this.reorderButton() }
+            })
+          }
+          .width('100%')
+          .layoutWeight(1)
         }
-        .width('100%')
-        .layoutWeight(1)
+      }
+      .width('100%')
+      .height('100%')
+
+      // 分类排序框(与 Android 的发现页 endAction 同义):草稿态在页内,保存才落盘。
+      if (this.reorderShown) {
+        this.reorderDialog()
       }
     }
     .width('100%')
@@ -394,7 +525,119 @@ export struct DiscoverPage {
     if (this.pageW <= 0) return index;
     if (Math.abs(offset) < this.pageW / 2) return index;
     const next = offset < 0 ? index + 1 : index - 1;
-    return Math.max(0, Math.min(DISCOVER_CATEGORIES.length - 1, next));
+    return Math.max(0, Math.min(this.cats.length - 1, next));
+  }
+
+  /// 分段条右端的排序入口。图标与 Android 同一颗(`Icons.Rounded.Tune` = `slider_horizontal_2`)、
+  /// 同一档尺寸与留白(20 / 左右 16 / 上下 12),按钮不自带背景 —— 底就是这条玻璃(见 ChipsRow 注释)。
+  @Builder
+  reorderButton() {
+    Glyph({ symbol: Sym.speed, dim: 20, color: this.scheme.onSurfaceVariant })
+      .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .onClick(() => this.openReorder())
+  }
+
+  private closeReorder(): void {
+    this.reorderShown = false;
+    this.dragIndex = -1;
+    this.dragOffsetY = 0;
+  }
+
+  /// 草稿列表的高度:按行数出来,最高不超过 380vp(再高就把按钮挤出屏外,框内自己滚)。
+  private reorderListHeight(): number {
+    return Math.min(this.draft.length * this.reorderRowHeight(), 380);
+  }
+
+  /**
+   * 自定义分类排序框。**逐句对应** Android `ReorderCategoriesDialog`:
+   * 标题 / 一行提示 / 48dp(本端 42vp)一行、右端拖拽装饰 / 「取消 + 完成」两颗文字按钮,
+   * 长按后拖动、换位按整行高四舍五入(算法见 `rowDragUpdate`)。
+   *
+   * ⚠️ 与 Android 的一处已知差别:这里的遮罩覆盖的是**发现页区域**,底部玻璃 tab 栏仍浮在
+   * 遮罩之上(Android 的 AlertDialog 是整窗)。要把框提到整窗,得让它长在 Index 上,
+   * 而现在没有任何别的页面需要它 —— 先如实记着,不做半吊子搬运。
+   */
+  @Builder
+  reorderDialog() {
+    Stack() {
+      Column()
+        .width('100%').height('100%')
+        .backgroundColor(withAlpha('#000000', 0.45))
+        .onClick(() => this.closeReorder())
+
+      Column() {
+        Text(L.s('reorder_title'))
+          .fontSize(TypeScale.titleMedium * this.fontScale)
+          .fontColor(this.scheme.onBackground)
+          .alignSelf(ItemAlign.Start)
+          .margin({ bottom: 8 })
+        Text(L.s('reorder_hint'))
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .alignSelf(ItemAlign.Start)
+          .margin({ bottom: 10 })
+
+        List({ space: 0 }) {
+          ForEach(this.draft, (c: DiscoverCategory, i: number) => {
+            ListItem() {
+              Row() {
+                Text(categoryLabel(c))
+                  .fontSize(TypeScale.body * this.fontScale)
+                  .fontColor(this.scheme.onBackground)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+                Glyph({ symbol: Sym.dragHandle, dim: 18, color: this.scheme.onSurfaceVariant })
+              }
+              .width('100%')
+              .height(this.reorderRowHeight())
+              .padding({ left: 6, right: 8 })
+              .borderRadius(8)
+              .backgroundColor(this.dragIndex === i ? this.scheme.surfaceVariant : Color.Transparent)
+            }
+            .zIndex(this.dragIndex === i ? 1 : 0)
+            .translate({ y: this.dragIndex === i ? this.dragOffsetY : 0 })
+            // 长按 → 拖:与 Android 的 `detectDragGesturesAfterLongPress` 同一条手势路径。
+            // 用 priorityGesture 而不是 gesture:框内是 List,普通手势会被父滚动抢走,
+            // 于是"拖行"变成"滚框",一次换位都做不成。
+            .priorityGesture(
+              GestureGroup(GestureMode.Sequence,
+                LongPressGesture({ duration: LIST_MENU_LONG_PRESS_MS }),
+                PanGesture({ direction: PanDirection.Vertical, distance: 1 })
+                  .onActionStart((e: GestureEvent) => this.rowDragStart(c, e.offsetY))
+                  .onActionUpdate((e: GestureEvent) => this.rowDragUpdate(e.offsetY))
+                  .onActionEnd(() => this.rowDragEnd())
+                  .onActionCancel(() => this.rowDragEnd())
+              )
+            )
+          }, (c: DiscoverCategory) => c.key)
+        }
+        .width('100%')
+        .height(this.reorderListHeight())
+        .scrollBar(BarState.Off)
+        .cachedCount(0)
+
+        Row({ space: 22 }) {
+          Text(L.s('action_cancel'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .onClick(() => this.closeReorder())
+          Text(L.s('action_done'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.primary)
+            .onClick(() => this.saveReorder())
+        }
+        .margin({ top: 18 })
+        .alignSelf(ItemAlign.End)
+      }
+      .width('78%')
+      .padding({ left: 22, right: 22, top: 22, bottom: 16 })
+      .backgroundColor(this.scheme.surface)
+      .borderRadius(18)
+    }
+    .width('100%')
+    .height('100%')
+    .zIndex(20)
   }
 
   /// 情境电台的时段图标。**分界与 Android `contextualRadioIcon()` 逐段一致**:
@@ -726,7 +969,7 @@ export struct DiscoverPage {
             }
             ListItem() {
               Text(L.f(this.seedFlags[idx] ? 'discover_seed_list' : 'discover_daily_hot',
-                categoryLabel(DISCOVER_CATEGORIES[idx])))
+                categoryLabel(this.cats[idx])))
                 .fontSize(TypeScale.caption * this.fontScale)
                 .fontWeight(FontWeight.Medium)
                 .fontColor(this.scheme.onSurfaceVariant)

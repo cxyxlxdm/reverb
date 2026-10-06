@@ -13,6 +13,7 @@ import { DownloadStore } from './store/DownloadStore';
 import { StampStore } from './store/StampStore';
 import { NoteStore } from './store/NoteStore';
 import { PlaybackStateStore } from './store/PlaybackStateStore';
+import { CategoryStore } from './store/CategoryStore';
 import { TranscriptStore } from './store/TranscriptStore';
 import { SpeechTranscriber } from './playback/SpeechTranscriber';
 import { DownloadManager } from './playback/DownloadManager';
@@ -44,6 +45,8 @@ export class AppContainer {
   readonly notes: NoteStore = new NoteStore();
   /// 会话态:`playback_state.json` —— 排好的队列 + 正在播的那一集 + 它来自哪一列(与 Android 同格式)
   readonly playbackState: PlaybackStateStore = new PlaybackStateStore();
+  /// 发现页分类的自定义顺序(与 Android `categoryStore` 同义;备份里叫 `categoryOrder`)
+  readonly categoryStore: CategoryStore = new CategoryStore();
   /// 逐字稿:状态机 + 缓存。识别实现由 boot 注入(见下)
   readonly transcripts: TranscriptStore = new TranscriptStore();
   readonly downloads: DownloadStore = new DownloadStore();
@@ -91,6 +94,8 @@ export class AppContainer {
     // 会话态(队列 + 正在播那一集)。**纯本地读**,和上面几个 store 同一性质;
     // 真正会联网的预载排在同意后(见 startGated 末尾的 restoreFromState)。
     this.playbackState.load();
+    // 分类顺序同样是纯本地读一个键,首屏 chips 要用它排序,必须在 UI 装配前就绪。
+    this.categoryStore.load();
     /**
      * 逐字稿:这里装配的只是**状态机与本地缓存**(私有目录读写),不联网、不碰权限,
      * 所以放在同意隐私政策之前没有问题(与上面几个 store 同一性质)。
