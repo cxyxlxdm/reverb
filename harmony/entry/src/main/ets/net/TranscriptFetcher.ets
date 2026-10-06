@@ -63,6 +63,17 @@ export class TranscriptFetcher {
     let i = 0;
     while (i < lines.length) {
       const line = lines[i].trim();
+      /**
+       * VTT 的 NOTE / STYLE / REGION 块不是字幕,整块跳过。
+       * Android 那边按空行切块、判块首行;这边是逐行扫,所以判到块首就跳到下一个空行。
+       * 非跳不可:`NOTE` 里常写「00:00:01.000 --> 00:00:02.000 转场」这种带箭头的说明,
+       * 逐行扫会把它当成一条 cue、凭空多出一行(见 H150)。
+       */
+      if (line === 'NOTE' || line.startsWith('NOTE ') || line === 'STYLE' || line === 'REGION') {
+        i++;
+        while (i < lines.length && lines[i].trim().length > 0) i++;
+        continue;
+      }
       const arrow = line.indexOf('-->');
       if (arrow < 0) { i++; continue; }
       const startMs = TranscriptFetcher.parseClock(line.substring(0, arrow));
@@ -96,7 +107,10 @@ export class TranscriptFetcher {
    */
   private static cleanCueText(s: string): string {
     let t = s.replace(/<[^>]*>/g, '');
-    t = t.replace(/^SPEAKER_?\d+\s*:\s*/i, '');
+    // 与 Android 同一条:`SPEAKER_01:` 与 `SPEAKER 01:` 都要去掉(少了那个 `[_ ]?` 时,
+    // 带空格的写法会整串留在正文里),另外 `&nbsp;` 也要换成真空格 —— 网页存出来的 SRT 常见。
+    t = t.replace(/^\s*SPEAKER[_ ]?\d+\s*:\s*/i, '');
+    t = t.replace(/&nbsp;/g, ' ');
     return t.trim();
   }
 
@@ -172,7 +186,12 @@ export class TranscriptFetcher {
   private static pickString(o: Record<string, Object>, keys: string[]): string {
     for (let i = 0; i < keys.length; i++) {
       const v = o[keys[i]];
-      if (typeof v === 'string') return (v as string).trim();
+      if (typeof v === 'string') {
+        const t = (v as string).trim();
+        // 空串要接着找下一个键(`{"body":" ", "text":"…"}` 这种真出现过),否则整条被丢掉。
+        // 与 Android `pickString` 同口径(见 H150)。
+        if (t.length > 0) return t;
+      }
     }
     return '';
   }

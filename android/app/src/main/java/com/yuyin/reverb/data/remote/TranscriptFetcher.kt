@@ -7,7 +7,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
+import kotlin.math.roundToInt
 
 /**
  * 取发布方**自己提供的逐字稿**(RSS `podcast:transcript`),解析成统一的 `TranscribedSegment`。
@@ -87,7 +89,8 @@ class TranscriptFetcher(private val client: OkHttpClient) {
         val text = raw.removePrefix("﻿").trim()   // 去 BOM,否则 "WEBVTT" 判断会失手
         return when {
             text.startsWith("WEBVTT") -> parseCues(text, vtt = true)
-            text.startsWith("{") -> parseJson(text)
+            // `[` 也要认:有些转写服务直接把数组当根吐出来(鸿蒙那边一直认,这边漏了 —— 见 H150)
+            text.startsWith("{") || text.startsWith("[") -> parseJson(text)
             text.contains("-->") -> parseCues(text, vtt = false)
             declaredType.contains("json", true) -> parseJson(text)
             else -> null
@@ -149,11 +152,13 @@ class TranscriptFetcher(private val client: OkHttpClient) {
     internal fun parseClock(s: String): Int? {
         val token = s.trim().split(Regex("\\s+")).firstOrNull()?.replace(',', '.') ?: return null
         val seg = token.split(":")
-        if (seg.isEmpty() || seg.size > 3) return null
+        // 只认 `HH:MM:SS` / `MM:SS`(鸿蒙那边也是这段要求)。原先允许单段数字,于是正文里
+        // 混进的一行 "5" 会被当成 5 秒造出一个假 cue —— 那是凭空多出的一行(见 H150)
+        if (seg.size < 2 || seg.size > 3) return null
         return try {
             var ms = 0.0
             for (p in seg) ms = ms * 60 + p.toDouble()   // 从高位往低位累乘,兼容 2 段与 3 段
-            (ms * 1000).toInt()
+            (ms * 1000).roundToInt()                     // 与鸿蒙的 Math.round 同口径
         } catch (e: NumberFormatException) {
             null
         }
@@ -172,7 +177,8 @@ class TranscriptFetcher(private val client: OkHttpClient) {
      */
     private fun parseJson(text: String): List<TranscribedSegment>? {
         val arr = try {
-            JSONObject(text).optJSONArray("segments") ?: return null
+            if (text.startsWith("[")) JSONArray(text)                       // 根就是数组的稿
+            else JSONObject(text).optJSONArray("segments") ?: return null   // Podcast Index 标准形
         } catch (e: Exception) {
             com.yuyin.reverb.util.Logger.w(TAG, "JSON 稿格式不认:${e.message}")
             return null
@@ -180,10 +186,10 @@ class TranscriptFetcher(private val client: OkHttpClient) {
         val words = ArrayList<TranscribedWord>(arr.length())
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
-            val body = o.optString("body").ifBlank { o.optString("text") }
-            if (body.isBlank()) continue
-            val s = (o.optDouble("startTime", -1.0) * 1000).toInt()
-            val e = (o.optDouble("endTime", -1.0) * 1000).toInt()
+            val body = pickString(o, BODY_KEYS)
+            if (body.isEmpty()) continue
+            val s = pickMs(o, START_KEYS)
+            val e = pickMs(o, END_KEYS)
             if (s < 0) continue
             words.add(TranscribedWord(body, s, if (e > s) e else s))
         }
@@ -192,8 +198,46 @@ class TranscriptFetcher(private val client: OkHttpClient) {
         return if (words.isEmpty()) null else TranscriptLines.mergeWords(words, spaced = true)
     }
 
+    /**
+     * 取第一个**有内容**的字符串键。转写服务给出的键名不统一(`body` 是 Podcast Index 的,
+     * `text` 是几家自研接口的,`word` 是词级稿直接给单字的)。
+     * 这层容错鸿蒙先做了、这边漏了 —— 同一个 feed 于是一端出稿、另一端解析失败(见 H150)。
+     */
+    private fun pickString(o: JSONObject, keys: Array<String>): String {
+        for (k in keys) {
+            val v = o.opt(k)
+            if (v is String) {
+                val t = v.trim()
+                if (t.isNotEmpty()) return t
+            }
+        }
+        return ""
+    }
+
+    /**
+     * 取时间并统一成毫秒:键名以 `Ms` 结尾的当毫秒,其它当**秒(浮点)**;取不到返回 -1。
+     *
+     * 用四舍五入而不是早先的 `.toInt()`(截断):断句门是 400ms / 900ms 这种整数阈值,
+     * 一端截断一端进位,同一份稿就会在临界值上分叉成不同的行。鸿蒙一直是 `Math.round`。
+     */
+    private fun pickMs(o: JSONObject, keys: Array<String>): Int {
+        for (k in keys) {
+            val n = when (val v = o.opt(k)) {
+                is Number -> v.toDouble()
+                is String -> v.trim().toDoubleOrNull()
+                else -> null
+            }
+            if (n != null) return if (k.endsWith("Ms")) n.roundToInt() else (n * 1000).roundToInt()
+        }
+        return -1
+    }
+
     private companion object {
         /// 8 MB:再离谱的逐字稿也到不了这个量级,超过就是链接指错了东西
         const val MAX_BYTES = 8L * 1024 * 1024
+
+        val BODY_KEYS = arrayOf("body", "text", "word")
+        val START_KEYS = arrayOf("startTime", "start", "startMs")
+        val END_KEYS = arrayOf("endTime", "end", "endMs")
     }
 }

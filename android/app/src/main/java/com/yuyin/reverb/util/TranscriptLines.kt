@@ -78,13 +78,22 @@ object TranscriptLines {
             if (prev != null && seg.text.length < ORPHAN_CHARS && seg.startMs - prev.endMs < GLUE_GAP_MS) {
                 // 空格折进被并进来那一段的文本里,维持"words 拼接 == 整句"的不变式
                 val glued = if (isAsciiHead(seg.text)) " ${seg.text}" else seg.text
+                // 词级那边也要带上同一个空格:`TranscriptPane.karaokeLine` 是**逐条 words 拼接**
+                // 出整行的(它故意不补空格,依据就是这条不变式)。早先这里直接
+                // `prev.words + seg.words`,于是被并进来的那句首词丢了空格,屏幕上读出
+                // "…andhe's" —— 不变式在注释里写着、代码里没做(见 H150)。
+                val needSpace = glued.length != seg.text.length
+                val segWords = seg.words?.let { ws ->
+                    if (!needSpace || ws.isEmpty()) ws
+                    else listOf(ws.first().copy(text = " ${ws.first().text}")) + ws.drop(1)
+                }
                 out[out.size - 1] = prev.copy(
                     text = prev.text + glued,
                     endMs = seg.endMs,
                     words = when {
-                        prev.words == null && seg.words == null -> null
+                        prev.words == null && segWords == null -> null
                         else -> (prev.words ?: listOf(TranscribedWord(prev.text, prev.startMs, prev.endMs))) +
-                                (seg.words ?: listOf(TranscribedWord(glued, seg.startMs, seg.endMs)))
+                                (segWords ?: listOf(TranscribedWord(glued, seg.startMs, seg.endMs)))
                     }
                 )
             } else {
