@@ -4095,12 +4095,12 @@
       "continueEntries:1005:1011": "continueEntries",
       "showGuide:1015:1019": "showGuide",
       "guideCard:1024:1053": "guideCard",
-      "continueStrip:1057:1091": "continueStrip",
-      "searchResults:1094:1177": "searchResults",
-      "searchTabChip:1180:1188": "searchTabChip",
-      "menuFont:1227:1229": "menuFont",
-      "contextMenu:1245:1265": "contextMenu",
-      "initialRender:1267:1349": "initialRender"
+      "continueStrip:1057:1101": "continueStrip",
+      "searchResults:1104:1187": "searchResults",
+      "searchTabChip:1190:1198": "searchTabChip",
+      "menuFont:1237:1239": "menuFont",
+      "contextMenu:1255:1275": "contextMenu",
+      "initialRender:1277:1359": "initialRender"
     },
     "obfName": "entry/src/main/ets/view/DiscoverPage.ets"
   },
@@ -4938,8 +4938,8 @@
       "LibraryPage#noteRowItem#$2#$0#$0#paramsLambda": "d135",
       "LibraryPage#noteRowItem#$5#$0#$0#paramsLambda": "v134",
       "LibraryPage#noteRowItem#$12#$0#$0#paramsLambda": "e134",
-      "#subsGridTemplate:685:691": "k133",
-      "#subsGridSpacers:694:700": "l133"
+      "#subsGridTemplate:703:709": "k133",
+      "#subsGridSpacers:712:718": "l133"
     },
     "MemberMethodCache": {
       "segments:86:89": "segments",
@@ -4955,12 +4955,12 @@
       "downloadsSection:445:478": "downloadsSection",
       "downloadEpisodes:480:482": "downloadEpisodes",
       "askDeleteDownload:493:500": "askDeleteDownload",
-      "historySection:504:545": "historySection",
-      "historyEpisodes:547:549": "historyEpisodes",
-      "notesSection:559:581": "notesSection",
-      "noteRowItem:591:651": "noteRowItem",
-      "isNoteCurrent:653:655": "isNoteCurrent",
-      "askDeleteNote:664:671": "askDeleteNote"
+      "historySection:504:563": "historySection",
+      "historyEpisodes:565:567": "historyEpisodes",
+      "notesSection:577:599": "notesSection",
+      "noteRowItem:609:669": "noteRowItem",
+      "isNoteCurrent:671:673": "isNoteCurrent",
+      "askDeleteNote:682:689": "askDeleteNote"
     },
     "obfName": "entry/src/main/ets/view/LibraryPage.ets"
   },
