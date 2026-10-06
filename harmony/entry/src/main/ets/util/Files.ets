@@ -21,24 +21,39 @@ export class PickedText {
 /// 用系统文件选择器,**不申请任何存储权限**——用户选到哪就写到哪。
 export class Files {
   /**
-   * 唤起系统分享面板分享一段文本(设置页「分享日志」用)。
+   * 把一段文本**落成缓存文件**后经系统分享面板分享(设置页「分享日志」「发送日志到开发者邮箱」用)。
    *
-   * Android 侧是「分享日志」+「发送日志到开发者邮箱」两条,因为 Android 要靠显式的
-   * ACTION_SEND / mailto Intent 分别处理;鸿蒙的系统分享面板本身就把邮件、即时通讯、
-   * 存文件等去向都列在一起 —— **平台原生做法是一条**,故这里合成一项。
+   * 为什么不直接分享字符串(本函数原先就是这么做的):Android 侧的 `shareLog` 走的是
+   * `EXTRA_STREAM` + 一个真实的 `reverb-log.txt`,**收件应用拿到的是文件**;而
+   * `utd.PLAIN_TEXT` + `content` 是内联文本,绝大多数即时通讯与邮件目标会**截断**长文本,
+   * 文件名与扩展名也一起丢掉 —— 一份几十 KB 的运行日志正好落在被截的那一段里。
+   * 改成文件之后两端同口径,而且「邮件反馈」那条本来就必须是附件。
+   *
+   * 与 `shareImage` 共用同一条 URI 规矩:**必须 `fileUri.getUriFromPath()`**,
+   * 自己拼 `file://` + 沙箱路径的表现是面板压根不弹(见该函数的注释)。
+   *
+   * `title` / `description` 对应 Android 的 `EXTRA_SUBJECT` / `EXTRA_TEXT`。
+   * 本端**做不到**的只有收件人预填:`systemShare.SharedRecord` 没有收件人字段,
+   * 分享面板也不接受"定向到邮件应用"的参数 —— 所以那条的副标题把邮箱地址写在屏上。
    */
-  static async shareText(ctx: common.UIAbilityContext, title: string, text: string): Promise<boolean> {
+  static async shareText(ctx: common.UIAbilityContext, title: string, fileName: string, text: string, description: string): Promise<boolean> {
     try {
+      const path = `${ctx.cacheDir}/${fileName}`;
+      // 异步写:日志可达几十 KB,同步写在低优先级线程上会卡住面板唤起(见 H65)
+      const f = await fs.open(path, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+      await fs.write(f.fd, text);
+      await fs.close(f);
       const data = new systemShare.SharedData({
         utd: utd.UniformDataType.PLAIN_TEXT,
-        content: text,
-        title: title
+        uri: fileUri.getUriFromPath(path),
+        title: title,
+        description: description
       });
       await new systemShare.ShareController(data).show(ctx, {
         previewMode: systemShare.SharePreviewMode.DETAIL,
         selectionMode: systemShare.SelectionMode.SINGLE
       });
-      Log.i('Files', '已唤起系统分享面板');
+      Log.i('Files', `已唤起系统分享面板 ${fileName}`);
       return true;
     } catch (e) {
       Log.e('Files', `分享失败 ${(e as Error).message}`);

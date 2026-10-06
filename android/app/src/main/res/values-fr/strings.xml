@@ -214,6 +214,8 @@
     <string name="set_share_log">Partager les journaux</string>
     <string name="set_mail_log">Envoyer les journaux au développeur</string>
     <string name="set_mail_log_sub">Envoyer le journal en pièce jointe au développeur</string>
+    <string name="log_export">Exporter les journaux</string>
+    <string name="log_done">Journaux exportés</string>
     <string name="set_share_log_sub">Envoyez les journaux au développeur pour aider à diagnostiquer les problèmes occasionnels</string>
     <string name="set_clear_log">Effacer les journaux</string>
     <string name="log_size">Journaux actuels %1$s</string>

@@ -825,6 +825,14 @@
       "value": "Envoyez les journaux au développeur pour aider à diagnostiquer les problèmes occasionnels"
     },
     {
+      "name": "set_mail_log",
+      "value": "Envoyer les journaux au développeur"
+    },
+    {
+      "name": "set_mail_log_sub",
+      "value": "Transmettez le journal au logiciel de messagerie et saisissez wooooxooom@gmail.com comme destinataire"
+    },
+    {
       "name": "set_clear_log",
       "value": "Effacer les journaux"
     },

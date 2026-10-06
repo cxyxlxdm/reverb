@@ -825,6 +825,14 @@
       "value": "Send runtime logs to the developer to help diagnose rare issues"
     },
     {
+      "name": "set_mail_log",
+      "value": "Email logs to developer"
+    },
+    {
+      "name": "set_mail_log_sub",
+      "value": "Hand the log file to a mail app and enter wooooxooom@gmail.com as the recipient"
+    },
+    {
       "name": "set_clear_log",
       "value": "Clear logs"
     },
