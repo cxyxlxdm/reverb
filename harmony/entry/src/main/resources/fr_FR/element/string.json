@@ -966,11 +966,11 @@
     },
     {
       "name": "channel_share",
-      "value": "Partager l'émission"
+      "value": "Partager l’émission"
     },
     {
       "name": "share_failed",
-      "value": "Impossible de créer l'image à partager"
+      "value": "Impossible de créer l’image à partager"
     },
     {
       "name": "stamp_add",
@@ -1262,7 +1262,7 @@
     },
     {
       "name": "transcript_prompt_official",
-      "value": "L’éditeur fournit une transcription pour cet épisode"
+      "value": "L'éditeur fournit une transcription pour cet épisode"
     },
     {
       "name": "transcript_start",
@@ -1274,11 +1274,11 @@
     },
     {
       "name": "transcript_fetching",
-      "value": "Récupération de la transcription de l’éditeur…"
+      "value": "Récupération de la transcription de l'éditeur…"
     },
     {
       "name": "transcript_preparing_audio",
-      "value": "Préparation de l’audio…"
+      "value": "Préparation de l'audio…"
     },
     {
       "name": "transcript_running",
