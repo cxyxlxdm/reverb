@@ -5258,9 +5258,31 @@ Swift 用 200 条同刻样本跑 `.sorted`(实测顺序保持),JS/ArkTS 同一�
   都是 14,与 H128/H130 的判据一致 —— 只比"错误集相同"不成立),外加**三道阳性对照各自命中**
   (`Data/Stores.swift` 的 `normalize` 里注入不存在的成员、`Playback/PlayerController.swift` 注入类型错、
   `UI/LibraryView.swift` 注入未定义标识,每次只留一个,三处都被报出来;撤掉后回到 0)。
-- ❌ **三端都没有把这条跑起来。** 没有真造一份"乱序 + 带负 `positionMs`"的 `notes.json` 再冷启动读回 ——
-  装机时补的第一条判据:`adb push` 一份手写文件后重启,看音阁批注段的顺序,以及那一行的时间戳
-  是否显示 0:00 而不是负数;
+- ✅ **Android 真机跑过(2026-10-07,debug 包)。** 判据就是原来列的那条:造一份乱序 + 负值的
+  `notes.json` 再冷启动读回。喂进去六条 ——
+  甲 `createdAt=2000`、乙一与乙二**同一毫秒** `createdAt=3000`、丙 `positionMs=-90000`、
+  丁**整条缺 `episode`**、戊 `audioUrl` 为空。写入方式:
+  `cat 文件 | adb shell "run-as <debug 包> sh -c 'cat > files/notes.json'"`
+  (**`run-as` 读不到 `/sdcard`,所以只能走 stdin**,不能先 push 再 `cp`)。
+  `force-stop` 后冷启动,音阁批注段实测四行:
+  「乙一 · 02:03」「乙二 · 03:42」「甲 · 10:54」「丙 · **00:00**」
+  ⇒ 倒序 ✅、同刻两条保持文件里的原有先后(乙一仍在乙二之前,稳定排序成立)✅、
+  负值显示成 00:00 而不是负数 ✅、丁/戊被跳过(六条进、四条出)✅。
+  ⚠️ 顺带看到一条**行为**而不是格式的副作用:任何一次写操作(这里删了乙一)都会整份重写,
+  于是 `load()` 跳过的丁/戊**从盘上真正消失**。方向上等于顺手清了垃圾,不算 bug;
+  但它意味着那两条 invalid 条目不会一直躺在文件里等人去修 —— 别按"它们还在"设计下一次测试。
+- ✅ **两端 `notes.json` 的字节口径已逐键对过。** 这条以前以为做不了(见 H141 验收 ⑦ 的更正):
+  鸿蒙沙箱**可读**(`hdc shell cat /data/app/el2/100/base/<bundle>/haps/entry/files/notes.json`),
+  只是写不进去。两边各取一份**真机自己写出来**的文件比对:外层键序
+  `noteId · positionMs · text · createdAt · episode`,`episode` 内层 11 键
+  `id · title · description · audioUrl · artworkUrl · podcastTitle · durationSec · pubDate ·
+  feedUrl · transcriptUrl · transcriptType` —— **两端逐键同序、同为紧凑无空格 JSON**。
+  于是硬规矩里"三端字段命名与文件名尽量一致"在这一份格式上是实测,不是推定。
+  **唯一不同是 id 的生成式**(Android `UUID.randomUUID()`、鸿蒙 `${now}-${Math.random()}`),
+  而合并只按 id 全等去重,格式不同不影响 —— 记在这里是为了下次看到两种形状的 id 时不必怀疑是脏数据。
+- ❌ **鸿蒙侧这条判据不可注入**:沙箱只读,而导出到 Download 的那份应用读不到,
+  所以"写一份乱序文件再冷启动"在本端没有等价手段。鸿蒙的 `normalize` 仍只到编译 + 与 Android 逐字对齐。
+- ❌ **macOS 未跑**(出包与运行固定在另一台机器,本机只有 typecheck 差分)。
 - ❌ **系统级备份还原本身未验**(需要 `bmgr` / 云端环境)。所以"覆盖回来的那份也会被归一"
   是**代码层结论**(依据是 `load()` 是还原后唯一的读取路径),不是实测。
 
@@ -5276,6 +5298,11 @@ Swift 用 200 条同刻样本跑 `.sorted`(实测顺序保持),JS/ArkTS 同一�
 默认不做;除非那个估计是真值(播放器实际时长、用户自己按下的那一刻)。
 ⑤ 归一逻辑三端**逐字对齐**是这份格式的前提:同一个字段名、同一个方向、同一条"为什么不夹上限"的理由,
 否则下一次跨端复核必然重新论证一遍(见 H86 / H127 两笔同族账)。
+⑥ **"读不到"要按路径判,不能按端判。** 本条的判据一度被写成"鸿蒙侧不可取证",依据是沙箱外那个
+Download 目录 `ls` 就 Permission denied;而应用自己的文件在
+`/data/app/el2/100/base/<bundle>/haps/entry/files/` 下,`hdc shell cat` 一直读得到。
+**把整端判成不可取证,丢掉的正是已经拿在手上的那条判据**(三端格式互通这件事,本来只有字节比对能钉住)。
+以后写"验不了"之前先问一句:是这条路不通,还是这个端不通。
 
 ### H139. ArkTS 的 `private` 成员一旦出现在组件构造参数里,**传值被静默丢弃** —— 编译只给 WARN,而那条路"看起来是好的"
 
@@ -5518,9 +5545,13 @@ Android 侧对应的四个 `CreateDocument` 回调全是 `if (uri != null) { …
      恢复框**只列出「批注」一个分区**、`[Backup] 恢复完成 importedSettings=false` →
      那条批注回来且文字 / 时间戳 / 所属集逐项一致 → **同一个文件再恢复一次,条数仍是 1**。
      一次跑完同时钉住三件事:勾了的才写进去、只列出真有的、合并是幂等的(不翻倍)。
-     仍未被这条覆盖的是**文件字节本身** —— `hdc shell` 至今读不到沙箱外那个目录
+     仍未被这条覆盖的是**导出那份文件的字节** —— `hdc shell` 读不到沙箱外那个目录
      (`ls /storage/Users/currentUser` 直接 No such file,`/storage/media/100/localfiles` Permission denied),
-     所以"导出的 json 里字段长什么样"在鸿蒙侧不可取证,能取证的只有 App 自己怎么读它。
+     所以"落到 Download 里的那个 json 长什么样"仍然只能靠 App 怎么读它来反推。
+     **但这句话当时写得太宽了(2026-10-07 更正):应用自己沙箱里的那份是可读的** ——
+     `hdc shell cat /data/app/el2/100/base/<bundle>/haps/entry/files/notes.json` 实测能读到内容
+     (写不行:shell 是 uid 2000,文件属主 20020217)。"字段长什么样"因此**在鸿蒙侧可取证**,
+     只是取证点不在 Download 而在沙箱;逐键比对的结果见 **H138 验收**。
      系统级备份(`bmgr`)同理:Android 侧可验,鸿蒙侧没有对应入口。
 
 **顺带抓到的一处内容失真**(不是流程问题,记在这里因为它属于同一个功能面):
