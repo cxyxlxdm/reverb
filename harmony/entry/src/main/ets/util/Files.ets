@@ -17,6 +17,17 @@ export class PickedText {
   text: string = '';
 }
 
+/// `Files.saveText` 的结果。与 `PickedText` 同一口径,三态而不是 boolean:
+///  - `cancelled` = 用户取消(位置压根没选)—— **不是失败**,调用侧不该给任何提示;
+///  - `cancelled === false && ok` = 真的写进去了;
+///  - 其余 = 选了位置但写失败。
+/// 为什么不能是 boolean:boolean 只有两个位置可站,取消就只能落在「失败」那一侧,
+/// 于是用户按了「取消」会看到一句「操作未完成」。
+export class SavedResult {
+  cancelled: boolean = false;
+  ok: boolean = false;
+}
+
 /// 文档选择/保存(备份导出导入、OPML、日志导出都走这里)。
 /// 用系统文件选择器,**不申请任何存储权限**——用户选到哪就写到哪。
 export class Files {
@@ -89,24 +100,35 @@ export class Files {
     }
   }
 
-  /// 让用户选一个保存位置并写入文本。返回是否成功。
-  static async saveText(ctx: common.UIAbilityContext, suggestName: string, text: string): Promise<boolean> {
+  /**
+   * 让用户选一个保存位置并写入文本。
+   *
+   * **取消与写失败要分开标**(`SavedResult`)。本端原先返回 boolean,于是取消只能落在
+   * `false` 那一侧,三个调用点各弹一句「操作未完成」;而 Android 的
+   * `CreateDocument` 回调是 `if (uri != null) { … }` —— **取消时什么都不说**,
+   * 只有真的写失败才给提示。这里对齐到那个口径(见 H141 装机复验)。
+   */
+  static async saveText(ctx: common.UIAbilityContext, suggestName: string, text: string): Promise<SavedResult> {
+    const out = new SavedResult();
     try {
       const p = new picker.DocumentViewPicker(ctx);
       const uris = await p.save({ newFileNames: [suggestName] });
       if (uris.length === 0) {
         Log.i('Files', '用户取消保存');
-        return false;
+        out.cancelled = true;
+        return out;
       }
       // 异步写:备份文件可达几 MB,同步写会卡住 UI 线程(见 H65)
       const f = await fs.open(uris[0], fs.OpenMode.READ_WRITE | fs.OpenMode.TRUNC);
       await fs.write(f.fd, text);
       await fs.close(f);
       Log.i('Files', `已保存 ${suggestName}`);
-      return true;
+      out.ok = true;
+      return out;
     } catch (e) {
       Log.e('Files', `保存失败 ${(e as Error).message}`);
-      return false;
+      // cancelled 保持 false、ok 保持 false = 「选了位置但没写进去」
+      return out;
     }
   }
 
