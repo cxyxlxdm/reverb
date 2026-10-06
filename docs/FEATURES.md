@@ -74,7 +74,7 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
 | 功能 | 说明 | 平台差异/说明 |
 |------|------|----------------|
 | 分类热门榜 | 19 个分类:推荐 / 新闻 / 商业 / 科技 / 文化 / 知识 / 教育 / 喜剧 / 健康 / 历史 / 体育 / 美食 / 旅行 / 动漫 / 情感 / 艺术 / 音乐 / 亲子 / 影视。磁盘缓存秒开后台刷新 | Android:分类 chips + 横滑分页(HorizontalPager),**支持下拉刷新**;macOS:安静的**分类下拉菜单** + 卡片网格,**工具栏刷新按钮**手动刷新 |
-| 分类排序 | 长按拖拽自定义分类顺序并持久化 | Android:分类 chips 长按拖拽,落 `category_order`。**HarmonyOS 已同构**(2026-10-06,分类条右端 `Tune` 入口 → 排序框;`CategoryStore.ets` 与 Android `loadOrdered/saveOrder` 逐句对应,行高按外壳口径 48dp→42vp)—— ⚠️ **只过到编译,未真机**;macOS 为下拉菜单,不排序。**备份侧仍未接**:Android 导出的 `categoryOrder` 在鸿蒙暂无消费方,见 ROADMAP「手动备份 settings 分区跨端互通」 |
+| 分类排序 | 长按拖拽自定义分类顺序并持久化 | Android:分类 chips 长按拖拽,落 `category_order`。**HarmonyOS 已同构**(2026-10-06,分类条右端 `Tune` 入口 → 排序框;`CategoryStore.ets` 与 Android `loadOrdered/saveOrder` 逐句对应,行高按外壳口径 48dp→42vp)—— ⚠️ **只过到编译,未真机**,见 ROADMAP「技术债」那一行;macOS 为下拉菜单,不排序。**备份侧也已接**(2026-10-06):`categoryOrder` 两端都导出、都消费,空数组=不动本机顺序(同 `DiscoverViewModel.kt:104` 的早退口径,不是清空) |
 | 搜索 | 「单集」+「节目」两个分段并行检索;单集可直接播放,节目点进详情 | Android / HarmonyOS 分段 chip 切换,macOS 上下分区展示;HarmonyOS 先展示目录结果,再以两路并发预检首屏前 4 个 RSS,当前网络不可访问的条目保留但禁入 |
 | RSS 直接导入 | 搜索框粘贴 http(s) / RSS 地址即解析导入 | 两端一致 |
 | 频道分享 | 频道详情页生成包含频道 Logo、频道名、简介(最多四行,超出省略)与「余音 · Reverb」落款的水墨图片,交给系统分享面板;不把 RSS 地址写入图片 | 三端一致(1.0.2) |
@@ -195,29 +195,32 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
 ## 九、备份 / 恢复 · OPML
 
 - **完整备份 / 恢复**:订阅、收藏、听觉印记、**批注**、下载(仅链接)、历史、收听时长、设置,可分项勾选;**恢复为合并语义**(与现有数据合并,不覆盖清空)
+- **settings 分区的键集两端逐键对齐**(2026-10-06):`themeMode` / `fontScale` / `fontIndex` / `accentIndex` / `allowCellularDownload` / `updatesEnabled` / `defaultSpeed` / `skipBackSec` / `skipForwardSec` / `language` / `subsGrid` / `contextualRadio` / `regionOverride` / `categoryOrder` —— Android 与鸿蒙**导出都写全、恢复都读全**。两条口径值得单独记住:
+  - **契约是键名与类型,不是本地存储格式**。字号 Android 本地存倍率 Float、鸿蒙存档位下标,所以备份里 `fontScale` 与 `fontIndex` **同时写**:前者是跨端契约键,后者是给已发布的旧鸿蒙读的回落(少了它,新 Android 导出的备份装到旧鸿蒙上会静默丢掉字号)。恢复时**倍率优先、下标兜底**,先后不能反 —— 两键同时在场而取哪个不确定时,同一份文件会在两台机器上恢复出两档字号且谁都不报错。
+  - **键名以已发布的那一端为准**(Android 1.0.2 在外,那份格式是既成事实;鸿蒙 1.0.3 在架但它的 settings 分区此前只有本端读写过,改它不破坏现存备份)。
 - **OPML 导入 / 导出**:订阅列表标准 OPML 互通
 - **系统级备份(1.0.2)**:向操作系统声明白名单,由系统备份到**用户自己的**云账号或换机直连——Android 为 Auto Backup(`fullBackupContent` + `dataExtractionRules`,云备份与 device-transfer 同一口径;无 GMS 机型走厂商备份通道),鸿蒙为 `BackupExtensionAbility` + `backup_config.json`(「备份和恢复」/云空间/手机克隆)。白名单 = 订阅、收藏、历史、下载记录(仅链接)、印记、**批注(notes.json)**、收听统计 + 设置 prefs;**不含**音频、逐字稿、榜单/消息缓存与日志(25MB 配额约束)。注意:这是「备份/恢复」语义,不是跨设备实时同步;恢复为文件级覆盖,`downloads.json` 恢复后音频不在,列表不会自动出现,也不自动重下
 
 | 平台 | 差异 |
 |------|------|
 | Android | 备份 / 恢复 / 导入 / 导出经 SAF 文档选择器;恢复弹窗勾选分区;系统级备份规则见上 |
-| HarmonyOS | 备份 / 恢复 / 导入 / 导出经系统安全组件;`BackupExtension` 声明于 module.json5,范围在 `resources/base/profile/backup_config.json` |
+| HarmonyOS | 备份 / 恢复 / 导入 / 导出经系统安全组件;`BackupExtension` 声明于 module.json5,范围在 `resources/base/profile/backup_config.json`。**⚠️ 与另两端的已知差距**:导出固定全量分区、恢复按文件里探测到的分区全量应用,**没有分项勾选对话框**(Android 导出与恢复都弹 `BackupSectionDialog`、macOS sheet 同),待补齐 —— 补齐方向是给鸿蒙加对话框,**不是**把另两端的勾选删掉 |
 | macOS | 经 `NSSavePanel` / `NSOpenPanel`;恢复 sheet 勾选要合并的分区;无系统级备份机制 |
 
 ## 十、个性化与设置
 
 | 设置项 | 选项 | 平台差异/说明 |
 |--------|------|----------------|
-| 主题 | 跟随系统 / 浅色(宣纸)/ 深色(水墨)/ **纯白** | 两端一致 |
+| 主题 | 跟随系统 / 浅色(宣纸)/ 深色(水墨)/ **纯白** | 两端一致;**默认都是「深色(水墨)」** —— 不是跟随系统,这是品牌决定(Android 侧注释明示,鸿蒙 2026-10-06 把原先的默认 0「跟随系统」对齐过来) |
 | 配色 | 青瓷 / 黛蓝 / 绯红 / 竹青 | 两端一致 |
-| 字号 | 小 / 标准 / 大 / 特大 | Android 4 档离散;macOS **连续滑杆**(0.85 ~ 1.30) |
-| 语言 | 跟随系统 / 简体中文 / 繁體中文 / English / Français / Español | 两端一致(切换后 Android 重建界面 / macOS 重启生效) |
-| 地区 | 自动 + 多地区 | Android 12 地区;macOS 8 地区 |
+| 字号 | 小 / 标准 / 大 / 特大 | **Android / 鸿蒙都是 4 档、倍率逐项相同**(`0.85 / 1.0 / 1.15 / 1.3`;倍率无量纲,不参与"外壳按 1vp≈1.18dp 换算",见 H122)—— 两端各自把常量放在数据层(Android `SettingsStore.FONT_SCALES` / 鸿蒙 `theme/Theme.ets`),**改一处必须同步另一处**;macOS 连续滑杆(0.85 ~ 1.30) |
+| 语言 | 跟随系统 / 简体中文 / 繁體中文 / English / Français / Español | 两端一致(切换后 Android / 鸿蒙重建界面 / macOS 重启生效)。**标签词表是跨端契约**:`"" / zh-CN / zh-TW / en / fr / es`,两端逐项同序同值;鸿蒙 1.0.x 本地存过的 `zh-Hans` / `zh-Hant` 在读盘与写入两处归一(否则升级后老用户显示成「跟随系统」) |
+| 地区 | 自动 + 多地区 | **Android / 鸿蒙都是 12 项**(自动 + cn/hk/tw/us/jp/kr/sg/au/ca/gb/de,逐项同序);macOS 8 地区。备份里"自动"的表示法不同(Android `null` ↔ 鸿蒙 `""`),恢复侧双向桥接 |
 | 电台模式 | 随机电台 / 情境电台 | 两端一致 |
-| 默认倍速 | 0.8× ~ 2.0× | 两端一致 |
+| 默认倍速 | 0.8× ~ 2.0× | 两端一致;**选定后当场作用到正在播的这一集**(不是等下一集)。鸿蒙原先只写设置,2026-10-06 补上调用;该端 `setSpeed` 仅在 playing 时下发速率(AVPlayer 限制),暂停态改的是待用值、恢复播放时补上 |
 | 快退 / 快进秒数 | 5 / 10 / 15 / 30 · 15 / 30 / 45 / 60 | 两端一致 |
 | 真实频谱 | 开关(默认关,开启时请求录音权限) | **仅 Android**(macOS / 鸿蒙平台限制,无此开关) |
-| 仅 WiFi 下载 | 开关 | **Android / 鸿蒙**;开启时下载层实际拒绝蜂窝网络 |
+| 仅 WiFi 下载 | 开关(**默认开**,即默认拒绝计费网络) | **Android / 鸿蒙**;拦的是**计费网络**而不是"没连路由器":判据两端同口径(Android `isActiveNetworkMetered` ↔ 鸿蒙 `NET_CAPABILITY_NOT_METERED`),所以**限量/计费热点同样会被拒**。两个兜底方向也一致:设置读不到按"不允许蜂窝"、网络能力取不到按"不计费"放行 |
 | 更新提醒 | 开关 | **Android / 鸿蒙**(macOS 无后台更新);鸿蒙拒绝通知授权时保持关闭 |
 | 清理 | 缓存 / 下载 / 历史 | Android:缓存 + 下载 + 历史,均带用量与二次确认;macOS:下载(存储区)+ 历史(音阁内) |
 | 听觉足迹 | 入口 | 两端一致 |

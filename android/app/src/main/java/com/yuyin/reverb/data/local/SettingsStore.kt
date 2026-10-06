@@ -149,6 +149,33 @@ class SettingsStore(context: Context) {
 
     companion object {
         /**
+         * 四档字号**倍率**。从 `ui/screens/SettingsScreen.kt` 下移到数据层,原因是
+         * `BackupManager` 也要用它:跨端备份里字号有 `fontScale`(倍率,契约)和
+         * `fontIndex`(下标,旧鸿蒙那份本地格式)两种写法,读对方来的备份要在两者之间换算,
+         * 而这个换算是**数据层的口径**,不该让数据层反过来 import 一个 UI 文件里的私有常量。
+         *
+         * ⚠️ 这四个数与鸿蒙 `theme/Theme.ets` 的 `FONT_SCALES` **必须逐项相同**。
+         * 倍率是无量纲的,不参与"外壳按 1vp≈1.18dp 换算"那一套(见 H122 的口径区分);
+         * 两端取不同数的话,设置页两边都显示「小」而实际字号不同,且谁都不报错。
+         */
+        val FONT_SCALES = listOf(0.85f, 1.0f, 1.15f, 1.3f)
+
+        /// 倍率 → 档位下标,取最近的一档(外部备份给的数未必正好落在某档上)。
+        fun fontIndexFor(scale: Float): Int {
+            var best = 1
+            var diff = Float.MAX_VALUE
+            FONT_SCALES.forEachIndexed { i, s ->
+                val d = kotlin.math.abs(s - scale)
+                if (d < diff) { diff = d; best = i }
+            }
+            return best
+        }
+
+        /// 下标 → 倍率,越界夹到端点(备份是外部输入)。
+        fun scaleForFontIndex(index: Int): Float =
+            FONT_SCALES[index.coerceIn(0, FONT_SCALES.lastIndex)]
+
+        /**
          * 隐私政策版本。**政策有实质性变更时把这个数 +1**,所有用户会再看一次同意页。
          *
          * 什么算"实质性变更":新增/变更网络访问地址、新增权限、改变数据的收集或用途、

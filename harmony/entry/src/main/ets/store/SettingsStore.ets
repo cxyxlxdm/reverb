@@ -28,7 +28,7 @@ export class SettingsStore {
   accentIndex: number = 0;
   /// FONT_SCALES 索引(4 档)
   fontIndex: number = 1;
-  /// 界面语言:"" 跟随系统,否则 zh-Hans / zh-Hant / en / fr / es
+  /// 界面语言:"" 跟随系统,否则 zh-CN / zh-TW / en / fr / es(与 Android 同一套标签,见 langTag)
   language: string = '';
   /// 目录检索地区:"" 自动
   regionOverride: string = '';
@@ -107,7 +107,9 @@ export class SettingsStore {
     this.themeMode = Prefs.getNumber('theme_mode', 2);
     this.accentIndex = Prefs.getNumber('accent_index', 0);
     this.fontIndex = Prefs.getNumber('font_index', 1);
-    this.language = Prefs.getString('app_language', '');
+    // 老版本(1.0.x)存的是 zh-Hans / zh-Hant,不归一的话升级后设置页会显示「跟随系统」。
+    // 归一放在读盘这一侧(硬规矩 10:不变式在数据出口保证),下面 applyLanguage 拿到的就只能是新标签。
+    this.language = SettingsStore.langTag(Prefs.getString('app_language', ''));
     this.regionOverride = Prefs.getString('region_override', '');
     this.defaultSpeed = Prefs.getNumber('default_speed', 1.0);
     this.skipBackSec = Prefs.getNumber('skip_back', 10);
@@ -150,10 +152,12 @@ export class SettingsStore {
     // 同值必须短路掉重建。恢复备份时 `BackupManager.apply` 只要备份里有 language 键
     // 就会调进来,语言通常**根本没变**;若照旧重建整棵树,界面会被踢回发现页,
     // 连「已恢复」提示一起冲掉 —— 用户无从确认恢复是否成功。详见 H23。
-    const changed = v !== this.language;
-    this.language = v;
-    Prefs.put('app_language', v);
-    SettingsStore.applyLanguage(v);
+    // 归一在**进来这一步**做,所以下面的比较是"归一后 vs 当前(也已归一)",不会误判成变了。
+    const next = SettingsStore.langTag(v);
+    const changed = next !== this.language;
+    this.language = next;
+    Prefs.put('app_language', next);
+    SettingsStore.applyLanguage(next);
     if (!changed) return;
     const reload = SettingsStore.onLanguageChanged;
     if (reload !== null) {
@@ -161,6 +165,25 @@ export class SettingsStore {
       // 正在收起的菜单。
       setTimeout(() => { reload(); }, 150);
     }
+  }
+
+  /**
+   * 语言标签**归一到 Android 那一套**:"" / zh-CN / zh-TW / en / fr / es。
+   *
+   * 为什么是这一套而不是本端原先的 `zh-Hans` / `zh-Hant`:
+   * ① **契约以已发布的那一端为准** —— Android 1.0.2 在外,它本地存的一直是 zh-CN/zh-TW,
+   *    而它的备份**从这一版起**才第一次导出 `language`;本端的语言值从未离开过本端,
+   *    换掉不破坏任何现存备份。
+   * ② 本端资源目录本来就是按**地区**切的(`base` 放简体 + `zh_TW`/`en_US`/`fr_FR`/`es_ES`),
+   *    `zh-TW` 与目录名同形,`zh-Hant` 反而要靠 i18n 的规范化才落得上去。
+   *
+   * ⚠️ 已发布的鸿蒙 1.0.x 里存的是 `zh-Hans` / `zh-Hant`,所以**读盘也要过这一道**
+   * (见 `load()` 里那句),否则升级后老用户的语言会在界面上显示成「跟随系统」。
+   */
+  static langTag(v: string): string {
+    if (v === 'zh-Hans' || v === 'zh_CN') return 'zh-CN';
+    if (v === 'zh-Hant' || v === 'zh_TW') return 'zh-TW';
+    return v;
   }
 
   /// 启动时把已存的语言偏好套用到系统(否则重启后回落系统语言)。

@@ -56,6 +56,7 @@ import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.local.BackupManager
+import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.data.remote.OpmlSupport
 import com.yuyin.reverb.playback.DownloadManager
@@ -69,7 +70,9 @@ import java.io.File
 
 private enum class Dlg { NONE, REGION, THEME, FONT, ACCENT, SPEED, SKIP_BACK, SKIP_FWD, LANGUAGE, RADIO }
 
-private val FONT_SCALES = listOf(0.85f, 1.0f, 1.15f, 1.3f)
+// 字号的四档**倍率**不在这里了:它下移到了 `SettingsStore.FONT_SCALES`,因为备份读写
+// 也要在同一份表上做「倍率 ↔ 下标」换算(那是数据口径,不该依赖本文件)。下面这张标签表
+// 与那张倍率表**按下标对齐**,任一端加一档必须两边同改,并且鸿蒙那份也要跟上。
 private val FONT_LABEL_RES = listOf(R.string.font_small, R.string.font_normal, R.string.font_large, R.string.font_xlarge)
 private val THEME_LABEL_RES = listOf(R.string.theme_system, R.string.theme_light, R.string.theme_dark, R.string.theme_white)
 private val ACCENT_LABEL_RES = listOf(R.string.accent_celadon, R.string.accent_blue, R.string.accent_red, R.string.accent_green)
@@ -217,7 +220,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
 
             SectionLabel(stringResource(R.string.sec_appearance))
             SettingRow(stringResource(R.string.set_theme), value = stringResource(THEME_LABEL_RES.getOrElse(themeMode) { THEME_LABEL_RES[0] })) { dlg = Dlg.THEME }
-            SettingRow(stringResource(R.string.set_font), value = stringResource(FONT_LABEL_RES[fontIndex(fontScale)])) { dlg = Dlg.FONT }
+            SettingRow(stringResource(R.string.set_font), value = stringResource(FONT_LABEL_RES[SettingsStore.fontIndexFor(fontScale)])) { dlg = Dlg.FONT }
             SettingRow(
                 stringResource(R.string.set_accent),
                 value = stringResource(ACCENT_LABEL_RES.getOrElse(accentIndex) { ACCENT_LABEL_RES[0] }),
@@ -346,8 +349,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             onPick = { i -> settings.setThemeMode(i); dlg = Dlg.NONE }, onDismiss = dismiss
         )
         Dlg.FONT -> ChoiceDialog(
-            stringResource(R.string.dlg_font_title), FONT_LABEL_RES.map { stringResource(it) }, fontIndex(fontScale),
-            onPick = { i -> settings.setFontScale(FONT_SCALES[i]); dlg = Dlg.NONE }, onDismiss = dismiss
+            stringResource(R.string.dlg_font_title), FONT_LABEL_RES.map { stringResource(it) }, SettingsStore.fontIndexFor(fontScale),
+            onPick = { i -> settings.setFontScale(SettingsStore.FONT_SCALES[i]); dlg = Dlg.NONE }, onDismiss = dismiss
         )
         Dlg.RADIO -> ChoiceDialog(
             stringResource(R.string.set_radio_mode),
@@ -563,13 +566,6 @@ private fun human(bytes: Long): String {
     val mb = kb / 1024.0
     if (mb < 1024) return "%.1f MB".format(mb)
     return "%.2f GB".format(mb / 1024.0)
-}
-
-private fun fontIndex(scale: Float): Int {
-    var best = 1
-    var diff = Float.MAX_VALUE
-    FONT_SCALES.forEachIndexed { i, s -> val d = kotlin.math.abs(s - scale); if (d < diff) { diff = d; best = i } }
-    return best
 }
 
 @Composable

@@ -45,7 +45,7 @@ export class CategoryStore {
    * 写整份顺序(排序框「保存」与备份恢复都走这里)。**空数组直接返回,不落盘。**
    *
    * 这条早退是照 Android 抄的两处:DiscoverViewModel.kt:104 `if (newOrder.isEmpty()) return`、
-   * BackupManager.kt:229 `if (order.isNotEmpty()) …`。两端在"空"上的语义必须一致 ——
+   * BackupManager.kt 恢复段 `if (order.isNotEmpty()) …`。两端在"空"上的语义必须一致 ——
    * 如果这里改成"空 = 写空串 = 回默认序",那么备份里**没有**这个键(旧版本备份、
    * 或用户只勾了别的分区)就会在恢复时把用户排好的顺序**清空**,
    * 而 Android 恢复同一份备份是什么都不动。排序框那条路永远有 19 项,撞不到;
@@ -61,6 +61,18 @@ export class CategoryStore {
     this.order = next;
     Prefs.put(CategoryStore.KEY, JSON.stringify(next));
     Log.i('Category', `保存顺序 ${next.length} 项`);
+  }
+
+  /**
+   * 导出**原始**顺序(未排过 = 空数组),供手动备份写 `categoryOrder`。
+   *
+   * 刻意不返回 `ordered()`:Android 那侧导出的是 `categoryStore.loadOrder()` 原值,
+   * 也就是"用户到底排没排过"。把默认序展平成 19 个 key 写出去,恢复端就分不出
+   * "用户主动排成默认序"和"从没排过",而将来若允许"只勾 settings 分区、不覆盖顺序",
+   * 这个区分是唯一的依据。
+   */
+  keys(): string[] {
+    return this.order.slice();
   }
 
   private static readFromDisk(): string[] {
