@@ -12,6 +12,7 @@ import { ListenStatsStore } from './store/ListenStatsStore';
 import { DownloadStore } from './store/DownloadStore';
 import { StampStore } from './store/StampStore';
 import { NoteStore } from './store/NoteStore';
+import { PlaybackStateStore } from './store/PlaybackStateStore';
 import { TranscriptStore } from './store/TranscriptStore';
 import { SpeechTranscriber } from './playback/SpeechTranscriber';
 import { DownloadManager } from './playback/DownloadManager';
@@ -41,6 +42,8 @@ export class AppContainer {
   readonly stamps: StampStore = new StampStore();
   /// 听觉批注:「那一秒 + 我那句话」(notes.json,与 Android 同格式)
   readonly notes: NoteStore = new NoteStore();
+  /// 会话态:`playback_state.json` —— 排好的队列 + 正在播的那一集 + 它来自哪一列(与 Android 同格式)
+  readonly playbackState: PlaybackStateStore = new PlaybackStateStore();
   /// 逐字稿:状态机 + 缓存。识别实现由 boot 注入(见下)
   readonly transcripts: TranscriptStore = new TranscriptStore();
   readonly downloads: DownloadStore = new DownloadStore();
@@ -85,6 +88,9 @@ export class AppContainer {
     GuideEpisode.prepare(ctx);
     this.stamps.load();
     this.notes.load();
+    // 会话态(队列 + 正在播那一集)。**纯本地读**,和上面几个 store 同一性质;
+    // 真正会联网的预载排在同意后(见 startGated 末尾的 restoreFromState)。
+    this.playbackState.load();
     /**
      * 逐字稿:这里装配的只是**状态机与本地缓存**(私有目录读写),不联网、不碰权限,
      * 所以放在同意隐私政策之前没有问题(与上面几个 store 同一性质)。
@@ -102,6 +108,10 @@ export class AppContainer {
     this.listenStats.seedFromHistory(this.history.history);
 
     Log.i('App', `本地数据就绪 订阅=${this.subscriptions.subscriptions.length} 收藏=${this.favorites.favorites.length} 历史=${this.history.history.length} 最新=${this.inbox.episodes.length} 批注=${this.notes.notes.length}`);
+    // 会话态单独一行:装机验收「重启后队列与正在播的那一集还在」靠的就是这两格
+    // (与 Android AppContainer 的启动日志同口径)。只报 id 与条数,不落标题。
+    const snap = this.playbackState.snapshot;
+    Log.i('App', `会话态 upNext=${snap.upNext.length} 上次在播=${snap.current === null ? '-' : snap.current.id}`);
 
     // 以上全是**本地读写**,不联网、不读系统网络信息,可以在同意隐私政策之前做。
     // 联网相关的装配一律推到 startGated(同意后由 Index 调用)。
@@ -129,6 +139,7 @@ export class AppContainer {
 
     // 播放层装配:注入历史/设置,并把状态变化同步给系统媒体会话
     this.player.bind(this.history, this.settings);
+    this.player.bindState(this.playbackState);
     // 已下载优先本地播放(闭包注入,解耦下载模块)。
     // 引导音频也走这条路:它的"本地文件"是从 rawfile 拷出来的那一份。
     this.player.localFileProvider = (e: Episode) => {
@@ -143,6 +154,15 @@ export class AppContainer {
     const bridge = AvSessionBridge.get();
     bridge.setup(ctx, this.player);
     this.player.onStateChanged = () => { bridge.sync(this.player); };
+    /**
+     * 恢复上次退出时的播放态(队列 + 正在播那一集),排在**上面两行之后**:
+     * 预载会立刻产生一次状态回调,而"预载到暂停态、不出声"这件事要在锁屏/控制中心
+     * 正确显示成暂停 —— `onStateChanged` 还没挂上就装载,那一格就丢了。
+     *
+     * 这一步会向发布方拉一次音频流(装载到就绪、不自动开播),所以它在同意门之内,
+     * 口径同步写在 `docs/PRIVACY.md` 第三节(与 Android 同一条)。
+     */
+    this.player.restoreFromState();
   }
 
   /// 当前生效地区:设置覆盖优先;自动模式跟随设备地区,无地区信息时才回落 us。

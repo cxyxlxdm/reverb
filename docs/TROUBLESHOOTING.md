@@ -4613,6 +4613,34 @@ H124 的补记把天花板写成"`TranscriptPage.swift` 那四处",这次量出�
 带标志位那次 `ENDED` 之后只有 `markPlayed`(没有 `play id=` / `advanceQueue` / `play from userQueue`),
 不带标志位那次立刻 `play from userQueue … remaining=2` —— 一有一无,才算证明。
 
+**鸿蒙同构补记(2026-10-06,`store/PlaybackStateStore.ets` + `playback/PlayerController.ets`,
+BRA-AL00 / HarmonyOS 6.1.0.135 / debug 签名 hap)**。文件名、JSON 形状、`version` 门、±40 窗口、
+`upNext` 上限 300、slim 十键(不写 `description`)全部照抄 Android,连日志三行文案也一致 ——
+所以取证口在两端是同一个,`启动读回播放态` / `restore cur=…` / `落盘播放态 …ctx=N@M(全列 K)`。
+真机过的是:**±40 裁剪**(`playQueue count=390 index=1` → `ctx=42@1(全列 390)`)、**入队落盘**(`upNext=2`)、
+**冷启动读回**(`cur=xmly_track_1017190729 ctx=42@1 upNext=2`)、**预载不出声**(整轮只有 `state=initialized`
+→ `state=prepared`,**没有** `state=playing`)、**迷你条冷启动即出现**、
+**进度没被抹成 0**(播放页 `02:03` / `1:14:20`,按播放后 `state=playing` 且从 `02:10` 往上走 ——
+这道地闸在鸿蒙同样要按事件设:`saveProgress()` 里 `if (!this.playbackStarted) return;`)、
+**上一集/下一集不灰**(按「下一集」→ `play from userQueue … remaining=1` 并当场换集)、
+以及**第二次冷启动的往返**(下一集之后立刻 force-stop,再起:读回 `ctx=1@0 upNext=1`,与上一次落盘逐字段相同)。
+
+三处**不是照抄**的地方,值得下次移植时再看:
+① 鸿蒙没有 `playWhenReady`,对内标志是 `playbackDesiredPlaying`,而消费点在 `prepared` 分支的
+「不希望播放就到此为止」—— 所以置 `false` 必须排在**绑源与 `prepare()` 之前**;
+而 `startEpisode` 原本无条件把它置 `true`,于是这次给它加了第三个参数 `autoplay`,恢复路径传 `false`。
+② 恢复的**前置判据换了**:"控制器连上之后 + `currentMediaItem == null`" 这个形状在鸿蒙不存在 ——
+本端 AVPlayer 每条都新建,没有"同会话重连"一说,对应判据是 `this.current === null`。
+③ **调用点的位置是合规线,不是风格**:`restoreFromState()` 排在 `AppContainer.startGated` 的**末尾**
+(`bindState` 与 `onStateChanged` 之后)。鸿蒙的装配是 `boot()`(只做本地读写)与 `startGated()`(同意隐私政策后
+才装配联网组件)两段式,预载会向发布方拉一次流,所以它**只能落在后半段里**;
+放在 `boot()` 里就等于"同意前联网",而 Android 那边没有这个区分,照抄位置就会错。
+
+**没在真机验过的两条(路径与 Android 同形,但本端没拿到夹具,别当成已过)**:
+① 电台模式不落 `current`(`persistState()` 的 `radioMode` 分支)—— 这轮没起过电台;
+② 盘上挂着引导音频时播放条不出现、并重写落盘 —— 设备上已有订阅,引导卡不显示,构造不出这个夹具。
+
+
 ### H130. macOS 整模块 typecheck 的"错误集与基线相同"是一个**假通过**:编译器在第一个错的文件之后就停了
 
 **现象**(2026-10-05 复核 A2-2 清单时撞出来的)。`docs/ROADMAP.md` 三-A 的 macOS 那一行写着

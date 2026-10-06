@@ -6,6 +6,7 @@ import audio from '@ohos.multimedia.audio';
 import { Episode } from '../model/Models';
 import { HistoryStore } from '../store/Stores';
 import { SettingsStore } from '../store/SettingsStore';
+import { PlaybackStateStore } from '../store/PlaybackStateStore';
 import { PlaybackClock } from './PlaybackClock';
 import { Log } from '../util/Logger';
 
@@ -132,6 +133,18 @@ export class PlayerController {
   private playbackActionTask: Promise<void> = Promise.resolve();
   private history: HistoryStore | null = null;
   private settings: SettingsStore | null = null;
+  /// 播放态落盘(`playback_state.json`)。null = 尚未装配(AppContainer.boot 之后才有)。
+  private stateStore: PlaybackStateStore | null = null;
+  /**
+   * **这一集在本会话里真的出声过**才允许把播放器位置回写进历史。
+   *
+   * 为什么必须有这道闸:1.0.4 起冷启动会预载上次那一集,于是「有 current」第一次
+   * **先于**「播过」而存在。若还按字段判(`current !== null`),预载后任何一次
+   * `saveProgress`(暂停事件、ticker)都会拿 `positionMs` 去覆盖历史进度 ——
+   * 而预载那一刻它可能是 0,用户上次听到的位置就被静默抹掉了,且无从察觉(H129)。
+   * 判据只能是**事件**:走到 `playing` 状态才算播过。
+   */
+  private playbackStarted = false;
   /// 已下载单集的本地路径提供者(闭包注入,解耦下载模块;采纳 macOS 设计)
   localFileProvider: ((e: Episode) => string | null) | null = null;
   /// 播放状态变化回调(供 AVSession 同步)
@@ -223,6 +236,74 @@ export class PlayerController {
     this.playMode = this.fallbackMode();
   }
 
+  /** 注入播放态落盘器。由 AppContainer 在 `bind` 之后调用,恢复则另走 `restoreFromState`。 */
+  bindState(store: PlaybackStateStore): void {
+    this.stateStore = store;
+  }
+
+  /**
+   * 把当前播放态写下去(落盘口径与裁剪见 `PlaybackStateStore.save`)。
+   *
+   * **电台模式例外:那一档没有可恢复的身份** —— 电台的「上一集/下一集」走的是内存里的
+   * `radioHistory`(随机抓来的节目序列,退出即弃),把它写成上下文队列
+   * 会让重启后的「下一集」跳进一个毫不相干的列表。所以电台期间只留 up next、清空 current。
+   */
+  private persistState(): void {
+    const st = this.stateStore;
+    if (st === null) return;
+    if (this.radioMode) st.save(null, '', [], 0, this.userQueue);
+    else st.save(this.current, this.activeListTag, this.queue, this.queueIndex, this.userQueue);
+  }
+
+  /**
+   * 冷启动把上次退出时的播放态读回来。用户报的是「加入队列的节目下次打开 app 就消失」,
+   * 而一起丢的其实是同一份内存里的三样东西:`up next`、**正在播哪一集**、
+   * 以及**这一集来自哪一列**(后者决定上/下一集与「播完自动接下一集」)。
+   *
+   * 口径与 Android 同:**恢复现场,不恢复意图** —— 不自动开播,但把这一集预载到就绪,
+   * 于是迷你条上的进度是播放器真值、按下播放键即刻出声。
+   * 调用时机:隐私政策已同意、`bind`/`bindState` 之后,且**本会话还没有任何装载**
+   * (`current === null`)—— 后台服务还活着时拿旧快照覆盖会把正在播的现场改掉,比丢队列更糟。
+   */
+  restoreFromState(): void {
+    const st = this.stateStore;
+    if (st === null || this.current !== null) return;
+    const snap = st.snapshot;
+    if (snap.isEmpty()) return;
+    if (snap.upNext.length > 0) {
+      this.userQueue = snap.upNext;
+      Log.i('Player', `restore upNext=${snap.upNext.length}`);
+    }
+    // 引导音频不是一集真正的节目,不该在重启后又冒出来占住播放条
+    const saved = snap.current;
+    const cur = saved !== null && !GuideEpisode.isGuide(saved.id) ? saved : null;
+    if (cur === null) {
+      // 读侧跳过之外还要**重写一次**:否则引导音频会一直留在文件里,
+      // 每次冷启动都白跳一遍,而它占着的那格本可以放真正在播的那一集。
+      if (saved !== null) {
+        Log.i('Player', 'restore 忽略引导音频,重写播放态');
+        this.persistState();
+      }
+      this.updateNavFlags();
+      return;
+    }
+    const hasInContext = snap.context.some((x: Episode) => x.id === cur.id);
+    this.queue = hasInContext ? snap.context : [cur];
+    let idx = 0;
+    for (let i = 0; i < this.queue.length; i++) if (this.queue[i].id === cur.id) { idx = i; break; }
+    this.queueIndex = idx;
+    this.activeListTag = snap.listTag;
+    // 先按那一列存着的模式建好随机表,再装载(顺序错了会让随机模式的下一集指回原列表)
+    this.applyPlayMode(this.modeFor(snap.listTag));
+    // **上/下一集的可点状态要在这里刷一次,不是"反正播起来会刷"**:恢复走的是直接装载
+    // (不调 `playQueue`),而预载又是暂停态,`playing` 分支不会为它触发一次。
+    // 少这一行的症状是"重启后那两颗按钮灰着,按下播放才亮" —— 而这一列的上下文明明已经读回来了。
+    this.updateNavFlags();
+    Log.i('Player',
+      `restore cur='${cur.title}' ctx=${this.queue.length}@${this.queueIndex} tag='${snap.listTag}' mode=${modeName(this.playMode)}`);
+    this.startEpisode(cur, true, false);
+  }
+
   /** 把 SettingsStore 那两份 ordinal 换成一张枚举表(整表换新引用,界面才会收到)。 */
   private refreshPlayModes(): void {
     const s = this.settings;
@@ -312,15 +393,24 @@ export class PlayerController {
     this.playQueue(queue.length > 0 ? queue : [e], idx, tag);
   }
 
-  private startEpisode(e: Episode, resetRetries: boolean): void {
+  /**
+   * 装载某一集。
+   *
+   * @param autoplay **false = 只预载到就绪,不出声**(冷启动恢复走这条)。
+   *   AVPlayer 没有 `playWhenReady` 这个属性,`playbackDesiredPlaying` 就是它在本端的对应物 ——
+   *   所以这条"意图要排在装载之前"的约束一字不动地搬过来:必须在绑源(prepare 随后由
+   *   `initialized` 分支发起)之前把它按成 false,否则 `prepared` 分支会照旧意图直接起播,
+   *   表现成"没经同意就自己响起来"。消费点在 `prepared` 分支开头。
+   */
+  private startEpisode(e: Episode, resetRetries: boolean, autoplay: boolean = true): void {
     if (this.released) return;
     this.cancelLoadRetry();
     if (resetRetries) {
       this.loadRetries = 0;
       this.playbackError = '';
     }
-    // 新音源会自动起播,此前排队的暂停/恢复动作不得再落到它身上。
-    this.playbackDesiredPlaying = true;
+    // 新音源按这里的意图起播,此前排队的暂停/恢复动作不得再落到它身上。
+    this.playbackDesiredPlaying = autoplay;
     this.playbackActionGeneration += 1;
     const generation = ++this.loadGeneration;
     this.failedGeneration = -1;
@@ -335,6 +425,8 @@ export class PlayerController {
   private async playEpisode(e: Episode, generation: number): Promise<void> {
     if (generation !== this.loadGeneration) return;
     this.current = e;
+    // 换集即重新计数:见 `playbackStarted` 那道地闸的注释
+    this.playbackStarted = false;
     this.clock.positionMs = 0;
     this.durationMs = 0;
     this.loading = true;
@@ -343,6 +435,10 @@ export class PlayerController {
     this.clearFade();
     this.stopTicker();
     this.notify();
+    // 落这一笔是"正在播哪一集"的**唯一**落盘点:队列动作各自也会写,但换集(含自动续播)
+    // 不经过那些入口。写在这里而不是装载成功之后 —— 装载失败重试时快照内容并没有变,
+    // 而提前写过才能保证"排完队就杀掉进程"这一格不丢。
+    this.persistState();
     if (this.onListenFlush !== null) this.onListenFlush();   // 结算上一集残余
 
     // 内置引导音频不是一集真正的播客:不进历史、不计收听时长,
@@ -595,7 +691,15 @@ export class PlayerController {
         Log.i('Player', `跳点落空 seek=${seekMs} dur=${this.durationMs} explicit=${explicit}`);
       }
       // 用户可能在 prepare 或 AudioSession 激活期间按了暂停。prepared 不能把旧的自动起播意图复活。
+      // 冷启动的**预载**也走这一格:装载到就绪、不激活 AudioSession、不出声,按播放即刻继续。
       if (!this.playbackDesiredPlaying) {
+        // 音量抬回满:预载不经过淡入那一段(`setVolume(0)` → fade),而用户随后按播放走的是
+        // resume 那条路(也没有淡入)。若上一集被睡眠渐弱压过低音量,这一笔不补就是"声音突然很小"。
+        try {
+          p.setVolume(1.0);
+        } catch (e) {
+          Log.w('Player', `预载设置音量失败 ${(e as Error).message}`);
+        }
         this.loading = false;
         this.notify();
         return;
@@ -644,6 +748,9 @@ export class PlayerController {
       this.playbackError = '';
       this.cancelLoadRetry();
       this.isPlaying = true;
+      // **本端"真的出声过"的事件点**。历史进度的回写以它为闸(见 `playbackStarted`),
+      // 所以冷启动预载那一集不会把用户上次听到的位置抹成 0。
+      this.playbackStarted = true;
       this.startTicker();
       this.notify();
       return;
@@ -1051,17 +1158,20 @@ export class PlayerController {
     if (this.userQueue.some((x: Episode) => x.id === e.id)) return;
     this.userQueue = this.userQueue.concat([e]);
     this.updateNavFlags();
+    this.persistState();
   }
 
   playNext(e: Episode): void {
     const rest = this.userQueue.filter((x: Episode) => x.id !== e.id);
     this.userQueue = [e].concat(rest);
     this.updateNavFlags();
+    this.persistState();
   }
 
   removeFromQueue(id: string): void {
     this.userQueue = this.userQueue.filter((x: Episode) => x.id !== id);
     this.updateNavFlags();
+    this.persistState();
   }
 
   // ── 随机 / 情境电台 ──
@@ -1139,11 +1249,14 @@ export class PlayerController {
     next.splice(to, 0, item);
     this.userQueue = next;
     this.updateNavFlags();
+    this.persistState();
   }
 
   clearQueue(): void {
+    if (this.userQueue.length === 0) return;
     this.userQueue = [];
     this.updateNavFlags();
+    this.persistState();
   }
 
   private consumeQueueAt(index: number): void {
@@ -1313,6 +1426,11 @@ export class PlayerController {
     if (e === null || this.history === null) return;
     // 引导音频不写历史:playEpisode 已跳过 record,这里若还写就会又建出一条
     if (GuideEpisode.isGuide(e.id)) return;
+    // **这一集在本会话里真的播出过声音,才允许回写进度**(H129)。
+    // 1.0.4 起冷启动会预载上次那一集,于是"有 current"先于"播过"而存在:
+    // 少了这道闸,预载后任何一次 paused 事件或 ticker 都会拿 positionMs(那一刻可能是 0)
+    // 去覆盖历史进度 —— 用户上次听到的位置被静默抹成 0:00,而界面上看不出任何异常。
+    if (!this.playbackStarted) return;
     this.history.updatePosition(e.id, Math.max(0, this.positionMs), Math.max(0, this.durationMs));
   }
 
