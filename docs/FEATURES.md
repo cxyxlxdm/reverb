@@ -194,7 +194,7 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
 
 ## 九、备份 / 恢复 · OPML
 
-- **完整备份 / 恢复**:订阅、收藏、听觉印记、**批注**、下载(仅链接)、历史、收听时长、设置,可分项勾选;**恢复为合并语义**(与现有数据合并,不覆盖清空)
+- **完整备份 / 恢复**:订阅、收藏、听觉印记、**批注**、下载(仅链接)、历史、收听时长、设置,**恢复侧三端都能分项勾选;导出侧 Android 与鸿蒙能勾,macOS 仍是全量导出**(鸿蒙 2026-10-06 补齐勾选框);**恢复为合并语义**(与现有数据合并,不覆盖清空)
 - **settings 分区的键集两端逐键对齐**(2026-10-06):`themeMode` / `fontScale` / `fontIndex` / `accentIndex` / `allowCellularDownload` / `updatesEnabled` / `defaultSpeed` / `skipBackSec` / `skipForwardSec` / `language` / `subsGrid` / `contextualRadio` / `regionOverride` / `categoryOrder` —— Android 与鸿蒙**导出都写全、恢复都读全**。两条口径值得单独记住:
   - **契约是键名与类型,不是本地存储格式**。字号 Android 本地存倍率 Float、鸿蒙存档位下标,所以备份里 `fontScale` 与 `fontIndex` **同时写**:前者是跨端契约键,后者是给已发布的旧鸿蒙读的回落(少了它,新 Android 导出的备份装到旧鸿蒙上会静默丢掉字号)。恢复时**倍率优先、下标兜底**,先后不能反 —— 两键同时在场而取哪个不确定时,同一份文件会在两台机器上恢复出两档字号且谁都不报错。
   - **键名以已发布的那一端为准**(Android 1.0.2 在外,那份格式是既成事实;鸿蒙 1.0.3 在架但它的 settings 分区此前只有本端读写过,改它不破坏现存备份)。
@@ -203,9 +203,9 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
 
 | 平台 | 差异 |
 |------|------|
-| Android | 备份 / 恢复 / 导入 / 导出经 SAF 文档选择器;恢复弹窗勾选分区;系统级备份规则见上 |
-| HarmonyOS | 备份 / 恢复 / 导入 / 导出经系统安全组件;`BackupExtension` 声明于 module.json5,范围在 `resources/base/profile/backup_config.json`。**⚠️ 与另两端的已知差距**:导出固定全量分区、恢复按文件里探测到的分区全量应用,**没有分项勾选对话框**(Android 导出与恢复都弹 `BackupSectionDialog`、macOS sheet 同),待补齐 —— 补齐方向是给鸿蒙加对话框,**不是**把另两端的勾选删掉 |
-| macOS | 经 `NSSavePanel` / `NSOpenPanel`;恢复 sheet 勾选要合并的分区;无系统级备份机制 |
+| Android | 备份 / 恢复 / 导入 / 导出经 SAF 文档选择器;**导出与恢复都弹框勾选分区**(`BackupSectionDialog`,默认全勾、一个都不勾时确认不可点、勾选结果记到下次打开);系统级备份规则见上 |
+| HarmonyOS | 备份 / 恢复 / 导入 / 导出经系统安全组件;`BackupExtension` 声明于 module.json5,范围在 `resources/base/profile/backup_config.json`。**分项勾选框已于 2026-10-06 补齐**(此前本端两个方向都是无选择的全量操作 —— 补齐方式是给鸿蒙加对话框,没有删另两端的勾选)。交互与 Android 逐项同构:导出**先弹框再选保存位置**、恢复**先选文件→探测文件里有哪些分区→再弹框**(可选集只有文件里真有的那几项)、打开即全选、点行翻转、一个都不勾时「备份/恢复」不可点、文件里探测不到分区报 `backup_invalid`。**取消文件选择现在不提示**(改前与"读不出来"共用一句 `操作未完成`;Android 的 `uri == null` 本来就是静默的)。分区名改用专键 `backup_row_*`,**5 语种与 Android 逐字一致**(此前复用各功能页自己的标题,同一格会出现「下载」vs「下载(仅节目链接)」、「听觉足迹」vs「听觉印记」两种措辞)。<br>⚠️ **一条有意保留的差异**:Android 把勾选结果记在页面状态里、下次打开还在;鸿蒙每次打开回到全选 —— 少一个看不见的"上次勾了什么"。❌ **全部只过到编译,一次都没点过**,判据见 `docs/ROADMAP.md` 三-D 技术债「手动备份 settings 分区跨端互通」那一行与 `docs/TROUBLESHOOTING.md` H141 |
+| macOS | 经 `NSSavePanel` / `NSOpenPanel`;恢复 sheet 勾选要合并的分区;⚠️ **导出侧没有勾选框** —— `SettingsView.exportBackup()` 实测写死 `Set(BackupManager.Section.allCases)` 全量导出(与另两端本轮补齐后的差别,记在 `docs/ROADMAP.md` A2-4 待办);无系统级备份机制 |
 
 ## 十、个性化与设置
 

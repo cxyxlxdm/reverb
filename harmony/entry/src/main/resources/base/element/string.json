@@ -649,6 +649,58 @@
       "value": "已导入 %d 个订阅"
     },
     {
+      "name": "backup_export_title",
+      "value": "备份数据"
+    },
+    {
+      "name": "backup_confirm",
+      "value": "备份"
+    },
+    {
+      "name": "backup_restore_title",
+      "value": "恢复数据"
+    },
+    {
+      "name": "restore_confirm",
+      "value": "恢复"
+    },
+    {
+      "name": "backup_invalid",
+      "value": "无法识别的备份文件"
+    },
+    {
+      "name": "backup_row_subscriptions",
+      "value": "订阅"
+    },
+    {
+      "name": "backup_row_favorites",
+      "value": "收藏"
+    },
+    {
+      "name": "backup_row_stamps",
+      "value": "听觉印记"
+    },
+    {
+      "name": "backup_row_notes",
+      "value": "批注"
+    },
+    {
+      "name": "backup_row_downloads",
+      "value": "下载（仅节目链接）"
+    },
+    {
+      "name": "backup_row_history",
+      "value": "历史"
+    },
+    {
+      "name": "backup_row_listen_stats",
+      "value": "收听时长"
+    },
+    {
+      "name": "backup_row_settings",
+      "value": "设置"
+    },
+    {
       "name": "set_updates",
       "value": "订阅更新提醒"
     },

@@ -649,6 +649,58 @@
       "value": "%d abonnements importés"
     },
     {
+      "name": "backup_export_title",
+      "value": "Sauvegarder"
+    },
+    {
+      "name": "backup_confirm",
+      "value": "Sauvegarder"
+    },
+    {
+      "name": "backup_restore_title",
+      "value": "Restaurer"
+    },
+    {
+      "name": "restore_confirm",
+      "value": "Restaurer"
+    },
+    {
+      "name": "backup_invalid",
+      "value": "Fichier de sauvegarde non reconnu"
+    },
+    {
+      "name": "backup_row_subscriptions",
+      "value": "Abonnements"
+    },
+    {
+      "name": "backup_row_favorites",
+      "value": "Favoris"
+    },
+    {
+      "name": "backup_row_stamps",
+      "value": "Empreintes d'écoute"
+    },
+    {
+      "name": "backup_row_notes",
+      "value": "Annotations"
+    },
+    {
+      "name": "backup_row_downloads",
+      "value": "Téléchargements (liens)"
+    },
+    {
+      "name": "backup_row_history",
+      "value": "Historique"
+    },
+    {
+      "name": "backup_row_listen_stats",
+      "value": "Temps d'écoute"
+    },
+    {
+      "name": "backup_row_settings",
+      "value": "Réglages"
+    },
+    {
       "name": "set_updates",
       "value": "Alertes nouveaux épisodes"
     },

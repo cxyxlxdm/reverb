@@ -40,9 +40,20 @@ const KEY: Record<number, string> = {
   4: 'downloads', 5: 'history', 6: 'listenStats', 7: 'settings'
 };
 
+/**
+ * 分区在「勾选框对话框」里显示的名字对应的字符串键。
+ *
+ * ⚠️ 用的是**专键 `backup_row_*`**,不是各功能页自己的标题键。两条理由:
+ *  - 逐字对齐 Android:它这 8 行一直是独立的一套 `backup_row_*`,复用 `lib_*` 会让两端的
+ *    同一格出现两种措辞(「下载」vs「下载(仅节目链接)」、「听觉足迹」vs「听觉印记」);
+ *  - 备份语境下的名字要带**这条语境的信息**:这里下载分区只搬节目链接不搬音频(见下方合并规则),
+ *    光写「下载」会让人以为恢复完音频也在。功能页的标题不该承担这句话。
+ *
+ * 顺序与上面 `KEY` 逐项对齐(枚举值 = 下标)。
+ */
 const LABEL_KEY: Record<number, string> = {
-  0: 'lib_subscriptions', 1: 'lib_favorites', 2: 'footprint_title', 3: 'lib_notes',
-  4: 'lib_downloads', 5: 'lib_history', 6: 'listen_stats_title', 7: 'settings_title'
+  0: 'backup_row_subscriptions', 1: 'backup_row_favorites', 2: 'backup_row_stamps', 3: 'backup_row_notes',
+  4: 'backup_row_downloads', 5: 'backup_row_history', 6: 'backup_row_listen_stats', 7: 'backup_row_settings'
 };
 
 export function sectionLabelKey(s: BackupSection): string {
