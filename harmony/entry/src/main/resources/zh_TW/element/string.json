@@ -882,7 +882,7 @@
     },
     {
       "name": "set_full_backup_sub",
-      "value": "訂閱 · 下載 · 歷史 · 設定，用於換機 / 備份"
+      "value": "訂閱 · 批註 · 歷史等全部本機資料，用於換機 / 備份"
     },
     {
       "name": "set_restore",

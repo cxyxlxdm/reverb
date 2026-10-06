@@ -882,7 +882,7 @@
     },
     {
       "name": "set_full_backup_sub",
-      "value": "订阅 · 下载 · 历史 · 设置，用于换机 / 备份"
+      "value": "订阅 · 批注 · 历史等全部本地数据，用于换机 / 备份"
     },
     {
       "name": "set_restore",

@@ -228,7 +228,7 @@
     <string name="set_import_opml">Importar suscripciones (OPML)</string>
     <string name="set_import_opml_sub">Importar un OPML de otra app</string>
     <string name="set_full_backup">Copia completa</string>
-    <string name="set_full_backup_sub">Suscripciones · descargas · historial · ajustes</string>
+    <string name="set_full_backup_sub">Todos tus datos locales — suscripciones, anotaciones, historial — para migración / copia de seguridad</string>
     <string name="set_restore">Restaurar</string>
     <string name="set_restore_sub">Importar desde un archivo de copia de Reverb</string>
 
