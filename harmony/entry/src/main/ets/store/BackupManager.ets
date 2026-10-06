@@ -5,12 +5,19 @@ import { EpisodeNote } from './NoteStore';
 import { AppContainer } from '../AppContainer';
 import { J } from '../net/Http';
 import { xmlUnescape } from '../util/HtmlText';
+import { FONT_SCALES, fontIndexOf, fontIndexClamped } from '../theme/Theme';
 import taskpool from '@ohos.taskpool';
 import { stringifyPrettyConcurrent, parseObjectConcurrent } from './JsonTask';
 import { Log } from '../util/Logger';
 
-/// 可备份的数据分区(与 Android / macOS 的 8 项一致,**顺序也要一致** ——
-/// 三端共用同一份 reverb-backup.json,枚举值就是分区在文件里的出现次序,漂了就对不上)。
+/**
+ * 可备份的数据分区(与 Android / macOS 的 8 项一一对应)。
+ *
+ * ⚠️ **互通契约是键名,不是顺序** —— 三端都按键名读同一份 `reverb-backup.json`,
+ * 而 Android 走 `org.json.JSONObject`(HashMap)本来就不保证写出顺序,所以"枚举值=文件里的
+ * 出现次序"这种说法站不住(先前本注释就是这么写的,已按实测改掉,见 ROADMAP A2-4)。
+ * 保持同序仍然有价值,但那是**界面价值**:勾选框按这个顺序列,三端看到的次序才一致。
+ */
 export enum BackupSection {
   SUBSCRIPTIONS = 0,
   FAVORITES = 1,
@@ -140,12 +147,32 @@ export class BackupManager {
     }
     if (has(BackupSection.SETTINGS)) {
       const st = app.settings;
+      /**
+       * settings 分区的键集与 Android `BackupManager.kt` 的 SETTINGS 段**逐键对齐**。
+       *
+       * 为什么以 Android 的键名为准:Android 1.0.2 已发布,那份格式是**既成事实**;
+       * 而鸿蒙 1.0.3 虽然在架,这一份文件此前只有本端自己读写过,改它不破坏任何现存备份。
+       *
+       * 两条不同源的东西要分清:
+       * - **跨端键名是契约**(`fontScale` 是倍率、`allowCellularDownload`、`updatesEnabled`、
+       *   `categoryOrder`…) —— 两端必须同名同义同类型;
+       * - **本地编码不是契约**(Android 用 SharedPreferences 存 Float、本端用 `font_index`
+       *   存档位下标) —— 所以这里同时写 `fontScale`(给对方读)和 `fontIndex`
+       *   (给**已发布的旧鸿蒙**读,它只认下标)。
+       */
       root[KEY[BackupSection.SETTINGS]] = {
-        'themeMode': st.themeMode, 'accentIndex': st.accentIndex, 'fontIndex': st.fontIndex,
-        'language': st.language, 'regionOverride': st.regionOverride,
+        'themeMode': st.themeMode, 'accentIndex': st.accentIndex,
+        // 倍率而非下标:与 Android 同一个数,不参与 0.876 那套外壳换算
+        'fontScale': FONT_SCALES[st.fontIndex] === undefined ? 1.0 : FONT_SCALES[st.fontIndex],
+        'fontIndex': st.fontIndex,
+        'language': st.language,
+        'regionOverride': st.regionOverride,
+        'allowCellularDownload': st.allowCellular,
+        'updatesEnabled': st.updatesEnabled,
         'defaultSpeed': st.defaultSpeed, 'skipBackSec': st.skipBackSec,
         'skipForwardSec': st.skipForwardSec, 'subsGrid': st.subsGrid,
-        'contextualRadio': st.contextualRadio
+        'contextualRadio': st.contextualRadio,
+        'categoryOrder': app.categoryStore.keys()
       } as Record<string, Object>;
     }
     Log.i('Backup', `导出 分区=${include.length}`);
@@ -299,9 +326,24 @@ export class BackupManager {
         const st = app.settings;
         if (o['themeMode'] !== undefined) st.setThemeMode(J.num(o, 'themeMode'));
         if (o['accentIndex'] !== undefined) st.setAccentIndex(J.num(o, 'accentIndex'));
-        if (o['fontIndex'] !== undefined) st.setFontIndex(J.num(o, 'fontIndex'));
+        /**
+         * 字号:**优先读 `fontScale`(倍率),读不到才退 `fontIndex`(本端下标)**。
+         *
+         * 这个先后不能反。Android 那份备份只有 `fontScale`,而它对"本端从未存过字号"
+         * 是唯一可行的入口;反过来旧鸿蒙备份只有 `fontIndex`。两个键同时在场时
+         * (新版本端导出就是同时写两个),必须让**跨端契约键**赢 ——
+         * 否则一份手改过的 Android 备份在本端会按旧下标落,而对方端按新倍率落,
+         * 同一份文件在两台机器上恢复出两档字号,且谁都不报错。
+         */
+        if (o['fontScale'] !== undefined) st.setFontIndex(fontIndexOf(J.num(o, 'fontScale')));
+        else if (o['fontIndex'] !== undefined) st.setFontIndex(fontIndexClamped(J.num(o, 'fontIndex')));
         if (o['language'] !== undefined) st.setLanguage(J.str(o, 'language'));
+        // Android 的"自动"是 JSON null,本端是 ""。J.str 对 null 返回 "",两边天然对上。
         if (o['regionOverride'] !== undefined) st.setRegionOverride(J.str(o, 'regionOverride'));
+        const cd = o['allowCellularDownload'];
+        if (typeof cd === 'boolean') st.setAllowCellular(cd);
+        const ue = o['updatesEnabled'];
+        if (typeof ue === 'boolean') st.setUpdatesEnabled(ue);
         if (o['defaultSpeed'] !== undefined) st.setDefaultSpeed(J.num(o, 'defaultSpeed'));
         if (o['skipBackSec'] !== undefined) st.setSkipBackSec(J.num(o, 'skipBackSec'));
         if (o['skipForwardSec'] !== undefined) st.setSkipForwardSec(J.num(o, 'skipForwardSec'));
@@ -309,6 +351,23 @@ export class BackupManager {
         if (typeof sg === 'boolean') st.setSubsGrid(sg);
         const cr = o['contextualRadio'];
         if (typeof cr === 'boolean') st.setContextualRadio(cr);
+        /**
+         * 分类顺序。这一行就是 FEATURES 里那句"`categoryOrder` 在本端无消费方"的收尾。
+         *
+         * `save()` 内部对空数组早退(同 Android `DiscoverViewModel.kt:104`),
+         * 所以"备份里这个键是空的"= 不动本机已有顺序,而不是清空。
+         * 恢复之后当前页可能正停在某个分类上,而发现页的 `cats` 是 aboutToAppear 时读的 ——
+         * 由 #89 那一并处理的「恢复后整页刷新」负责把界面接上,这里只保证落盘正确。
+         */
+        const ca = J.arr(o, 'categoryOrder');
+        if (ca.length > 0) {
+          const keys: string[] = [];
+          for (let i = 0; i < ca.length; i++) {
+            const v = ca[i];
+            if (typeof v === 'string' && v.length > 0) keys.push(v);
+          }
+          app.categoryStore.save(keys);
+        }
         importedSettings = true;
       }
     }

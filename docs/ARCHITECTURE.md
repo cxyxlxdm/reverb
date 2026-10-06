@@ -160,7 +160,8 @@ transcripts/<单集>.<语言>.json
   无条件把它置真,所以移植时给它加了第三个参数 `autoplay`,恢复路径传 `false`。
   预载的隐私口径(打开应用即向发布方拉一次流)同步写在 `docs/PRIVACY.md` 第三节。
 - **不进任何备份**:它不在 Android 的 `backup_rules.xml` / `data_extraction_rules.xml`、
-  也不在鸿蒙的 `backup_config.json` 白名单里,同样不占手动备份的分区(那 8 项的顺序是三端互通契约)。
+  也不在鸿蒙的 `backup_config.json` 白名单里,同样不占手动备份的分区(那 8 项的**键名**是三端互通契约;
+  顺序不是 —— 三端按键名读,见 ROADMAP A2-4)。
   判断标准与 `notes.json` 相反 ——
   批注是用户写出来的字,丢了补不回来;队列里每一集都能从历史或订阅里再找到。
 - **电台模式不落 `current`**:电台的上下集走内存里的 `radioHistory`(随机抓来的序列,退出即弃),

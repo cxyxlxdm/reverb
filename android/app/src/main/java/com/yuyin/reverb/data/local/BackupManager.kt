@@ -83,15 +83,33 @@ object BackupManager {
         }
         if (Section.SETTINGS in include) {
             val s = container.settingsStore
+            /**
+             * settings 分区的键集与鸿蒙 `BackupManager.ets` 的 SETTINGS 段**逐键对齐**。
+             *
+             * 契约是**这一组键名与类型**,不是各端本地的存储格式:Android 本地把字号存成
+             * Float 倍率(`font_scale`)、鸿蒙存成档位下标(`font_index`),那是各自实现。
+             * 所以这里同时写两种:
+             *  - `fontScale` —— 跨端契约键,也是本端一直在用的那个;
+             *  - `fontIndex` —— 给**已发布的旧鸿蒙**(1.0.3 及更早)读的,它只认下标。
+             *    少了这一行,新 Android 导出的备份装到旧鸿蒙上会静默丢掉字号。
+             *
+             * `language` / `subsGrid` / `contextualRadio` 是这次补的:三项本端早就有,
+             * 只是从没写进备份,于是从 Android 换到鸿蒙时**语言、订阅排列、电台模式**
+             * 全部回到默认 —— 而同一份文件里比它们冷门的键都带过去了。
+             */
             val obj = JSONObject()
                 .put("themeMode", s.themeMode.value)
                 .put("fontScale", s.fontScale.value.toDouble())
+                .put("fontIndex", SettingsStore.fontIndexFor(s.fontScale.value))
                 .put("accentIndex", s.accentIndex.value)
                 .put("allowCellularDownload", s.allowCellularDownload.value)
                 .put("updatesEnabled", s.updatesEnabled.value)
                 .put("defaultSpeed", s.defaultSpeed.value.toDouble())
                 .put("skipBackSec", s.skipBackSec.value)
                 .put("skipForwardSec", s.skipForwardSec.value)
+                .put("language", s.language.value)
+                .put("subsGrid", s.subsGrid.value)
+                .put("contextualRadio", s.contextualRadio.value)
                 .put("regionOverride", container.regionStore.override.value ?: JSONObject.NULL)
                 .put("categoryOrder", JSONArray(container.categoryStore.loadOrder()))
             root.put("settings", obj)
@@ -215,13 +233,28 @@ object BackupManager {
         if (Section.SETTINGS in include) root.optJSONObject("settings")?.let { s ->
             val st = container.settingsStore
             if (s.has("themeMode")) st.setThemeMode(s.getInt("themeMode"))
+            /**
+             * 字号:**优先读 `fontScale`(倍率,跨端契约键),读不到才退 `fontIndex`(下标)**。
+             *
+             * 先后不能反:新版两端导出的备份两个键都写(见上面导出段),而它们由同一个值派生,
+             * 正常情况下取哪个都一样。之所以仍要以倍率优先 —— 一份**手改过**或**来自只改了下标
+             * 那一侧**的备份里两者可能不一致,这时必须有一个确定性的胜出者,否则同一份文件
+             * 在两台机器上恢复出两档字号,而两端都显示"我从自己的库里读出来的",查不到。
+             */
             if (s.has("fontScale")) st.setFontScale(s.getDouble("fontScale").toFloat())
+            else if (s.has("fontIndex"))
+                st.setFontScale(SettingsStore.scaleForFontIndex(s.getInt("fontIndex")))
             if (s.has("accentIndex")) st.setAccentIndex(s.getInt("accentIndex"))
             if (s.has("allowCellularDownload")) st.setAllowCellularDownload(s.getBoolean("allowCellularDownload"))
             if (s.has("updatesEnabled")) st.setUpdatesEnabled(s.getBoolean("updatesEnabled"))
             if (s.has("defaultSpeed")) st.setDefaultSpeed(s.getDouble("defaultSpeed").toFloat())
             if (s.has("skipBackSec")) st.setSkipBackSec(s.getInt("skipBackSec"))
             if (s.has("skipForwardSec")) st.setSkipForwardSec(s.getInt("skipForwardSec"))
+            // 这三项是这次补的消费端。语言标签两端用的是同一套("" = 跟随系统),
+            // 所以对空串要照实写回去 —— 它的意思就是"跟随系统",不是"没值"。
+            if (s.has("language")) st.setLanguage(s.getString("language"))
+            if (s.has("subsGrid")) st.setSubsGrid(s.getBoolean("subsGrid"))
+            if (s.has("contextualRadio")) st.setContextualRadio(s.getBoolean("contextualRadio"))
             val region = if (s.isNull("regionOverride")) null else s.optString("regionOverride").ifBlank { null }
             container.regionStore.setOverride(region)
             s.optJSONArray("categoryOrder")?.let { ca ->

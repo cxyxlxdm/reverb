@@ -104,7 +104,9 @@ export struct SettingsPage {
   private themeLabels(): string[] { return [L.s('theme_system'), L.s('theme_light'), L.s('theme_dark'), L.s('theme_white')]; }
   private fontLabels(): string[] { return [L.s('font_small'), L.s('font_standard'), L.s('font_large'), L.s('font_xlarge')]; }
   /// 语言:值与 resources 下的 locale 目录对应("" = 跟随系统)
-  private langCodes: string[] = ['', 'zh-Hans', 'zh-Hant', 'en', 'fr', 'es'];
+  // 与 Android `SettingsScreen.kt` 的 `LANG_TAGS` **逐项同序同值**("" = 跟随系统)。
+  // 原先本端是 zh-Hans / zh-Hant,而备份里的 `language` 是跨端契约键 —— 见 SettingsStore.langTag。
+  private langCodes: string[] = ['', 'zh-CN', 'zh-TW', 'en', 'fr', 'es'];
   private langLabels(): string[] { return [L.s('theme_system'), '简体中文', '繁體中文', 'English', 'Français', 'Español']; }
   private speeds: number[] = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0];
   private skipBackOpts: number[] = [5, 10, 15, 30];
@@ -567,7 +569,25 @@ export struct SettingsPage {
       this.hint = L.s('backup_failed');
       return;
     }
-    BackupManager.applyRoot(this.app, root, found);
+    /**
+     * 恢复 settings 分区之后必须**按新值重排订阅更新的周期任务**。
+     *
+     * 原先这里把返回值直接丢了(`applyRoot` 是同步返回 boolean 的,调用侧却不接),
+     * 于是"备份里开着更新提醒、本机没开"这一种情况:设置页的 Toggle 会显示成开,
+     * 而 workScheduler 里**压根没有那个任务** —— 界面承诺了一件不会发生的事。
+     * 反向也一样(备份里关着、本机开着 → 恢复了还在偷偷检查并发通知)。
+     *
+     * 判据与 Android `SettingsScreen.kt:461-464` 逐字同构:仅在真恢复了 settings 分区时,
+     * 按 `updatesEnabled` 的新值 schedule / cancel。
+     *
+     * ⚠️ 与 Android 共有的一条窄窗口(不是本端独有,所以这里不单方面改):
+     * 恢复路径**不重新索取通知授权**。若那份备份来自另一台机器,本机可能从未授予通知权限,
+     * 于是任务排上了而通知发不出去。两端一致 ⇒ 不算漂移;要修得两端一起修。
+     */
+    if (BackupManager.applyRoot(this.app, root, found)) {
+      if (this.settings.updatesEnabled) UpdateNotifier.schedule();
+      else UpdateNotifier.cancel();
+    }
     this.hint = L.s('backup_restored');
     this.onChanged();
   }

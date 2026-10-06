@@ -142,6 +142,33 @@ function whiteScheme(a: AccentPalette): Scheme {
 export const FONT_SCALES: number[] = [0.85, 1.0, 1.15, 1.3];
 
 /**
+ * 倍率 → 档位下标,取**最近**的一档。
+ *
+ * 为什么需要:字号在两端本地存的都是下标,而跨端备份存的是**倍率**(Android 的 `fontScale`)。
+ * 对方给的数未必是本端某个整档 —— 旧版本备份、或将来加减档位。
+ * 与其拒绝不如就近落档:这本来就是"4 档离散"这个设计的语义。
+ * 与 Android `SettingsScreen.kt` 里那句 `abs(s - scale) < diff` 的取最近同一条规则。
+ */
+export function fontIndexOf(scale: number): number {
+  let best = 1;
+  let diff = Number.MAX_VALUE;
+  for (let i = 0; i < FONT_SCALES.length; i++) {
+    const d = Math.abs(FONT_SCALES[i] - scale);
+    if (d < diff) {
+      diff = d;
+      best = i;
+    }
+  }
+  return best;
+}
+
+/// 下标夹进合法范围。备份是外部输入,越界下标会让 `FONT_SCALES[i]` 取到 undefined。
+export function fontIndexClamped(i: number): number {
+  if (!(i > 0)) return 0;
+  return i < FONT_SCALES.length ? i : FONT_SCALES.length - 1;
+}
+
+/**
  * 排版尺度基准(fp)。实际使用时乘以当前字号倍率。
  *
  * **数值与 Android 侧实际用的 Material 3 尺度逐项对齐。**
