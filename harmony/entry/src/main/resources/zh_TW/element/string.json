@@ -1323,6 +1323,14 @@
     {
       "name": "reorder_hint",
       "value": "長按拖曳排序"
+    },
+    {
+      "name": "log_send_failed",
+      "value": "日誌發送失敗"
+    },
+    {
+      "name": "saved_fail",
+      "value": "儲存失敗"
     }
   ]
 }

@@ -225,6 +225,7 @@
     <string name="set_mail_log_sub">将日志作为附件通过邮件发给开发者</string>
     <string name="log_export">导出日志</string>
     <string name="log_done">已导出日志</string>
+    <string name="log_send_failed">日志发送失败</string>
     <string name="set_share_log_sub">把运行日志发给开发者协助排查偶发问题</string>
     <string name="set_clear_log">清空日志</string>
     <string name="log_size">当前日志 %1$s</string>
