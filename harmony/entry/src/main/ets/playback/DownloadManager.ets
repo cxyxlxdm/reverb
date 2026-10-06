@@ -189,15 +189,30 @@ export class DownloadManager {
     }
   }
 
+  /**
+   * 计费网络闸门。判据与 Android `blockedByCellular()` 同口径:**按"这条链路是否计费"判,
+   * 不按 bearer 是不是 Wi-Fi 判**。
+   *
+   * 原先本端写的是 `bearerTypes 里没有 WIFI ⇒ 拦`,和 Android 的 `isActiveNetworkMetered`
+   * 在两种网上给出相反答案:限量热点(计费的 Wi-Fi)Android 拦、本端放行;以太网/免流通道
+   * 本端拦、Android 放行。而"仅 Wi-Fi"这个开关对用户承诺的是**不花流量**,不是"必须连路由器"。
+   *
+   * 两个方向也与 Android 一致:
+   * - **设置读不到就按"不允许蜂窝"**(Android 是 `?: false`;本端原先 `settings === null` 直接放行);
+   * - 拿不到 capability 时按"不计费"放行(Android 的 ConnectivityManager 取不到时同样放行),
+   *   拦下载比拦错下载更烦人。
+   */
   private async downloadGate(): Promise<DownloadResult> {
     try {
       const handle = await connection.getDefaultNet();
       const caps = await connection.getNetCapabilities(handle);
       if (caps.bearerTypes.length === 0) return DownloadResult.NO_NETWORK;
       const settings = this.settings;
-      if (settings === null || settings.allowCellular) return DownloadResult.STARTED;
-      return caps.bearerTypes.indexOf(connection.NetBearType.BEARER_WIFI) >= 0
-        ? DownloadResult.STARTED : DownloadResult.WIFI_REQUIRED;
+      if (settings !== null && settings.allowCellular) return DownloadResult.STARTED;
+      const netCap = caps.networkCap;
+      const notMetered = netCap === undefined
+        || netCap.indexOf(connection.NetCap.NET_CAPABILITY_NOT_METERED) >= 0;
+      return notMetered ? DownloadResult.STARTED : DownloadResult.WIFI_REQUIRED;
     } catch (e) {
       Log.w('Download', `读取当前网络失败 ${(e as Error).message}`);
       return DownloadResult.NO_NETWORK;

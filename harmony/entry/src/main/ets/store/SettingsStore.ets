@@ -21,7 +21,9 @@ export class SettingsStore {
   static readonly PRIVACY_VERSION: number = 1;
 
   /// 0 跟随系统 / 1 浅色(宣纸) / 2 深色(水墨) / 3 纯白
-  themeMode: number = 0;
+  /// **默认 2(水墨)**,与 Android `theme_mode` 的默认值一致 —— 品牌主观感是水墨,
+  /// 不是"跟随系统"。原先本端默认 0,两端首启是两套界面;而 0 这条路本身在 H126 之前是坏的。
+  themeMode: number = 2;
   /// ACCENTS 索引:0 青瓷 / 1 黛蓝 / 2 绯红 / 3 竹青
   accentIndex: number = 0;
   /// FONT_SCALES 索引(4 档)
@@ -61,8 +63,16 @@ export class SettingsStore {
   contextualRadio: boolean = false;
   /// 订阅更新提醒(周期检查 + 本地通知)
   updatesEnabled: boolean = false;
-  /// 是否允许蜂窝网络下载(false = 仅 Wi-Fi)。与 Android allowCellular 同名同义。
-  allowCellular: boolean = true;
+  /**
+   * 是否**允许**在计费网络(蜂窝)下下载。**默认关**,与 Android `cellular_dl` 的默认值一致。
+   *
+   * ⚠️ 这里原先的注释写的是「与 Android allowCellular 同名同义」而本端默认 `true` ——
+   * 那句是错的:Android 的字段叫 `allowCellularDownload`、键是 `cellular_dl`、**默认 false**,
+   * 于是同一次改动里两端「什么都不设」的下载行为正好相反(鸿蒙走蜂窝、Android 拦)。
+   * 界面那一行是反向的开关(`set_wifi_only`,显示的是"仅 Wi-Fi"),所以翻转默认值时
+   * 界面文案不用动,只有首启的用户会看到开关处于"仅 Wi-Fi"这一侧。
+   */
+  allowCellular: boolean = false;
   /**
    * 逐字稿总开关(播放页第三页)。与 Android `transcriptionEnabled` 同名同义、同默认值。
    *
@@ -94,7 +104,7 @@ export class SettingsStore {
   privacyAccepted: boolean = false;
 
   load(): void {
-    this.themeMode = Prefs.getNumber('theme_mode', 0);
+    this.themeMode = Prefs.getNumber('theme_mode', 2);
     this.accentIndex = Prefs.getNumber('accent_index', 0);
     this.fontIndex = Prefs.getNumber('font_index', 1);
     this.language = Prefs.getString('app_language', '');
@@ -107,7 +117,7 @@ export class SettingsStore {
     this.subsGrid = Prefs.getBool('subs_grid', false);
     this.contextualRadio = Prefs.getBool('contextual_radio', false);
     this.updatesEnabled = Prefs.getBool('updates_enabled', false);
-    this.allowCellular = Prefs.getBool('allow_cellular', true);
+    this.allowCellular = Prefs.getBool('allow_cellular', false);
     this.transcriptionEnabled = Prefs.getBool('transcription_enabled', true);
     this.wordHighlight = Prefs.getBool('word_highlight', true);
     this.privacyAccepted = this.loadPrivacyAccepted();

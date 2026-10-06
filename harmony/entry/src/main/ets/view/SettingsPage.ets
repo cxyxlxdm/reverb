@@ -151,9 +151,17 @@ export struct SettingsPage {
           // OH_AVScreenCapture,为一个封面动效索取录屏权限不成比例。详见 TROUBLESHOOTING。
 
           this.sectionLabel(L.s('sec_playback'))
+          // 选定默认倍速**同时作用到当前这一集**:Android 在 Dlg.SPEED 的 onPick 里连着调
+          // `PlayerController.setSpeed`,本端原先只写设置,于是"改了要等下一集才见效"。
+          // 鸿蒙侧 `setSpeed` 只在 playing 时下发速率(AVPlayer 的限制,见 PlayerController
+          // 的 applyRate 注释),暂停态改的是待用的 `speed` 字段,恢复播放时补上。
           this.choiceRow(L.s('set_default_speed'), () => '', this.speeds.map((s: number) => `${s}×`),
             () => this.speedIndex(),
-            (i: number) => { this.settings.setDefaultSpeed(this.speeds[i]); this.onChanged(); })
+            (i: number) => {
+              this.settings.setDefaultSpeed(this.speeds[i]);
+              this.app.player.setSpeed(this.speeds[i]);
+              this.onChanged();
+            })
           this.choiceRow(L.s('set_skip_back'), () => '', this.skipBackOpts.map((s: number) => L.f('unit_seconds', s)),
             () => this.optIndex(this.skipBackOpts, this.settings.skipBackSec),
             (i: number) => { this.settings.setSkipBackSec(this.skipBackOpts[i]); this.onChanged(); })
