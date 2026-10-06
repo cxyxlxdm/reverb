@@ -358,7 +358,7 @@ export struct PlayerPage {
         .width('100%')
       }
       Row({ space: 22 }) {
-        this.iconBtn($r('sys.media.ohos_ic_public_play_last'), 22, this.player.hasPrev,
+        this.iconBtn($r('sys.media.ohos_ic_public_play_last'), 22, () => this.player.hasPrev,
           L.s('a11y_prev'), () => this.player.previous())
         this.skipBtn(false)
         // 主播放键
@@ -375,7 +375,7 @@ export struct PlayerPage {
         .accessibilityText(L.s(this.player.isPlaying ? 'a11y_pause' : 'a11y_play'))
         .onClick(() => this.player.togglePlayPause())
         this.skipBtn(true)
-        this.iconBtn($r('sys.media.ohos_ic_public_play_next'), 22, this.player.hasNext,
+        this.iconBtn($r('sys.media.ohos_ic_public_play_next'), 22, () => this.player.hasNext,
           L.s('a11y_next'), () => this.player.next())
       }
       .justifyContent(FlexAlign.Center)
@@ -385,13 +385,22 @@ export struct PlayerPage {
     .margin({ top: 10 })
   }
 
+  /**
+   * 上一集 / 下一集。**`enabledOf` 必须是闭包,不能是布尔值参数** —— 与 `iconAction`
+   * 那处同一个坑(见 H29),但这里的症状更重,而且是真机量出来的(见 H145):
+   * 值参数冻结在**首次渲染**那一刻,冷启动时队列里只有当前这一集、`hasPrev=false`,
+   * 于是按了「下一集」换到第二集之后,「上一集」仍然是暗的、点下去 `if (enabled)` 直接吃掉,
+   * 用户看到的就是「播到第二集了却按不动上一集」。
+   * 闭包在 builder 体里被调用时才读 `this.player.hasPrev`,那次读会登记依赖,所以既亮得对、
+   * 也按得动。标签 `label` 是静态的,继续按值传(动态标签要留在渲染处,见 `iconAction` 注释)。
+   */
   @Builder
-  iconBtn(icon: Resource, size: number, enabled: boolean, label: string, action: () => void) {
+  iconBtn(icon: Resource, size: number, enabledOf: () => boolean, label: string, action: () => void) {
     Image(icon)
       .width(size).height(size)
-      .fillColor(enabled ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.35))
+      .fillColor(enabledOf() ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.35))
       .accessibilityText(label)
-      .onClick(() => { if (enabled) action(); })
+      .onClick(() => { if (enabledOf()) action(); })
   }
 
   /// 快退/快进:秒数标在图标下方(与 Android 一致的信息密度)。
