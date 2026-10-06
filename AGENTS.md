@@ -164,6 +164,12 @@ aapt2 dump permissions dist/reverb-store.apk | grep -c RECORD_AUDIO         # 0
 这里的方法论是「声明加回来也要验、声明删掉也要验」,不是把某组期望值永久写死。
 产品决策翻转时,grep 的期望值也会翻转(见 H70),并且必须同步 `docs/FEATURES.md`。
 
+**上面那条 `aapt2` 在开发机上不在 PATH**(只有 `adb` 在;`sdk.dir` 读 `android/local.properties`)。
+2026-10-07 实测:写成 `aapt2 dump permissions … 2>/dev/null | grep -c …` 时命令**根本没跑**,
+`grep -c` 对着空 stdin 报 **0**,于是两个渠道都被读成「没有录音权限」—— 而自分发渠道实际是有的。
+所以期望 0 的判据**必须先看那条命令自己的退出码和处理量**(权限清单打印出来数过行数再谈 0),
+同理适用于任何"命令不存在 ≠ 没命中"的工具。
+
 **中文字符串必须用 `LC_ALL=C grep -a` 搜原始字节** —— `resources.arsc` / `resources.index`
 里的中文不是 ASCII,`strings` 看不见,曾因此差点得出错误结论。
 
