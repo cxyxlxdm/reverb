@@ -107,20 +107,26 @@ export class TranscriptLines {
         // 空格折进被并进来那一段的文本里,维持"words 拼接 == 整句"的不变式
         const glued = TranscriptLines.isAsciiHead(seg.text) ? ' ' + seg.text : seg.text;
         const mergedWords: TranscribedWord[] = [];
-        if (prev.words.length > 0) {
-          for (let k = 0; k < prev.words.length; k++) mergedWords.push(prev.words[k]);
-        } else {
-          mergedWords.push({ text: prev.text, startMs: prev.startMs, endMs: prev.endMs } as TranscribedWord);
-        }
-        if (seg.words.length > 0) {
-          // 被并进来的一段:第一条要带上那个空格,否则拼接不等于整句
-          for (let k = 0; k < seg.words.length; k++) {
-            const w = seg.words[k];
-            const t = (k === 0 && glued !== seg.text) ? ' ' + w.text : w.text;
-            mergedWords.push({ text: t, startMs: w.startMs, endMs: w.endMs } as TranscribedWord);
+        // 两边都没有词级时间(整句稿被并起来,例如两条短 cue)时**不凭空造词**:
+        // 早先这里会合成 [{prev.text}, {glued}] 两条,同一份稿于是鸿蒙按两句跳、
+        // Android 整句一亮(另一端是 `words = null`),粒度对不上;而 `flush` 里
+        // 明明写着"本来就是整句的稿留了也没用,白占缓存"。见 H150。
+        if (prev.words.length > 0 || seg.words.length > 0) {
+          if (prev.words.length > 0) {
+            for (let k = 0; k < prev.words.length; k++) mergedWords.push(prev.words[k]);
+          } else {
+            mergedWords.push({ text: prev.text, startMs: prev.startMs, endMs: prev.endMs } as TranscribedWord);
           }
-        } else {
-          mergedWords.push({ text: glued, startMs: seg.startMs, endMs: seg.endMs } as TranscribedWord);
+          if (seg.words.length > 0) {
+            // 被并进来的一段:第一条要带上那个空格,否则拼接不等于整句
+            for (let k = 0; k < seg.words.length; k++) {
+              const w = seg.words[k];
+              const t = (k === 0 && glued !== seg.text) ? ' ' + w.text : w.text;
+              mergedWords.push({ text: t, startMs: w.startMs, endMs: w.endMs } as TranscribedWord);
+            }
+          } else {
+            mergedWords.push({ text: glued, startMs: seg.startMs, endMs: seg.endMs } as TranscribedWord);
+          }
         }
         out[out.length - 1] = {
           text: prev.text + glued,
