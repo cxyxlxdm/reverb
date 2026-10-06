@@ -228,7 +228,7 @@
     <string name="set_import_opml">匯入訂閱（OPML）</string>
     <string name="set_import_opml_sub">從其他 App 的 OPML 匯入</string>
     <string name="set_full_backup">完整備份</string>
-    <string name="set_full_backup_sub">訂閱 · 下載 · 歷史 · 設定，用於換機 / 備份</string>
+    <string name="set_full_backup_sub">訂閱 · 批註 · 歷史等全部本機資料，用於換機 / 備份</string>
     <string name="set_restore">還原備份</string>
     <string name="set_restore_sub">從餘音備份檔匯入</string>
 

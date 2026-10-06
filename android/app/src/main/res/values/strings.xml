@@ -237,7 +237,7 @@
     <string name="set_import_opml">导入订阅（OPML）</string>
     <string name="set_import_opml_sub">从其他 App 的 OPML 导入</string>
     <string name="set_full_backup">完整备份</string>
-    <string name="set_full_backup_sub">订阅 · 下载 · 历史 · 设置，用于换机 / 备份</string>
+    <string name="set_full_backup_sub">订阅 · 批注 · 历史等全部本地数据，用于换机 / 备份</string>
     <string name="set_restore">恢复备份</string>
     <string name="set_restore_sub">从余音备份文件导入</string>
 

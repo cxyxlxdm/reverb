@@ -228,7 +228,7 @@
     <string name="set_import_opml">Import subscriptions (OPML)</string>
     <string name="set_import_opml_sub">Import an OPML from another app</string>
     <string name="set_full_backup">Full backup</string>
-    <string name="set_full_backup_sub">Subscriptions · downloads · history · settings, for migration / backup</string>
+    <string name="set_full_backup_sub">All your local data — subscriptions, notes, history and more — for migration / backup</string>
     <string name="set_restore">Restore backup</string>
     <string name="set_restore_sub">Import from a Reverb backup file</string>
 
