@@ -649,6 +649,58 @@
       "value": "Imported %d subscriptions"
     },
     {
+      "name": "backup_export_title",
+      "value": "Back up data"
+    },
+    {
+      "name": "backup_confirm",
+      "value": "Back up"
+    },
+    {
+      "name": "backup_restore_title",
+      "value": "Restore data"
+    },
+    {
+      "name": "restore_confirm",
+      "value": "Restore"
+    },
+    {
+      "name": "backup_invalid",
+      "value": "Unrecognized backup file"
+    },
+    {
+      "name": "backup_row_subscriptions",
+      "value": "Subscriptions"
+    },
+    {
+      "name": "backup_row_favorites",
+      "value": "Favorites"
+    },
+    {
+      "name": "backup_row_stamps",
+      "value": "Listening marks"
+    },
+    {
+      "name": "backup_row_notes",
+      "value": "Notes"
+    },
+    {
+      "name": "backup_row_downloads",
+      "value": "Downloads (links only)"
+    },
+    {
+      "name": "backup_row_history",
+      "value": "History"
+    },
+    {
+      "name": "backup_row_listen_stats",
+      "value": "Listening time"
+    },
+    {
+      "name": "backup_row_settings",
+      "value": "Settings"
+    },
+    {
       "name": "set_updates",
       "value": "New episode alerts"
     },

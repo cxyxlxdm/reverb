@@ -7,7 +7,7 @@ import { AppContainer } from '../AppContainer';
 import { SettingsStore } from '../store/SettingsStore';
 import { TopBar } from './Widgets';
 import { ConfirmDialog, ConfirmSpec } from './Components';
-import { BackupManager, ALL_SECTIONS } from '../store/BackupManager';
+import { BackupManager, ALL_SECTIONS, BackupSection, sectionLabelKey } from '../store/BackupManager';
 import { UpdateNotifier } from '../update/UpdateNotifier';
 import { Files } from '../util/Files';
 import { Log } from '../util/Logger';
@@ -33,6 +33,37 @@ class PickerSpec {
     this.selected = selected;
     this.onPick = onPick;
     this.swatches = swatches;
+  }
+}
+
+/// 一次「勾选数据分区」的请求(导出与恢复共用一个框)。null = 没在勾。
+///
+/// 对应 Android 的 `BackupSectionDialog`:标题 + 每区一个复选框 + 取消 + 一个动作按钮
+/// (导出那侧按钮写「备份」、恢复那侧写「恢复」),**一个都不勾时动作按钮不可点**。
+///
+/// 本对象只描述「要勾什么」,**不保存勾选状态** —— 勾选状态归对话框自己的 `@State`。
+/// 理由见 `BackupSectionDialog` 的注释:@Builder 的值参数是一次性的,把可变状态放在
+/// 页面 `@State` 的 spec 里会让勾打上而界面不动。
+class BackupSpec {
+  title: string = '';
+  confirmText: string = '';
+  sections: BackupSection[] = [];
+  /// 与 sections 同长的显示名(在构造时算一次;`sectionLabelKey` 用的是专键 `backup_row_*`,
+  /// 逐字对齐 Android,见 BackupManager 里那段注释)。
+  labels: string[] = [];
+  onConfirm: (picked: BackupSection[]) => void = () => {};
+
+  constructor(title: string, confirmText: string, sections: BackupSection[],
+              onConfirm: (picked: BackupSection[]) => void) {
+    this.title = title;
+    this.confirmText = confirmText;
+    this.sections = sections;
+    this.onConfirm = onConfirm;
+    const out: string[] = [];
+    for (let i = 0; i < sections.length; i++) {
+      out.push(L.s(sectionLabelKey(sections[i])));
+    }
+    this.labels = out;
   }
 }
 
@@ -95,6 +126,8 @@ export struct SettingsPage {
   @State picker: PickerSpec | null = null;
   /// 正在确认的破坏性操作;null = 无。
   @State confirm: ConfirmSpec | null = null;
+  /// 正在勾选分区的备份/恢复对话框;null = 无。
+  @State backup: BackupSpec | null = null;
   /// 缓存/下载/日志占用。-1 表示还在算(与 Android 的 size_calculating 一致)。
   @State cacheBytes: number = -1;
   @State dlBytes: number = -1;
@@ -208,8 +241,8 @@ export struct SettingsPage {
           this.sectionLabel(L.s('sec_backup'))
           this.actionRow(L.s('set_export_opml'), () => L.s('set_export_opml_sub'), () => this.exportOpml())
           this.actionRow(L.s('set_import_opml'), () => L.s('set_import_opml_sub'), () => this.importOpml())
-          this.actionRow(L.s('set_full_backup'), () => L.s('set_full_backup_sub'), () => this.exportBackup())
-          this.actionRow(L.s('set_restore'), () => L.s('set_restore_sub'), () => this.importBackup())
+          this.actionRow(L.s('set_full_backup'), () => L.s('set_full_backup_sub'), () => this.openExportDialog())
+          this.actionRow(L.s('set_restore'), () => L.s('set_restore_sub'), () => this.startRestore())
 
           this.sectionLabel(L.s('set_logs'))
           this.actionRow(L.s('set_share_log'), () => L.s('set_share_log_sub'), () => this.shareLog())
@@ -252,6 +285,16 @@ export struct SettingsPage {
           fontScale: this.fontScale,
           spec: this.confirm,
           onDismiss: () => { this.confirm = null; }
+        })
+      }
+      // 分区勾选框:同理只在 null → 非 null 时新建。框打开期间的勾选状态归它自己的 @State,
+      // 所以这里**不需要**在勾选变化时重建(见 BackupSectionDialog 的注释)。
+      if (this.backup !== null) {
+        BackupSectionDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          spec: this.backup,
+          onDismiss: () => { this.backup = null; }
         })
       }
     }
@@ -550,25 +593,48 @@ export struct SettingsPage {
     .onClick(action)
   }
 
-  private async exportBackup(): Promise<void> {
-    const json = await BackupManager.build(this.app, ALL_SECTIONS);
+  /**
+   * 「完整备份」这一行的动作:**先弹框勾分区**,勾完确认才走保存。
+   *
+   * 与 Android 同序(`SettingsScreen.kt` 的「完整备份」行点下去只把 `backupExportOpen` 置 true,
+   * 对话框的 onConfirm 里才 `backupExportLauncher.launch(...)`)。
+   * 顺序是有意为之:选了保存位置再问要备份什么,等于让用户在文件管理器里走一趟回来还没写完。
+   */
+  private openExportDialog(): void {
+    this.backup = new BackupSpec(L.s('backup_export_title'), L.s('backup_confirm'),
+      ALL_SECTIONS.slice(), (picked: BackupSection[]) => { this.runExportBackup(picked); });
+  }
+
+  private async runExportBackup(include: BackupSection[]): Promise<void> {
+    const json = await BackupManager.build(this.app, include);
     const ok = await Files.saveText(this.ctx(), 'reverb-backup.json', json);
     this.hint = ok ? L.s('backup_done') : L.s('backup_failed');
   }
 
-  private async importBackup(): Promise<void> {
-    const text = await Files.pickText(this.ctx());
-    if (text === null) {
-      this.hint = L.s('backup_failed');
-      return;
-    }
+  /**
+   * 「从备份恢复」:**先选文件 → 探测文件里有哪些分区 → 再弹框让用户勾**。
+   *
+   * 探测必须在勾选之前:可选集只有「文件里真的有的」那几项(Android 同做法 ——
+   * `sectionsIn(text)` 出来空集就直接报 `backup_invalid`,非空才把对话框的 available
+   * 限制成这个集合)。列一个文件里没有的分区,勾了等于勾一个空操作。
+   */
+  private async startRestore(): Promise<void> {
+    const picked = await Files.pickText(this.ctx());
+    // 用户取消 = 什么都不提示。原先这里落进 backup_failed,于是「按了取消」和「文件读不出来」
+    // 是同一句话;Android 的 OpenDocument 回调里 uri == null 是静默的,现在两端一致。
+    if (picked.cancelled) return;
     // 解析一次,探测与应用共用同一份 root(原先是把同一个大 JSON 解析两遍)
-    const root = await BackupManager.parseRoot(text);
+    const root = await BackupManager.parseRoot(picked.text);
     const found = BackupManager.sectionsInRoot(root);
     if (found.length === 0) {
-      this.hint = L.s('backup_failed');
+      this.hint = L.s('backup_invalid');
       return;
     }
+    this.backup = new BackupSpec(L.s('backup_restore_title'), L.s('restore_confirm'),
+      found.slice(), (sel: BackupSection[]) => { this.runRestore(root, sel); });
+  }
+
+  private runRestore(root: Record<string, Object> | null, include: BackupSection[]): void {
     /**
      * 恢复 settings 分区之后必须**按新值重排订阅更新的周期任务**。
      *
@@ -577,14 +643,15 @@ export struct SettingsPage {
      * 而 workScheduler 里**压根没有那个任务** —— 界面承诺了一件不会发生的事。
      * 反向也一样(备份里关着、本机开着 → 恢复了还在偷偷检查并发通知)。
      *
-     * 判据与 Android `SettingsScreen.kt:461-464` 逐字同构:仅在真恢复了 settings 分区时,
-     * 按 `updatesEnabled` 的新值 schedule / cancel。
+     * 判据与 Android `SettingsScreen.kt` 恢复段(`if (importedSettings) { schedule / cancel }`)
+     * 同构:仅在真恢复了 settings 分区时,按 `updatesEnabled` 的新值 schedule / cancel。
+     * 加了勾选框之后这条更要紧 —— 用户完全可以只勾订阅不勾设置,那时就不该动任务。
      *
      * ⚠️ 与 Android 共有的一条窄窗口(不是本端独有,所以这里不单方面改):
      * 恢复路径**不重新索取通知授权**。若那份备份来自另一台机器,本机可能从未授予通知权限,
      * 于是任务排上了而通知发不出去。两端一致 ⇒ 不算漂移;要修得两端一起修。
      */
-    if (BackupManager.applyRoot(this.app, root, found)) {
+    if (BackupManager.applyRoot(this.app, root, include)) {
       if (this.settings.updatesEnabled) UpdateNotifier.schedule();
       else UpdateNotifier.cancel();
     }
@@ -598,12 +665,10 @@ export struct SettingsPage {
   }
 
   private async importOpml(): Promise<void> {
-    const text = await Files.pickText(this.ctx());
-    if (text === null) {
-      this.hint = L.s('backup_failed');
-      return;
-    }
-    const n = await BackupManager.importOpml(this.app, text);
+    const picked = await Files.pickText(this.ctx());
+    // 取消不提示(与恢复那条同口径;Android 的 OPML 导入回调里 uri == null 同样什么都不做)
+    if (picked.cancelled) return;
+    const n = await BackupManager.importOpml(this.app, picked.text);
     this.hint = L.f('opml_imported', n);
     this.onChanged();
   }
@@ -673,5 +738,135 @@ export struct SettingsPage {
   private accentColor(idx: number): string {
     const a: AccentPalette = ACCENTS[idx];
     return this.scheme.isDark ? a.primaryDark : a.primaryLight;
+  }
+}
+
+/**
+ * 分区勾选框(Android `BackupSectionDialog` 的同构体)。
+ *
+ * **为什么是独立子组件,不是又一个 @Builder**:
+ * 页面里那两个框(`pickerDialog` / `ConfirmDialog`)都只在「null → 非 null」那一次被创建,
+ * 之后立刻消失,所以值参数一次性没问题。这个框不同 —— 打开期间要连点 8 次复选框。
+ * 如果把勾选状态挂在页面的 `@State backup: BackupSpec` 上(每次翻转换一份新 spec),
+ * 外层 `if (this.backup !== null)` 的分支从头到尾没变 ⇒ 子树不重建 ⇒
+ * `@Builder` 拿到的还是旧 spec,**勾打上而界面不动**(H6/H19/H27/H139 同一族)。
+ * 状态收进子组件自己的 `@State` 才是那个能刷新的形状,顺带满足硬规矩 7
+ * (只重建这一个框,不重建整页)。
+ *
+ * **勾选状态用位图而不用 `boolean[]`**:标量的整值赋值是 V1 观察里最没有争议的一档,
+ * 数组元素赋值要另靠「整份替换」才稳(H77)。8 个分区正好一个字节,读起来也不绕。
+ */
+@Component
+struct BackupSectionDialog {
+  @Prop scheme: Scheme;
+  @Prop fontScale: number;
+  /// 只在 null → 非 null 时随组件新建而来,所以是普通成员(与 ConfirmDialog 同口径)。
+  spec: BackupSpec = new BackupSpec('', '', [], (p: BackupSection[]) => {});
+  onDismiss: () => void = () => {};
+  /// 第 i 位 = 第 i 个分区勾没勾。初值在 aboutToAppear 里给(默认**全选**,与 Android 同)。
+  @State bits: number = 0;
+
+  aboutToAppear(): void {
+    // 全选:Android 侧导出是 `Section.entries.toSet()`、恢复是 `backupImportSel = avail`,
+    // 两处都是「打开即全勾,勾掉是例外」。这样默认路径与没有对话框时完全等价 —— 老用户的
+    // 肌肉记忆(点一下就直接备份全部)不会变味。
+    this.bits = (1 << this.spec.sections.length) - 1;
+  }
+
+  private isOn(idx: number): boolean {
+    return (this.bits & (1 << idx)) !== 0;
+  }
+
+  private toggleRow(idx: number): void {
+    this.bits = this.bits ^ (1 << idx);
+  }
+
+  /// 勾中的分区,**按框里的显示顺序**。
+  private pickedSections(): BackupSection[] {
+    const src: BackupSection[] = this.spec.sections;
+    const out: BackupSection[] = [];
+    for (let i = 0; i < src.length; i++) {
+      if (this.isOn(i)) out.push(src[i]);
+    }
+    return out;
+  }
+
+  private confirmBackup(): void {
+    // 一个都没勾 = 确认没有意义(Android 那边直接 disable 按钮)。这里拦第二道:
+    // 视觉上的半透明只表达「不可点」,真正的拦截必须在点击里做。
+    if (this.bits === 0) return;
+    const sel = this.pickedSections();
+    const run = this.spec.onConfirm;
+    this.onDismiss();   // 先收框再动手(同 ConfirmDialog:确认后可能有 IO,框挂着像没反应)
+    run(sel);
+  }
+
+  build() {
+    Stack() {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(withAlpha('#000000', 0.45))
+        .onClick(() => { this.onDismiss(); })
+
+      Column() {
+        Text(this.spec.title)
+          .fontSize(TypeScale.titleMedium * this.fontScale)
+          .fontColor(this.scheme.onBackground)
+          .margin({ bottom: 16 })
+          .alignSelf(ItemAlign.Start)
+
+        Scroll() {
+          Column() {
+            ForEach(this.spec.labels, (label: string, idx: number) => {
+              Row({ space: 14 }) {
+                Toggle({ type: ToggleType.Checkbox, isOn: this.isOn(idx) })
+                  .selectedColor(this.scheme.primary)
+                  // 勾选只由**整行**的 onClick 改。不关掉 Toggle 自己的命中,点圈会被翻两次
+                  // (它自己一次、行一次),表现是「点了没反应」—— 与 Components.ets:469 同一条。
+                  .hitTestBehavior(HitTestMode.None)
+                Text(label)
+                  .fontSize(TypeScale.body * this.fontScale)
+                  .fontColor(this.scheme.onBackground)
+                  .layoutWeight(1)
+              }
+              .width('100%')
+              // 上下各 14 ⇒ 行高约 48vp,与 pickerDialog 同(系统推荐的最小点击区)
+              .padding({ top: 14, bottom: 14 })
+              .onClick(() => { this.toggleRow(idx); })
+            }, (label: string, idx: number) => `${idx}-${label}-${this.isOn(idx) ? 1 : 0}`)
+            // key 里带上勾选位:整份状态刷新时这一项的 key 变了 ⇒ 该项必定重建。
+            // Toggle 的 isOn 走的是状态依赖,理论上就会更新;加上 key 是第二道保险,
+            // 因为「子组件参数不刷新」这一族在本仓库已经踩过三次(H77、H139、H27)。
+          }
+          .width('100%')
+        }
+        .scrollBar(BarState.Off)
+        .constraintSize({ maxHeight: 420 })
+
+        Row({ space: 22 }) {
+          Text(L.s('action_cancel'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .onClick(() => { this.onDismiss(); })
+          Text(this.spec.confirmText)
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.primary)
+            // 无勾选时降到 0.38 —— 用 opacity + confirmBackup 里的守卫,而不是 `.enabled(false)`:
+            // 后者对 Text 的 onClick 到底拦不拦,SDK 文档没写死,而这里必须**确定**拦得住
+            // (否则会导出一份空备份、或应用零个分区还提示「已恢复」)。
+            .opacity(this.bits === 0 ? 0.38 : 1)
+            .onClick(() => { this.confirmBackup(); })
+        }
+        .margin({ top: 8 })
+        .alignSelf(ItemAlign.End)
+      }
+      .width('78%')
+      .padding({ left: 22, right: 22, top: 22, bottom: 16 })
+      .backgroundColor(this.scheme.surface)
+      .borderRadius(18)
+    }
+    .width('100%')
+    .height('100%')
   }
 }

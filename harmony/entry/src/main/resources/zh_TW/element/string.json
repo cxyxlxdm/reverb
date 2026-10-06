@@ -649,6 +649,58 @@
       "value": "已匯入 %d 個訂閱"
     },
     {
+      "name": "backup_export_title",
+      "value": "備份資料"
+    },
+    {
+      "name": "backup_confirm",
+      "value": "備份"
+    },
+    {
+      "name": "backup_restore_title",
+      "value": "還原資料"
+    },
+    {
+      "name": "restore_confirm",
+      "value": "還原"
+    },
+    {
+      "name": "backup_invalid",
+      "value": "無法辨識的備份檔"
+    },
+    {
+      "name": "backup_row_subscriptions",
+      "value": "訂閱"
+    },
+    {
+      "name": "backup_row_favorites",
+      "value": "收藏"
+    },
+    {
+      "name": "backup_row_stamps",
+      "value": "聽覺印記"
+    },
+    {
+      "name": "backup_row_notes",
+      "value": "批註"
+    },
+    {
+      "name": "backup_row_downloads",
+      "value": "下載（僅節目連結）"
+    },
+    {
+      "name": "backup_row_history",
+      "value": "歷史"
+    },
+    {
+      "name": "backup_row_listen_stats",
+      "value": "收聽時長"
+    },
+    {
+      "name": "backup_row_settings",
+      "value": "設定"
+    },
+    {
       "name": "set_updates",
       "value": "訂閱更新提醒"
     },

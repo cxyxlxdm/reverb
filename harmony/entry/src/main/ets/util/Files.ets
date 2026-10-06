@@ -7,6 +7,16 @@ import { uniformTypeDescriptor as utd } from '@kit.ArkData';
 import type common from '@ohos.app.ability.common';
 import { Log } from './Logger';
 
+/// `Files.pickText` 的结果。三种形状:
+///  - `cancelled` = 用户取消(`text` 无意义);
+///  - `text.length === 0` 且未取消 = 选了但读不出来;
+///  - 其余 = 拿到了内容。
+/// 之所以不是 `string | null`:调用侧要能分「取消」与「失败」,否则提示会说谎。
+export class PickedText {
+  cancelled: boolean = false;
+  text: string = '';
+}
+
 /// 文档选择/保存(备份导出导入、OPML、日志导出都走这里)。
 /// 用系统文件选择器,**不申请任何存储权限**——用户选到哪就写到哪。
 export class Files {
@@ -85,21 +95,35 @@ export class Files {
     }
   }
 
-  /// 让用户选一个文件并读出文本。取消或失败返回 null。
-  static async pickText(ctx: common.UIAbilityContext): Promise<string | null> {
+  /**
+   * 让用户选一个文件并读出文本。
+   *
+   * **取消与读失败要分开标**(见返回的 `PickedText`)。本端原先两条都返回 `null`,
+   * 于是调用侧只能给一个提示 —— 用户只是按了「取消」也会看到「操作未完成」。
+   * Android 的 `OpenDocument` 回调里 `uri == null` 是**什么都不提示**,只有读不出内容
+   * 或内容不像备份才报 `backup_invalid`;这里对齐到那个口径。
+   */
+  static async pickText(ctx: common.UIAbilityContext): Promise<PickedText> {
+    const out = new PickedText();
     try {
       const p = new picker.DocumentViewPicker(ctx);
       const uris = await p.select({ maxSelectNumber: 1 });
-      if (uris.length === 0) return null;
+      if (uris.length === 0) {
+        Log.i('Files', '用户取消选择');
+        out.cancelled = true;
+        return out;
+      }
       const f = await fs.open(uris[0], fs.OpenMode.READ_ONLY);
       const stat = await fs.stat(f.fd);
       const buf = new ArrayBuffer(stat.size);
       await fs.read(f.fd, buf);
       await fs.close(f);
-      return new util.TextDecoder().decodeToString(new Uint8Array(buf));
+      out.text = new util.TextDecoder().decodeToString(new Uint8Array(buf));
+      return out;
     } catch (e) {
       Log.e('Files', `读取失败 ${(e as Error).message}`);
-      return null;
+      // cancelled 保持 false、text 保持空串 = 「选了但没读出来」
+      return out;
     }
   }
 }
