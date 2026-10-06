@@ -11,7 +11,14 @@ import { BackupManager, ALL_SECTIONS, BackupSection, sectionLabelKey } from '../
 import { UpdateNotifier } from '../update/UpdateNotifier';
 import { Files } from '../util/Files';
 import { Log } from '../util/Logger';
+import deviceInfo from '@ohos.deviceInfo';
 import type common from '@ohos.app.ability.common';
+
+/// 开发者邮箱。**与 Android 是同一个地址**(Android 那份写在 `SettingsScreen.kt` 的
+/// `mailLog()` 里,`EXTRA_EMAIL`)。本端必须把它显示出来:ShareKit 的 `SharedRecord`
+/// 没有收件人字段,面板也不接受"定向到邮件应用"的参数 ⇒ 预填这一步在本端不存在,
+/// 地址只能写在行副标题上,由用户自己填进邮件应用。
+const DEV_EMAIL = 'woooxooom@gmail.com';
 
 /// 一次「选一项」的请求。存进 @State 后弹出居中对话框;为 null 表示没在选。
 class PickerSpec {
@@ -246,6 +253,7 @@ export struct SettingsPage {
 
           this.sectionLabel(L.s('set_logs'))
           this.actionRow(L.s('set_share_log'), () => L.s('set_share_log_sub'), () => this.shareLog())
+          this.actionRow(L.s('set_mail_log'), () => L.s('set_mail_log_sub'), () => this.mailLog())
           this.actionRow(L.s('log_export'), () => '', () => this.exportLog())
           this.actionRow(L.s('set_clear_log'), () => L.f('log_size', this.logStr()),
             () => { this.confirm = logConfirm(this); })
@@ -564,8 +572,28 @@ export struct SettingsPage {
     this.recomputeSizes();
   }
 
+  /**
+   * 「分享日志」= 把日志落成 `reverb-log.txt` 交给系统分享面板。
+   * 与 Android 的 `shareLog()` 同口径(那边是 `cacheDir/shares/reverb-log.txt` + `EXTRA_STREAM`),
+   * 标题「Reverb log」也照搬。
+   */
   private async shareLog(): Promise<void> {
-    const ok = await Files.shareText(this.ctx(), L.s('set_share_log'), Log.dump());
+    const ok = await Files.shareText(this.ctx(), 'Reverb log', 'reverb-log.txt', Log.dump(), '');
+    if (!ok) this.hint = L.s('backup_failed');
+  }
+
+  /**
+   * 「发送日志到开发者邮箱」= **同一个文件**,只是标题/正文换成邮件的形状
+   * (对应 Android 的 `EXTRA_SUBJECT` + `EXTRA_TEXT`,那两个字符串在 Android 侧也没本地化)。
+   *
+   * 与本端「分享日志」的**真实差别**只有一层:Android 用 `type = "message/rfc822"` 把目标
+   * 收敛到邮件应用,并预填收件人;本端做不到这两件(见 `DEV_EMAIL` 上方那段)。
+   * 所以这一行的价值是**把主题、版本信息、收件人地址一起递到用户眼前**,
+   * 而不是"点一下就发出去了" —— 副标题必须把这件事讲清楚,否则界面就在说谎(#89 同族)。
+   */
+  private async mailLog(): Promise<void> {
+    const body = `请描述你遇到的问题:\n\n\n——\n余音 HarmonyOS v${appVersionName()} · ${deviceInfo.osFullName}`;
+    const ok = await Files.shareText(this.ctx(), '余音 HarmonyOS 日志反馈', 'reverb-log.txt', Log.dump(), body);
     if (!ok) this.hint = L.s('backup_failed');
   }
 

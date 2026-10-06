@@ -825,6 +825,14 @@
       "value": "把运行日志发给开发者协助排查偶发问题"
     },
     {
+      "name": "set_mail_log",
+      "value": "发送日志到开发者邮箱"
+    },
+    {
+      "name": "set_mail_log_sub",
+      "value": "将日志作为附件交给邮件应用,收件人请填写 wooooxooom@gmail.com"
+    },
+    {
       "name": "set_clear_log",
       "value": "清空日志"
     },

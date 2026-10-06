@@ -190,6 +190,25 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
         }
     }
 
+    val logExportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/plain")
+    ) { uri ->
+        // 与鸿蒙的 `log_export` 同一格:把日志落到用户选的位置。
+        // 这条行此前只有鸿蒙有 —— 补齐方向是给 Android 加,**不是**把鸿蒙那条删掉。
+        // 走 SAF 而不是复用 `shareLog` 的 cacheDir:后者只给了分享目标,用户手上没有文件。
+        if (uri != null) scope.launch {
+            val ok = withContext(Dispatchers.IO) {
+                runCatching {
+                    val text = com.yuyin.reverb.util.Logger.allText().ifBlank { "(暂无日志)" }
+                    context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                }.isSuccess
+            }
+            // 失败用 `saved_fail`(「保存失败」)而不是复用 `backup_failed`:这一行不在备份段里,
+            // 弹一句「备份失败」会让人以为刚导出的备份坏了。
+            backupMsg = context.getString(if (ok) R.string.log_done else R.string.saved_fail)
+        }
+    }
+
     val cacheStr = if (cacheBytes < 0) stringResource(R.string.size_calculating) else human(cacheBytes)
     val dlStr = if (dlBytes < 0) stringResource(R.string.size_calculating) else human(dlBytes)
 
@@ -309,6 +328,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             SettingRow(stringResource(R.string.set_mail_log), stringResource(R.string.set_mail_log_sub)) {
                 scope.launch { mailLog(context) }
             }
+            SettingRow(stringResource(R.string.log_export), onClick = { logExportLauncher.launch("reverb-log.txt") })
             SettingRow(
                 stringResource(R.string.set_clear_log),
                 stringResource(R.string.log_size, if (logBytes < 0) stringResource(R.string.size_calculating) else human(logBytes))

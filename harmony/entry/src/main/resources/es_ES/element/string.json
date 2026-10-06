@@ -825,6 +825,14 @@
       "value": "Envía los registros al desarrollador para ayudar a diagnosticar problemas ocasionales"
     },
     {
+      "name": "set_mail_log",
+      "value": "Enviar registros al desarrollador"
+    },
+    {
+      "name": "set_mail_log_sub",
+      "value": "Envía el registro a tu app de correo e introduce wooooxooom@gmail.com como destinatario"
+    },
+    {
       "name": "set_clear_log",
       "value": "Borrar registros"
     },
