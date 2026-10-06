@@ -189,8 +189,16 @@ export class SettingsStore {
   /// 启动时把已存的语言偏好套用到系统(否则重启后回落系统语言)。
   static applyLanguage(v: string): void {
     try {
-      i18n.System.setAppPreferredLanguage(v.length === 0 ? 'default' : v);
-      Log.i('Settings', `应用语言 ${v.length === 0 ? '跟随系统' : v}`);
+      // 「跟随系统」**不能直接传 'default'**:SDK 里这个值写明**只在冷启动时生效**
+      // (`@ohos.i18n.d.ts` 对 `setAppPreferredLanguage` 的说明),而本端切语言是当场
+      // `loadContent` 重画整棵树 —— 于是勾「跟随系统」之后界面仍是旧语言,要等下一次
+      // 冷启动才回正,看起来就像这一项点了没反应(见 H146)。显式语言没有这个限制。
+      // 改成**当场把系统语言解析成具体标签**再交给它,让它走与显式语言同一条当场生效的路。
+      // 持久化的仍是空串,所以每次冷启动都按**当时的**系统语言重新解析,
+      // 不会钉死在勾选那一刻。
+      const tag = v.length > 0 ? v : i18n.System.getSystemLanguage();
+      i18n.System.setAppPreferredLanguage(tag);
+      Log.i('Settings', `应用语言 ${v.length === 0 ? `跟随系统(${tag})` : v}`);
     } catch (e) {
       Log.w('Settings', `设置语言失败 ${(e as Error).message}`);
     }

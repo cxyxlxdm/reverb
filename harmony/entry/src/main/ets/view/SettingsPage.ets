@@ -635,8 +635,10 @@ export struct SettingsPage {
 
   private async runExportBackup(include: BackupSection[]): Promise<void> {
     const json = await BackupManager.build(this.app, include);
-    const ok = await Files.saveText(this.ctx(), 'reverb-backup.json', json);
-    this.hint = ok ? L.s('backup_done') : L.s('backup_failed');
+    const r = await Files.saveText(this.ctx(), 'reverb-backup.json', json);
+    // 取消 = 静默。原先 boolean 把取消折进「操作未完成」,用户只是按了取消却被告知失败。
+    if (r.cancelled) return;
+    this.hint = r.ok ? L.s('backup_done') : L.s('backup_failed');
   }
 
   /**
@@ -688,8 +690,9 @@ export struct SettingsPage {
   }
 
   private async exportOpml(): Promise<void> {
-    const ok = await Files.saveText(this.ctx(), 'reverb-subscriptions.opml', BackupManager.exportOpml(this.app));
-    this.hint = ok ? L.s('backup_done') : L.s('backup_failed');
+    const r = await Files.saveText(this.ctx(), 'reverb-subscriptions.opml', BackupManager.exportOpml(this.app));
+    if (r.cancelled) return;
+    this.hint = r.ok ? L.s('backup_done') : L.s('backup_failed');
   }
 
   private async importOpml(): Promise<void> {
@@ -722,8 +725,9 @@ export struct SettingsPage {
   }
 
   private async exportLog(): Promise<void> {
-    const ok = await Files.saveText(this.ctx(), 'reverb-log.txt', Log.dump());
-    this.hint = ok ? L.s('log_done') : L.s('backup_failed');
+    const r = await Files.saveText(this.ctx(), 'reverb-log.txt', Log.dump());
+    if (r.cancelled) return;
+    this.hint = r.ok ? L.s('log_done') : L.s('backup_failed');
   }
 
   private valueLabel(options: string[], selected: number): string {
