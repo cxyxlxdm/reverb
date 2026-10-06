@@ -900,7 +900,17 @@ struct ChipsCapsule {
   /** 各 chip 实测位置/宽度 —— 与 ChipsRow 共享同一数组引用,读时即最新值 */
   chipX: number[] = [];
   chipW: number[] = [];
-  private sync: ChipsSwipeSync = new ChipsSwipeSync();
+  /**
+   * 与 ChipsRow **共享同一个驱动实例**(由下面 build 里 `sync: this.sync` 传进来)。
+   *
+   * ⚠️ 这里原先写的是 `private sync`,于是那一行的传值被 ArkTS 静默丢弃、换成自建实例:
+   * 页面级的 `ChipsSwipeSync.report()` 打到的是**行**那份,`frameSink` 永远为 null,
+   * `live` 恒 false —— 这颗胶囊自己的逐帧插值路径**从来没跑过**(编译只给一条 WARN,不报错)。
+   * 观感上看不出来,因为行会用同一份 sync 算出 capX/capW 喂给 @Prop,两条路算的是同一个 lerp;
+   * 少掉的正是把胶囊独立成子组件的全部理由:Swiper 手势期间只重建这一颗,而不是整行。
+   * 去掉 `private` 即恢复上面那段注释所描述的设计;顺序不变(行先注册、这里后注册)。
+   */
+  sync: ChipsSwipeSync = new ChipsSwipeSync();
 
   private frameSink = (f: number, t: number, p: number): void => {
     const fx = this.chipX[f] ?? -1;
