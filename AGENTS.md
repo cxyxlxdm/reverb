@@ -195,6 +195,12 @@ native 库与模型是构建系统按 source set 打进包的。渠道要「没�
 | `docs/PRIVACY.md` + `reverb/privacy.html` + 同意页正文 | 涉及权限/网络/数据用途时 |
 
 **五个语种一起改**:简中 / 繁中 / 英 / 法 / 西。
+**但三端的「五套」形态不一样,别按一个数去找文件**:Android 与鸿蒙是**每个语种一套**
+(`res/values-<locale>/strings.xml` / `resources/<locale>/element/string.json`,都是 5 份);
+**macOS 只有 4 套** —— `macos/Localization/{en,es,fr,zh-Hant}.lproj/Localizable.strings`,
+**简中是基础语言**(键名本身就是简体中文原文,没有 `zh-Hans.lproj`)。
+所以 macOS 加一条文案 = 改代码里的默认串 **+ 4 个 `.strings`**,加起来才是五个语种;
+只按「找 5 个文件」改,会把简中那一份漏在代码里。
 已经栽过两次的具体坑:**繁体那条其实是简体**、**es/fr 整段还是英文** —— 两端都犯过。
 改完用脚本体检一遍(繁体文件里不该出现简体独有字;非中文文件不该以英文原句开头)。
 
