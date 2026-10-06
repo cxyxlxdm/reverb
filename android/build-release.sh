@@ -19,7 +19,16 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 ROOT="$PWD"
+# SDK 解析:**先读 local.properties 的 sdk.dir**,再退到 ANDROID_HOME,最后才是默认路径。
+# 顺序不能反:本机 SDK 在 /usr/local/share/android-commandlinetools,而默认那条
+# $HOME/Library/Android/sdk 压根不存在 —— 于是 SDK 变成一个指向空目录的字符串,
+# 后面找 apksigner / aapt2 全部落空,脚本既不报错也不签名(见 TROUBLESHOOTING H151)。
 SDK="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
+if [ -f local.properties ]; then
+  LP_SDK=$(sed -n 's/^sdk\.dir=//p' local.properties | head -1)
+  [ -n "$LP_SDK" ] && SDK="$LP_SDK"
+fi
+[ -d "$SDK/build-tools" ] || { echo "✗ 找不到 Android SDK 的 build-tools:$SDK/build-tools"; echo "  (ANDROID_HOME 或 local.properties 的 sdk.dir 给一个)"; exit 1; }
 
 [ -x ./gradlew ] || { echo "✗ 找不到 ./gradlew"; exit 1; }
 
@@ -82,7 +91,6 @@ fi
 DIST="$ROOT/dist"
 mkdir -p "$DIST"
 VARIANT_DIR=$(echo "$CHANNEL" | tr 'A-Z' 'a-z')Release
-rm -f "$DIST/$OUT_APK" "$DIST/${OUT_APK%.apk}-unsigned.apk" "$DIST/${OUT_APK%.apk}.aab" "$DIST/${OUT_APK%.apk}-mapping.txt"
 
 APK=$(find "app/build/outputs/apk/$CHANNEL/release" -name "*.apk" 2>/dev/null | head -1)
 [ -n "$APK" ] || { echo "✗ 没找到 release APK"; exit 1; }
@@ -90,12 +98,20 @@ APK=$(find "app/build/outputs/apk/$CHANNEL/release" -name "*.apk" 2>/dev/null | 
 # 用 apksigner 判定是否真的签了,以及签名者是谁 —— 不靠"有没有 keystore.properties"猜。
 # 早先在鸿蒙端就吃过"以为签了其实是调试签名"的亏,这里直接验产物。
 APKSIGNER=$(ls "$SDK"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -1 || true)
+# 「没签名」和「验不了」是两回事,以前混成一个数:apksigner 找不到时 IS_SIGNED 停在 0,
+# 于是签名材料齐全的一构建也被写成就一个 -unsigned.apk,而退出码还是 0 ——
+# 看日志的人只会以为是 keystore 的问题,而真正的问题是 SDK 路径没解析出来(见 H151)。
 IS_SIGNED=0
 SIGNER_DN=""
 if [ -n "$APKSIGNER" ] && "$APKSIGNER" verify "$APK" >/dev/null 2>&1; then
   IS_SIGNED=1
   SIGNER_DN=$("$APKSIGNER" verify --print-certs "$APK" 2>/dev/null | sed -n 's/^Signer #1 certificate DN: //p' | head -1)
 fi
+
+# 清旧产物放在「签名结果已经判出来」之后。原先它紧跟构建,于是后面任一步失败
+# (SDK 没解析出来 → 找不到 apksigner → 判成未签名;或证书是调试签名被挡)都会先把
+# dist 里那个还能用的旧包删掉,而脚本的退出码可能仍然是 0 —— 见 H151。
+rm -f "$DIST/$OUT_APK" "$DIST/${OUT_APK%.apk}-unsigned.apk" "$DIST/${OUT_APK%.apk}.aab" "$DIST/${OUT_APK%.apk}-mapping.txt"
 
 if [ "$IS_SIGNED" = "1" ]; then
   case "$SIGNER_DN" in
