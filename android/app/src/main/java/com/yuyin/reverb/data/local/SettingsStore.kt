@@ -75,6 +75,10 @@ class SettingsStore(context: Context) {
      * 真出现不合这个格式的条目就整条丢(等价于没设过)。
      *
      * 已知残留:退订之后这一列的条目不会自动清(一条几字节,且重新订阅还能接上原设置)。
+     * **这是决定,不是待办**(理由记在 H119):三端的读点都只是**按 tag 取那一格**
+     * (Android 起播时把整表复制进内存后按 tag 查、鸿蒙同义、macOS 逐条转成 PlayMode 后按 tag 查),
+     * 没有任何一处把"表里有这个键"当成"还在订阅"。清它反而丢掉"重新订阅接上原模式"这份好处。
+     * 别再当 bug 翻出来。
      */
     private val _playModeByTag = MutableStateFlow(readPlayModeMap())
     val playModeByTag: StateFlow<Map<String, Int>> = _playModeByTag
