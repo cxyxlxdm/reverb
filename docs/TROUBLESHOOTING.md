@@ -4309,12 +4309,32 @@ related subsystems` + `audio_server/AudioBackgroundTaskListener: DeleteTaskId` +
 
 **验收方式**:✅ `hvigorw assembleHap -p buildMode=debug` **BUILD SUCCESSFUL**(18 s,警告集与改前同:
 `SettingsPage` 的 `fill` API 版本提示、`Components.ets:761` 的 private `sync`)。
-❌ **空窗是否真的没了,尚未真机复验** —— 改完这台机器上没有连着的设备(`hdc list targets` 为空)。
-复验手法沿用本轮已跑通的那条:`uitest` 把进度拖到约 97% → `keyEvent Home` → 等 `completed` 在后台触发,
-然后按这两条判据读日志(`hdc hilog | grep -a -E 'Background|CONTINUOUS_TASK|AudioBackgroundTaskListener'`):
-**期望 ① 换集全程不再出现 `长时任务已释放`,② 不再出现 `All continuous task has stopped of uid`、
-`DeleteTaskId`,③ 不再出现 `释放失败 9800005`**;而用户暂停那一跳**必须**仍能释放(否则是白占资源)。
-判据 ③ 的反面也要跑一次:暂停→继续要仍能保活(即 `bgHeld` 没有因为去重逻辑而漏申请)。
+❌ 当时**空窗是否真的没了尚未真机复验**(改完这台机器 `hdc list targets` 为空)。
+
+**→ ✅ 2026-10-06 真机复验通过**(BRA-AL00 / HarmonyOS 6.1.0.135 / debug hap)。判据按上面写的三条逐条读,
+取证窗口全部是**当场截的**(这台机器的 hilog 缓冲 1~2 分钟就轮掉,隔一分钟再 grep 的"没有"不算证据)。
+本轮把方向从"后台自动续集"换成**播中手动切集**,因为它更短、更好复现,而且走的是同一条
+`播放 … generation=N+1` 重建路径:
+
+- **上一集**(21:34:29.398,播中 `gen=4` → 新集 `gen=5`):日志里从 `播放 …` 到 `state=playing`
+  (21:34:30.134,**736 ms**)**没有任何 `[Background]` 行** —— 既没释放也没重申;
+- **下一集**(21:34:50.161,`gen=5` → `gen=6`):同样,`播放 …` → `state=playing`
+  (21:34:50.884,**723 ms**)**零 `[Background]` 行**;
+- **负控制(证明这套日志"响")**:同一次会话里先做一次**明确暂停**,系统侧立刻打出
+  `com.ohos.sceneboard/HOME: RecentContinuousTask --> onContinuousTaskStop com.yuyin.reverbEntryAbility0`
+  (21:32:52.259),继续播放则打出 `onContinuousTaskStart`(21:33:06.271)。而上面两次切集
+  **`onContinuousTaskStop` / `Start` 一条都没有**,只有 `[AVSession] 元信息已写` 与
+  `CONTINUOUS_TASK: AVSessionNotifyUpdateNotification` —— 也就是说**任务从头到尾没被放过**,
+  改前那种 `All continuous task has stopped of uid` + `DeleteTaskId` 的空窗自然不复存在;
+- **`9800005` 归零**:整段窗口内 `释放失败` 零命中(改前同一轮里出现过两条)。
+- **暂停那一跳仍然会释放**(上面负控制即是),所以不是"改成白占资源" —— 判据 ③ 的正反两面都跑到了。
+
+**取证手法上的一条新账**:`next()` 那颗按钮在队末是**灰的**,`uitest uiInput click` 打上去
+**日志一条不出**(这是 H145 修好之后的正确行为,修前会照旧执行动作)。所以先要用亮度带
+(60×60 框内 `L>150` 亮墨 vs `45≤L≤150` 暗墨)确认按钮可点再打坐标 —— 本轮第一次点 下一集
+就撞在队末上,得到一份"什么都没发生"的空窗口,差点被读成"切集没走这条路"。
+另一条:`snapshot_display -f xxx.png` 在这台机器上产出的 PNG 是**整屏发白的坏图**,
+同坐标换 `.jpeg` 才是真实界面 —— 用 JPEG,别拿 PNG 量像素。
 
 **教训与可复用的规律**:
 ① **"状态位的语义要贴在用户的意图上,不要贴在系统对象的瞬时状态上。"** `isPlaying` 描述的是
