@@ -83,13 +83,14 @@ export struct QueuePage {
       // 上移 / 下移 / 移除。图标与 Android QueueScreen 对齐:
       // KeyboardArrowUp / KeyboardArrowDown(折角,非实心箭头)/ Close。
       // 原先借「上一集/下一集」图标旋转 90° 充当上下移,形状是横向三角+竖线,语义不对。
-      this.iconBtn(Sym.up, idx > 0, () => {
+      this.iconBtn(Sym.up, idx > 0, L.s('a11y_queue_up'), () => {
         this.player.moveInQueue(idx, idx - 1);
       })
-      this.iconBtn(Sym.down, idx < this.player.userQueue.length - 1, () => {
+      this.iconBtn(Sym.down, idx < this.player.userQueue.length - 1, L.s('a11y_queue_down'), () => {
         this.player.moveInQueue(idx, idx + 1);
       })
       Glyph({ symbol: Sym.close, dim: 18, color: this.scheme.onSurfaceVariant })
+        .accessibilityText(L.s('a11y_queue_remove'))
         .onClick(() => this.player.removeFromQueue(e.id))
     }
     .width('100%')
@@ -98,11 +99,12 @@ export struct QueuePage {
   }
 
   @Builder
-  iconBtn(icon: Resource, enabled: boolean, action: () => void) {
+  iconBtn(icon: Resource, enabled: boolean, label: string, action: () => void) {
     Glyph({
       symbol: icon, dim: 20,
       color: enabled ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.3)
     })
+      .accessibilityText(label)
       .onClick(() => { if (enabled) action(); })
   }
 }

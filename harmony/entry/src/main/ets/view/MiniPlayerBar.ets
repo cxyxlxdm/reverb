@@ -1,4 +1,5 @@
 import { Scheme, TypeScale, withAlpha } from '../theme/Theme';
+import { L } from '../util/L';
 import { PlayerController } from '../playback/PlayerController';
 import { Artwork, Glyph, Sym } from './Widgets';
 
@@ -100,15 +101,18 @@ export struct MiniPlayerBar {
           Image(this.player.isPlaying ? $r('sys.media.ohos_ic_public_pause') : $r('sys.media.ohos_ic_public_play'))
             .width(22).height(22)
             .fillColor(this.scheme.onBackground)
+            .accessibilityText(L.s(this.player.isPlaying ? 'a11y_pause' : 'a11y_play'))
             .onClick(() => this.player.togglePlayPause())
         }
         Image($r('sys.media.ohos_ic_public_play_next'))
           .width(19).height(19)
           .fillColor(this.player.hasNext ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.35))
+          .accessibilityText(L.s('a11y_next'))
           .onClick(() => { if (this.player.hasNext) this.player.next(); })
         // 队列入口:命中区同样外扩,不外扩会被左右两个大命中目标夹得点不中
         Glyph({ symbol: Sym.queue, dim: 20, color: this.scheme.onBackground })
           .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+          .accessibilityText(L.s('queue_title'))
           .onClick(() => this.onOpenQueue())
       }
       .width('100%')

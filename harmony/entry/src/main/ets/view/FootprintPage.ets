@@ -37,11 +37,13 @@ export struct FootprintPage {
             Glyph({ symbol: Sym.download, dim: 21, color: this.scheme.onSurfaceVariant })
           }
           .width(40).height(40).justifyContent(FlexAlign.Center)
+          .accessibilityText(L.s('footprint_save'))
           .onClick(() => { this.savePoster(); })
           Row() {
             Glyph({ symbol: Sym.share, dim: 21, color: this.scheme.primary })
           }
           .width(40).height(40).justifyContent(FlexAlign.Center)
+          .accessibilityText(L.s('footprint_share'))
           .onClick(() => { this.sharePoster(); })
         }
       }

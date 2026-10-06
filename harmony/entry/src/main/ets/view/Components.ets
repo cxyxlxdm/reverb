@@ -308,6 +308,7 @@ export struct EpisodeListItem {
             dim: 24,
             color: Color.White
           })
+            .accessibilityText(this.isCurrent && this.isPlaying ? L.s('a11y_pause') : L.s('a11y_play'))
         }
         .width(52).height(52)
 
@@ -330,6 +331,7 @@ export struct EpisodeListItem {
               .flexShrink(1)
             if (this.played) {
               Glyph({ symbol: Sym.played, dim: 16, color: this.scheme.onSurfaceVariant })
+                .accessibilityText(L.s('a11y_played'))
             }
           }
           .width('100%')
@@ -376,6 +378,7 @@ export struct EpisodeListItem {
             // 图标只有 20,命中区外扩到 36 见方,免得点不中(行本身的 onClick 是播放,
             // 命中区重叠会被行吃掉,所以这里必须显式外扩)
             .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+            .accessibilityText(this.isFavorite ? L.s('a11y_unfavorite') : L.s('a11y_favorite'))
             // 截断触摸冒泡:行的按压高亮只属于「按到行本身」,点图标不该点亮整行
             .onTouch((event: TouchEvent) => event.stopPropagation())
             .onClick(() => this.onToggleFavorite())
@@ -387,6 +390,7 @@ export struct EpisodeListItem {
         if (this.showQueueAdd) {
           Glyph({ symbol: Sym.queueAdd, dim: 20, color: this.scheme.onSurfaceVariant })
             .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
+            .accessibilityText(L.s('queue_add'))
             .onTouch((event: TouchEvent) => event.stopPropagation())
             .onClick(() => {
               this.onEnqueue();
@@ -402,10 +406,12 @@ export struct EpisodeListItem {
           LoadingProgress().width(20).height(20).color(this.scheme.primary)
         } else if (this.downloadState === DownloadState.COMPLETED) {
           Glyph({ symbol: Sym.downloaded, dim: 20, color: this.scheme.primary })
+            .accessibilityText(L.s('a11y_downloaded'))
             .onTouch((event: TouchEvent) => event.stopPropagation())
             .onClick(() => this.onDeleteDownload())
         } else if (this.downloadState >= 0) {
           Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
+            .accessibilityText(L.s('action_download'))
             .onTouch((event: TouchEvent) => event.stopPropagation())
             .onClick(() => this.onDownload())
         }

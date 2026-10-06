@@ -271,6 +271,7 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
 | 可视化真实频谱 | `Visualizer`(session 0)本地 FFT,权限用户自决 | 程序化水墨动效(平台限制) | 程序化水墨动效(平台限制) |
 | 打包 | `./gradlew :app:assembleDebug` → APK | SwiftPM 手动组装 `.app` → ad-hoc 签名 → 打 dmg(`./package.sh`) | hvigorw 构建 HAP;`build-release.sh` → 发布 App |
 | 国际化 | 5 种语言 + 跟随系统 | 5 种语言 + 跟随系统 | 5 种语言 + 跟随系统 |
+| 无障碍标注 | 52 处 `contentDescription`(其中 14 处是装饰性图标上显式写 `null`) | **0 处** `accessibilityLabel`(见「已知 / 未做」) | 30 处 `.accessibilityText()`(27 处挂在节点上,3 处在 `@Builder` 的 `label` 形参里、覆盖收起/队列/上一集/下一集/上移/下移六个控件),2026-10-06 与 Android 同源补齐;计数方式 `grep -c '\.accessibilityText(' view/`。**读屏未实听** —— `SymbolGlyph` 在 `uitest dumpLayout` 里 `description` 恒空,本端没有自动化证据,三条判据见 H143 |
 
 ## 已知 / 未做
 
@@ -280,3 +281,7 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
   官方改用 native 的 `OH_AVScreenCapture`(需录屏授权),为一个封面动效索取录屏权限不成比例,
   故与 macOS 一致走程序化水墨动效,设置页不出现该开关。
 - **macOS 后台更新**:无 WorkManager 式后台巡检,订阅更新通过「最新」手动刷新聚合。
+- **macOS 无障碍标注**:`Image(systemName:)` 41 处、`accessibilityLabel` **0 处** ——
+  Android 与鸿蒙 2026-10-06 已把图标型可点控件标注补齐,桌面端是同一族缺口的更大一份。
+  **本轮只在双端补,macOS 没动**:本机跑不了它的构建也起不了它的应用(AGENTS.md「macOS」一节六层实测),
+  改了无法验;SwiftUI 里图标按钮的标注是否被 VoiceOver 取到同样只能实听,所以按硬规矩如实登记而不是盲补。

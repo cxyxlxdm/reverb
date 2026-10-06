@@ -1005,6 +1005,66 @@
       "value": "Esta anotación se eliminará y no podrá recuperarse.\n\n« %1$s »"
     },
     {
+      "name": "a11y_play",
+      "value": "Reproducir"
+    },
+    {
+      "name": "a11y_pause",
+      "value": "Pausa"
+    },
+    {
+      "name": "a11y_prev",
+      "value": "Episodio anterior"
+    },
+    {
+      "name": "a11y_next",
+      "value": "Episodio siguiente"
+    },
+    {
+      "name": "a11y_skip_back",
+      "value": "Retroceder %d s"
+    },
+    {
+      "name": "a11y_skip_fwd",
+      "value": "Avanzar %d s"
+    },
+    {
+      "name": "a11y_collapse_player",
+      "value": "Contraer"
+    },
+    {
+      "name": "a11y_queue_up",
+      "value": "Subir"
+    },
+    {
+      "name": "a11y_queue_down",
+      "value": "Bajar"
+    },
+    {
+      "name": "a11y_queue_remove",
+      "value": "Quitar de la cola"
+    },
+    {
+      "name": "a11y_played",
+      "value": "Escuchado"
+    },
+    {
+      "name": "a11y_downloaded",
+      "value": "Descargado — toca para eliminar"
+    },
+    {
+      "name": "subs_layout_toggle",
+      "value": "Cambiar disposición"
+    },
+    {
+      "name": "radio_start",
+      "value": "Radio aleatoria"
+    },
+    {
+      "name": "radio_next",
+      "value": "Siguiente"
+    },
+    {
       "name": "a11y_note_delete",
       "value": "Eliminar la anotación"
     },

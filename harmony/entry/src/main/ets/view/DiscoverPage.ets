@@ -534,6 +534,7 @@ export struct DiscoverPage {
   reorderButton() {
     Glyph({ symbol: Sym.speed, dim: 20, color: this.scheme.onSurfaceVariant })
       .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+      .accessibilityText(L.s('reorder_title'))
       .onClick(() => this.openReorder())
   }
 
@@ -669,6 +670,7 @@ export struct DiscoverPage {
       }
     }
     .alignItems(VerticalAlign.Center)
+    .accessibilityText(L.s(this.radio.mode !== null ? 'radio_next' : 'radio_start'))
     .onClick(() => {
       const region = this.app.region();
       if (this.radio.mode !== null) {

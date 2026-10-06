@@ -1005,6 +1005,66 @@
       "value": "Cette annotation sera supprimée, sans récupération possible.\n\n« %1$s »"
     },
     {
+      "name": "a11y_play",
+      "value": "Lire"
+    },
+    {
+      "name": "a11y_pause",
+      "value": "Pause"
+    },
+    {
+      "name": "a11y_prev",
+      "value": "Épisode précédent"
+    },
+    {
+      "name": "a11y_next",
+      "value": "Épisode suivant"
+    },
+    {
+      "name": "a11y_skip_back",
+      "value": "Reculer de %d s"
+    },
+    {
+      "name": "a11y_skip_fwd",
+      "value": "Avancer de %d s"
+    },
+    {
+      "name": "a11y_collapse_player",
+      "value": "Réduire"
+    },
+    {
+      "name": "a11y_queue_up",
+      "value": "Monter"
+    },
+    {
+      "name": "a11y_queue_down",
+      "value": "Descendre"
+    },
+    {
+      "name": "a11y_queue_remove",
+      "value": "Retirer de la file"
+    },
+    {
+      "name": "a11y_played",
+      "value": "Écouté"
+    },
+    {
+      "name": "a11y_downloaded",
+      "value": "Téléchargé — toucher pour supprimer"
+    },
+    {
+      "name": "subs_layout_toggle",
+      "value": "Changer la disposition"
+    },
+    {
+      "name": "radio_start",
+      "value": "Radio aléatoire"
+    },
+    {
+      "name": "radio_next",
+      "value": "Suivant"
+    },
+    {
       "name": "a11y_note_delete",
       "value": "Supprimer l'annotation"
     },
@@ -1090,7 +1150,7 @@
     },
     {
       "name": "a11y_favorite",
-      "value": "Favori"
+      "value": "Ajouter aux favoris"
     },
     {
       "name": "a11y_unfavorite",

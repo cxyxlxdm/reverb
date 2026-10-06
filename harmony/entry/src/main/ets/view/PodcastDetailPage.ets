@@ -262,6 +262,7 @@ export struct PodcastDetailPage {
               color: this.sharing ? this.scheme.outline : this.scheme.primary })
           }
           .width(40).height(40).justifyContent(FlexAlign.Center)
+          .accessibilityText(L.s('channel_share'))
           .onClick(() => { this.shareChannel(); })
         }
         .width('100%')
