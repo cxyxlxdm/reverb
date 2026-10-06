@@ -323,10 +323,10 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
 
             SectionLabel(stringResource(R.string.set_logs))
             SettingRow(stringResource(R.string.set_share_log), stringResource(R.string.set_share_log_sub)) {
-                scope.launch { shareLog(context) }
+                scope.launch { shareLog(context) { msg -> backupMsg = msg } }
             }
             SettingRow(stringResource(R.string.set_mail_log), stringResource(R.string.set_mail_log_sub)) {
-                scope.launch { mailLog(context) }
+                scope.launch { mailLog(context) { msg -> backupMsg = msg } }
             }
             SettingRow(stringResource(R.string.log_export), onClick = { logExportLauncher.launch("reverb-log.txt") })
             SettingRow(
@@ -521,8 +521,17 @@ private suspend fun exportOpml(context: Context, container: AppContainer, uri: U
     }
 }
 
-/** 导出全部日志到 cacheDir/shares/ 并经系统分享面板发出(text/plain)。 */
-private suspend fun shareLog(context: Context) {
+/**
+ * 导出全部日志到 cacheDir/shares/ 并经系统分享面板发出(text/plain)。
+ *
+ * **失败必须出声**(H142 判据 ④,2026-10-07 真机造出来过一次):「分享日志」「发送日志」这两个入口原先是
+ * `catch { Logger.e(...) }` 就结束了 —— 面板不弹、界面不给任何反馈,用户看到的就是"点了没反应"(与 H141 那条"点了不动"同族)。
+ * 鸿蒙同两条一直在失败时写 `this.hint`,所以这里补的是**缺的那一侧**,不是把另一侧删掉。
+ * 文案用 `log_send_failed`(「日志发送失败」):不能复用 `share_failed`(它的值是「分享图片生成失败」,
+ * 讲的是剪藏海报),也不能复用 `backup_failed`(本端值是「备份失败」,而这一行不在备份段里 ——
+ * 同一个坑在 `log_export` 上已经踩过一次,见该行的注释)。
+ */
+private suspend fun shareLog(context: Context, onFailed: (String) -> Unit) {
     try {
         val text = com.yuyin.reverb.util.Logger.allText().ifBlank { "(暂无日志)" }
         val uri = withContext(Dispatchers.IO) {
@@ -543,11 +552,15 @@ private suspend fun shareLog(context: Context) {
         context.startActivity(chooser)
     } catch (e: Exception) {
         com.yuyin.reverb.util.Logger.e("Settings", "share log failed", e)
+        onFailed(context.getString(R.string.log_send_failed))
     }
 }
 
-/** 把日志作为附件、经系统邮件发送到开发者邮箱(收件人/主题预填)。 */
-private suspend fun mailLog(context: Context) {
+/**
+ * 把日志作为附件、经系统邮件发送到开发者邮箱(收件人/主题预填)。
+ * 失败出声的口径与 `shareLog` 完全一致(见那里的注释),文案同样用 `log_send_failed`。
+ */
+private suspend fun mailLog(context: Context, onFailed: (String) -> Unit) {
     try {
         val text = com.yuyin.reverb.util.Logger.allText().ifBlank { "(暂无日志)" }
         val uri = withContext(Dispatchers.IO) {
@@ -574,6 +587,7 @@ private suspend fun mailLog(context: Context) {
         context.startActivity(chooser)
     } catch (e: Exception) {
         com.yuyin.reverb.util.Logger.e("Settings", "mail log failed", e)
+        onFailed(context.getString(R.string.log_send_failed))
     }
 }
 

@@ -1323,6 +1323,14 @@
     {
       "name": "reorder_hint",
       "value": "Appui long puis glisser pour réordonner"
+    },
+    {
+      "name": "log_send_failed",
+      "value": "Impossible d’envoyer les journaux"
+    },
+    {
+      "name": "saved_fail",
+      "value": "Échec de l’enregistrement"
     }
   ]
 }

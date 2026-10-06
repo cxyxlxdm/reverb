@@ -1323,6 +1323,14 @@
     {
       "name": "reorder_hint",
       "value": "Mantén pulsado y arrastra para reordenar"
+    },
+    {
+      "name": "log_send_failed",
+      "value": "No se pudieron enviar los registros"
+    },
+    {
+      "name": "saved_fail",
+      "value": "Error al guardar"
     }
   ]
 }

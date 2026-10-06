@@ -587,10 +587,14 @@ export struct SettingsPage {
    * 「分享日志」= 把日志落成 `reverb-log.txt` 交给系统分享面板。
    * 与 Android 的 `shareLog()` 同口径(那边是 `cacheDir/shares/reverb-log.txt` + `EXTRA_STREAM`),
    * 标题「Reverb log」也照搬。
+   *
+   * 失败提示用 `log_send_failed`(「日志发送失败」),不用 `backup_failed`(本端值是「操作未完成」,
+   * 太泛;Android 侧那个键更不能复用,见那边注释)。H142 判据 ④:两端在这一格必须出声,
+   * 而且文案口径一致 —— Android 原先失败是静默的,补的是**缺的那一侧**,不是把这边改成静默。
    */
   private async shareLog(): Promise<void> {
     const ok = await Files.shareText(this.ctx(), 'Reverb log', 'reverb-log.txt', Log.dump(), '');
-    if (!ok) this.hint = L.s('backup_failed');
+    if (!ok) this.hint = L.s('log_send_failed');
   }
 
   /**
@@ -601,11 +605,12 @@ export struct SettingsPage {
    * 收敛到邮件应用,并预填收件人;本端做不到这两件(见 `DEV_EMAIL` 上方那段)。
    * 所以这一行的价值是**把主题、版本信息、收件人地址一起递到用户眼前**,
    * 而不是"点一下就发出去了" —— 副标题必须把这件事讲清楚,否则界面就在说谎(#89 同族)。
+   * 失败提示与 `shareLog` 同一口径。
    */
   private async mailLog(): Promise<void> {
     const body = `请描述你遇到的问题:\n\n\n——\n余音 HarmonyOS v${appVersionName()} · ${deviceInfo.osFullName}`;
     const ok = await Files.shareText(this.ctx(), '余音 HarmonyOS 日志反馈', 'reverb-log.txt', Log.dump(), body);
-    if (!ok) this.hint = L.s('backup_failed');
+    if (!ok) this.hint = L.s('log_send_failed');
   }
 
   private ctx(): common.UIAbilityContext {
@@ -745,7 +750,9 @@ export struct SettingsPage {
   private async exportLog(): Promise<void> {
     const r = await Files.saveText(this.ctx(), 'reverb-log.txt', Log.dump());
     if (r.cancelled) return;
-    this.hint = r.ok ? L.s('log_done') : L.s('backup_failed');
+    // 失败用 `saved_fail`(「保存失败」)而不是 `backup_failed`(本端值是「操作未完成」):
+    // 这一行不在备份段里,与 Android 的 `logExportLauncher` 同一口径(见那边注释)。
+    this.hint = r.ok ? L.s('log_done') : L.s('saved_fail');
   }
 
   private valueLabel(options: string[], selected: number): string {
