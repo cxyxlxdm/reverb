@@ -1,4 +1,5 @@
 import hilog from '@ohos.hilog';
+import util from '@ohos.util';
 
 /// hilog 领域 ID(0x0000~0xFFFF 自定义区)。日志用 `hdc shell hilog | grep Reverb` 过滤。
 const DOMAIN = 0xE0B0;
@@ -68,12 +69,17 @@ export class Log {
     return ring.join('\n');
   }
 
-  /// 日志占用(字节)。鸿蒙侧日志只在内存环形缓冲里,不落盘,所以就是文本字节数;
-  /// Android/macOS 是落盘文件,取文件大小 —— 两端展示口径一致(都显示"日志占用"),
-  /// 实现不同是因为鸿蒙这边刻意不做日志文件(避免无谓 IO,见本类顶部注释)。
+  /// 日志占用(字节)。鸿蒙侧日志只在内存环形缓冲里,不落盘,所以**按 `dump()` 的实际
+  /// UTF-8 字节数算**,与分享/导出出去的那份文件同尺寸(Android、macOS 取的是落盘文件长度,
+  /// 两端展示口径因此仍然一致)。
+  /// ⚠️ 原先写的是 `每字符 × 3`(中文按 3 字节估),而日志行**绝大多数是 ASCII**
+  /// (时间戳 + 英文 tag + 主机名),于是这个数比真实文件大 2.4 倍:实测设置页显示
+  /// 「当前日志 9 KB」,同一刻分享出去的文件是 3.73 KB。见 H148。
   static sizeBytes(): number {
-    let n = 0;
-    for (let i = 0; i < ring.length; i++) n += ring[i].length * 3;   // UTF-8 中文按 3 字节估
+    if (ring.length === 0) return 0;
+    const enc = new util.TextEncoder();
+    let n = ring.length - 1;                     // dump() 用 '\n' 连接,行间的分隔符也要算
+    for (let i = 0; i < ring.length; i++) n += enc.encodeInto(ring[i]).byteLength;
     return n;
   }
 
