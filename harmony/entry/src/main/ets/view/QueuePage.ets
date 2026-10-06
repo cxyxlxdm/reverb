@@ -45,7 +45,11 @@ export struct QueuePage {
             ListItem() {
               this.row(e, idx)
             }
-          }, (e: Episode) => e.id)
+          }, (e: Episode, idx: number) => `${idx}-${e.id}`)
+          // ↑ key **必须带上 idx**:只按 `e.id` 做 key 时,上移/下移之后那两条的 key 没变,
+          //   ArkUI 认定「内容没变」而不重建行 —— 于是行里那个**值参数 `idx` 冻结在旧位置**,
+          //   点一下「上移」发的还是 `moveInQueue(旧idx, 旧idx-1)`,动的是别人的条目。
+          //   同一次冻结还让图标亮暗停在初始判定上(见 H145)。队列只有几十条,重建代价可忽略。
         }
         .scrollBar(BarState.Off)
         .layoutWeight(1)
@@ -83,10 +87,10 @@ export struct QueuePage {
       // 上移 / 下移 / 移除。图标与 Android QueueScreen 对齐:
       // KeyboardArrowUp / KeyboardArrowDown(折角,非实心箭头)/ Close。
       // 原先借「上一集/下一集」图标旋转 90° 充当上下移,形状是横向三角+竖线,语义不对。
-      this.iconBtn(Sym.up, idx > 0, L.s('a11y_queue_up'), () => {
+      this.iconBtn(Sym.up, () => idx > 0, L.s('a11y_queue_up'), () => {
         this.player.moveInQueue(idx, idx - 1);
       })
-      this.iconBtn(Sym.down, idx < this.player.userQueue.length - 1, L.s('a11y_queue_down'), () => {
+      this.iconBtn(Sym.down, () => idx < this.player.userQueue.length - 1, L.s('a11y_queue_down'), () => {
         this.player.moveInQueue(idx, idx + 1);
       })
       Glyph({ symbol: Sym.close, dim: 18, color: this.scheme.onSurfaceVariant })
@@ -98,13 +102,15 @@ export struct QueuePage {
     .alignItems(VerticalAlign.Center)
   }
 
+  /// 上移 / 下移的图标。**`enabledOf` 必须是闭包**:`@Builder` 的值参数只求值一次(见 H29/H145),
+  /// 传布尔进来的结果是「首条的上移永远是亮的、末条的下移永远按不动」,而列表变化之后亮暗也不会跟着改。
   @Builder
-  iconBtn(icon: Resource, enabled: boolean, label: string, action: () => void) {
+  iconBtn(icon: Resource, enabledOf: () => boolean, label: string, action: () => void) {
     Glyph({
       symbol: icon, dim: 20,
-      color: enabled ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.3)
+      color: enabledOf() ? this.scheme.onBackground : withAlpha(this.scheme.onSurfaceVariant, 0.3)
     })
       .accessibilityText(label)
-      .onClick(() => { if (enabled) action(); })
+      .onClick(() => { if (enabledOf()) action(); })
   }
 }
