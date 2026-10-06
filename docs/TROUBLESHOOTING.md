@@ -5169,3 +5169,67 @@ Swift 用 200 条同刻样本跑 `.sorted`(实测顺序保持),JS/ArkTS 同一�
 默认不做;除非那个估计是真值(播放器实际时长、用户自己按下的那一刻)。
 ⑤ 归一逻辑三端**逐字对齐**是这份格式的前提:同一个字段名、同一个方向、同一条"为什么不夹上限"的理由,
 否则下一次跨端复核必然重新论证一遍(见 H86 / H127 两笔同族账)。
+
+### H139. ArkTS 的 `private` 成员一旦出现在组件构造参数里,**传值被静默丢弃** —— 编译只给 WARN,而那条路"看起来是好的"
+
+**现象**(2026-10-06 做 #86 时发现,但这条不在我改的代码里)。给 `DiscoverPage` 补分类排序时,
+照惯例扫了一遍新增文件的编译告警,里面有一条一直存在的:
+
+```
+WARN: ArkTS:WARN Components.ets:761:15
+ Property 'sync' is private and can not be initialized through the component constructor.
+```
+
+`Components.ets` 里 `ChipsCapsule` 声明的是 `private sync: ChipsSwipeSync = new ChipsSwipeSync()`,
+而 `ChipsRow` 的 build 里写了 `ChipsCapsule({ …, sync: this.sync })`。ArkTS **不报错、只是不传**:
+组件拿到的是自己 `new` 的那一份,页面传进来的那一份从头到尾没被接住。
+
+**根因**。共享驱动 `ChipsSwipeSync` 的接线方式是「注册回调」:
+
+| 位置 | 注册到哪一份实例 | 结果 |
+|---|---|---|
+| `ChipsRow:672` `addEndSink(springTo)` | 行 `sync` 是**公开**成员,拿到页面那份 ✅ | 收尾弹簧正常 |
+| `DiscoverPage:468` / `LibraryPage:169` `report(...)` | 页面自己那份 ✅ | 逐帧派发正常 |
+| `ChipsCapsule:917` `onFrame(frameSink)` | ❌ 私有 → 自建实例 | `frameSink` **恒为 null** |
+
+于是 `report()` 里那句 `this.frameSink?.(…)` 每次都命中可选链的空分支 —— 不抛、不告警、什么都不会发生。
+`ChipsCapsule.live` 因此恒为 `false`,它自己的逐帧插值路径(`ix`/`iw`)**从来没跑过**。
+
+**为什么界面上完全看不出来**:胶囊位置还有第二条等价路径 —— `ChipsRow:716-724` 用同一份 `sync`
+算出同一个 lerp 写进 `@State capX/capW`,再经 `@Prop` 传给胶囊。`build()` 里
+`.translate({ x: this.live ? this.ix : this.capX })` 两条都指向同一个数。
+**所以坏掉的恰好是"为什么要把胶囊独立成子组件"的全部理由**:Swiper 手势期间本应只重建这一颗胶囊,
+实际是整行跟着重建。这不改变观感,只改变成本 —— 也正因为它不改变观感,它躲过了此前所有真机验收。
+
+**修法**。去掉 `private`(与同一批组件里 `ChipsRow.sync` 的声明口径一致)。注册顺序不变:
+行的 `aboutToAppear` 仍先于胶囊,所以 `end()` 派发时还是"行先弹簧、胶囊再摘 `live`",
+而 `springTo` 动手前会先把 `capX` 钉到当前实际绘制值,`live` 从 `true` 翻回 `false` 的那一帧不跳。
+
+**同一次改动撞到的另一条**(它是**响**的,记在这里是为了下次少试一轮):
+自定义方法**不能叫 `onDragStart` / `onDragEnd`** —— 它们是 `CustomComponent` 基类上已有的通用属性方法
+(组件原生拖拽的回调),成员方法同名会直接编译失败
+`Property 'onDragStart' in type 'DiscoverPage' is not assignable to the same property in base type`。
+本项目这一处是自研手势(长按 + Pan)做排序,回调统一改成 `rowDragStart/rowDragUpdate/rowDragEnd`。
+另外 `PanGesture` 的 `direction` 取的是 **`PanDirection`** 而不是 `Direction` ——
+`Direction` 是布局书写方向(`Ltr/Rtl/Auto`),`Direction.Vertical` 压根不存在。
+这两个枚举名都要查 SDK 的 `ets/component/gesture.d.ts`,不要凭 iOS/Android 的直觉写。
+
+**验收方式**:
+- ✅ 鸿蒙 `hvigorw assembleHap`(debug)BUILD SUCCESSFUL,且 `grep` 编译输出里
+  `Property 'sync' is private` 那条**消失**(改前它每次都打印 —— 这就是本条唯一的机器可见证据);
+- ❌ **未装机。** 这条改的是渲染路径的重建范围,**观感本来就没坏**,所以"看起来正常"证明不了任何事。
+  真机判据只能是成本:发现页/音阁左右滑动切分类时,胶囊跟手且**不掉帧**;
+  更硬的做法是临时在 `ChipsRow.build()` 顶部加一行 `Log.i`,看手势期间它是否还逐帧打印
+  (改前会、改后不会)。**这条要并进 #84 那次复验,不要单独装一次机。**
+
+**教训与可复用的规律**:
+① **ArkTS 里"组件构造参数 + `private`"是一个静默失败组合**,和 `sys.symbol.*` 写错不报错、
+`@Prop` 传数组不触发刷新(H77)是同族:**编译只 WARN 不 ERROR 的告警,在本仓库按错误处理。**
+判据很机械:每次改完鸿蒙跑一遍 `assembleHap`,把 WARN 逐条读完 —— 本条就是这么撞出来的,
+而不是排查某个现象时找到的。
+② **"观感正常"不能当作"性能路径没坏"的证据。** 一份数据有两条等价的渲染供给路径时,
+断开其中一条不会影响画面,只会影响成本;而成本坏掉的症状是"这台机器有点卡",
+下一次换机器就查不到了。**凡是"为了少重建才拆出来的子组件",要能说出拆完之后谁不再重建。**
+③ 可选链 `a?.()` 会把"没人注册"和"注册了但没派发"折叠成同一个静默 no-op。
+跨对象注册的回调链,注册侧和派发侧要有一处显式的"我确实挂上了"的痕迹(日志或断言),
+否则这种接线错误在代码审查里也看不出来 —— 两边各自都是对的。
