@@ -112,6 +112,14 @@ export class Sym {
    * 所以此前每次换这类资源都得真机看一眼;这次装机前只做到"表里有这个名"。
    */
   static readonly noteDelete: Resource = $r('sys.symbol.trash');                // Rounded.DeleteOutline
+  /**
+   * 分类排序行末的拖拽把手。Android 侧是 `Icons.Rounded.DragHandle`(两条圆头横杠)。
+   *
+   * `sys.symbol.*` 写错不报错、直接空白(见上面 noteDelete 那段),所以这个名字取自
+   * SDK 的 `toolchains/id_defined.json`(type=symbol,已核对存在),不是凭形状猜的。
+   * 表里另有 `line_3_horizontal`(三条),Android 那枚是**两条**,故取 `_2`。
+   */
+  static readonly dragHandle: Resource = $r('sys.symbol.line_2_horizontal');    // Rounded.DragHandle
 }
 
 /// 顶层页大标题头:标题 + 可选副标 + 右侧动作插槽 + 下方一道「梁金」细线。

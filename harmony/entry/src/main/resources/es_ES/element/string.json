@@ -1191,6 +1191,18 @@
     {
       "name": "download_delete_message",
       "value": "Se eliminará el archivo sin conexión de «%1$s». No se puede deshacer."
+    },
+    {
+      "name": "action_done",
+      "value": "Hecho"
+    },
+    {
+      "name": "reorder_title",
+      "value": "Reordenar categorías"
+    },
+    {
+      "name": "reorder_hint",
+      "value": "Mantén pulsado y arrastra para reordenar"
     }
   ]
 }
