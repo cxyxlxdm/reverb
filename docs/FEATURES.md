@@ -206,9 +206,9 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
 
 | 平台 | 差异 |
 |------|------|
-| Android | 备份 / 恢复 / 导入 / 导出经 SAF 文档选择器;**导出与恢复都弹框勾选分区**(`BackupSectionDialog`,默认全勾、一个都不勾时确认不可点、勾选结果记到下次打开);系统级备份规则见上 |
+| Android | 备份 / 恢复 / 导入 / 导出经 SAF 文档选择器;**导出与恢复都弹框勾选分区**(`BackupSectionDialog`,默认全勾、一个都不勾时确认不可点、勾选结果记到下次打开);系统级备份规则见上。<br>**写不出去从此如实报错**(2026-10-07,H157):①「导出订阅(OPML)」这一格原先**成功失败都不出声**(它没有异常捕获,所以不在 H142 那轮"失败必须出声"的清单上)—— 现在与「完整备份」同口径弹 `backup_done` / `backup_failed`;②三条导出(备份 / OPML / 日志)原先共用 `runCatching { openOutputStream(uri)?.use{…} }.isSuccess`,而该 API **打不开时返回 null、不抛异常** ⇒ 判据照样为真 ⇒ **弹「备份完成」而文件里什么都没有**;现已收进 `writeTextViaSaf`,null 明确算失败 |
 | HarmonyOS | 备份 / 恢复 / 导入 / 导出经系统安全组件;`BackupExtension` 声明于 module.json5,范围在 `resources/base/profile/backup_config.json`。**分项勾选框已于 2026-10-06 补齐**(此前本端两个方向都是无选择的全量操作 —— 补齐方式是给鸿蒙加对话框,没有删另两端的勾选)。交互与 Android 逐项同构:导出**先弹框再选保存位置**、恢复**先选文件→探测文件里有哪些分区→再弹框**(可选集只有文件里真有的那几项)、打开即全选、点行翻转、一个都不勾时「备份/恢复」不可点、文件里探测不到分区报 `backup_invalid`。**取消文件选择现在不提示**(改前与"读不出来"共用一句 `操作未完成`;Android 的 `uri == null` 本来就是静默的)。分区名改用专键 `backup_row_*`,**5 语种与 Android 逐字一致**(此前复用各功能页自己的标题,同一格会出现「下载」vs「下载(仅节目链接)」、「听觉足迹」vs「听觉印记」两种措辞)。<br>⚠️ **一条有意保留的差异**:Android 把勾选结果记在页面状态里、下次打开还在;鸿蒙每次打开回到全选 —— 少一个看不见的"上次勾了什么"。❌ **全部只过到编译,一次都没点过**,判据见 `docs/ROADMAP.md` 三-D 技术债「手动备份 settings 分区跨端互通」那一行与 `docs/TROUBLESHOOTING.md` H141 |
-| macOS | 经 `NSSavePanel` / `NSOpenPanel`;恢复 sheet 勾选要合并的分区;⚠️ **导出侧没有勾选框** —— `SettingsView.exportBackup()` 实测写死 `Set(BackupManager.Section.allCases)` 全量导出(与另两端本轮补齐后的差别,记在 `docs/ROADMAP.md` A2-4 待办);无系统级备份机制 |
+| macOS | 经 `NSSavePanel` / `NSOpenPanel`;恢复 sheet 勾选要合并的分区;⚠️ **导出侧没有勾选框** —— `SettingsView.exportBackup()` 实测写死 `Set(BackupManager.Section.allCases)` 全量导出(与另两端本轮补齐后的差别,记在 `docs/ROADMAP.md` A2-4 待办);无系统级备份机制。**两条导出现在都如实报错**(2026-10-07,原先是 `try?` 吞掉写盘失败,点了什么也不会发生):备份与 OPML 都弹「备份失败」,措辞取 Android 的值(鸿蒙同位置是更泛的「操作未完成」,这一条是**已知的双端措辞差异**,本轮不动任何一端);本页原有的「无法恢复备份」弹窗此前四套 `.strings` **一条都没译**(英文系统上仍显示简体),已连失败提示一起补齐。见 H157 |
 
 ## 十、个性化与设置
 
@@ -245,9 +245,9 @@ macOS 走 dmg 自行分发,不涉及应用商店,功能与默认渠道一致。
 
 | 平台 | 差异 |
 |------|------|
-| Android | 分享与邮件都先把日志落到 `cacheDir/shares/reverb-log.txt` 再以 `EXTRA_STREAM` 交出;邮件那条用 `type=message/rfc822` 把目标收敛到邮件应用并预填收件人/主题/正文;导出走 SAF `CreateDocument("text/plain")`。**分享/邮件失败只写日志、不弹提示**(导出有结果对话框) |
+| Android | 分享与邮件都先把日志落到 `cacheDir/shares/reverb-log.txt` 再以 `EXTRA_STREAM` 交出;邮件那条用 `type=message/rfc822` 把目标收敛到邮件应用并预填收件人/主题/正文;导出走 SAF `CreateDocument("text/plain")`。**失败现在会出声**(2026-10-07):分享 / 邮件失败弹「日志发送失败」、导出失败弹「保存失败」,与备份/OPML 用的是**同一个**页内 AlertDialog(原先只把异常写进日志文件,于是"点了没反应",见 `docs/TROUBLESHOOTING.md` H155) |
 | HarmonyOS | 分享与邮件是同一条代码路径:文本写进 `cacheDir/reverb-log.txt`,再经 `fileUri.getUriFromPath` 以文件 uri 交给分享面板(标题=Android 的 subject,描述=Android 的 body);**收件人由用户在邮件应用里填**。结果经页面内 hint 行显示 |
-| macOS | 四行都在(顺序是 导出 / 分享 / 邮件 / 清空,与另两端不同序但同条目)。分享经 `ShareLink`,导出经 `NSSavePanel`,邮件经 `NSSharingService`,无邮件客户端时回退 `mailto` + 在访达中定位日志文件 |
+| macOS | 四行都在(顺序是 导出 / 分享 / 邮件 / 清空,与另两端不同序但同条目)。分享经 `ShareLink`,导出经 `NSSavePanel`,邮件经 `NSSharingService`,无邮件客户端时回退 `mailto` + 在访达中定位日志文件。**失败现在也出声**(2026-10-07,原先五处写盘全是 `try?` 吞错误):导出备份 / 导出 OPML 失败弹「备份失败」、导出日志失败弹「保存失败」、发送日志失败弹「日志发送失败」并**不把那封附件不存在的邮件起草出去**;「分享前的临时文件」写不出去时**撤掉分享入口**而不是弹一句错(那一刻用户并没有点「发送」)。三条措辞与两端**按渲染值逐字一致**;见 H157 |
 
 ## 十三、关于
 

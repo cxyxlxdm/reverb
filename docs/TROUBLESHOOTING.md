@@ -6695,3 +6695,120 @@ Android 缺「出声」,鸿蒙缺「说清楚是哪件事失败」。
 双渠道与语音识别入口;若干条是句子结构不同而非同句改写)。所以这一层的正确处置是**逐条读**而不是
 按数清 —— 它属于文案体检,不属于发布判据。**这次没读,记在这里而不是"没有问题"**;
 下次真要做,判据口径已经是现成的(反转义后比,再按「是否同句」分层)。
+
+
+### H157 「备份完成」可以是假的:把口径从「枚举 catch」换成「枚举落盘点」,抓出来的不是静默而是**主动报错成功** —— 而 `openOutputStream` 失败时返回 null、不抛异常
+
+**现象**(2026-10-07)。起点是补掉 H155 留下的那一格(macOS 设置页三处 `try?` 静默)。为了不再靠记忆漏项,
+这轮把清点口径换成**「所有落盘 / 跨进程写入的调用点」**,一次扫出三层,越往后越严重:
+
+1. **macOS** 四条写盘(导出备份 / 导出 OPML / 导出日志 / 邮件附件)清一色
+   `try? … data(using: .utf8)?.write(to:)` —— 失败**既不弹提示也不写日志**,比 Android 修好之前还安静一档。
+2. **Android 的 OPML 导出整行没有成败**:回调里 `exportOpml(context, container, uri)` 返回 `Unit`,
+   成功失败都不出声;而**鸿蒙同一格一直是两条提示都有**(`backup_done` / `backup_failed`)。
+   H142 判据④(「失败必须出声」)那轮**清点的是「有 catch 的地方」**,这一行压根没有 catch,于是整行被跳过。
+3. **最坏的一条**:Android 三条导出(备份 / OPML / 日志)共用同一个形状
+   `runCatching { contentResolver.openOutputStream(uri)?.use { it.write(…) } }.isSuccess`,
+   而 `ContentResolver.openOutputStream` 的**契约是打不开就返回 null、不抛异常** ⇒ null 分支让
+   `runCatching` 照样 success、`isSuccess` 照样 true ⇒ **界面弹「备份完成」,用户手上那个文件里什么都没有**。
+4. 顺带一处失真:macOS 本页原有的「无法恢复备份」弹窗**四套 `.strings` 一条都没译**,
+   于是在英文系统上那一句仍然显示简体。
+
+**根因**:
+
+① **`try?`、`runCatching{}.isSuccess`、`?.use{}` 这三种形状都能吃掉错误,而且语法完全合规。**
+   它们把「有没有出错」压成一个 Bool / Optional,而"没出错"与"根本没执行那次写"在它们眼里是同一个值。
+② **返回 null 是 API 契约,不是异常路径。** `runCatching{}.isSuccess` 只在「这件事失败=抛异常」时才是成败判据。
+   凡拿它判成败,必须先问一句:**它失败时是抛,还是返回 null / 空 / -1 / false?**
+   `openOutputStream` 属于后者(同族写法:`.getOrNull()` 之后直接当成功用、`getDrawable`、0 尺寸的 `createBitmap`)。
+③ **清点口径决定漏项。** 按「catch 里只打日志」清点(H155 那轮)会漏掉「压根没有 catch」的行。
+   全集应该是**所有落盘点** —— 这次两处新缺口都不是从报错里发现的,是从枚举里发现的。
+④ **假成功比静默更坏一档**:静默是"用户不知道成了没有",假成功是"用户以为成了"。
+   前者损失一次点击,后者损失那份数据(用户会认为已经有备份了,真出事时才想起没有)。
+
+**修法**(三端各补自己缺的那一侧,**没有**把任何一端改回静默):
+
+- **Android** `SettingsScreen.kt`:三条导出收进一个
+  `writeTextViaSaf(context, uri, build) -> Boolean`,其中 null 分支**明确 `error("openOutputStream 返回 null(目标不可写):$uri")`**,
+  `onFailure` 进 `Logger.e`;OPML 行接进 `backupMsg`(成功 `backup_done` / 失败 `backup_failed` —— 与「完整备份」
+  同段同键,不像 `log_export` 那样换成 `saved_fail`,因为它就在备份段里)。`backupMsg` 的声明**上移到
+  `exportLauncher` 之前**(Kotlin 的 lambda 只能捕获已声明的局部变量;原先它排在下面,是因为那时只有备份那两条引用它)。
+  生成文本(备份 JSON / OPML / 整份日志)也一并放进 `Dispatchers.IO`,调用方只拿一个 Bool。
+- **macOS** `SettingsView.swift`:加 `private enum Prompt { none / sendFailed / saveFailed / backupFailed }`
+  + 一个**只给标题**的 `.alert`(标题即三端那句短语,不新增双端没有的正文);写盘统一走
+  `writeText(_:to:) async -> Bool`(IO 仍在 `Task.detached` 里,只有 Bool 回主线程驱动提示)。
+  五个调用点分别接:`exportBackup` / `exportOPML` → `backupFailed`、`exportLog` → `saveFailed`、
+  `mailLog` → `sendFailed` **且写不出附件就不起草这封邮件**(否则发出去的是一封挂着不存在/上一次内容的附件)、
+  `prepareShareLog` → **不弹提示**,改成撤掉分享入口(`shareLogURL = nil`),因为它由 `.onAppear` 与「清空日志」
+  自动调用,那一刻用户并没有点「发送」,弹「日志发送失败」反而莫名其妙。
+- **提示标题为什么做成枚举而不是 String**:SwiftUI 的 `.alert(_ title:)` 要 `LocalizedStringKey`
+  (StaticString 形态)才会查表,**运行期拼出来的 `String` 不会被本地化** —— 直接 `alert(promptText)`
+  得到的就是"代码看着对、英文系统还是中文"。
+- **文案口径**:三条与两端同名提示**按渲染值逐字对齐**。`备份失败` 取的是 Android 的措辞(鸿蒙同位置是更泛的
+  `操作未完成`,那边自己的注释也嫌它泛 —— 这是已知的双端措辞差异,本轮不动任何一端)。
+  四套 `.strings` 各 +6 键。en/fr 的 `日志发送失败` 里是**弯撇号**,因为那两个端的渲染值就是弯的,而这两个文件
+  其余部分一律直撇号:**这是 H156 教训 ④「比渲染值、不比源文件字节」在这里的正确产物**,
+  并把理由写进 `.strings` 的注释里,免得下一个人顺手把它"统一"回直的。
+- **鸿蒙一行没改**:这一格它本来就是两条提示都有,它是这轮的**参照端**。
+
+**验收**:
+
+- ✅ Android 两渠道重打(08:20 / 08:21)。本轮上游只碰 `android/` 与 `macos/`(`git status --short` 为证)
+  ⇒ **鸿蒙 07:43 那份仍是当前包**,没有为一条 macOS 的改动去重打 65 MB 之外的第三个端。
+  处理量先摆出来:`reverb.apk` 64,954,732 B / 168 条目 / dex 6,392,564 B / `resources.arsc` 440,608 B;
+  `reverb-store.apk` 3,526,803 B / 165 条目 / dex 6,377,744 B / arsc 436,388 B。
+- 判据**两侧都跑**(不只验"删掉的那一侧"):`aapt2 dump badging` 两渠道都是 `versionCode='5' versionName='1.0.4'`;
+  `lib/` + `whisper-model` default **2** / store **0**;**`RECORD_AUDIO` default 1 / store 0**,
+  且两边权限清单整份打印并数过行数(default 10 条 `uses-permission` / store 8 条,差的两条正是
+  `RECORD_AUDIO` + `MODIFY_AUDIO_SETTINGS`);目录接口 URL 两侧都非 0(按行计 `itunes.apple.com`=1 / `fyyd`=3 / `gpodder`=3);
+  `apksigner` v2+v3 true、DN `CN=Yuyin Reverb`、`META-INF` 三件齐=3(v1 false 是 minSdk≥24 的既定口径)。
+  **`aapt2` / `apksigner` 全部按 `local.properties` 的 `sdk.dir` 取绝对路径并看退出码** —— 这是 H156 那条坑的固定写法。
+- **本轮新加的字面量按串验在两个包里**:`writeTextViaSaf` / `openOutputStream` / `目标不可写` 在 default 与 store
+  各 1 次(中文走 `LC_ALL=C grep -a` 搜 dex 原始字节,`strings` 看不见)。同一次 dex 反而**变小**
+  (default 6,393,976 → 6,392,564 B):三段重复的写盘合成一个 helper。⚠️ 但**体积不当判据**(H154 定的那条),
+  这轮的判据是那三条串。
+- ✅ macOS 资源侧:四套 `.strings` `plutil -lint` 全 OK、各 **199 键**、两两 `comm -3` **键集合差 0**、
+  新增 6 键每套各 1 条;那条长句的**键**与代码里 `Text("…")` 的串逐字一致(脚本比过)—— 不一致就等于没译。
+  zh-Hant 的六个**值**回读过,无简体独有字。
+- ✅ macOS 代码侧:`bash tools/typecheck-diff.sh` —— base(HEAD)38 文件 / 309,051 B 与
+  mod(工作区)38 文件 / 311,791 B **各中性化 9 类、各 0 错误**,阳性对照在唯一改动文件注入语义错并被报出
+  (`SettingsView.swift:459:48: cannot convert value of type 'String' to specified type 'Int'`),撤净后回 0。
+  **天花板如实写:这只证明类型没变多,一帧都没跑起来。**
+- ⚠️ **没做的三条,记在这里而不是"验过了"**:
+  ①**Android 这三条的失败分支一次都没在真机上走过** —— H155 那套 `run-as … chmod cache/` 的杠杆对 SAF 目标
+  不适用(用户选的落点在应用沙箱之外),而本仓库**没有任何测试源集**(`android/app/src` 下只有 `main/default/store`),
+  写 instrumentation 测试等于新引入一整套测试依赖,不在本轮范围。三条候选注入杠杆记在任务里,没做到之前
+  这条判据只到「编译 + 串在包里」。
+  ②macOS 没有任何运行证据(出包固定在另一台机器,见 AGENTS.md「macOS」与三-A)。
+  ③片尾还剩一处同族静默**本轮没动**:`ShareCards.saveWithPanel:238` 的 `try? png.write(to:)`,
+  以及同函数 `renderPNG` 返回 nil 时四个调用方(`FootprintView.swift:42/54`、`PlayerView.swift:376/380`、
+  `PodcastDetailView.swift:171`)直接 return —— 两端同位置都有提示(`share_failed`「分享图片生成失败」)。任务 #121。
+
+**为什么顺手把这轮的验收固化成脚本**(`macos/tools/neutralize-sdk13.py` + `typecheck-diff.sh`):
+
+AGENTS.md 里「本机对 macOS 改动的最强验收 = 整模块 typecheck 差分」自 2026-10-01 修正判据(H128)之后
+**一直是手跑的**:要在 /tmp 的 scratch 树里中性化 9 类 14+/26-only 依赖(双参 `onChange` ×4、轮播那四个 modifier、
+`focusEffectDisabled`、`themedSheet` 的 `@MainActor`、`SettingsLink`、`MainActor.assumeIsolated` ×4、
+`nonisolated(unsafe)`(语法级,连解析都过不了)、整个 `@available(macOS 26)` 的 `Transcriber`、
+`TranscriptStore.run` 那 68 行),再让两棵树各跑到 0,再逐个注入阳性对照。
+**手跑的 0 别人复现不了**,而"复现不了的 0"正是 H156 处理的那一类问题(「没有命中」与「没扫成」输出相同)。
+于是固化成:中性化**每条规则不命中就 MISS 退出**(否则那个 0 可能只是漏改)、两棵树类数必须相等、
+两棵树都必须 0 错误、每个改动文件各注入一次、最后打印未覆盖范围。
+**牙齿在写的时候就抓出三条自伤**:`classes_for` 把 `/dev/stdin` 这个路径本身回显成类数,使"两边相等"恒真;
+`set -u` + 空数组展开在 macOS bash 3.2 下直接炸;BSD sed 不认 `\s`,轮播那三条 modifier **一条都没删掉**
+(改成 `[[:space:]]*`,然后整个折进 python 保证可复现)。
+
+**教训与可复用的规律**:
+
+① **清点「会静默的地方」的口径是"所有落盘 / 跨进程写入的调用点",不是"所有 catch"。**
+   没有 catch 的行(回调直接返回 Unit)同样吞掉成败,而它按 catch 清点时是**隐形**的。
+② **用 `runCatching{}.isSuccess` / `try?` 判成败之前,先查那个 API 失败时是抛还是返回 null/空。**
+   "框架不抛"是契约的一部分,而 `runCatching` 对 null 完全无感。凡是 `?.use{}` 后面接 `.isSuccess` 的写法都该重审一遍。
+③ **凡是弹「完成」的分支,必须拿出"确实写了"的证据**(非 null 的流 + 写入不抛,二者都要)。
+   假成功比静默更坏一档 —— 它不是"没说",是"说错了"。
+④ **移植一条提示时,先确认这一端的呈现载体能不能本地化。** SwiftUI 的 alert 标题要 `LocalizedStringKey`;
+   这与硬规矩 5 是同一件事的两半:键加了,还得保证查得到表(查表失败在中文系统上完全没有症状)。
+⑤ **一条需要人记住九个步骤的判据,迟早会变成"手跑的、别人复现不了的 0"。** 把验收固化成脚本的成本很低,
+   收益是它能被第三个人逐字复现;**而且写脚本的过程本身会逼你把每条规则的命中数摆出来** —— 这次的三条哑火就是这么发现的。
+⑥ 这一轮三端**各缺一块、缺的是同一族**:macOS 缺出声、Android 缺一整行(没有 catch 因而不在清单上)、
+   鸿蒙那一格是参照端。所以"对齐双端"的正确动作是**逐格问"这一格谁缺"**,而不是假定缺的总在桌面端。
