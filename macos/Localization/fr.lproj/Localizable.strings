@@ -231,13 +231,14 @@
 "删除批注" = "Supprimer l'annotation";
 "将删除这条批注，无法恢复。\n\n「%@」" = "Cette annotation sera supprimée, sans récupération possible.\n\n« %@ »";
 
-/* 失败提示。前三条与 Android / 鸿蒙的渲染值逐字对齐(硬规矩 5):`d’envoyer` 用的是弯撇号,
+/* 失败提示。前四条与 Android / 鸿蒙的渲染值逐字对齐(硬规矩 5):`d’envoyer` 用的是弯撇号,
    因为那两个端就是弯的 —— 本文件其余部分一律直撇号,别顺手「统一」过去(见 H156 教训 ④)。
    后三条补的是本页「无法恢复备份」弹窗原先缺的译名。另:「备份失败」取 Android 的值,
    鸿蒙同位置是更泛的「操作未完成」,这一条是已知的双端措辞差异,不是本轮改坏的。 */
 "日志发送失败" = "Impossible d’envoyer les journaux";
 "保存失败" = "Échec de l'enregistrement";
 "备份失败" = "Échec de la sauvegarde";
+"分享图片生成失败" = "Impossible de créer l’image à partager";
 "无法恢复备份" = "Impossible de restaurer la sauvegarde";
 "好" = "OK";
 "这个文件无法识别为余音的备份,可能已损坏或来自不兼容的版本。" = "Ce fichier n'est pas reconnu comme une sauvegarde de Reverb. Il est peut-être corrompu ou issu d'une version incompatible.";

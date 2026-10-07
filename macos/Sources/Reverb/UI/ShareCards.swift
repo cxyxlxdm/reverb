@@ -215,28 +215,54 @@ struct FootprintPoster: View {
 func renderPNG(_ view: some View, scale: CGFloat = 2) -> URL? {
     let renderer = ImageRenderer(content: view)
     renderer.scale = scale
-    guard let cg = renderer.cgImage else { return nil }
+    guard let cg = renderer.cgImage else {
+        Log.e("ShareCard", "海报渲染失败:cgImage 为空")
+        return nil
+    }
     let rep = NSBitmapImageRep(cgImage: cg)
-    guard let png = rep.representation(using: .png, properties: [:]) else { return nil }
+    guard let png = rep.representation(using: .png, properties: [:]) else {
+        Log.e("ShareCard", "海报渲染失败:PNG 编码返回空")
+        return nil
+    }
     let url = FileManager.default.temporaryDirectory
         .appendingPathComponent("reverb-\(UUID().uuidString).png")
-    do { try png.write(to: url); return url } catch { return nil }
+    do { try png.write(to: url); return url }
+    catch { Log.e("ShareCard", "海报临时文件写入失败:\(url.lastPathComponent)", error: error); return nil }
 }
 
+/// `saveWithPanel` 的结果。**取消与失败必须分开** —— 用户按「取消」不是错误,弹一句「生成失败」
+/// 是诬告(鸿蒙那一侧同族的坑记在 H147 / #99:那边 `saveText` 返回 `boolean`,把取消渲染成了失败提示)。
+enum ShareCardOutcome { case saved, cancelled, failed }
+
 /// 用 NSSavePanel 让用户选择位置保存 PNG。
+///
+/// 原先三处失败全是静默:两个 `guard … else { return }` 加一句 `try? png.write(to:)`,
+/// 而 `try?` 那一处正是"面板已经点完、位置已经选好、字没写进去"的情形 —— 用户看到的是"什么都没发生"。
+/// 现在渲染不出来就**不弹面板**(没有可写的内容,弹面板等于让用户白选一次),并把结果交回调用方出声。
+/// 见 H157 收尾段与 H158 同族清点:两端同位置都有提示(`share_failed`「分享图片生成失败」)。
 @MainActor
-func saveWithPanel(_ view: some View, defaultName: String, scale: CGFloat = 2) {
+func saveWithPanel(_ view: some View, defaultName: String, scale: CGFloat = 2) -> ShareCardOutcome {
     let renderer = ImageRenderer(content: view)
     renderer.scale = scale
-    guard let cg = renderer.cgImage else { return }
+    guard let cg = renderer.cgImage else {
+        Log.e("ShareCard", "保存海报失败:cgImage 为空(未弹面板)")
+        return .failed
+    }
     let rep = NSBitmapImageRep(cgImage: cg)
-    guard let png = rep.representation(using: .png, properties: [:]) else { return }
+    guard let png = rep.representation(using: .png, properties: [:]) else {
+        Log.e("ShareCard", "保存海报失败:PNG 编码返回空(未弹面板)")
+        return .failed
+    }
     let panel = NSSavePanel()
     panel.nameFieldStringValue = defaultName
     panel.allowedContentTypes = [.png]
-    if panel.runModal() == .OK, let url = panel.url {
-        try? png.write(to: url)
+    guard panel.runModal() == .OK, let url = panel.url else { return .cancelled }
+    do { try png.write(to: url) }
+    catch {
+        Log.e("ShareCard", "保存海报失败:\(url.lastPathComponent)", error: error)
+        return .failed
     }
+    return .saved
 }
 
 /// 异步加载远程封面为 NSImage(供 ImageRenderer 同步渲染使用)。
