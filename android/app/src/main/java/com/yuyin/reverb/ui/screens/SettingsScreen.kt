@@ -160,8 +160,17 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     // 原先它声明在下面,是因为那时只有备份那两条回调引用它。
     var backupMsg by remember { mutableStateOf<String?>(null) }
 
+    // mime 用 `text/x-opml` 而不是 `application/xml`,是为了文件名。MediaProvider 在 insert 时
+    // 会按 mime 的注册扩展名补后缀:传 `application/xml` 时它给 `reverb-subscriptions.opml`
+    // 又追加了 `.xml`,真机落盘成 `reverb-subscriptions.opml.xml`(09:11 之前的那次导出实测)。
+    // 而鸿蒙 `Files.saveText('reverb-subscriptions.opml', …)` 落的是干净的 `.opml`,
+    // 这一行副标题写的是「可导入其他播客 App」,双重后缀正是那些 App 的文件过滤器会漏掉的样子。
+    // `text/x-opml` 在两侧都安全:Android 的 MimeTypeMap 认不认它,结果都是不补后缀
+    // —— 认得则扩展名正是 `opml`(名字已以它结尾,追加是空操作),不认则压根没有可补的扩展名。
+    // 见 H158。同一格的两条教训:①SAF 的 mime 参与文件名生成,不只是过滤器;
+    // ②这一行的提示(本轮才补)弹的是 `备份完成`,而产物名字是错的 —— 所以判据要看 `ls -l` 的文件名与字节数。
     val exportLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("application/xml")
+        ActivityResultContracts.CreateDocument("text/x-opml")
     ) { uri ->
         if (uri != null) scope.launch {
             val ok = exportOpml(context, container, uri)
