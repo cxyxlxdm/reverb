@@ -21,6 +21,8 @@ struct PlayerView: View {
     @State private var noteDraft = ""
     @State private var momentURL: URL?
     @State private var momentArtwork: NSImage?
+    /// 「保存剪藏」失败提示。取消不算失败,所以这个状态只由 `.failed` 置起(见 `ShareCardOutcome`)。
+    @State private var shareCardFailed = false
     @State private var page: Int? = 0   // 轮播当前页(macOS 14+)
     @State private var noteParagraphs: [String] = []   // 简介按段拆分(解析在渲染路径外,懒排版)
     @State private var noteForEpisode: String = ""      // 上述缓存对应的单集 id
@@ -51,6 +53,10 @@ struct PlayerView: View {
         }
         .frame(minWidth: 420, minHeight: 560)
         .noFocusRing()
+        // 只给标题、不给正文:与设置页那三条失败提示同形,文案对齐 Android / 鸿蒙的 `share_failed`。
+        .alert("分享图片生成失败", isPresented: $shareCardFailed) {
+            Button("好", role: .cancel) {}
+        }
     }
 
     // MARK: - 轮播:播放 / 简介 / 转录
@@ -377,7 +383,8 @@ struct PlayerView: View {
     }
 
     private func saveMoment(_ ep: Episode) {
-        saveWithPanel(card(ep), defaultName: "reverb-moment.png")
+        // 「取消」不提示(H147 / #99 的口径:用户按取消不是错误);只有真失败才出声。
+        if saveWithPanel(card(ep), defaultName: "reverb-moment.png") == .failed { shareCardFailed = true }
     }
 
     private var sleepActive: Bool { player.sleepRemainingMs > 0 || player.sleepEndOfEpisode }

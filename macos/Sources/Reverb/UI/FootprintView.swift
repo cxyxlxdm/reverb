@@ -7,6 +7,8 @@ struct FootprintView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var posterURL: URL?
+    /// 「保存海报」失败提示。取消不算失败,只有真写不出去才出声(见 `ShareCardOutcome`)。
+    @State private var shareCardFailed = false
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private let columns = [GridItem(.adaptive(minimum: 120, maximum: 160), spacing: 16)]
@@ -39,8 +41,10 @@ struct FootprintView: View {
                     }
                     ToolbarItem(placement: .primaryAction) {
                         Button {
-                            saveWithPanel(FootprintPoster(stamps: env.stamps.stamps, accent: accent),
-                                          defaultName: "reverb-footprint.png")
+                            // 失败要出声:两端同位置都有 `share_failed` 提示。原先这条路径整段静默
+                            // —— 渲染不出连面板都不弹,写不出去也没有任何反馈。取消仍静默,见 `ShareCardOutcome`。
+                            if saveWithPanel(FootprintPoster(stamps: env.stamps.stamps, accent: accent),
+                                             defaultName: "reverb-footprint.png") == .failed { shareCardFailed = true }
                         } label: {
                             Label("保存", systemImage: "square.and.arrow.down")
                         }
@@ -49,6 +53,9 @@ struct FootprintView: View {
             }
         }
         .tint(accent)
+        .alert("分享图片生成失败", isPresented: $shareCardFailed) {
+            Button("好", role: .cancel) {}
+        }
         .task(id: env.stamps.stamps.count) {
             guard !env.stamps.stamps.isEmpty else { posterURL = nil; return }
             posterURL = renderPNG(FootprintPoster(stamps: env.stamps.stamps, accent: accent))

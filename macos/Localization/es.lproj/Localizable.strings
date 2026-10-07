@@ -231,11 +231,12 @@
 "删除批注" = "Eliminar la anotación";
 "将删除这条批注，无法恢复。\n\n「%@」" = "Esta anotación se eliminará y no podrá recuperarse.\n\n« %@ »";
 
-/* 失败提示。前三条与 Android / 鸿蒙的渲染值逐字对齐(硬规矩 5);
+/* 失败提示。前四条与 Android / 鸿蒙的渲染值逐字对齐(硬规矩 5);
    后三条补的是本页「无法恢复备份」弹窗原先缺的译名。措辞取舍见 en.lproj 同段注释。 */
 "日志发送失败" = "No se pudieron enviar los registros";
 "保存失败" = "Error al guardar";
 "备份失败" = "Error en la copia";
+"分享图片生成失败" = "No se pudo crear la imagen para compartir";
 "无法恢复备份" = "No se pudo restaurar la copia";
 "好" = "OK";
 "这个文件无法识别为余音的备份,可能已损坏或来自不兼容的版本。" = "Este archivo no se reconoce como una copia de Reverb. Puede estar dañado o proceder de una versión incompatible.";
