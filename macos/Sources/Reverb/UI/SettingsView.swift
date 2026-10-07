@@ -33,6 +33,23 @@ private struct SettingsForm: View {
     private let skipBackOptions = [5, 10, 15, 30]
     private let skipForwardOptions = [15, 30, 45, 60]
 
+    /// 失败提示的三种标题。**这三条同时是本地化 key**,改动要连 Localization/*.lproj 一起改;
+    /// 文案对齐 Android / 鸿蒙的同名提示(硬规矩 5),取值口径见 Localization/en 同段注释。
+    /// 用枚举而不是 String:alert 的标题参数要 StaticString 形态的 LocalizedStringKey,
+    /// 运行期拼出来的 String 不会被查表本地化。
+    private enum Prompt: Equatable {
+        case none, sendFailed, saveFailed, backupFailed
+
+        var title: LocalizedStringKey {
+            switch self {
+            case .none: return ""
+            case .sendFailed: return "日志发送失败"
+            case .saveFailed: return "保存失败"
+            case .backupFailed: return "备份失败"
+            }
+        }
+    }
+
     @State private var showFootprint = false
     @State private var restorePayload: RestorePayload?
     @State private var restoreUnreadable = false
@@ -40,6 +57,7 @@ private struct SettingsForm: View {
     @State private var confirmClearLog = false
     @State private var logSizeText = ""
     @State private var shareLogURL: URL?
+    @State private var prompt: Prompt = .none
 
     var body: some View {
         Form {
@@ -214,6 +232,11 @@ private struct SettingsForm: View {
         } message: {
             Text("这个文件无法识别为余音的备份,可能已损坏或来自不兼容的版本。")
         }
+        // 只给标题、不给正文:Android / 鸿蒙上这三条本来就是 toast 的一句短语,
+        // 在这里换成 alert 也不新增双端没有的文案,免得同一件事在三端读出三种话。
+        .alert(prompt.title, isPresented: Binding(get: { prompt != .none }, set: { if !$0 { prompt = .none } })) {
+            Button("好", role: .cancel) {}
+        }
     }
 
     private var usageText: String {
@@ -225,13 +248,32 @@ private struct SettingsForm: View {
 
     // MARK: - 文件操作
 
+    /// 写盘并把成败交回调用方。原先这五处清一色 `try? … data(using:)?.write(to:)`:
+    /// 磁盘满、选了只读卷、沙箱拒绝时用户点了「导出」什么也不会发生,连日志都没有。
+    /// IO 留在 detached 线程(硬规矩 8:await 回来之后的同步计算照样占调用线程),
+    /// 只有 Bool 回主线程驱动提示。
+    private func writeText(_ text: String, to url: URL) async -> Bool {
+        await Task.detached {
+            do {
+                try text.write(to: url, atomically: true, encoding: .utf8)
+                return true
+            } catch {
+                Log.e("Settings", "写入失败:\(url.lastPathComponent)", error: error)
+                return false
+            }
+        }.value
+    }
+
     private func exportBackup() {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "reverb-backup.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let json = BackupManager.build(env, Set(BackupManager.Section.allCases))
-        Task.detached { try? json.data(using: .utf8)?.write(to: url) }
+        Task {
+            let ok = await writeText(json, to: url)
+            if !ok { prompt = .backupFailed }
+        }
     }
 
     private func restoreBackup() {
@@ -259,7 +301,12 @@ private struct SettingsForm: View {
         panel.allowedContentTypes = [UTType(filenameExtension: "opml") ?? .xml]
         guard panel.runModal() == .OK, let url = panel.url else { return }
         let xml = BackupManager.exportOPML(env)
-        Task.detached { try? xml.data(using: .utf8)?.write(to: url) }
+        Task {
+            // 失败提示与鸿蒙同口径(`backup_failed`):Android 这一格原先成功失败都不出声,
+            // 补的是 Android 那一侧,不是把这里改成静默。
+            let ok = await writeText(xml, to: url)
+            if !ok { prompt = .backupFailed }
+        }
     }
 
     private func importOPML() {
@@ -287,12 +334,14 @@ private struct SettingsForm: View {
     }
 
     /// 将当前完整日志写入临时文件,供 ShareLink 分享。
+    /// 失败时不弹提示:这个函数由 `.onAppear` 和「清空日志」自动调用,用户此刻并没有点「发送」,
+    /// 弹一句「日志发送失败」反而莫名其妙。改成把分享入口撤掉(ShareLink 只在有文件时渲染)+ 留日志。
     private func prepareShareLog() {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("reverb-log.txt")
         Task {
             let text = await Task.detached { Log.allText() }.value
-            try? text.data(using: .utf8)?.write(to: url, options: .atomic)
-            shareLogURL = url
+            let ok = await writeText(text, to: url)
+            shareLogURL = ok ? url : nil
         }
     }
 
@@ -303,7 +352,8 @@ private struct SettingsForm: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         Task {
             let text = await Task.detached { Log.allText() }.value
-            try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+            let ok = await writeText(text, to: url)
+            if !ok { prompt = .saveFailed }
         }
     }
 
@@ -313,7 +363,9 @@ private struct SettingsForm: View {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("reverb-log.txt")
         Task {
             let text = await Task.detached { Log.allText() }.value
-            try? text.data(using: .utf8)?.write(to: url, options: .atomic)
+            // 附件那份写不出去就别把邮件起草出去:否则用户发走的是一封挂着不存在/上一次内容的附件
+            let ok = await writeText(text, to: url)
+            guard ok else { prompt = .sendFailed; return }
             let ver = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
             let os = ProcessInfo.processInfo.operatingSystemVersionString
             let body = String(localized: "请描述你遇到的问题:\n\n\n——\n余音 macOS v\(ver) · \(os)") as NSString
