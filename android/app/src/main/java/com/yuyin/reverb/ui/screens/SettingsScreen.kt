@@ -155,26 +155,34 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             }
         }
     }
+    // 提示条:备份 / OPML / 日志三条导出与恢复共用同一个 AlertDialog(见下面 backupMsg?.let)。
+    // 这一行必须排在 exportLauncher **之前** —— Kotlin 的 lambda 只能捕获已声明的局部变量,
+    // 原先它声明在下面,是因为那时只有备份那两条回调引用它。
+    var backupMsg by remember { mutableStateOf<String?>(null) }
+
     val exportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/xml")
-    ) { uri -> if (uri != null) scope.launch { exportOpml(context, container, uri) } }
+    ) { uri ->
+        if (uri != null) scope.launch {
+            val ok = exportOpml(context, container, uri)
+            // 这一格原先成功失败都不出声 —— H142 判据④(失败必须出声)那轮只补了 share/mail 两条,
+            // OPML 导出漏了;鸿蒙 SettingsPage.exportOpml 一直是两条提示都有,所以补的是 Android 这一侧,
+            // 不是把鸿蒙改成静默。文案取 backup_done / backup_failed:这一行就在 sec_backup 段里,
+            // 与「完整备份」用同一个键(那一行也在 sec_backup 段里),不像 log_export 那样换成 saved_fail。
+            backupMsg = context.getString(if (ok) R.string.backup_done else R.string.backup_failed)
+        }
+    }
 
     var backupExportOpen by remember { mutableStateOf(false) }
     var backupExportSel by remember { mutableStateOf(BackupManager.Section.entries.toSet()) }
     var backupImportJson by remember { mutableStateOf<String?>(null) }
     var backupImportAvail by remember { mutableStateOf(emptySet<BackupManager.Section>()) }
     var backupImportSel by remember { mutableStateOf(emptySet<BackupManager.Section>()) }
-    var backupMsg by remember { mutableStateOf<String?>(null) }
     val backupExportLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/json")
     ) { uri ->
         if (uri != null) scope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching {
-                    val json = BackupManager.build(container, backupExportSel)
-                    context.contentResolver.openOutputStream(uri)?.use { it.write(json.toByteArray(Charsets.UTF_8)) }
-                }.isSuccess
-            }
+            val ok = writeTextViaSaf(context, uri) { BackupManager.build(container, backupExportSel) }
             backupMsg = context.getString(if (ok) R.string.backup_done else R.string.backup_failed)
         }
     }
@@ -197,11 +205,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
         // 这条行此前只有鸿蒙有 —— 补齐方向是给 Android 加,**不是**把鸿蒙那条删掉。
         // 走 SAF 而不是复用 `shareLog` 的 cacheDir:后者只给了分享目标,用户手上没有文件。
         if (uri != null) scope.launch {
-            val ok = withContext(Dispatchers.IO) {
-                runCatching {
-                    val text = com.yuyin.reverb.util.Logger.allText().ifBlank { "(暂无日志)" }
-                    context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
-                }.isSuccess
+            val ok = writeTextViaSaf(context, uri) {
+                com.yuyin.reverb.util.Logger.allText().ifBlank { "(暂无日志)" }
             }
             // 失败用 `saved_fail`(「保存失败」)而不是复用 `backup_failed`:这一行不在备份段里,
             // 弹一句「备份失败」会让人以为刚导出的备份坏了。
@@ -512,14 +517,29 @@ private suspend fun importOpml(context: Context, container: AppContainer, uri: U
     return podcasts.size
 }
 
-private suspend fun exportOpml(context: Context, container: AppContainer, uri: Uri) {
+private suspend fun exportOpml(context: Context, container: AppContainer, uri: Uri): Boolean =
+    writeTextViaSaf(context, uri) {
+        OpmlSupport.buildOpml(container.subscriptionStore.subscriptions.value)
+    }
+
+/**
+ * 经 SAF 把一段文本写到用户选的位置,返回**真实**成败。三条导出(备份 / OPML / 日志)共用。
+ *
+ * 两个坑都在「假成功」这一侧:
+ * ① `openOutputStream(uri)?.use { … }` 整个包在 `runCatching` 里,而 ContentResolver 的契约是
+ *    **打不开就返回 null、不抛异常** —— 于是 null 分支让 `isSuccess` 照样为 true,
+ *    用户看到「备份完成」而文件里什么都没有。这里把 null 变成 error,让它真的算失败。
+ * ② 生成文本(备份 JSON / OPML / 整份日志)也放在 `withContext(Dispatchers.IO)` 里面,
+ *    调用方只拿一个 Bool —— 大 JSON 序列化不能落到 UI 线程(硬规矩 8 的同一口径)。
+ */
+private suspend fun writeTextViaSaf(context: Context, uri: Uri, build: () -> String): Boolean =
     withContext(Dispatchers.IO) {
         runCatching {
-            val opml = OpmlSupport.buildOpml(container.subscriptionStore.subscriptions.value)
-            context.contentResolver.openOutputStream(uri)?.use { it.write(opml.toByteArray(Charsets.UTF_8)) }
-        }
+            val text = build()
+            context.contentResolver.openOutputStream(uri)?.use { it.write(text.toByteArray(Charsets.UTF_8)) }
+                ?: error("openOutputStream 返回 null(目标不可写):$uri")
+        }.onFailure { com.yuyin.reverb.util.Logger.e("Settings", "SAF 写入失败", it) }.isSuccess
     }
-}
 
 /**
  * 导出全部日志到 cacheDir/shares/ 并经系统分享面板发出(text/plain)。
