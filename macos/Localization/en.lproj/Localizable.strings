@@ -230,3 +230,17 @@
 "回到那一秒" = "Back to that second";
 "删除批注" = "Delete note";
 "将删除这条批注，无法恢复。\n\n「%@」" = "This note will be deleted for good.\n\n\"%@\"";
+
+/* 失败提示。前三条与 Android / 鸿蒙的同名提示逐字对齐(硬规矩 5),所以 "Couldn’t" 里
+   是**弯撇号** —— 那两个端的渲染值就是弯的,而本文件其余部分一律直撇号。
+   别顺手把它「统一」成直的:那正是要避免的跨端形态漂移(见 TROUBLESHOOTING H156 教训 ④)。
+   后三条是本页原有的「无法恢复备份」弹窗 —— 此前四套 .strings 一条都没译,
+   于是在英文系统上那一句仍然显示简体。
+   「备份失败」取的是 Android 的措辞:鸿蒙同位置是更泛的「操作未完成」(那边自己的注释也嫌它泛),
+   这属于已知的双端措辞差异,本轮不改动任何一端。 */
+"日志发送失败" = "Couldn’t send the logs";
+"保存失败" = "Save failed";
+"备份失败" = "Backup failed";
+"无法恢复备份" = "Couldn't restore the backup";
+"好" = "OK";
+"这个文件无法识别为余音的备份,可能已损坏或来自不兼容的版本。" = "This file isn't recognized as a Reverb backup. It may be corrupted or from an incompatible version.";
