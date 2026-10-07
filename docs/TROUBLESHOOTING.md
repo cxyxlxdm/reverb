@@ -6779,6 +6779,8 @@ Android 缺「出声」,鸿蒙缺「说清楚是哪件事失败」。
   不适用(用户选的落点在应用沙箱之外),而本仓库**没有任何测试源集**(`android/app/src` 下只有 `main/default/store`),
   写 instrumentation 测试等于新引入一整套测试依赖,不在本轮范围。三条候选注入杠杆记在任务里,没做到之前
   这条判据只到「编译 + 串在包里」。
+  **【当天稍晚闭合,见 H158】** 手法是「冻结本进程 → 让 SAF 落点在写之前变成同名目录 → 唤醒」,
+  两条候选杠杆(chmod / unlink)都实测无效、原因记在 H158;**命中的是 throw 臂,`return null` 那条臂至今没有证据。**
   ②macOS 没有任何运行证据(出包固定在另一台机器,见 AGENTS.md「macOS」与三-A)。
   ③片尾还剩一处同族静默**本轮没动**:`ShareCards.saveWithPanel:238` 的 `try? png.write(to:)`,
   以及同函数 `renderPNG` 返回 nil 时四个调用方(`FootprintView.swift:42/54`、`PlayerView.swift:376/380`、
@@ -6812,3 +6814,59 @@ AGENTS.md 里「本机对 macOS 改动的最强验收 = 整模块 typecheck 差�
    收益是它能被第三个人逐字复现;**而且写脚本的过程本身会逼你把每条规则的命中数摆出来** —— 这次的三条哑火就是这么发现的。
 ⑥ 这一轮三端**各缺一块、缺的是同一族**:macOS 缺出声、Android 缺一整行(没有 catch 因而不在清单上)、
    鸿蒙那一格是参照端。所以"对齐双端"的正确动作是**逐格问"这一格谁缺"**,而不是假定缺的总在桌面端。
+
+---
+
+### H158 SAF 的 mime 会参与**文件名**:导出出来的是一份 `.opml.xml`,而这一行的副标题写着「可导入其他播客 App」—— 附「在 user build 上造一次真·写失败」的可复现手法
+
+**现象**(2026-10-07)。起因不是找 bug,是给 H157 欠的那条「失败分支没在真机上走过」补取证。
+装上 debug 包跑「导出订阅(OPML)」,页面如期弹出 `备份完成`(这一行的提示本轮才补上),
+但落盘产物是 `Download/reverb-subscriptions.opml.xml` —— **双后缀**。
+同一格鸿蒙是 `Files.saveText('reverb-subscriptions.opml', …)`,落的是干净的 `.opml`。
+两端**界面**完全一致(标题、副标题、提示都对),差别只在**产物名**;而产物名正是那一行
+副标题承诺的那件事会被文件过滤器漏掉的形态。**这条差异在只看界面的任何一轮里都不可能被发现。**
+
+**根因** `ActivityResultContracts.CreateDocument(mimeType)` 的 mime **不只是过滤器**:
+MediaProvider 在 insert 时会查 `MimeTypeMap` 里该 mime 的注册扩展名,显示名不以它结尾就追加。
+这里传的是 `application/xml` ⇒ 注册扩展名 `xml` ⇒ `reverb-subscriptions.opml` 不以 `.xml` 结尾 ⇒ 追加成 `.opml.xml`。
+同段另外两行不受影响纯属巧合:`application/json` / `text/plain` 的注册扩展名(`json` / `txt`)本来就在名字结尾。
+
+**修法** 只改那一行的 mime 为 `text/x-opml`(注释写码旁边)。选它的理由是**两种情形都收敛到同一个结果**:
+Android 认得它 ⇒ 注册扩展名正是 `opml`,追加是空操作;不认得 ⇒ 压根没有可扩展名。
+「导入订阅」的过滤器本来就是 `*/*`,与导出 mime 无关,不用一起动。
+
+**验收**(真机 Pixel 3 / `com.yuyin.reverb.android.debug`,时间戳是设备钟)
+- ✅ 改后导出:`Download/reverb-subscriptions.opml`,364 B,头三段是 `<?xml …?>` / `<opml version="2.0">` / 两条 `<outline … xmlUrl="…">`,弹 `备份完成`。
+- ✅ 同轮复跑另外两行,证明改动范围只有这一行:`reverb-backup.json` 68,006 B、`reverb-log.txt` 85,288 B,名字都没被补后缀。
+- ✅ **H157 欠的失败分支走通了**,而且前两次尝试都**没造成失败**,这本身是结论:
+  ① `adb shell chmod 444 <落点>` —— 命令**执行成功但无效**,回读仍是 `-rw-rw----`(FUSE 不接受 shell 改权限);
+     而这是 production build,`adb root` 直接被拒(`adbd cannot run as root in production builds`),`ro.debuggable=0`。
+  ② `run-as <本包> kill -STOP <pid>` 冻住进程 → SAF 保存(新文件 0 B)→ `rm` 掉它 → `kill -CONT` 唤醒 ——
+     **UI 仍报成功**:MediaProvider 按 `_data` 路径把文件**重开了一份**(落盘出现同名 364 B 文件)。unlink 不是杠杆。
+  ③ 把 ② 的 `rm` 换成 `rm && mkdir 同名目录` ⇒ `openOutputStream` **抛**
+     `java.io.FileNotFoundException: Failed to open for writing: … open failed: EISDIR (Is a directory)`,
+     栈顶到 `SettingsScreen.kt:539`(即 `writeTextViaSaf`)。UI 弹 **`备份失败`**,目录没被写进任何字节。
+- ✅ 异常全文是从**应用自己的导出**里拉的:`Logger` 只把消息镜像到 logcat(`E/Reverb/Settings: SAF 写入失败`),
+  栈进日志文件;跑一遍「导出日志」把那 85 KB 拉到主机上 grep,才看到 EISDIR 那一行。
+- ⚠️ **`return null` 那条臂仍然没有真机证据。** ③ 走的是 provider 抛异常的路径;
+  `?: error("openOutputStream 返回 null(目标不可写):…")` 与它同在一条 `runCatching` 里、提示与日志完全相同,
+  但要专门造出"provider 不抛而是返回 null"在 user build 上没有可复现的杠杆。
+  **两条臂都编进去了,真机只验到一条,就按一句写。**
+- 设备还原:测试期间在 `Download/` 生成的 6 个产物(含那个同名目录)全部删净,回到动手前的空目录;应用数据(2 个订阅)未动。
+
+**教训与可复用的规律**
+
+① **「弹了成功提示」不等于「产物对」**。这一行的成败本轮刚修好,它错的是**名字**。
+   凡是「导出 / 保存到用户选的位置」这类格子,判据要落到 `adb shell ls -l` 的**完整文件名与字节数**上,
+   不能停在界面弹了对的话 —— 后者这轮已经证明能给出一份不可用的文件名还写着「备份完成」。
+② **SAF 的 mime 参与文件名生成,不只是过滤器。** 给 `CreateDocument` 传 mime 之前先问一遍
+   `MimeTypeMap` 会为它补什么后缀。鸿蒙侧没有这个机制,所以这个漂移是**平台机制差异**而非谁写错,
+   也正因此它只能靠比产物发现,靠读两端代码读不出来(两边代码看起来都"对")。
+③ **跨端一致性要比落盘产物,不是比界面。** 界面一致而产物不一致的格子,`docs/FEATURES.md` 的矩阵也照不出来。
+④ **在 user build 上造"授予之后、写之前"的时间窗 = 冻结自己的进程。**
+   `run-as <自己的 debug 包> kill -STOP <pid>` 能冻住自己,而 SAF 的 ActivityResult 是排队送达的,
+   于是"用户在系统选择器里点了保存"与"应用开始写"之间被拉开一个可以从主机操作的窗口(`STAT` 回读 `T` 确认冻住)。
+   任何需要"在 URI 授予之后改外部状态"的取证都能用这一形状。
+   **但 unlink 不够 —— provider 会重开文件;要把那个路径换成一个"同名的、不可写的东西"(目录)。**
+⑤ **应用自己的日志导出可以当取证通道**:失败现场不需要 root,只要把提示分支的日志落进文件、
+   再用同一轮里另一个已验通的导出行取出来。这比截 logcat 强,因为**用户手上拿到的就是这一份**。
