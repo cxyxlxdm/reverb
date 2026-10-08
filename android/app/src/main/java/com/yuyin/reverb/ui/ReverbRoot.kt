@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.RssFeed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -55,6 +56,7 @@ import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.MiniPlayer
 import com.yuyin.reverb.ui.screens.AboutScreen
 import com.yuyin.reverb.ui.screens.DiscoverScreen
+import com.yuyin.reverb.ui.screens.FeedScreen
 import com.yuyin.reverb.ui.screens.LibraryScreen
 import com.yuyin.reverb.ui.screens.LicensesScreen
 import com.yuyin.reverb.ui.screens.ListenStatsScreen
@@ -152,11 +154,11 @@ private fun FullScreen(content: @Composable () -> Unit) {
     }
 }
 
-/** 带底部栏的 tab 外壳：两个顶层 tab 常驻叠层(不走导航栈),详情 / 播放 / 设置由外层承载。 */
+/** 带底部栏的 tab 外壳：三个顶层 tab 常驻叠层(不走导航栈),详情 / 播放 / 设置由外层承载。 */
 @Composable
 private fun MainShell(rootNav: NavHostController) {
     /**
-     * 两个顶层 tab **不走导航栈**,叠在同一个 Box 里用 [tabKept] 切换。
+     * 三个顶层 tab **不走导航栈**,叠在同一个 Box 里用 [tabKept] 切换。
      *
      * 为什么(2026-09-28,Pixel 3 实测):「换 tab 卡」这条被报了**三次**,前两次都当成
      * "切换时多画了一段东西"——第一次怀疑玻璃栏逐帧读 size,第二次抓到 NavHost 缺省的
@@ -172,21 +174,28 @@ private fun MainShell(rootNav: NavHostController) {
      * 于是成本既不在转场、也不在底部栏、也不在分段内容,而在**切走的那一页被整个 dispose**:
      * NavHost 只组合当前 entry,切回来要从零 compose,而且进页的刷新会重跑
      * (logcat 里每次切回发现都重发一次 `Charts.topByGenre`,切进音阁重发一次
-     * `InboxStore.refresh`)。叠层之后两页共存:每页只在**第一次被选中**时建一次
-     * (`seenLibrary` 那笔账见下面注释),之后切换只是翻一个布尔。
+     * `InboxStore.refresh`)。叠层之后每页只在**第一次被选中**时建一次(`seen*` 那笔账见下面注释),
+     * 之后切换只是翻一个整数。**加第三格时必须继续走这套**(见 H108),不能退回 NavHost。
      */
     val tabs = listOf(
         GlassTabSpec(stringResource(R.string.nav_discover), Icons.Rounded.Explore),
+        GlassTabSpec(stringResource(R.string.nav_feed), Icons.Rounded.RssFeed),
         GlassTabSpec(stringResource(R.string.nav_library), Icons.Rounded.LibraryMusic)
     )
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    /// 音阁建过没有。**懒**建它有两个理由:① 冷启动不该为一个没打开的页面付 compose 的钱;
-    /// ② 进音阁会顺带触发「最新」的进页刷新(`InboxBody` 的 LaunchedEffect),
-    ///    冷启就多发一轮网络请求。首建之后一直留着 —— 留着才是要解决的问题。
+    /// 追更 / 音阁各建过没有。**懒**建它们的理由分两条:
+    /// ① 冷启动不该为一个没打开的页面付 compose 的钱;
+    /// ② **进了那一页才会发它自己的那笔请求** —— 追更一建就触发 `InboxBody` 的进页刷新
+    ///    (合并所有订阅拉最新单集,可能十几个源),音阁一建会读六段的数据。
+    ///    这条从 2 格变 3 格之后更重要:原先「进音阁顺带刷最新」是因为两者在同一棵子里,
+    ///    现在拆开了,刷新只跟着追更那一格走。
+    /// 首建之后一直留着 —— 留着才是要解决的问题(见上面那段差分)。
+    var seenFeed by rememberSaveable { mutableStateOf(false) }
     var seenLibrary by rememberSaveable { mutableStateOf(false) }
 
     fun select(i: Int) {
-        if (i == 1) seenLibrary = true
+        if (i == 1) seenFeed = true
+        if (i == 2) seenLibrary = true
         selectedTab = i
     }
 
@@ -211,10 +220,11 @@ private fun MainShell(rootNav: NavHostController) {
     // navigationBarsPadding 管。
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         CompositionLocalProvider(LocalGlassBottomPad provides bottomPad) {
-            // 两页叠在一起,谁可见由 selectedTab 决定。**不要用 if 把它们互斥包起来** ——
+            // 三页叠在一起,谁可见由 selectedTab 决定。**不要用 if 把它们互斥包起来** ——
             // 那就退回"切走即销毁"的老问题(见 MainShell 上面那段差分)。
             // [tabKept] 的语义是"照样测量与布局,但不画、不进无障碍树";
             // 隐藏页因此一直占好尺寸,切回来第一帧就是对的。
+            // 组合顺序按底部栏的格序排(发现 → 追更 → 音阁),这样页号与代码位置对得上。
             Box(
                 Modifier
                     .fillMaxSize()
@@ -223,12 +233,22 @@ private fun MainShell(rootNav: NavHostController) {
             ) {
                 DiscoverScreen(onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") })
             }
-            if (seenLibrary) {
+            if (seenFeed) {
                 Box(
                     Modifier
                         .fillMaxSize()
                         .zIndex(if (selectedTab == 1) Z_VISIBLE else Z_HIDDEN)
                         .tabKept(selectedTab != 1)
+                ) {
+                    FeedScreen()
+                }
+            }
+            if (seenLibrary) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(if (selectedTab == 2) Z_VISIBLE else Z_HIDDEN)
+                        .tabKept(selectedTab != 2)
                 ) {
                     LibraryScreen(
                         onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
@@ -237,7 +257,9 @@ private fun MainShell(rootNav: NavHostController) {
                     )
                 }
             }
-            // **吸收层**:夹在两页之间(命中顺序 可见页 [Z_VISIBLE] → 吸收层 [Z_SHIELD] → 隐藏页 [Z_HIDDEN])。
+            // **吸收层**:夹在所有内容页之上、底部栏之下(命中顺序 可见页 [Z_VISIBLE] → 吸收层 [Z_SHIELD] → 隐藏页 [Z_HIDDEN])。
+            // 隐藏页现在有两张(追更 / 音阁),它们都在 Z_HIDDEN 同一档,而吸收层排在**全部**内容页之后,
+            // 所以这一层照样挡得住两张 —— 不需要按页各摆一颗。
             //
             // 为什么必须有这一层(2026-09-28,Pixel 3 实测):整层摘掉之后,在「发现」的真空白处
             // 点一下 —— 坐标正好压在隐藏那页的「下载 / 收藏」chip 上 —— 切回音阁**分段真的被改了**。

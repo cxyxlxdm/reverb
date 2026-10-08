@@ -210,8 +210,18 @@ export class DownloadManager {
       const settings = this.settings;
       if (settings !== null && settings.allowCellular) return DownloadResult.STARTED;
       const netCap = caps.networkCap;
-      const notMetered = netCap === undefined
+      // 空数组与 undefined 同等对待:那都是"系统没告诉我们计费与否",按不计费放行
+      // (与上面「拿不到 capability 时放行」同口径 —— 拦下载比拦错下载更烦人)。
+      // 只兜 undefined 的旧写法若真遇上 `[]`,会在连着 Wi-Fi 的机器上弹「当前不是 Wi-Fi」。
+      const notMetered = netCap === undefined || netCap.length === 0
         || netCap.indexOf(connection.NetCap.NET_CAPABILITY_NOT_METERED) >= 0;
+      if (!notMetered) {
+        // 拦下来的时候把系统给的两组 capability 原样打出来:这条判据按 networkCap 判,
+        // 而用户看到的是「按用量计费」的提示 —— 只有这两个数组能分辨"真连着计费网"
+        // 与"设备上报得不对"(见 H162)。放行时不打,免得正常路径每次下载都刷一行。
+        Log.i('Download', `闸门拦下 bearer=${JSON.stringify(caps.bearerTypes)} `
+          + `cap=${JSON.stringify(netCap)} 判定=计费`);
+      }
       return notMetered ? DownloadResult.STARTED : DownloadResult.WIFI_REQUIRED;
     } catch (e) {
       Log.w('Download', `读取当前网络失败 ${(e as Error).message}`);

@@ -73,14 +73,17 @@ import com.yuyin.reverb.ui.components.formatTime
 import kotlinx.coroutines.launch
 
 /**
- * 音阁三段的「列身份」。同一个串用在**两处**:段条右端那颗模式按钮按它读写自己那一格,
+ * 音阁各段的「列身份」。同一个串用在**两处**:段条右端那颗模式按钮按它读写自己那一格,
  * 段内某一行起播时把它随 `playQueue` 传下去(装机日志里 `tag='…'` 读到的就是它)。
  * 两边必须是同一个值 —— 否则「在这一列设的模式」和「这一列起播时用的模式」各走各的,
  * 而且不会报错,只会表现成"设了没生效"。
  *
- * 频道主页用的是 `"podcast:" + (feedUrl 或频道名)`,那个前缀保证它撞不上这三个。
+ * 频道主页用的是 `"podcast:" + (feedUrl 或频道名)`,那个前缀保证它撞不上这些。
+ *
+ * 「最新」那一列的 `TAG_INBOX` 不在这里:2026-10-08 它提升成顶层「追更」页,串跟着
+ * 搬到 `InboxScreen.kt`。**值一个字母没改** —— 模式是按这个串存盘的,改值会让用户
+ * 设备上已设的那一格静默失效。
  */
-const val TAG_INBOX = "inbox"
 const val TAG_FAV = "fav"
 const val TAG_DL = "dl"
 
@@ -93,15 +96,21 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
     // 订阅分段右端那颗「行 / 宫格」切换要按**有没有内容**决定摆不摆,
     // 所以这份数据在**栏这一层**也要读一遍(订阅页自己还会再 collect 同一个 flow ——
     // StateFlow 的订阅很轻,且这个列表只在进页刷新时整体替换,不会逐帧变)。
-    // 最新 / 收藏 / 下载三份**不在这里读了**:段尾那颗现在只有播放模式,与列空不空无关。
+    // 收藏 / 下载两份**不在这里读了**:段尾那颗现在只有播放模式,与列空不空无关。
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
+    // 待播段右端那颗「清空」同样要按有没有内容决定摆不摆,所以队列也在栏这一层读一份
+    // (`userQueue` 是 StateFlow,只在用户排队/移除时整体替换,不会逐帧变)。
+    val queue by PlayerController.userQueue.collectAsStateWithLifecycle()
     // 分段用 HorizontalPager 承载,可横滑切换;chips 与 pager 双向联动。
-    // 订阅 / 最新 / 收藏 / 下载 / 历史 / 批注。「最新」= 全部订阅的更新聚合,归入音阁。
+    // 订阅 / 收藏 / 下载 / 待播 / 历史 / 批注。
+    // 「最新」不在这份列表里了:2026-10-08 它提升成底部第三格「追更」(见 `FeedScreen`),
+    // 音阁这一层同时放进「待播」。页号因此是**净不移位** —— 删掉 1 号段把后面全往前顶一位,
+    // 又把待播插在历史之前把它们顶回来,所以 4=历史、5=批注 和改之前一样。
     val sections = listOf(
         stringResource(R.string.lib_subscriptions),
-        stringResource(R.string.nav_inbox),
         stringResource(R.string.lib_favorites),
         stringResource(R.string.lib_downloads),
+        stringResource(R.string.lib_queue),
         stringResource(R.string.lib_history),
         stringResource(R.string.lib_notes)
     )
@@ -134,9 +143,11 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
             ) { page ->
                 when (page) {
                     0 -> SubscriptionsSection(subsGrid, onOpen)
-                    1 -> InboxBody(topPad = GLASS_CHIPS_TOP_PAD)
-                    2 -> FavoritesSection()
-                    3 -> DownloadsSection()
+                    1 -> FavoritesSection()
+                    2 -> DownloadsSection()
+                    // 待播段就是 `PlayerController.userQueue` 本体 —— 与独立队列页同源,
+                    // 不是另一份列表。复用 `QueueBody`(独立页标题栏以下的那一段)。
+                    3 -> QueueBody(topPad = GLASS_CHIPS_TOP_PAD)
                     // 从这里开始**必须写显式页号**:原来是 `else -> HistorySection`,
                     // 加第 6 段时若不拆开,历史会被挤到批注段的位置上(点了历史看到批注)。
                     4 -> HistorySection(history)
@@ -167,17 +178,22 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                 //  · 也不放「清空」—— 批注是用户自己写的字,一键清光没有回旋余地
                 //    (`NoteStore` 也没有 clear),要删只能逐条删。
                 endAction = {
-                    // 三段单集列表(最新 / 收藏 / 下载):一颗**本列的播放模式按钮**。
+                    // 两段单集列表(收藏 / 下载):一颗**本列的播放模式按钮**。
                     // 三态图标与点击口径收在 `Components.kt PlayModeButton`
-                    // (频道主页「共 N 集」那一行右端用的是同一颗)。
-                    // 三段各有一份模式,所以这里传的是**这一段自己的** tag —— 三段看到三个值。
-                    if (section in 1..3) PlayModeButton(
-                        when (section) {
-                            1 -> TAG_INBOX
-                            2 -> TAG_FAV
-                            else -> TAG_DL
-                        }
+                    // (频道主页「共 N 集」那一行与顶层「追更」页用的都是同一颗)。
+                    // 两段各有一份模式,所以这里传的是**这一段自己的** tag —— 两段看到两个值。
+                    if (section == 1 || section == 2) PlayModeButton(
+                        if (section == 1) TAG_FAV else TAG_DL
                     )
+                    // 待播段**刻意不挂模式按钮**:这一列就是 `PlayerController.userQueue` 本体,
+                    // 起播走 `playFromQueue`,模式(顺序/单曲循环/随机)在播放器那一层已经生效。
+                    // 给它挂一颗,它改的是"另一列的设置"而那一列就是它自己 —— 只是多一个能设错的地方。
+                    if (section == 3 && queue.isNotEmpty()) {
+                        TextButton(
+                            onClick = { PlayerController.clearQueue() },
+                            contentPadding = PaddingValues(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
+                        ) { Text(stringResource(R.string.action_clear_confirm)) }
+                    }
                     if (section == 4 && history.isNotEmpty()) {
                         TextButton(
                             onClick = { container.historyStore.clear() },

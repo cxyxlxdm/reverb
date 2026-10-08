@@ -127,7 +127,7 @@ export struct PodcastDetailPage {
    * 这一列的身份:头部那颗模式按钮靠它读写**这一列自己的**播放模式,起播时也随
    * `playQueue` 传下去(装机日志里 `tag='…'` 读到的就是它)。
    * 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名会把两家的设置串成一格。
-   * 加前缀是为了**永不可能**撞上音阁那三个分段名("inbox" / "fav" / "dl")。
+   * 加前缀是为了**永不可能**撞上那三个列身份串("inbox"「追更」/ "fav" / "dl")。
    */
   private listTag(): string {
     return `podcast:${this.channelKey()}`;

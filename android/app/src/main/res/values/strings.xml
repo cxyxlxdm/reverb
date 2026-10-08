@@ -41,6 +41,7 @@
 
     <string name="nav_discover">发现</string>
     <string name="nav_library">音阁</string>
+    <string name="nav_feed">追更</string>
 
     <!-- 通用 -->
     <string name="action_cancel">取消</string>
@@ -173,6 +174,7 @@
     <string name="lib_downloads">下载</string>
     <string name="lib_history">历史</string>
     <string name="lib_notes">批注</string>
+    <string name="lib_queue">待播</string>
     <string name="empty_library">音阁尚空，先去「发现」订阅几档好节目</string>
     <string name="empty_downloads">还没有下载。在节目详情里点下载按钮，即可离线收听</string>
     <string name="empty_history">还没有收听记录，去听一集吧</string>
@@ -324,7 +326,7 @@
     <string name="about_h_what">这是什么</string>
     <string name="about_p_what">余音是一款轻量的播客客户端。发现好节目、订阅收听、离线下载、随时续播，专注「听」本身。</string>
     <string name="about_h_features">主要功能</string>
-    <string name="about_p_features">· 发现：按地区与分类浏览每日热门，可自定义分类排序、横滑切换\n· 搜索：按名字或直接粘贴 RSS 地址\n· 频道分享：生成含 Logo、频道名、简介与余音落款的图片\n· 音阁：订阅、最新、收藏、下载、历史、批注六栏管理\n· 离线下载：边听边缓存，可仅 Wi-Fi 下载\n· 逐字稿：本机离线转写，或直接读发布方提供的稿\n· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播、后台与锁屏控制\n· 批注：听到某一句有感触，就记下那一秒和此刻的一句话；音阁「批注」栏把它们连成一条时间线，点一下从那一句接着听\n· 节目笔记：播放页横滑查看\n· 订阅更新提醒：有新一期时通知\n· 系统级备份：订阅、收藏、历史、下载记录（仅链接）、印记、批注、收听统计与设置随系统备份与换机迁移，音频与逐字稿不在备份内\n· 外观：深色/浅色/跟随系统、字号、主题配色、多语言</string>
+    <string name="about_p_features">· 发现：按地区与分类浏览每日热门，可自定义分类排序、横滑切换\n· 搜索：按名字或直接粘贴 RSS 地址\n· 频道分享：生成含 Logo、频道名、简介与余音落款的图片\n· 追更：订阅频道的新单集集中在一个分栏，可下拉刷新、单独设这一栏的播放模式\n· 音阁：订阅、收藏、下载、待播、历史、批注六栏管理\n· 离线下载：边听边缓存，可仅 Wi-Fi 下载\n· 逐字稿：本机离线转写，或直接读发布方提供的稿\n· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播、后台与锁屏控制\n· 批注：听到某一句有感触，就记下那一秒和此刻的一句话；音阁「批注」栏把它们连成一条时间线，点一下从那一句接着听\n· 节目笔记：播放页横滑查看\n· 订阅更新提醒：有新一期时通知\n· 系统级备份：订阅、收藏、历史、下载记录（仅链接）、印记、批注、收听统计与设置随系统备份与换机迁移，音频与逐字稿不在备份内\n· 外观：深色/浅色/跟随系统、字号、主题配色、多语言</string>
     <string name="about_h_philosophy">设计理念</string>
     <string name="about_p_philosophy">美学上取「水墨 + 青瓷 + 梁金」的底色，名字与图标呼应「余音绕梁」——声波环绕横梁，余韵不散。\n\n取源上坚持全链路免费、无需登录、无需任何 API Key：检索一律基于公开来源，最终始终回到发布方自己的 RSS，直接流式播放原始音频——版权干净、成本为零。\n\n隐私上，订阅、历史和下载保存在设备本地，不向开发者自动上传，也不用于跨应用追踪。</string>
 
@@ -349,7 +351,6 @@
     <string name="notif_multi_more">等</string>
 
     <!-- 最新 / 继续收听 / 播放队列 -->
-    <string name="nav_inbox">最新</string>
     <string name="continue_listening">继续收听</string>
     <string name="home_latest">最新更新</string>
     <string name="mark_played">标记为已播完</string>
@@ -357,12 +358,12 @@
     <string name="queue_play_next">下一个播放</string>
     <string name="queue_add">加入队列</string>
     <string name="queue_added">已加入播放队列</string>
-    <string name="queue_title">播放队列</string>
+    <string name="queue_title">待播</string>
     <string name="queue_empty">队列是空的。长按单集「加入队列」，排着慢慢听</string>
     <string name="inbox_empty_no_subs">还没有订阅。去「发现」订阅几档，新一期就会汇到这里</string>
     <string name="inbox_empty_no_updates">暂无最新内容，下拉试试刷新</string>
     <string name="a11y_played">已播完</string>
-    <string name="a11y_queue">播放队列</string>
+    <string name="a11y_queue">待播</string>
     <string name="a11y_queue_up">上移</string>
     <string name="a11y_queue_down">下移</string>
     <string name="a11y_queue_remove">移出队列</string>

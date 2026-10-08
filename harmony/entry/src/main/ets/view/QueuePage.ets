@@ -3,10 +3,13 @@ import { L } from '../util/L';
 import { Episode } from '../model/Models';
 import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, Artwork, Glyph, Sym } from './Widgets';
-import { formatDurationSec } from './Components';
+import { formatDurationSec, CHIPS_RESERVE_H } from './Components';
 
-/// 播放队列(up next):点击单集直接跳播(摘出立即播),上移 / 下移 / 移除 / 清空。
+/// 待播(up next):点击单集直接跳播(摘出立即播),上移 / 下移 / 移除 / 清空。
 /// 对应 Android `QueueScreen.kt`。队列语义由 PlayerController 持有(优先于上下文队列)。
+///
+/// 标题栏里那颗「清空」**只在独立页出现**:音阁里它是内嵌的一个分段,那颗动作由
+/// 分段条右端去摆(`LibraryPage.barActions()`),与「历史」段同一个走法。
 @Component
 export struct QueuePage {
   @Prop scheme: Scheme;
@@ -33,6 +36,36 @@ export struct QueuePage {
       .width('100%')
       .alignItems(VerticalAlign.Center)
 
+      // 列表本体与音阁那个分段**共用一个组件**(下面是空态,也是一个组件里的两分支),
+      // 免得两处各写一遍行的操作与 key 规则 —— 那两条坑(H145 的 idx-in-key)会各修一半。
+      QueueBody({
+        scheme: this.scheme, fontScale: this.fontScale, player: this.player,
+        bottomPad: 0, chipReserve: false
+      })
+        .layoutWeight(1)
+    }
+    .width('100%')
+    .height('100%')
+  }
+}
+
+/**
+ * 待播列表主体(不含标题栏与那颗「清空」),供音阁「待播」段内嵌复用 ——
+ * 与 Android 的 `QueueBody` 同一个形状。
+ *
+ * @param chipReserve 内嵌在玻璃分段条下面时要顶出一行占位(独立页不需要)。
+ *   与音阁其余分段同一走法:那几段用 `List` 的首个占位 `ListItem`,因为分段条是悬浮的。
+ */
+@Component
+export struct QueueBody {
+  @Prop scheme: Scheme;
+  @Prop fontScale: number;
+  @Prop bottomPad: number = 0;
+  @Prop chipReserve: boolean = false;
+  @ObjectLink player: PlayerController;
+
+  build() {
+    Column() {
       if (this.player.userQueue.length === 0) {
         EmptyHint({
           scheme: this.scheme, fontScale: this.fontScale,
@@ -41,6 +74,11 @@ export struct QueuePage {
           .layoutWeight(1)
       } else {
         List() {
+          if (this.chipReserve) {
+            ListItem() {
+              Row().width('100%').height(CHIPS_RESERVE_H)
+            }
+          }
           ForEach(this.player.userQueue, (e: Episode, idx: number) => {
             ListItem() {
               this.row(e, idx)
@@ -52,6 +90,7 @@ export struct QueuePage {
           //   同一次冻结还让图标亮暗停在初始判定上(见 H145)。队列只有几十条,重建代价可忽略。
         }
         .scrollBar(BarState.Off)
+        .contentEndOffset(this.bottomPad)
         .layoutWeight(1)
       }
     }

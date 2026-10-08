@@ -10,6 +10,7 @@ import { RadioStation } from '../playback/RadioStation';
 import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint, Glyph, Sym } from '../view/Widgets';
 import { DiscoverPage } from '../view/DiscoverPage';
+import { FeedPage } from '../view/FeedPage';
 import { PodcastDetailPage } from '../view/PodcastDetailPage';
 import { NoteStore, EpisodeNote } from '../store/NoteStore';
 import { PlayerPage } from '../view/PlayerPage';
@@ -30,7 +31,7 @@ import type common from '@ohos.app.ability.common';
 import window from '@ohos.window';
 import { TapGuard } from '../util/TapGuard';
 
-/// 顶层外壳:Navigation 承载全屏页(频道详情等),内页是「发现 / 音阁」两 tab。
+/// 顶层外壳:Navigation 承载全屏页(频道详情等),内页是「发现 / 追更 / 音阁」三 tab。
 /// 与 Android 一致的取舍:全屏页整体转场,底部栏不产生占位跳动。
 @Entry
 @Component
@@ -40,7 +41,8 @@ struct Index {
    *
    * 为什么不让页面自己 `AppContainer.get().xxx` 取(那样代码更短):那样拿到的是
    * **未被 ArkUI 观察**的裸对象,改了字段页面不会重渲。音阁的宫格切换/清空历史/删除下载、
-   * 「最新」刷新结果上屏,以及设置页的配色,都曾因此点了没反应 —— 有些看着正常,
+   * 「追更」(2026-10-08 之前它是音阁的「最新」段)刷新结果上屏,以及设置页的配色,都曾因此
+   * 点了没反应 —— 有些看着正常,
    * 只是恰好被别的 `@State` 变化(切分段、关对话框、播放状态 tick)顺带刷新了,属偶然。
    * 详见 TROUBLESHOOTING H26 / H27。
    */
@@ -446,13 +448,26 @@ struct Index {
 
 
           TabContent() {
+            FeedPage({
+              scheme: this.scheme(),
+              fontScale: this.fontScale(),
+              player: this.player,
+              inbox: this.inbox,
+              subscriptions: this.subscriptions,
+              history: this.history,
+              bottomPad: this.underBarPad(),
+              onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
+            })
+          }
+
+
+          TabContent() {
             LibraryPage({
               scheme: this.scheme(),
               fontScale: this.fontScale(),
               player: this.player,
               settings: this.settings,
               subscriptions: this.subscriptions,
-              inbox: this.inbox,
               favorites: this.favorites,
               downloads: this.downloads,
               history: this.history,
@@ -508,6 +523,7 @@ struct Index {
           inset: this.bottomInset,
           items: [
             { label: $r('app.string.nav_discover'), icon: $r('app.media.ic_tab_discover') },
+            { label: $r('app.string.nav_feed'), icon: $r('app.media.ic_tab_feed') },
             { label: $r('app.string.nav_library'), icon: $r('app.media.ic_tab_library') }
           ],
           onSelect: (i: number) => { this.tab = i; }

@@ -175,7 +175,8 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                     // `tag='…'` 认出点的是哪一列),右端那颗模式按钮也按它读写**本列**的模式。
                     // 用 feedUrl 而不是频道名 —— 同名频道不少,撞了名既分不出日志,也会
                     // 让两个频道共用同一格模式。
-                    // 加前缀是为了**永不可能**撞上音阁那三个分段名(TAG_INBOX / TAG_FAV / TAG_DL)。
+                    // 加前缀是为了**永不可能**撞上那三个列身份串(TAG_INBOX「追更」/ TAG_FAV / TAG_DL,
+                    // 后者两个仍在音阁,前者 2026-10-08 跟着那一列搬到了 InboxScreen)。
                     val listTag = "podcast:$channelKey"
                     LazyColumn(
                         Modifier.fillMaxSize(),

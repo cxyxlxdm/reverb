@@ -41,6 +41,7 @@
 
     <string name="nav_discover">Discover</string>
     <string name="nav_library">Library</string>
+    <string name="nav_feed">Updates</string>
 
     <string name="action_cancel">Cancel</string>
     <string name="action_know">Got it</string>
@@ -167,6 +168,7 @@
     <string name="lib_downloads">Downloads</string>
     <string name="lib_history">History</string>
     <string name="lib_notes">Notes</string>
+    <string name="lib_queue">Up next</string>
     <string name="empty_library">Your Library is empty — subscribe to a few shows from Discover</string>
     <string name="empty_downloads">No downloads yet. Tap the download button on an episode to listen offline</string>
     <string name="empty_history">No listening history yet — go play an episode</string>
@@ -310,7 +312,7 @@
     <string name="about_h_what">What is this</string>
     <string name="about_p_what">Reverb is a lightweight podcast client with an ink-and-wash aesthetic. Discover shows, subscribe, download for offline, and resume anytime — focused on listening.</string>
     <string name="about_h_features">Features</string>
-    <string name="about_p_features">· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: by name or paste an RSS URL\n· Share shows: create an image with the show artwork, title and Reverb branding\n· Library: six shelves — subscriptions, latest, favorites, downloads, history, notes\n· Offline downloads: cache while listening, Wi-Fi-only optional\n· Transcript: transcribe on device, or read the publisher\'s own transcript\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background &amp; lock-screen controls\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player\n· New-episode notifications\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent color, multiple languages</string>
+    <string name="about_p_features">· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: by name or paste an RSS URL\n· Share shows: create an image with the show artwork, title and Reverb branding\n· Updates: every new episode from the shows you follow, on its own tab\n· Library: six shelves — subscriptions, up next, favorites, downloads, history, notes\n· Offline downloads: cache while listening, Wi-Fi-only optional\n· Transcript: transcribe on device, or read the publisher\'s own transcript\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background &amp; lock-screen controls\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player\n· New-episode notifications\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent color, multiple languages</string>
     <string name="about_h_philosophy">Design</string>
     <string name="about_p_philosophy">Visually it draws on ink, celadon and beam-gold — the name and icon echo “an echo circling the rafters.”\n\nFor sources it stays entirely free, no login, no API key: discovery relies on public sources, and it always returns to the publisher’s own RSS and streams the original audio — copyright-clean, zero cost.\n\nFor privacy, subscriptions, history and downloads stay on your device, are not automatically uploaded to the developer, and are not used for cross-app tracking.</string>
 
@@ -333,7 +335,6 @@
     <string name="notif_multi_more">and more</string>
 
     <!-- Latest / Continue listening / Up next -->
-    <string name="nav_inbox">Latest</string>
     <string name="continue_listening">Continue listening</string>
     <string name="home_latest">Latest episodes</string>
     <string name="mark_played">Mark as played</string>

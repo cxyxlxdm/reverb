@@ -3,7 +3,7 @@ import { Log } from '../util/Logger';
 import { FrameCallback } from '@kit.ArkUI';
 import image from '@ohos.multimedia.image';
 
-/// tab 项规格:图标与文案。数量由父级决定(当前恒为 2)。
+/// tab 项规格:图标与文案。数量由父级决定,本组件按 `items.length` 算槽位(曾经写死 2)。
 export interface TabSpec {
   label: Resource;
   icon: Resource;
@@ -616,18 +616,22 @@ export struct GlassTabBar {
     this.dropBackdrop();
   }
 
-  /// 栏的中线(= 两个槽位的分界)。两项对称,所以分界永远在 barW/2。
-  private halfW(): number {
-    return this.barW / 2;
+  /**
+   * 一格槽宽。两项时它与旧的「栏中线 × 2 / 2」等价,所以两格时代的命中判定不动;
+   * 槽数必须由 items.length 来 —— 写死 2 的话第三格压根点不到(只会返回 0/1)。
+   * items 为空时按 1 槽算,避开除零(那种状态下栏本来也不可见)。
+   */
+  private slotW(): number {
+    return this.barW / Math.max(1, this.items.length);
   }
 
   /**
-   * 第 idx 项内容块的中心。两项不再"半栏均分",而是对称地放进
-   * [ITEM_INSET, barW - ITEM_INSET] 这条带里 —— 两个按钮之间的间距就是这么收小的。
+   * 第 idx 项内容块的中心。各项不再"半栏均分",而是对称地放进
+   * [ITEM_INSET, barW - ITEM_INSET] 这条带里 —— 按钮之间的间距就是这么收小的。
    */
   private slotCx(idx: number): number {
     const band: number = this.barW - ITEM_INSET * 2;
-    return ITEM_INSET + band * (idx + 0.5) / 2;
+    return ITEM_INSET + band * (idx + 0.5) / Math.max(1, this.items.length);
   }
 
   /**
@@ -639,9 +643,32 @@ export struct GlassTabBar {
     return this.slotCx(idx) - REST_W / 2;
   }
 
+  /**
+   * 药丸静止底前缘在 px 时,**离它最近的那一格**。
+   * 两项时它与「中线两侧」等价;三格以后必须逐格比距离 —— 写死 (0,1) 的中点判据
+   * 会让中间那一格既吸不进来、也判不出去。
+   */
+  private nearestSlot(px: number): number {
+    const n: number = Math.max(1, this.items.length);
+    let best = 0;
+    let bestDist = Number.MAX_VALUE;
+    for (let i = 0; i < n; i++) {
+      const d: number = Math.abs(px - this.pillXFor(i));
+      if (d < bestDist) {
+        bestDist = d;
+        best = i;
+      }
+    }
+    return best;
+  }
+
   /// 触摸点落在哪个 tab 上。x 是相对组件左上角的本地坐标(common.d.ts TouchObject.x)。
+  /// 判定按「均分槽位取整」而不是「离哪个槽心最近」—— 后者会把已选中那一格的右半边
+  /// 判给邻格(Android 那边同一个坑记在 H90)。
   private tabAtLocal(x: number): number {
-    return x < this.halfW() ? 0 : 1;
+    if (this.slotW() <= 0) return 0;
+    const n: number = Math.max(1, this.items.length);
+    return Math.min(n - 1, Math.max(0, Math.floor(x / this.slotW())));
   }
 
   /// 高亮跟随谁:拖动中跟手指(提前预告落点),平时跟选中项。
@@ -786,7 +813,7 @@ export struct GlassTabBar {
     this.dragging = false;
     this.nearIdx = -1;
     this.previewIdx = -1;
-    const target = this.pillX < (this.pillXFor(0) + this.pillXFor(1)) / 2 ? 0 : 1;
+    const target = this.nearestSlot(this.pillX);
     if (switchable && target !== this.tab) {
       // 药丸不在这里动:tab 一变 @Watch 会统一吸附
       this.onSelect(target);
@@ -1051,14 +1078,14 @@ export struct GlassTabBar {
           .onActionUpdate((e: GestureEvent) => {
             // offsetX 单位是 vp(gesture.d.ts 明确标注),与布局坐标同单位,直接相加
             const lo = this.pillXFor(0);
-            const hi = this.pillXFor(1);
+            const hi = this.pillXFor(Math.max(0, this.items.length - 1));
             /**
              * 前缘 1:1 跟手 —— 赋值,不起动画(动画会让它落后于手指)。
              * 这里**只写位置**:透镜宽度不读拖动量([pillW]),所以滑动中它保持按住时那一档,
              * 不再越拖越大。粘滞感落在松手后的 animatePill 上。
              */
             this.pillTo(Math.max(lo, Math.min(hi, this.startPillX + e.offsetX)));
-            this.nearIdx = this.pillX < (lo + hi) / 2 ? 0 : 1;
+            this.nearIdx = this.nearestSlot(this.pillX);
             // 折射层不吃动画,只吃这个逐帧赋值 —— 所以必须在这里手动重画
             if (REFRACT) {
               this.repaint();

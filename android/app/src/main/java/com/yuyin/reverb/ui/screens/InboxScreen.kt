@@ -1,6 +1,7 @@
 package com.yuyin.reverb.ui.screens
 
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -29,6 +30,7 @@ import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.PlayModeButton
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -117,5 +119,42 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = topPad)
             )
         }
+    }
+}
+
+/**
+ * 「最新」这一列的身份串。用在**两处**,两边必须是同一个值:
+ * 标题栏那颗播放模式按钮按它读写自己那一格,列表里某一行起播时把它随 `playQueue` 传下去
+ * (装机日志里 `tag='…'` 读到的就是它)。否则「在这一列设的模式」和「这一列起播时用的模式」
+ * 各走各的,而且不报错,只表现成"设了没生效"。
+ *
+ * 它原先与 `TAG_FAV`/`TAG_DL` 一起写在 `LibraryScreen.kt`(那时这一列是音阁的第 2 段);
+ * 2026-10-08 这一列提升成顶层「追更」页,串跟着搬到这里来。**值没变** ——
+ * 播放模式是按这个串存盘的,改值会让用户设备上已设的那一格失效。
+ */
+const val TAG_INBOX = "inbox"
+
+/**
+ * 顶层「追更」页 = 标题栏 + [InboxBody]。
+ *
+ * 为什么提上来:内容是"全部订阅的最新单集",是每天打开 App 要看的第一眼,
+ * 而它原先埋在音阁六个分段里、要靠横滑才够得着。
+ *
+ * ⚠️ [DiscoverScreen] 首屏那条「最新更新」读的是**同一个 inboxStore、同一份全量列表**,
+ * 所以这一页与那一节内容是重复的 —— 有意保留:那一节是给「降级首屏」(无目录时打开就看到
+ * 新内容)用的,这一页才是这一列自己的管理入口(标题栏那颗按钮按 `TAG_INBOX` 存这一列的
+ * 播放模式;那一节起播走不带 tag 的重载,因此读不到这个模式)。
+ *
+ * 标题栏右端那颗是**本列的播放模式按钮**,与频道主页、收藏、下载用的是同一颗
+ * (`Components.kt PlayModeButton`)。位置从分段条右端搬到标题栏,功能不能因为搬家而丢。
+ */
+@Composable
+fun FeedScreen() {
+    Column(Modifier.fillMaxSize()) {
+        ScreenHeader(
+            title = stringResource(R.string.nav_feed),
+            action = { PlayModeButton(TAG_INBOX) }
+        )
+        InboxBody()
     }
 }

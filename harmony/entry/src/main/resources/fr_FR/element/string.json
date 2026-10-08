@@ -9,6 +9,10 @@
       "value": "Bibliothèque"
     },
     {
+      "name": "nav_feed",
+      "value": "Nouveautés"
+    },
+    {
       "name": "app_title",
       "value": "Reverb"
     },
@@ -139,10 +143,6 @@
     {
       "name": "lib_subscriptions",
       "value": "Abonnements"
-    },
-    {
-      "name": "lib_inbox",
-      "value": "Récents"
     },
     {
       "name": "lib_favorites",
@@ -774,7 +774,7 @@
     },
     {
       "name": "download_wifi_required",
-      "value": "Aucune connexion Wi-Fi. Téléchargement annulé."
+      "value": "Réseau facturé à l’usage. Téléchargement annulé."
     },
     {
       "name": "download_no_network",
@@ -993,6 +993,10 @@
       "value": "Annotations"
     },
     {
+      "name": "lib_queue",
+      "value": "À suivre"
+    },
+    {
       "name": "note_empty",
       "value": "Aucune annotation. Dans le lecteur, touchez Plus → Écrire une annotation pour garder la seconde qui vous a touché"
     },
@@ -1130,7 +1134,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Bibliothèque : six rubriques — abonnements, nouveautés, favoris, téléchargements, historique et annotations\n· Hors ligne : téléchargez des épisodes, au besoin uniquement en Wi-Fi\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
+      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Nouveautés : les nouveaux épisodes de vos émissions suivies, dans un onglet dédié\n· Bibliothèque : six rubriques — abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Hors ligne : téléchargez des épisodes, au besoin uniquement en Wi-Fi\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
     },
     {
       "name": "about_h_philosophy",

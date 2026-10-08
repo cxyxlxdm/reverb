@@ -57,7 +57,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
-/** tab 项规格:图标与文案。数量由父级决定(当前恒为 2,与鸿蒙 GlassTabBar 一致)。 */
+/** tab 项规格:图标与文案。**数量由父级决定**(2026-10-08 起 3 项,鸿蒙 GlassTabBar 同步)。
+ * 栏内所有几何都按 `tabs.size` 通式算,加/减一格不需要改这里。 */
 data class GlassTabSpec(val label: String, val icon: ImageVector)
 
 // ———————————————————————————————— 玻璃参数 ————————————————————————————————
@@ -136,8 +137,11 @@ val GLASS_BAR_H = 48.dp
 private val SIDE_PAD = 24.dp
 
 /**
- * 两个 tab 的中心从栏边缘内收这么多 —— 按钮间距就是这么收小的。
- * 槽位判定(中线)不受影响:两项对称,分界永远在 barW/2。
+ * tab 内容的中心从栏边缘内收这么多 —— 按钮间距就是这么收小的。
+ * ⚠️ 这层 padding **只影响内容行与 [slotCx]**,不影响 [tabAt] 的命中带(那条按整栏宽度均分)。
+ * 两项时两者唯一分界都在 barW/2,对称到看不出差别;三项起分界与内容中心差 2·内收量/3
+ * (本机量:363dp 栏宽 ⇒ 约 15dp),而每格内容离最近分界还有 40dp 以上,所以点不偏 ——
+ * 但**别把它当"命中带与内容带对齐"**,槽数再往上加要重算这个余量。
  */
 private val ITEM_INSET = 22.dp
 
@@ -336,11 +340,15 @@ fun GlassNavBar(
      */
     val previewTarget = remember { IntArray(1) { -1 } }
 
-    fun halfW(): Float = barWpx / 2f
+    /**
+     * 一格槽宽。两项时它与旧的 `halfW()`(barW/2)逐值相同,所以两格时代的观感不动;
+     * 但槽数必须由 `tabs.size` 来 —— 写死 2 的话第三格压根点不到(命中判定只会返回 0/1)。
+     */
+    fun slotW(): Float = barWpx / tabs.size.coerceAtLeast(1)
 
     /**
      * 第 idx 项内容块的中心。两项不再"半栏均分",而是对称地放进
-     * [ITEM_INSET, barW - ITEM_INSET] 这条带里。
+     * [itemInsetPx, barW - itemInsetPx] 这条带里。
      *
      * ⚠️ 必须与 [TabItemsRow] 上那层 padding 读同一个常量:两列是 weight 均分的,
      * 少挂那层 padding,内容中心就永远落在 barW/4 与 3·barW/4,而药丸按 slotCx 走 ——
@@ -365,12 +373,12 @@ fun GlassNavBar(
     fun pillCx(): Float = pillPx() + restWpx / 2f
 
     fun tabAt(x: Float): Int {
-        if (halfW() <= 0f) return 0
+        if (slotW() <= 0f) return 0
         // 均分槽位直接 floor:x 落在哪个槽就是哪个 tab。原先的 (x + halfW/2)/halfW
-        // 算的是「离 halfW 的整数倍最近」,而槽中心在半个 halfW 处 —— 结果是发现
+        // 算的是「离 halfW 的整数倍最近」,而槽中心在半个槽宽处 —— 结果是发现
         // tab 自己的右半边全部被判成音阁:点已选中的发现,药丸预览跳去音阁、松手
         // 连页面也切过去(H90 用户反馈)。
-        return (x / halfW()).toInt().coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
+        return (x / slotW()).toInt().coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
     }
 
     // 选中项变化(含首次量宽)→ 药丸弹簧吸过去。拖拽期间不插手,松手路径自己收。
@@ -495,7 +503,7 @@ fun GlassNavBar(
                 .pointerInput(tabs.size) {
                     detectHorizontalDragGestures(
                         onDragStart = { _ ->
-                            if (halfW() > 0f) {
+                            if (slotW() > 0f) {
                                 // 预览动画若还在跑,先掐掉:下面的 snapTo 与它抢同一个 Animatable
                                 previewJob?.cancel()
                                 previewJob = null
