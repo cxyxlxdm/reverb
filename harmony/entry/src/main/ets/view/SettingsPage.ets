@@ -10,6 +10,7 @@ import { ConfirmDialog, ConfirmSpec } from './Components';
 import { BackupManager, ALL_SECTIONS, BackupSection, sectionLabelKey } from '../store/BackupManager';
 import { UpdateNotifier } from '../update/UpdateNotifier';
 import { Files } from '../util/Files';
+import { formatDecimal } from '../util/NumberFmt';
 import { Log } from '../util/Logger';
 import deviceInfo from '@ohos.deviceInfo';
 import type common from '@ohos.app.ability.common';
@@ -197,7 +198,8 @@ export struct SettingsPage {
           // `PlayerController.setSpeed`,本端原先只写设置,于是"改了要等下一集才见效"。
           // 鸿蒙侧 `setSpeed` 只在 playing 时下发速率(AVPlayer 的限制,见 PlayerController
           // 的 applyRate 注释),暂停态改的是待用的 `speed` 字段,恢复播放时补上。
-          this.choiceRow(L.s('set_default_speed'), () => '', this.speeds.map((s: number) => `${s}×`),
+          this.choiceRow(L.s('set_default_speed'), () => '',
+            this.speeds.map((s: number) => `${formatDecimal(s)}×`),
             () => this.speedIndex(),
             (i: number) => {
               this.settings.setDefaultSpeed(this.speeds[i]);

@@ -949,6 +949,18 @@
       "value": "Los siguientes son directorios públicos de podcasts / APIs de búsqueda, usados solo para búsqueda y listas. El audio siempre proviene del RSS del editor; esta app nunca lo almacena ni lo redirige."
     },
     {
+      "name": "lic_mdi_tabs",
+      "value": "Material Design Icons (vectores de las pestañas inferiores)"
+    },
+    {
+      "name": "src_publisher_rss",
+      "value": "El feed RSS original del editor"
+    },
+    {
+      "name": "src_site_opml",
+      "value": "Lista de suscripciones recomendada en el sitio de la app"
+    },
+    {
       "name": "log_size",
       "value": "Registros actuales %1$s"
     },

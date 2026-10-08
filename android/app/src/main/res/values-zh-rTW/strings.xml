@@ -320,6 +320,11 @@
     <string name="licenses_h_sources">資料來源</string>
     <string name="licenses_sources_note">本應用不提供節目目錄、不轉存也不代理任何音訊；音訊始終來自發布方的原始 RSS。</string>
     <string name="licenses_sources_note_catalog">以下為公開的播客目錄/檢索介面，僅用於檢索與榜單；音訊始終來自發布方原始 RSS，本應用不轉存、不代理。</string>
+    <!-- 许可页与数据来源里"换语种要变"的四条。目录/接口名(Apple iTunes、fyyd.de、gpodder.net)与专有名词是五套同形,仍留在 LicensesScreen.kt 字面量里。 -->
+    <string name="lic_whisper">whisper.cpp(離線語音辨識)</string>
+    <string name="lic_whisper_model">Whisper 模型 ggml-base-q5_1(OpenAI)</string>
+    <string name="src_publisher_rss">播客發布方自己的 RSS 位址</string>
+    <string name="src_site_opml">本應用官網的推薦訂閱清單(OPML)</string>
     <string name="notif_channel_name">訂閱更新</string>
     <string name="notif_channel_desc">訂閱的播客有新一集時提醒</string>
     <string name="notif_title">餘音 · 訂閱更新</string>

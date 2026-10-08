@@ -949,6 +949,18 @@
       "value": "Voici les annuaires de podcasts / API de recherche publics, utilisés uniquement pour la recherche et les classements. L'audio provient toujours du flux RSS de l'éditeur ; cette app ne le stocke ni ne le relaie."
     },
     {
+      "name": "lic_mdi_tabs",
+      "value": "Material Design Icons (vecteurs des onglets inférieurs)"
+    },
+    {
+      "name": "src_publisher_rss",
+      "value": "Le flux RSS d'origine de l'éditeur"
+    },
+    {
+      "name": "src_site_opml",
+      "value": "Liste d'abonnements recommandée sur le site de l'app"
+    },
+    {
       "name": "log_size",
       "value": "Journaux actuels %1$s"
     },

@@ -9,6 +9,7 @@ import { FavoriteStore } from '../store/Stores';
 import { StampStore } from '../store/StampStore';
 import { SettingsStore } from '../store/SettingsStore';
 import { formatTime } from './Components';
+import { formatDecimal } from '../util/NumberFmt';
 import { htmlToText } from '../util/HtmlText';
 import { sealOptions, SealOption } from '../store/StampStore';
 import { MomentCard, snapshotToPng, saveToGallery } from './MomentCard';
@@ -426,8 +427,9 @@ export struct PlayerPage {
   @Builder
   speedChip() {
     // 与 Android SpeedChip 一致:倍速数字 + 下拉小三角,强调色
+    // 数字走 `formatDecimal` 而不是模板串 —— 法/西语区小数该用逗号,与 Android 同口径(见 H160)
     Row({ space: 2 }) {
-      Text(`${this.player.speed}×`)
+      Text(`${formatDecimal(this.player.speed)}×`)
         .fontSize(TypeScale.caption * this.fontScale)
         .fontColor(this.scheme.primary)
       Glyph({ symbol: Sym.down, dim: 14, color: this.scheme.primary })
@@ -442,7 +444,7 @@ export struct PlayerPage {
   speedMenu() {
     Menu() {
       ForEach(this.player.speedSteps, (s: number) => {
-        MenuItem({ content: `${s}×` })
+        MenuItem({ content: `${formatDecimal(s)}×` })
           .onClick(() => this.player.setSpeed(s))
       }, (s: number) => `${s}`)
     }
