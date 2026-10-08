@@ -31,13 +31,20 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.Artwork
+import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 
-/** 播放队列(up next):手动排的接下来播放列表,点击单集直接跳播,可上下移动、移除、清空。 */
+/**
+ * 待播(up next):手动排的接下来播放列表,点击单集直接跳播,可上下移动、移除、清空。
+ *
+ * 标题栏里那颗「清空」**只在独立页出现**:音阁里它是内嵌的一「段」,那颗动作由
+ * [QueueBody] 的调用方(分段条右端)去摆,与「历史」段同一个走法。
+ */
 @Composable
 fun QueueScreen(onBack: () -> Unit) {
     val queue by PlayerController.userQueue.collectAsStateWithLifecycle()
@@ -66,80 +73,96 @@ fun QueueScreen(onBack: () -> Unit) {
                 }
             }
         }
+        QueueBody()
+    }
+}
 
-        if (queue.isEmpty()) {
-            EmptyHint(stringResource(R.string.queue_empty))
-            return
-        }
+/**
+ * 队列主体(不含标题栏),供音阁「待播」段内嵌复用 —— 与 [InboxBody] 同一个形状。
+ *
+ * ⚠️ 这里 collect 的是 `PlayerController.userQueue`(StateFlow)。它在用户增删队列时整份替换,
+ * 不是逐帧变,所以挂在段这一层不会像鸿蒙那侧的睡眠倒计时一样把整页打回重建
+ * (那条坑记在 H64 / H77,判据是"它多久变一次")。
+ */
+@Composable
+fun QueueBody(topPad: Dp = Dp(0f)) {
+    val queue by PlayerController.userQueue.collectAsStateWithLifecycle()
 
-        LazyColumn(
-            Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = 24.dp)
-        ) {
-            itemsIndexed(queue, key = { _, ep -> ep.id }) { index, ep ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        // 整行可点跳播;行内 IconButton 会自行消费点击,不会冒泡到这里
-                        .clickable { PlayerController.playFromQueue(ep.id) }
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Artwork(ep.artworkUrl, size = 44, corner = 8)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
+    if (queue.isEmpty()) {
+        EmptyHint(stringResource(R.string.queue_empty))
+        return
+    }
+
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            top = topPad,
+            bottom = 24.dp + LocalGlassBottomPad.current
+        )
+    ) {
+        itemsIndexed(queue, key = { _, ep -> ep.id }) { index, ep ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    // 整行可点跳播;行内 IconButton 会自行消费点击,不会冒泡到这里
+                    .clickable { PlayerController.playFromQueue(ep.id) }
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Artwork(ep.artworkUrl, size = 44, corner = 8)
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        ep.title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    if (ep.podcastTitle.isNotBlank()) {
                         Text(
-                            ep.title,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onBackground,
-                            maxLines = 2,
+                            ep.podcastTitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (ep.podcastTitle.isNotBlank()) {
-                            Text(
-                                ep.podcastTitle,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
-                        IconButton(
-                            onClick = { PlayerController.move(index, index - 1) },
-                            enabled = index > 0,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                Icons.Rounded.KeyboardArrowUp,
-                                contentDescription = stringResource(R.string.a11y_queue_up),
-                                tint = if (index > 0) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                            )
-                        }
-                        IconButton(
-                            onClick = { PlayerController.move(index, index + 1) },
-                            enabled = index < queue.lastIndex,
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                Icons.Rounded.KeyboardArrowDown,
-                                contentDescription = stringResource(R.string.a11y_queue_down),
-                                tint = if (index < queue.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
-                            )
-                        }
-                        IconButton(
-                            onClick = { PlayerController.removeFromQueue(ep.id) },
-                            modifier = Modifier.size(40.dp)
-                        ) {
-                            Icon(
-                                Icons.Rounded.Close,
-                                contentDescription = stringResource(R.string.a11y_queue_remove),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(0.dp)) {
+                    IconButton(
+                        onClick = { PlayerController.move(index, index - 1) },
+                        enabled = index > 0,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.KeyboardArrowUp,
+                            contentDescription = stringResource(R.string.a11y_queue_up),
+                            tint = if (index > 0) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
+                    }
+                    IconButton(
+                        onClick = { PlayerController.move(index, index + 1) },
+                        enabled = index < queue.lastIndex,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.KeyboardArrowDown,
+                            contentDescription = stringResource(R.string.a11y_queue_down),
+                            tint = if (index < queue.lastIndex) MaterialTheme.colorScheme.onSurfaceVariant
+                            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        )
+                    }
+                    IconButton(
+                        onClick = { PlayerController.removeFromQueue(ep.id) },
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.a11y_queue_remove),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }

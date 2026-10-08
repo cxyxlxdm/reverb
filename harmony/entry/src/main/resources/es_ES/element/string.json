@@ -9,6 +9,10 @@
       "value": "Biblioteca"
     },
     {
+      "name": "nav_feed",
+      "value": "Novedades"
+    },
+    {
       "name": "app_title",
       "value": "Reverb"
     },
@@ -139,10 +143,6 @@
     {
       "name": "lib_subscriptions",
       "value": "Suscritos"
-    },
-    {
-      "name": "lib_inbox",
-      "value": "Recientes"
     },
     {
       "name": "lib_favorites",
@@ -774,7 +774,7 @@
     },
     {
       "name": "download_wifi_required",
-      "value": "No hay conexión Wi-Fi. Descarga cancelada."
+      "value": "Red con límite de datos. Descarga cancelada."
     },
     {
       "name": "download_no_network",
@@ -993,6 +993,10 @@
       "value": "Anotaciones"
     },
     {
+      "name": "lib_queue",
+      "value": "A continuación"
+    },
+    {
       "name": "note_empty",
       "value": "Aún no hay anotaciones. En el reproductor toca Más → Escribir una anotación para guardar el segundo que te ha llegado"
     },
@@ -1130,7 +1134,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Descubrir: explora listas diarias por región y categoría; reordénalas y desliza entre ellas\n· Buscar: encuentra programas o episodios por palabra clave, o pega una URL RSS\n· Compartir programas: crea una imagen con portada, título, descripción y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Biblioteca: seis apartados — suscripciones, novedades, favoritos, descargas, historial y anotaciones\n· Sin conexión: descarga episodios, opcionalmente solo con Wi-Fi\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano y pantalla de bloqueo\n· Transcripción: en los episodios cuyo editor la ofrece, puedes leer mientras escuchas\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del programa: desliza en la página del reproductor\n· Avisos de novedades: notificación cuando llega un episodio nuevo\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño de texto, color de acento, varios idiomas"
+      "value": "· Descubrir: explora listas diarias por región y categoría; reordénalas y desliza entre ellas\n· Buscar: encuentra programas o episodios por palabra clave, o pega una URL RSS\n· Compartir programas: crea una imagen con portada, título, descripción y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Novedades: los episodios nuevos de tus programas seguidos, en su propia pestaña\n· Biblioteca: seis apartados — suscripciones, a continuación, favoritos, descargas, historial y anotaciones\n· Sin conexión: descarga episodios, opcionalmente solo con Wi-Fi\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano y pantalla de bloqueo\n· Transcripción: en los episodios cuyo editor la ofrece, puedes leer mientras escuchas\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del programa: desliza en la página del reproductor\n· Avisos de novedades: notificación cuando llega un episodio nuevo\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño de texto, color de acento, varios idiomas"
     },
     {
       "name": "about_h_philosophy",

@@ -39,7 +39,13 @@ object DownloadManager {
         _states.value = store.downloads.value.associate { it.episode.id to DownloadStatus.Completed }
     }
 
-    /** 计费(蜂窝)网络下，且未允许蜂窝下载时，拦截下载。 */
+    /**
+     * 未允许蜂窝下载、且**当前默认网络按用量计费**时拦截。
+     *
+     * 判据是 `isActiveNetworkMetered` 而不是「bearer 是不是 WIFI」—— 限量热点是计费的 Wi-Fi,要拦;
+     * 以太网/免流链路不是 Wi-Fi 但不计费,放行。鸿蒙侧同口径(见 `DownloadManager.ets` 与 H162)。
+     * `settings` 读不到按「不允许」(?: false),ConnectivityManager 取不到时放行。
+     */
     private fun blockedByCellular(): Boolean {
         val allow = settings?.allowCellularDownload?.value ?: false
         if (allow) return false
@@ -76,7 +82,7 @@ object DownloadManager {
 
         if (blockedByCellular()) {
             com.yuyin.reverb.util.Logger.w(TAG, "blocked by cellular id=$id")
-            setState(id, DownloadStatus.Failed) // 蜂窝网络下已被拦截，连 WiFi 后重试
+            setState(id, DownloadStatus.Failed) // 计费网络下已拦;换不计费的链路或关掉开关再重试(见 H162)
             return
         }
 

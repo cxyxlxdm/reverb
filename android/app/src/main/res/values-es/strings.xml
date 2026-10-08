@@ -41,6 +41,7 @@
 
     <string name="nav_discover">Descubrir</string>
     <string name="nav_library">Biblioteca</string>
+    <string name="nav_feed">Novedades</string>
 
     <string name="action_cancel">Cancelar</string>
     <string name="action_know">Entendido</string>
@@ -167,6 +168,7 @@
     <string name="lib_downloads">Descargas</string>
     <string name="lib_history">Historial</string>
     <string name="lib_notes">Anotaciones</string>
+    <string name="lib_queue">A continuación</string>
     <string name="empty_library">Biblioteca vacía — suscríbete desde Descubrir</string>
     <string name="empty_downloads">Sin descargas. Toca el botón de descarga de un episodio para escucharlo sin conexión</string>
     <string name="empty_history">Sin historial aún — reproduce un episodio</string>
@@ -310,7 +312,7 @@
     <string name="about_h_what">Qué es esto</string>
     <string name="about_p_what">Reverb es un cliente de pódcast ligero con estética de tinta china. Descubre, suscríbete, descarga sin conexión y reanuda cuando quieras — centrado en escuchar.</string>
     <string name="about_h_features">Funciones</string>
-    <string name="about_p_features">· Descubrir: listas diarias por región y categoría; reordenar y deslizar\n· Buscar: por nombre o URL RSS\n· Compartir programas: crea una imagen con portada, título y marca Reverb\n· Biblioteca: suscripciones, novedades, favoritos, descargas, historial y anotaciones\n· Sin conexión: cachear mientras escuchas, solo Wi-Fi opcional\n· Transcripción: transcribe en el dispositivo o lee la del propio editor\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del episodio: desliza en el reproductor\n· Avisos de nuevos episodios\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño, color, idiomas</string>
+    <string name="about_p_features">· Descubrir: listas diarias por región y categoría; reordenar y deslizar\n· Buscar: por nombre o URL RSS\n· Compartir programas: crea una imagen con portada, título y marca Reverb\n· Novedades: los episodios nuevos de tus programas seguidos, en su propia pestaña\n· Biblioteca: suscripciones, a continuación, favoritos, descargas, historial y anotaciones\n· Sin conexión: cachear mientras escuchas, solo Wi-Fi opcional\n· Transcripción: transcribe en el dispositivo o lee la del propio editor\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del episodio: desliza en el reproductor\n· Avisos de nuevos episodios\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño, color, idiomas</string>
     <string name="about_h_philosophy">Diseño</string>
     <string name="about_p_philosophy">La estética se inspira en la tinta, el celadón y el oro de las vigas — el nombre y el icono evocan «un eco girando entre las vigas».\n\nLas fuentes son gratuitas, sin cuenta ni clave API: la búsqueda usa fuentes públicas y vuelve al RSS original del editor para reproducir el audio.\n\nEn privacidad, suscripciones, historial y descargas permanecen en tu dispositivo, no se suben automáticamente al desarrollador ni se usan para seguimiento entre aplicaciones.</string>
 
@@ -333,7 +335,6 @@
     <string name="notif_multi_more">y más</string>
 
     <!-- Novedades / Seguir escuchando / A continuación -->
-    <string name="nav_inbox">Novedades</string>
     <string name="continue_listening">Seguir escuchando</string>
     <string name="home_latest">Episodios recientes</string>
     <string name="mark_played">Marcar como escuchado</string>

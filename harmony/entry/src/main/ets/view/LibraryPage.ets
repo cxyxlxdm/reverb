@@ -1,32 +1,37 @@
 import { Scheme, TypeScale, Metrics, Tracking, LineHeight, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { Podcast, Episode } from '../model/Models';
-import { AppContainer } from '../AppContainer';
 import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
-import { InboxStore } from '../store/InboxStore';
 import { DownloadStore } from '../store/DownloadStore';
 import { DownloadManager } from '../playback/DownloadManager';
 import { NoteStore, EpisodeNote } from '../store/NoteStore';
 import { PlayerController } from '../playback/PlayerController';
-import { ScreenHeader, EmptyHint, LoadingBox, Glyph, Sym, Artwork } from './Widgets';
+import { ScreenHeader, EmptyHint, Glyph, Sym, Artwork } from './Widgets';
 import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, PlayModeButton, ConfirmDialog, ConfirmSpec, formatTime } from './Components';
-import { Log } from '../util/Logger';
+import { QueueBody } from './QueuePage';
 
 /**
- * 音阁三段的「列身份」。与 Android `LibraryScreen.kt` 的 `TAG_INBOX/TAG_FAV/TAG_DL` 同值。
+ * 音阁两段的「列身份」。与 Android `LibraryScreen.kt` 的 `TAG_FAV/TAG_DL` 同值。
  * 同一个串用在**两处**:段条右端那颗模式按钮按它读写自己那一格,
  * 段内某一行起播时把它随 `playQueue` 传下去(装机日志里 `tag='…'` 读到的就是它)。
  * 两边必须是同一个值 —— 否则「在这一列设的模式」和「这一列起播时用的模式」各走各的,
  * 而且不会报错,只会表现成"设了没生效"。
  *
- * 频道主页用的是 `"podcast:" + (feedUrl 或频道名)`,那个前缀保证它撞不上这三个。
+ * 频道主页用的是 `"podcast:" + (feedUrl 或频道名)`,那个前缀保证它撞不上这些。
+ *
+ * 「最新」那一列的 `TAG_INBOX` 不在这里了:2026-10-08 它提升成顶层「追更」页,
+ * 串跟着搬到 `FeedPage.ets`。**值一个字母没改** —— 模式是按这个串存盘的,
+ * 改值会让用户设备上已设的那一格静默失效。
+ *
+ * 「待播」段也**没有列身份串**:这一列就是 `PlayerController.userQueue` 本体,
+ * 起播走 `playFromQueue`,模式在播放器身上那一层已经生效。给它挂一颗模式按钮,
+ * 它改的会是"另一列的设置"而那一列就是它自己 —— 只是多一个能设错的地方。
  */
-const TAG_INBOX = 'inbox';
 const TAG_FAV = 'fav';
 const TAG_DL = 'dl';
 
-/// 音阁:订阅 / 最新 / 收藏 / 历史 四分段(下载段留后续轮次)。
+/// 音阁:订阅 / 收藏 / 下载 / 待播 / 历史 / 批注 六分段。
 /// 对应 Android `LibraryScreen.kt`。分段用 chips + Swiper 双向联动。
 @Component
 export struct LibraryPage {
@@ -40,13 +45,15 @@ export struct LibraryPage {
    * 本页渲染用到的 store 一律经 `@ObjectLink` 接收(各 store 均已 `@Observed`,
    * 且都是「复制后整体赋值」,故字段变化能被观察到)。
    *
-   * 不要退回 `this.app.xxx` 直读:那是未被观察的裸对象。本页原先四处交互
+   * 不要退回 `AppContainer.get().xxx` 直读:那是未被观察的裸对象。本页原先四处交互
    * (宫格切换 / 清空历史 / 删除下载 / 「最新」刷新完成)都没有任何本地状态变化,
    * 于是点了界面不动;偶尔看着正常,是切分段或播放状态 tick 顺带刷新的。详见 H27。
+   *
+   * `inbox` 已经不在这儿了:2026-10-08「最新」提升成顶层「追更」页(`FeedPage.ets`),
+   * 音阁换进的是「待播」—— 那份数据在 `player.userQueue` 上,player 本来就是 @ObjectLink。
    */
   @ObjectLink settings: SettingsStore;
   @ObjectLink subscriptions: SubscriptionStore;
-  @ObjectLink inbox: InboxStore;
   @ObjectLink favorites: FavoriteStore;
   @ObjectLink downloads: DownloadStore;
   @ObjectLink history: HistoryStore;
@@ -76,32 +83,22 @@ export struct LibraryPage {
   /// 待确认的「删除某集下载」(非 null 即弹框)。null 表示没在确认。
   @State pendingDelete: ConfirmSpec | null = null;
 
-  private app: AppContainer = AppContainer.get();
   /**
-   * 六个分段。与 Android `LibraryScreen` 同序(订阅 / 最新 / 收藏 / 下载 / 历史 / 批注)。
+   * 六个分段。与 Android `LibraryScreen` 同序(订阅 / 收藏 / 下载 / 待播 / 历史 / 批注)。
    *
    * 顺序在两端必须一致:`docs/FEATURES.md` 的分栏叙述、分段条右端那颗动作按 `this.seg === N`
-   * 判断、以及用户的肌肉记忆都挂在这些序号上。加新段只能**加在末尾**。
+   * 判断、以及用户的肌肉记忆都挂在这些序号上。
+   *
+   * 2026-10-08 这一轮是**净不移位**改的:删掉「最新」把后面全往前顶一位,再把「待播」插在
+   * 历史之前把它们顶回来 —— 所以 4=历史、5=批注 和改之前一样,挂在序号上的那两处判断不用动。
    */
   private segments(): string[] {
-    return [L.s('lib_subscriptions'), L.s('lib_inbox'), L.s('lib_favorites'),
-      L.s('lib_downloads'), L.s('lib_history'), L.s('lib_notes')];
+    return [L.s('lib_subscriptions'), L.s('lib_favorites'), L.s('lib_downloads'),
+      L.s('lib_queue'), L.s('lib_history'), L.s('lib_notes')];
   }
 
-  aboutToAppear(): void {
-    // 进音阁即按需刷新「最新」(订阅集未变则跳过,避免切 tab 反复全量刷)
-    this.refreshInbox(false);
-  }
-
-  /// 刷新「最新」。loading 状态由 store 自己持有(inbox.refreshing):
-  /// 若用本地标志,被重入拒绝的那次调用会把转圈提前关掉——Android 上踩过这个坑。
-  private async refreshInbox(force: boolean): Promise<void> {
-    const subs = this.subscriptions.subscriptions;
-    if (subs.length === 0) return;
-    if (force) await this.inbox.refresh(subs, this.app.repository);
-    else await this.inbox.refreshIfStale(subs, this.app.repository);
-    Log.i('Library', `最新:当前 ${this.inbox.episodes.length} 条`);
-  }
+  // ── 「最新」的进页刷新已经跟着那一列搬到 `FeedPage.aboutToAppear()` ──
+  // (原先挂在音阁,因为那时它是音阁的第 2 段。挂在这儿会让冷启动多建一页、多发一轮请求。)
 
   build() {
     // 弹确认框时要连页头一起遮住(与 Android 的 AlertDialog 同范围),所以确认框挂在
@@ -121,9 +118,10 @@ export struct LibraryPage {
         Stack({ alignContent: Alignment.Top }) {
           Swiper() {
             this.subscriptionsSection()
-            this.inboxSection()
             this.favoritesSection()
             this.downloadsSection()
+            // 待播段:与独立队列页**同一个组件**(见 `QueuePage.QueueBody`)
+            this.queueSection()
             this.historySection()
             this.notesSection()
           }
@@ -224,6 +222,17 @@ export struct LibraryPage {
         .accessibilityText(L.s('subs_layout_toggle'))
         .onClick(() => { this.settings.setSubsGrid(!this.settings.subsGrid); })
     }
+    if (this.seg === 3 && this.player.userQueue.length > 0) {
+      // 待播段的动作只有「清空」,**没有播放模式那颗**:这一列就是 `player.userQueue` 本体,
+      // 起播走 `playFromQueue`,模式(顺序 / 单曲循环 / 随机)在播放器身上那一层已经生效。
+      // 给它挂一颗,它改的是"另一列的设置"而那一列就是它自己 —— 只是多一个能设错的地方。
+      // 独立队列页(`QueuePage`)标题栏里那颗是同一个动作,两处同源,不会各清各的。
+      Text(L.s('action_clear'))
+        .fontSize(TypeScale.labelLarge * this.fontScale)
+        .fontColor(this.scheme.primary)
+        .padding({ left: 16, right: 16, top: 12, bottom: 12 })
+        .onClick(() => { this.player.clearQueue(); })
+    }
     if (this.seg === 4 && this.history.history.length > 0) {
       Text(L.s('action_clear'))
         // 字号取 labelLarge 与 Android 那颗 TextButton 同档(原先是 caption,比另一端小一号)
@@ -233,18 +242,18 @@ export struct LibraryPage {
         .onClick(() => { this.history.clear(); })
     }
     /**
-     * 三段单集列表(最新 / 收藏 / 下载):一颗**本列的播放模式按钮**。
+     * 两段单集列表(收藏 / 下载):一颗**本列的播放模式按钮**。
      * 三态图标与点击口径收在 `Components.PlayModeButton`
-     * (频道主页「全 N 集」那一行右端用的是同一颗)。
-     * 三段**各有一份**模式,所以这里传的是**这一段自己的** tag ⇒ 三段看到三个值。
+     * (频道主页「全 N 集」那一行右端与顶层「追更」页用的是同一颗)。
+     * 两段**各有一份**模式,所以这里传的是**这一段自己的** tag ⇒ 两段看到两个值。
+     *
+     * 原先这里有三段(最新 / 收藏 / 下载):「最新」那段 2026-10-08 提升成顶层页,
+     * 它的模式按钮跟着搬到 `FeedPage` 的标题栏右端,功能没有因为搬家丢掉。
      */
     if (this.seg === 1) {
-      PlayModeButton({ scheme: this.scheme, player: this.player, tag: TAG_INBOX })
-    }
-    if (this.seg === 2) {
       PlayModeButton({ scheme: this.scheme, player: this.player, tag: TAG_FAV })
     }
-    if (this.seg === 3) {
+    if (this.seg === 2) {
       PlayModeButton({ scheme: this.scheme, player: this.player, tag: TAG_DL })
     }
     /**
@@ -357,48 +366,17 @@ export struct LibraryPage {
     .width('100%').height('100%')
   }
 
-  // ── 最新(收件箱)──
+  // ── 待播(手动排的接下来播放列表)──
   @Builder
-  inboxSection() {
-    Refresh({ refreshing: this.inbox.refreshing }) {
-      Column() {
-        if (this.subscriptions.subscriptions.length === 0) {
-          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox_nosubs') })
-        } else if (this.inbox.episodes.length === 0) {
-          if (this.inbox.refreshing) {
-            LoadingBox({ scheme: this.scheme, fontScale: this.fontScale })
-          } else {
-            EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox') })
-          }
-        } else {
-          List() {
-            // 顶部占位:理由见订阅段同名注释
-            ListItem() {
-              Row().width('100%').height(CHIPS_RESERVE_H)
-            }
-            ForEach(this.inbox.episodes, (e: Episode) => {
-              ListItem() {
-                EpisodeListItem({
-                  scheme: this.scheme, fontScale: this.fontScale, episode: e,
-                  showPodcastTitle: true,
-                  isCurrent: this.player.current !== null && this.player.current.id === e.id,
-                  isPlaying: this.player.isPlaying,
-                  played: this.history.isPlayed(e.id),
-                  onPlay: () => this.onPlayEpisode(e, this.inbox.episodes, TAG_INBOX),
-                  onPlayNext: () => { this.player.playNext(e); },
-                  onEnqueue: () => { this.player.enqueue(e); }
-                })
-              }
-            }, (e: Episode) => e.id)
-          }
-          .scrollBar(BarState.Off)
-          .contentEndOffset(this.bottomPad)
-          .width('100%').height('100%')
-        }
-      }
-      .width('100%').height('100%')
+  queueSection() {
+    // 与独立队列页共用 `QueuePage.QueueBody`,所以这里只补两件事:
+    // 顶出一行给悬浮分段条让位(chipReserve),底部让出玻璃 tab 栏的空间(bottomPad)。
+    Column() {
+      QueueBody({
+        scheme: this.scheme, fontScale: this.fontScale, player: this.player,
+        bottomPad: this.bottomPad, chipReserve: true
+      })
     }
-    .onRefreshing(() => { this.refreshInbox(true); })
     .width('100%').height('100%')
   }
 
