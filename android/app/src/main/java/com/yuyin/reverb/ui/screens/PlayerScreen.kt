@@ -627,8 +627,14 @@ private fun FavoriteButton(favorited: Boolean, onToggle: () -> Unit) {
     }
 }
 
+/**
+ * `"%.2f".format(...)` 用的是**设备默认 locale**,法/西环境里小数点会渲染成逗号
+ * (`1.0` → `"1,00"`),所以去尾零之后还要把**逗号**也去掉 —— 原先只去 `.` 和 `0`,
+ * 于是整数倍速在 fr/es 界面上念成 `1,×`(真机通读实测,见 H160)。
+ * 保留 locale 的小数分隔符而不是强改成 `.`:非整数倍速(1,25)在法/西里本来就该带逗号。
+ */
 private fun formatSpeed(speed: Float): String =
-    "%.2f".format(speed).trimEnd('0').trimEnd('.')
+    "%.2f".format(speed).trimEnd('0').trimEnd('.', ',')
 
 /** 上一集 / 下一集按钮:不可用时置灰。 */
 @Composable
