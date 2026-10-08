@@ -212,17 +212,37 @@ macOS 的 1.0.3 尚未出包 —— 它的播放模式是**同日在 1.0.3 定�
   三格的**透镜/药丸观感与拇指命中**(全部是纸面算术)、**音阁六个分段逐段点右端那颗动作**
   (段序号是隐式契约,而「清空历史」没有二次确认,H164)、以及**`selectedTab` 旧值恢复**
   (上次停在"第 2 格"= 序号 1,现在序号 1 是追更 ⇒ 冷启动落在追更,本批没查这个表现、也没做映射)。
-- **门 5 状态:`dist/` 里那三份包现在比源码旧,发布前必须重打**。判据不是时钟而是串,
-  所以重打后除了复跑整条既有判据(Android 两渠道 versionCode 5 / 1.0.4、`RECORD_AUDIO` 1 / 0、
-  store 无 `lib/` 无模型、签名 v2+v3 且 DN `CN=Yuyin Reverb`;鸿蒙 1000004 / 1.0.4、`debug=false`、
-  权限三条集合相等、`backup_config` 9 项含 `notes.json`、`debugKey`/`whisper`/`libreverb_asr`/`models/` 各 0),
-  **新增三条"期望非 0"的串证**(每条先打印处理量,再报命中数 —— 「没有」和「有」两侧都要验):
-  ① `nav_feed` 那一格的五语值(`追更` / `追更` / `Updates` / `Nouveautés` / `Novedades`)
-  —— 中文字面量要用 `LC_ALL=C grep -a` 搜原始字节,`strings` 看不见;
-  ② `lib_queue` / `queue_title` 的「待播」五语;
-  ③ 闸门改口后的提示串「当前网络按用量计费」(鸿蒙 `resources.index` 五套各一份),
-  同时**旧句「当前不是 Wi-Fi」应为 0** —— 这一条是"声明删掉也要验"那一侧。
-  ④ 三格新图标 `ic_tab_feed.svg` 在包里(非 0),而鸿蒙**权限仍恰三条、不含新申请**。
+- **门 5 · 本批已重打并复跑解包验收(2026-10-08 22:10–22:12;重打前的三份已备份到
+  `android/dist/_backup-1.0.4-preIA-2210/` 与 `harmony/dist/_backup-1.0.4-preIA-2210/`)**。
+  逐条按「命令 + 期望值 + 处理量」记,便于第三人复现:
+  - **Android 两渠道**(`aapt dump badging` / `aapt2 dump permissions` / `apksigner verify --verbose`):
+    versionCode 5 / versionName 1.0.4 × 两渠道;包名 `com.yuyin.reverb.android`;
+    v2 + v3 均 true,v1 false;证书 DN `CN=Yuyin Reverb, OU=Reverb, O=Reverb, …`。
+    **权限侧先打印清单再数**(H156:aapt2 不在 PATH,命令没跑与没命中长得一样):
+    default 权限清单 **12 行**、`RECORD_AUDIO` **1**;store **10 行**、`RECORD_AUDIO` **0**;两次 `aapt2` 退出码都是 **0**。
+    native/模型:`unzip -l … | grep -c ' lib/'` 与 `grep -c whisper-model` —— default **1 / 1**,store **0 / 0**。
+    解包串(处理量:arsc 444,224 / 438,904 B;classes.dex 6,399,180 / 6,384,972 B;命令 `LC_ALL=C grep -oa <串> <文件> | wc -l`,
+    **按出现次数**而不是行数):`itunes.apple.com` arsc **5** / dex **1**(两侧都非 0,目录接口在店里真的带);
+    `whisper.cpp` default arsc **10** / store arsc **0**;`lic_whisper` default **2** / store **0**。
+  - **本批新加的三条串证**(两侧都验,含"声明没有也要验"那一侧):
+    `追更` 与 `待播` 在新包 default arsc **3 / 3**、store arsc **1 / 1**(非 0 ⇒ 三格与待播段真的进包),
+    而**重打前那两份同一条命令读到 0 / 0** —— 负对照成立,这个非 0 才算数。
+    `Updates` / `Up next` 两渠道均非 0。
+  - **鸿蒙**(`unzip -p reverb.app '*.hap'` 再解 hap):versionCode **1000004** / versionName **1.0.4** / `debug` **false**;
+    `requestPermissions` 恰三条**集合相等**(`INTERNET` / `GET_NETWORK_INFO` / `KEEP_BACKGROUND_RUNNING`);
+    `backup_config` includes **9 项**且含 `notes.json`;`debugKey` / `whisper` / `libreverb_asr` / `models/`
+    在 `resources.index`(86,513 B)与 `ets/modules.abc`(819,980 B)两个落点各 **0**;
+    新图标 `resources/base/media/ic_tab_feed.svg` 在包内。
+  - **闸门改口的两侧**:新句五语各 **1**(`当前网络按用量计费` / `目前網路按用量計費` /
+    `This network is metered` / `Réseau facturé` / `Red con límite de datos`),
+    **旧句 `当前不是 Wi-Fi` 与 `目前不是 Wi-Fi` 在新包各 0,而旧包里 `当前不是 Wi-Fi` 是 1** ——
+    删掉的那一侧同样验了。
+  - **新码在不在包里 = 按串判**(与上一轮同一条规律):`nearestSlot` / `FeedPage` / `slotCx`
+    在新包 `modules.abc` 各 **2**,在重打前那份**全 0**。
+  - 上一轮的三条串证仍在(`stopAndClearWorks` 1、`&nbsp;` 1、`pendingSeekExplicit` 1)。
+  - **未覆盖范围**(照规矩明说):arsc/dex 里只扫了上面点名的串,不是全量词表;
+    `resources.index` 的中文靠 `LC_ALL=C grep -a` 搜原始字节(`strings` 看不见);
+    hap 内 18 个条目没有逐个解出;签名链只验到 scheme 与 DN,没在线校验证书有效期。
 - **另有一条待部署**:`site/reverb/privacy.html` 改了那句「判断当前是否为 Wi-Fi」⇒ **仓库又比线上新**,
   部署前要按上一轮新加的流程先 `curl` 取线上哈希与仓库比、据此定方向,而**部署本身要问用户**。
 
