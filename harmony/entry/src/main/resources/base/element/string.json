@@ -949,6 +949,18 @@
       "value": "以下为公开的播客目录/检索接口，仅用于检索与榜单；音频始终来自发布方原始 RSS，本应用不转存、不代理。"
     },
     {
+      "name": "lic_mdi_tabs",
+      "value": "Material Design Icons(底部页签矢量)"
+    },
+    {
+      "name": "src_publisher_rss",
+      "value": "播客发布方自己的 RSS 地址"
+    },
+    {
+      "name": "src_site_opml",
+      "value": "本应用官网的推荐订阅清单(OPML)"
+    },
+    {
       "name": "log_size",
       "value": "当前日志 %1$s"
     },

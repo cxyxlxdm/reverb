@@ -949,6 +949,18 @@
       "value": "The following are public podcast directories / search APIs, used only for search and charts. Audio always comes from the publisher's own RSS; this app never stores or proxies it."
     },
     {
+      "name": "lic_mdi_tabs",
+      "value": "Material Design Icons (bottom tab vector icons)"
+    },
+    {
+      "name": "src_publisher_rss",
+      "value": "The publisher's own RSS feed"
+    },
+    {
+      "name": "src_site_opml",
+      "value": "Recommended subscription list (OPML) on the app's site"
+    },
+    {
       "name": "log_size",
       "value": "Current logs %1$s"
     },

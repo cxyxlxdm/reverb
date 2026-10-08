@@ -320,6 +320,11 @@
     <string name="licenses_h_sources">Data sources</string>
     <string name="licenses_sources_note">This app provides no catalog and neither stores nor proxies any audio — audio always comes straight from the publisher\'s own RSS feed.</string>
     <string name="licenses_sources_note_catalog">These are public podcast directory/search APIs, used only for search and charts; audio always comes from the publisher\'s original RSS. This app never re-hosts or proxies it.</string>
+    <!-- 许可页与数据来源里"换语种要变"的四条。目录/接口名(Apple iTunes、fyyd.de、gpodder.net)与专有名词是五套同形,仍留在 LicensesScreen.kt 字面量里。 -->
+    <string name="lic_whisper">whisper.cpp (on-device speech recognition)</string>
+    <string name="lic_whisper_model">Whisper model ggml-base-q5_1 (OpenAI)</string>
+    <string name="src_publisher_rss">The publisher\'s own RSS feed</string>
+    <string name="src_site_opml">Recommended subscription list (OPML) on the app\'s site</string>
     <string name="notif_channel_name">New episodes</string>
     <string name="notif_channel_desc">Notify when a subscribed show has a new episode</string>
     <string name="notif_title">Reverb · New episodes</string>

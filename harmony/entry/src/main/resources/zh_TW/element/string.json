@@ -949,6 +949,18 @@
       "value": "以下為公開的播客目錄/檢索介面，僅用於檢索與榜單；音訊始終來自發布方原始 RSS，本應用不轉存、不代理。"
     },
     {
+      "name": "lic_mdi_tabs",
+      "value": "Material Design Icons(底部頁籤矢量)"
+    },
+    {
+      "name": "src_publisher_rss",
+      "value": "播客發布方自己的 RSS 位址"
+    },
+    {
+      "name": "src_site_opml",
+      "value": "本應用官網的推薦訂閱清單(OPML)"
+    },
+    {
       "name": "log_size",
       "value": "目前日誌 %1$s"
     },
