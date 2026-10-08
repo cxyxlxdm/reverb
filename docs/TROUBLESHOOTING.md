@@ -7315,3 +7315,71 @@ store 包里 `离线语音识别` 仍有 **1** 处命中,回读是 `set_word_hig
   以及缓存是否真按 tag 失效,只有源码一层。
 - macOS 端本轮**没动**(它的许可页文案在 `.strings` 里本就是分语种的),也未出一帧。
 - 半角标点体量差(18 vs 6)与措辞漂移 3 条仍在 D 节,本轮不在此列。
+
+**补记(2026-10-08,同日:上面「未覆盖范围」前两条真的清掉了 —— 但清的方式里有一条取证边界)**。
+两台机器各装一次本轮 debug 产物(Android 10:53 两渠道 / 鸿蒙同日 hap),界面串逐页取。
+
+① **许可页五语化:鸿蒙侧三条新键全部按当地语言渲染,键名一条没漏**。中文 / 法语 / 西语各读一次层级表:
+`Material Design Icons (vecteurs des onglets inférieurs)` / `(vectores de las pestañas inferiores)`、
+`Le flux RSS d'origine de l'éditeur` / `El feed RSS original del editor`、
+`Liste d'abonnements recommandée sur le site de l'app` / 西语同款 —— 全都读到了。
+**这一条本来最可能以另一种形状失败**:`L.s` 取不到键时**返回键名本身**,所以界面会显示 `lic_mdi_tabs` 而不是中文或法文
+—— 读到的既然都是句子,`aboutToAppear` 那个取用时机就成立。
+Android 侧默认渠道 fr / es 也各读到 `whisper.cpp (reconnaissance vocale sur l'appareil)` 与
+`(reconocimiento de voz en el dispositivo)`,中文渠道 8 行全在。
+
+② **两条「数据来源」说明在 Android 任何渠道都上不了屏 ⇒ 它们的设备证据只能来自鸿蒙**。
+`LicensesScreen.kt` 里渲染 `src_publisher_rss` / `src_site_opml` 那一段的条件是 `BuildConfig.CATALOG == false`,
+而 `default` 与 `store` **两个渠道的 CATALOG 都是 true**(H70 恢复了目录接口)——
+所以这两行在 Android 上**压根没有出现的分支**。真机逐条印证:Android 三份许可页 dump(默认 fr、默认 es、商店 fr/es)
+里只有 `licenses_sources_note_catalog` 那一段引言,**没有**这两行;鸿蒙那一份里有。
+**可复用的规律:「三端同一份文案」的证据不必三端都上屏 —— 但登记时必须写清哪一端的证据来自界面、哪一端只到资源层**,
+否则下一次读代码的人会以为 Android 也验过那一行。
+
+③ **商店渠道的覆盖在真机上也成立,而且是两层**:装 store 那份、切 fr 与 es 各读一次许可页 ——
+依赖列表 **6 行**(Compose/Media3、Media3、OkHttp、Coil、Coroutines、WorkManager)各带一条 Apache,
+**whisper.cpp 那两行不在,且没有因为删条目留下空行**;同一时刻默认渠道是 8 行、多出那两行各带一条 MIT。
+源码侧再核一遍覆盖写满:`src/store/res` 五个语种文件各有 `lic_whisper` 与 `lic_whisper_model` 两条空串,
+**未覆盖计数 0**(脚本 `android/app/build/verify/xcheck.py`,逐语种打印取到的值而不是只报总数)。
+
+④ **倍速小数分隔符:鸿蒙三处调用点 + 缓存失效一次读到**。法语与西语界面下,设置页那颗默认倍速、倍速选择列表、
+播放页的 chip 与弹层,读到的都是 `0,8× / 1,25× / 1,5× / 1,75× / 2×`,而**整数那格是 `1×`**(没有逗号尾巴);
+切回中文立刻回到 `0.8× / 1.25×`。这条同时把上面「未覆盖范围」第二条的**两个子问题都结掉了**:
+`getAppPreferredLanguage()` 空串(跟随系统)时回落系统 locale 这条路走通了(机器系统语言是中文,
+而应用内首选语言空 ⇒ 若回落失效,fr 装回中文后仍会是逗号),**而按 tag 缓存也确实失效**。
+Android 那一轮在法语倍速列表里读到的是 `1,25×`、整数那格 `1×`(`fr_speedmenu2.xml`)⇒ **两端同形**,
+这条对齐的目的达成。
+
+⑤ **两端共享键按渲染值逐字比:50 组里 18 组不一致,三条分类都不是回归**。
+逐条读完而不是只看总数:
+- **10 组是 Android 独有的键**(②里那两条的 × 5 语种)—— 鸿蒙包里没有本机识别,这两个键**本来就不该存在**;
+- **5 组是页面标题**(`开源许可` ↔ `开源与取源`,五语各处对应)—— 两端**有意不同名**,
+  Android 那一页只列许可,鸿蒙那一页还列取源;
+- **3 组是目录版引言 `licenses_sources_note_catalog`**(en / fr / es)—— 同一件事的两种措辞,信息量一致。
+**这一条值得单独记的是判据形态**:`src_publisher_rss` / `src_site_opml` 那 10 组比对**全等**,
+而 18 组不一致里 10 组来自同一处分支 —— 所以"不一致 18"这个数字**不能脱离分类读成回归**,
+下次复跑请照这三类去数。
+
+⑥ **两条计数与时间线的更正(都是"别人复现不了"的来源)**:
+(a) 上面验收表里那对 `11 / 4` 复现不出来 —— 同一条命令(`LC_ALL=C grep -oa whisper`,按出现次数)实测是
+**arsc 12 / dex 1**;`4` 那个数只有在数 `WhisperEngine` 时才出现,`11` 找不到对应命令。
+**定性结论两侧都更硬**(默认渠道非 0 / 商店渠道 arsc 与 dex 双侧都是 **0**),
+所以从这条起把判据写成**命令 + 期望值**而不是只写数(处理量:arsc 443,324 B / 438,480 B,dex 6,392,480 B / 6,377,748 B)。
+(b) `dist/` 里三份包的 mtime(鸿蒙 10:01、Android 10:04 / 10:05)**早于**这两个改动落进 git 的那条提交(10:43),
+按门 5 那条「包必须在最后一个提交之后重打」的字面读法要重打第十一次。实际判据是**内容而不是时钟**:
+源码文件的 mtime 最晚 09:57:19 < 包 10:01–10:05 < 提交 10:43,
+而包里读得出只有新码才有的东西(默认渠道 arsc 里 `lic_whisper` × 5 语种含 fr 的 `reconnaissance vocale`、
+商店渠道**整个键不存在**、dex 里 `whisper.cpp` 与那两条中文说明**都是 0** —— 旧写法它们是 Kotlin 字面量,必然在 dex 里)。
+⇒ **规矩的准确表述是"包必须晚于最后一次源码改动",提交只是它的一个代理信号**;
+两边顺序反了(先打包后提交)时,按串判而不是按 `git log` 时间判。本轮据此**没有重打**,并复跑了整条解包判据:
+Android versionCode 5 / 1.0.4 × 两渠道、`RECORD_AUDIO` 1 / 0、store 无 `lib/` 无模型、签名 v2+v3 且 DN `CN=Yuyin Reverb`;
+鸿蒙 1000004 / 1.0.4、`debug=false`、权限三条(集合相等)、`backup_config` includes 仍 9 项含 `notes.json`、
+`debugKey` / `whisper` / `libreverb_asr` / `models/` 四个落点各 0、上一轮三条串证(`stopAndClearWorks` / `&nbsp;` / `pendingSeekExplicit`)各自仍在。
+
+⑦ **仍未覆盖的**:进度条**被读屏念成什么**(鸿蒙那条 `accessibilityText` 与 Android 那一寸)——
+本轮在鸿蒙真机层级表里当场复现了为什么工具证不了:同一屏 `Slider` 节点的 text 是 `87688.000000`(毫秒原始值),
+它两侧的两个 `Text` 节点是 `01:27` 与 `04:42`(界面那行),**而整份 dump 137 个节点里 `description` 非空 0 个**
+(同批 text 非空 15 个 ⇒ 不是解析失败,是通道没有这个字段)。Android 那侧 `uiautomator` 能读 `content-desc`,
+但 `SeekBar` 那一格读到的是空串(2026-10-07 实测),**所以两端这一寸都只能实听,至今没听过**。
+macOS 仍一帧没跑起来看过。设备末态:Android 装回默认 debug、语言「跟随系统」(中文界面);
+鸿蒙 `app_language` 已清成空串、语言与主题回到用户原配置;两台机器都**没动过 release 签名包**。
