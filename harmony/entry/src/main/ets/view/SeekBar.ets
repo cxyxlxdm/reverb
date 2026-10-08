@@ -78,6 +78,21 @@ export struct SeekBar {
         .trackColor(withAlpha(this.scheme.onSurfaceVariant, 0.25))
         .blockColor(this.scheme.primary)
         .width('100%')
+        /**
+         * Slider 不设 `accessibilityText` 时,ArkUI 直接把 **value 的原始数字**当可读文本 ——
+         * 而这里的 value 单位是毫秒,真机 dumpLayout 实测读屏拿到的是 `101300.000000`
+         * (界面上同一时刻写的是 `01:41`)。这一串既不是时间也不是比例,等于没有信息。
+         *
+         * 用「当前 / 总长」两个已格式化的时间拼,和进度条下方那行文本逐字一致。
+         * 不新增五条本地化文案的理由同 `DateParse.formatCachedAt`:纯数字时间各语言都读得通。
+         *
+         * **本端改动无法用工具取证**:`uitest dumpLayout` 整条通道没有无障碍字段
+         * (本轮 83 份 dump、13,958 个节点里 `description` 非空 **0 个**,见 H143 补记),所以这条只能实听。
+         * Android 侧同样取证不到 ——
+         * `uiautomator dump` 里 `android.widget.SeekBar` 节点的 `content-desc` 是空串,
+         * 且 XML 里没有 RangeInfo(2026-10-08 实测)。所以不要拿"对端念百分比"当对照结论。
+         */
+        .accessibilityText(`${formatTime(this.shown())} / ${formatTime(this.durationMs)}`)
         .onChange((v: number, mode: SliderChangeMode) => {
           if (mode === SliderChangeMode.Begin || mode === SliderChangeMode.Moving) {
             this.dragging = true;

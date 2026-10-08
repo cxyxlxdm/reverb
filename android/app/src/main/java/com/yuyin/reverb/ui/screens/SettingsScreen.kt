@@ -620,7 +620,11 @@ private suspend fun mailLog(context: Context, onFailed: (String) -> Unit) {
     }
 }
 
-private fun speedLabel(v: Float): String = "%.2f".format(v).trimEnd('0').trimEnd('.') + "×"
+/**
+ * 与 `PlayerScreen.formatSpeed` 同一个坑:`%.2f` 走设备默认 locale,法/西环境里小数点渲染成逗号,
+ * 只去 `.` 就留下悬挂逗号(真机 fr/es 通读实测界面上写着 `1,×`,见 H160)。
+ */
+private fun speedLabel(v: Float): String = "%.2f".format(v).trimEnd('0').trimEnd('.', ',') + "×"
 
 private fun human(bytes: Long): String {
     if (bytes < 1024) return "$bytes B"
