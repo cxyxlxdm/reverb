@@ -7171,6 +7171,10 @@ Android 认得它 ⇒ 注册扩展名正是 `opml`,追加是空操作;不认得 
   **它只在 default 渠道出现**(`AsrFactory.HAS_ENGINE` 是编译期常量,store 渠道那一支被 R8 连字符串一起删,
   理由就写在 :30-33 的注释里),所以影响面是"自分发用户的 fr/es 界面里混进两行中文"。
   改法是把那两条拆成资源键 × 五语;这一版卡在上传前 ⇒ 排到 1.0.5。
+  **补记(同一天,2026-10-08):这一条没有排到 1.0.5,当天就改了并随之重打三包(第十次)** ——
+  动手才发现它比登记时估计的贵:把字面量搬进资源**改变了「包里没有」这件事的证明方式**(资源不参与 R8 的 DCE,
+  store 渠道必须另加空串覆盖),这些写在 **H161**;登记时那句"改了就要两端三包重打"确实兑现了。
+  同一轮还顺手把 H160 未覆盖范围里那条**跨端小数分隔符漂移**一起对齐了(也记在 H161)。
 - **`site/reverb/privacy.html` 只有一份简体中文**:实测 `<html lang="zh-CN">`、`hreflang` **0 个**;
   而**五语的 `privacy_url` 指向的都是它**(两端 10 处命中逐条读过,URL 完全相同)
   ⇒ fr/es 用户从同意页与关于页点开的隐私政策是中文。这条是**对外承诺面**不是界面串,
@@ -7215,3 +7219,99 @@ Android 认得它 ⇒ 注册扩展名正是 `opml`,追加是空操作;不认得 
 - 设备遗留:鸿蒙机上装的是**含本轮改动的 debug hap**(与在架 1.0.3 不同码);Android 侧 6 个数据文件已还原并 md5 校验,
   **`popular_cache.json` 是唯一没能回到 walk 前状态的**(81,350 → 93,176 B)—— 它是榜单缓存、不含用户数据,
   重刷一次即再生;其余(应用语言回「跟随系统 / Système」、prefs md5 全等、无残留临时文件、两台都息屏)已核对。
+
+### H161 把界面上的中文字面量搬进资源,**改变了「包里没有」的证明方式**:R8 删得掉 dex 里的串,删不掉资源 —— 而鸿蒙那侧连 `L.s` 都不能写在顶层
+
+**现象**
+
+H160 那轮真机通读登记的两条 D 节待办,这轮动手改。改之前先把「为什么不能照原样改」弄清楚了,
+因为这两条各自都藏着一个反向的坑:
+
+| 待办 | 原来的形状 | 改的时候撞到的问题 |
+|---|---|---|
+| 许可页/数据来源的中文硬编码(两端) | Android `LicensesScreen.kt` 顶层 `private val LIBS`,鸿蒙 `LicensesPage.ets` 顶层 `const LIBS` | 顶层 val/const **拿不到资源**(`stringResource` 只能在 composable 里调;鸿蒙的 `L.s` 依赖 `L.init` 已跑过)⇒ 清单必须搬进 composable / 生命周期里 |
+| 两端 fr/es 小数分隔符不一致 | 鸿蒙 `${this.player.speed}×` 裸拼接,恒为 `1.25×`;Android `"%.2f".format()` 走设备默认 locale,法/西下是 `1,25×` | 要对齐只能**在鸿蒙侧引入 locale**(Android 那侧本来就该带逗号),而本端 SDK 的 `@ohos.intl` API 形状与 Android 不同 |
+
+**根因**
+
+① **「包里没有」这件事的载体变了。** 原来那两条 whisper 许可文案是 Kotlin `String` 字面量,
+`AsrFactory.HAS_ENGINE` 是编译期常量,R8 折叠常量之后**连字符串一起从 dex 里删掉**
+(:30-33 的注释写的就是这件事)。搬成 `stringResource(R.string.lic_whisper)` 之后,
+串从 dex 移到了 `resources.arsc`,而**资源不参与 DCE**:五个语种的 `main/res` 值照单全收进包里。
+于是同一个 store 渠道会同时满足「代码里没有识别功能」和「许可页文案写着 whisper.cpp(离线语音识别)」——
+一句对外的不实陈述,而且**只有解包才看得见**(界面在 store 渠道根本不显示那一行)。
+
+② **鸿蒙那侧是同一个坑的另一种形态**:`const LIBS = [...new Lib(L.s('lic_mdi_tabs'), ...)]` 写在顶层,
+模块加载时 `L.rm` 还是 null,`L.s` 直接**把键名返回**(`util/L.ets` 的失败回落),
+界面上就会出现 `lic_mdi_tabs`。这个坑本仓库已在 `L.f` 的注释里记过一次(占位符类型不符时把键名摆上界面),
+这是**同一个回落被第三条路径踩到** —— 前两条是「取不到」和「取的时候类型不符」,这条是「取的时候太早」。
+
+③ **跨端类推 API 名会写错**:按 Android 的习惯写了 `intl.NumberFormat.getInstance(tag, NumberFormatOptions)`,
+本端 `@ohos.intl.d.ts` 里 **既没有 `getInstance`(只有构造函数),options 的类型也叫 `NumberOptions`**,
+`NumberFormatOptions` 这个名字在本端不存在。ArkTS 会当场报错,所以这一步不会漏到包里,
+但判据得写清楚:**对着 d.ts 逐行核,而不是背另一端的名字**(同一条纪律见 H61 的 `index.d.ts`)。
+
+**修法**
+
+- Android:顶层 `val` → `@Composable fun libs()` / `fun sources()`;四个需要变种的条目拆成
+  `lic_whisper` / `lic_whisper_model` / `src_publisher_rss` / `src_site_opml`,**五套 `main/res` 各写一份**;
+  **`src/store/res` 五个语种各加同名覆盖为空串**(与 `privacy_consent_asr` 既有写法同一条路子)。
+  专有名词(`OkHttp` / `Coil` / `Apple iTunes Search` / `fyyd.de` / `gpodder.net`)留在代码字面量里 ——
+  判据是「换语种要不要变」,五套同形的东西搬进资源只是让五个文件各抄一遍。
+- 鸿蒙:`const` → `buildLibs()` / `buildSources()`,在 **`aboutToAppear` 取一次存字段**
+  (不在 `build()` 里调:那是每帧过一边 resourceManager,硬规矩 6)。
+  三键 × 五套 `element/string.json`;`src_publisher_rss` / `src_site_opml` 的取值与 Android **逐字相同**。
+- 鸿蒙小数分隔符:新增 `util/NumberFmt.ets`,`new intl.NumberFormat(tag, {minimumFractionDigits:0, maximumFractionDigits:2, useGrouping:false})`,
+  tag 取 `i18n.System.getAppPreferredLanguage()`(空串=跟随系统时回落 `getSystemLocaleInstance().toString()`);
+  **实例按 tag 缓存**(调用点在播放页,播放中约 500ms 一次重渲);三个调用点
+  (`PlayerPage` 的 chip 与倍速菜单、`SettingsPage` 的默认倍速列表)改成 `formatDecimal(s)`。
+  方向选的是「把鸿蒙拉到 locale」而不是「把 Android 强改成点」:非整数倍速在法/西里本来就该带逗号。
+
+**验收**(解包 grep,每条先看处理量)
+
+| 判据 | 处理量 | default | store |
+|---|---|---|---|
+| `whisper`(裸词)arsc / dex | arsc 443,324 B / 438,480 B,dex 各 1 个 | **11 / 4** | **0 / 0** |
+| `whisper.cpp` arsc / dex | 同上 | 非 0 | **0 / 0** |
+| `lib/` 或 `whisper-model` 条目 | `unzip -l` 全条目 | 2 | **0** |
+| 目录接口串(dex) | `grep -ac` | 4 | 4(本轮恢复口径未变) |
+| `RECORD_AUDIO` | aapt2 退出码 0、权限**行数 12 / 10** | 1 | **0** |
+| 新串 `reconnaissance vocale` / `Le flux RSS` | arsc | 1 / 1 | 0 / **1**(RSS 那条与渠道无关) |
+| versionCode / versionName | `aapt2 dump badging` | 5 / 1.0.4 | 5 / 1.0.4 |
+
+**这一组里真正证明「覆盖生效」的是那个对照**:两个渠道的 `main/res` 定义**完全相同**,
+唯一差别是 store source set 那五个空串覆盖 —— 于是 `whisper` 在 store 的两个维度都是 0、
+在 default 是 11/4,**不必另建一个"不覆盖"的包来验反例**。
+
+鸿蒙包(`reverb.app` → `entry-default.hap` → `ets/modules.abc` 808,444 B + `resources.index` 85,803 B):
+目录接口 1/3/3;`Le flux RSS` / `vecteurs des onglets` / 简繁两套 `底部…矢量` **各 1**(五语都已进包);
+`NumberFmt` 在 abc 里 **1**(新代码确实在包里,不是只在源码里);权限集合恰为
+`INTERNET` / `GET_NETWORK_INFO` / `KEEP_BACKGROUND_RUNNING` 三条;versionCode 1000004 / 1.0.4;`debugKey` 四个文件各 0。
+store 包里 `离线语音识别` 仍有 **1** 处命中,回读是 `set_word_highlight_sub` 那句「本版本**不含**离线语音识别」——
+是否定句,不是许可条目,登记为例外而不是清掉。
+
+**教训与可复用的规律**
+
+① **渠道隔离的判据要跟着"串的载体"走,不是跟着功能走。** 同一句"store 渠道没有离线识别",
+写在代码里靠 R8,写进资源就**只能靠 source set 覆盖**;把文案从一处搬到另一处,
+就得同时把那条「包里没有」的证明方式换掉。判据词也要换:以前查 dex 就够,这轮必须**arsc 和 dex 两个维度都查**。
+② **反例不必另造包 —— 找一个只差这一处改动的同版本包当对照。** 两渠道同源、只差覆盖,
+0 与非 0 同时成立就已经把因果锁死了;这比"我删掉了所以没了"强。
+③ **失败回落的形状会决定它从几条路径被踩到。** `L.s` 取不到返回键名,这一条设计本身没错
+(界面上能直接看出漏配),但它的触发路径至少有三条:键没配、占位符类型不符、**取得太早**。
+新增任何"顶层就求值的文案表"时,先问这条回落会不会在 init 之前跑。
+④ **跨端类推 API 名 = 迟早写错;本端 d.ts 是唯一权威。** `getInstance` / `NumberFormatOptions`
+两个名字都来自 Android/ICU 的直觉,本端一个都没有。这类"背另一端"的错误在 ArkTS 至少会编译失败,
+比 H54 那类"静默进包"的坑便宜,但纪律是同一条。
+⑤ **两端共用的对外文案要按渲染值逐字比。** 这轮 `src_publisher_rss` / `src_site_opml` 各 5 个值、
+共 10 处比对全等,是机器判的(Android 侧的 `\'` 要先还原成 `'` 再比,否则每个带撇号的值都会误报漂移)。
+
+**未覆盖范围**(写了才算扫过)
+
+- **界面一屏都没看过**:这轮的改动全部只有"编译 + 解包 grep"两层证据。
+  fr/es 下许可页实际显示法/西文、倍速 chip 实际显示 `1,25×`,**都还没在真机上取过串**
+  (要做需先装机,而两台机器上现在都还是本轮之前的包)。
+- **`formatDecimal` 的运行时行为没验过**:`getAppPreferredLanguage()` 返回空串时走系统 locale 这条回落、
+  以及缓存是否真按 tag 失效,只有源码一层。
+- macOS 端本轮**没动**(它的许可页文案在 `.strings` 里本就是分语种的),也未出一帧。
+- 半角标点体量差(18 vs 6)与措辞漂移 3 条仍在 D 节,本轮不在此列。
