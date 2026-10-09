@@ -43,7 +43,10 @@ object DownloadManager {
      * 未允许蜂窝下载、且**当前默认网络按用量计费**时拦截。
      *
      * 判据是 `isActiveNetworkMetered` 而不是「bearer 是不是 WIFI」—— 限量热点是计费的 Wi-Fi,要拦;
-     * 以太网/免流链路不是 Wi-Fi 但不计费,放行。鸿蒙侧同口径(见 `DownloadManager.ets` 与 H162)。
+     * 以太网/免流链路不是 Wi-Fi 但不计费,放行。
+     * **鸿蒙侧与这条不等价**(2026-10-09 实测:那边连着 Wi-Fi 也不上报 `NET_CAPABILITY_NOT_METERED`,
+     * 计费信号在 ArkTS 拿不到,只能按 `bearerTypes` 判「是不是蜂窝」)⇒ 限量热点 Android 拦、鸿蒙放行。
+     * **不要把它"修一致"**,除非先在鸿蒙上把计费信号真取出来(见 H166)。
      * `settings` 读不到按「不允许」(?: false),ConnectivityManager 取不到时放行。
      */
     private fun blockedByCellular(): Boolean {

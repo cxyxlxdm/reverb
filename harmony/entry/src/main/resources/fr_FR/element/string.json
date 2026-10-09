@@ -482,7 +482,7 @@
     },
     {
       "name": "perm_network_info",
-      "value": "Sert à détecter le type de réseau et éviter les gros téléchargements en réseau facturé"
+      "value": "Sert à détecter une connexion en données mobiles pour éviter les gros téléchargements hors Wi-Fi"
     },
     {
       "name": "perm_background_audio",
@@ -774,7 +774,7 @@
     },
     {
       "name": "download_wifi_required",
-      "value": "Réseau facturé à l’usage. Téléchargement annulé."
+      "value": "Connexion en données mobiles. Téléchargement annulé."
     },
     {
       "name": "download_no_network",
@@ -815,6 +815,10 @@
     {
       "name": "confirm_clear_history",
       "value": "Efface tout l'historique et les positions de reprise."
+    },
+    {
+      "name": "confirm_clear_queue",
+      "value": "Efface tous les épisodes de la file « À suivre ». Cette action est définitive."
     },
     {
       "name": "set_share_log",

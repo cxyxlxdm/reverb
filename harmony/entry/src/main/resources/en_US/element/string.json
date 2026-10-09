@@ -482,7 +482,7 @@
     },
     {
       "name": "perm_network_info",
-      "value": "Used to detect the network type and avoid large downloads on metered networks"
+      "value": "Used to tell whether you are on a cellular network, to avoid large downloads over mobile data"
     },
     {
       "name": "perm_background_audio",
@@ -774,7 +774,7 @@
     },
     {
       "name": "download_wifi_required",
-      "value": "This network is metered. Download cancelled."
+      "value": "You are on a cellular network. Download cancelled."
     },
     {
       "name": "download_no_network",
@@ -815,6 +815,10 @@
     {
       "name": "confirm_clear_history",
       "value": "This clears all listening history and resume positions."
+    },
+    {
+      "name": "confirm_clear_queue",
+      "value": "This clears every episode in the up next queue. It cannot be undone."
     },
     {
       "name": "set_share_log",

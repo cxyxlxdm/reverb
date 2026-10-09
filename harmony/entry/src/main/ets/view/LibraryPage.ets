@@ -31,6 +31,20 @@ import { QueueBody } from './QueuePage';
 const TAG_FAV = 'fav';
 const TAG_DL = 'dl';
 
+/**
+ * 音阁六段的**序号**。与 Android `LibraryScreen.kt` 的 `SEG_*` 同一组数,段的顺序两端一致。
+ *
+ * 为什么不写裸数字(见 H164 / H165):分段条右端那颗动作是**按序号**挂的,而序号会随增删段变化 ——
+ * 「最新」提升成顶层页那次,若只改 `segments()` 不改判断,历史段就会挂上待播的动作。
+ * 具名常量把契约写在名字上:**加一段时改的是这一组数,漏改会立刻在名字对不上的地方露出来**。
+ */
+const SEG_SUBS: number = 0;
+const SEG_FAV: number = 1;
+const SEG_DL: number = 2;
+const SEG_QUEUE: number = 3;
+const SEG_HISTORY: number = 4;
+const SEG_NOTES: number = 5;
+
 /// 音阁:订阅 / 收藏 / 下载 / 待播 / 历史 / 批注 六分段。
 /// 对应 Android `LibraryScreen.kt`。分段用 chips + Swiper 双向联动。
 @Component
@@ -82,6 +96,9 @@ export struct LibraryPage {
   @State pageW: number = 0;
   /// 待确认的「删除某集下载」(非 null 即弹框)。null 表示没在确认。
   @State pendingDelete: ConfirmSpec | null = null;
+  /// 待确认的「清空某一段」(历史 / 待播)。与 pendingDelete 分开两颗,是因为两者的
+  /// 确认文案与动作不同,而 ConfirmSpec 已经把差异装在自己的四个字段里。
+  @State pendingClear: ConfirmSpec | null = null;
 
   /**
    * 六个分段。与 Android `LibraryScreen` 同序(订阅 / 收藏 / 下载 / 待播 / 历史 / 批注)。
@@ -188,6 +205,16 @@ export struct LibraryPage {
           onDismiss: () => { this.pendingDelete = null; }
         })
       }
+
+      // 清空历史 / 待播的二次确认(理由见 barActions 里那两颗按钮的注释)
+      if (this.pendingClear !== null) {
+        ConfirmDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          spec: this.pendingClear,
+          onDismiss: () => { this.pendingClear = null; }
+        })
+      }
     }
     .width('100%')
     .height('100%')
@@ -212,7 +239,7 @@ export struct LibraryPage {
     // 这里先前多挂了 `subscriptions.length > 0`,装机表现就是用户反馈的「切到订阅 tab
     // 右侧没有排序方式按钮」—— 一台还没订阅的手机两边行为立刻不一样,而排列方式是全局
     // 设置,空列表时切了下次进来看得到,没有任何理由藏起来。
-    if (this.seg === 0) {
+    if (this.seg === SEG_SUBS) {
       // 与 Android 一致:图标按钮,且**图标表示切换后的目标布局**(当前是宫格就显示"列表")
       Glyph({
         symbol: this.settings.subsGrid ? Sym.list : Sym.grid,
@@ -222,24 +249,33 @@ export struct LibraryPage {
         .accessibilityText(L.s('subs_layout_toggle'))
         .onClick(() => { this.settings.setSubsGrid(!this.settings.subsGrid); })
     }
-    if (this.seg === 3 && this.player.userQueue.length > 0) {
+    if (this.seg === SEG_QUEUE && this.player.userQueue.length > 0) {
       // 待播段的动作只有「清空」,**没有播放模式那颗**:这一列就是 `player.userQueue` 本体,
       // 起播走 `playFromQueue`,模式(顺序 / 单曲循环 / 随机)在播放器身上那一层已经生效。
       // 给它挂一颗,它改的是"另一列的设置"而那一列就是它自己 —— 只是多一个能设错的地方。
       // 独立队列页(`QueuePage`)标题栏里那颗是同一个动作,两处同源,不会各清各的。
+      //
+      // 两颗「清空」都**不直接动手**:一刀切且没有找回办法,与设置页里「清空播放历史」
+      // 同待遇(那边一直是先确认再清)。两端同口径,Android 侧见 `LibraryScreen.kt` 的 pendingClear。
       Text(L.s('action_clear'))
         .fontSize(TypeScale.labelLarge * this.fontScale)
         .fontColor(this.scheme.primary)
         .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-        .onClick(() => { this.player.clearQueue(); })
+        .onClick(() => {
+          this.pendingClear = new ConfirmSpec(L.s('queue_title'), L.s('confirm_clear_queue'),
+            L.s('action_clear_confirm'), () => this.player.clearQueue());
+        })
     }
-    if (this.seg === 4 && this.history.history.length > 0) {
+    if (this.seg === SEG_HISTORY && this.history.history.length > 0) {
       Text(L.s('action_clear'))
         // 字号取 labelLarge 与 Android 那颗 TextButton 同档(原先是 caption,比另一端小一号)
         .fontSize(TypeScale.labelLarge * this.fontScale)
         .fontColor(this.scheme.primary)
         .padding({ left: 16, right: 16, top: 12, bottom: 12 })
-        .onClick(() => { this.history.clear(); })
+        .onClick(() => {
+          this.pendingClear = new ConfirmSpec(L.s('set_clear_history'), L.s('confirm_clear_history'),
+            L.s('action_clear_confirm'), () => this.history.clear());
+        })
     }
     /**
      * 两段单集列表(收藏 / 下载):一颗**本列的播放模式按钮**。
@@ -250,10 +286,10 @@ export struct LibraryPage {
      * 原先这里有三段(最新 / 收藏 / 下载):「最新」那段 2026-10-08 提升成顶层页,
      * 它的模式按钮跟着搬到 `FeedPage` 的标题栏右端,功能没有因为搬家丢掉。
      */
-    if (this.seg === 1) {
+    if (this.seg === SEG_FAV) {
       PlayModeButton({ scheme: this.scheme, player: this.player, tag: TAG_FAV })
     }
-    if (this.seg === 2) {
+    if (this.seg === SEG_DL) {
       PlayModeButton({ scheme: this.scheme, player: this.player, tag: TAG_DL })
     }
     /**

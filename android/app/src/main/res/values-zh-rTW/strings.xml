@@ -286,6 +286,7 @@
     <string name="confirm_clear_cache">將清除榜單、頻道快取、圖片與已產生的逐字稿，不影響訂閱與下載。</string>
     <string name="confirm_clear_downloads">將刪除全部已下載的音訊檔，無法復原。</string>
     <string name="confirm_clear_history">將清空全部收聽記錄與續播位置。</string>
+    <string name="confirm_clear_queue">將清空待播佇列中的全部單集，無法恢復。</string>
 
     <string name="opml_importing_title">正在匯入</string>
     <string name="opml_importing_msg">正在解析 OPML 並抓取訂閱…</string>

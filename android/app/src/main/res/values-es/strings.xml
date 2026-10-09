@@ -286,6 +286,7 @@
     <string name="confirm_clear_cache">Borra listas, canales, imágenes y transcripciones generadas en caché. Las suscripciones y descargas no se ven afectadas.</string>
     <string name="confirm_clear_downloads">Elimina todos los audios descargados. No se puede deshacer.</string>
     <string name="confirm_clear_history">Borra todo el historial y las posiciones de reanudación.</string>
+    <string name="confirm_clear_queue">Borra todos los episodios de la cola «A continuación». No se puede deshacer.</string>
 
     <string name="opml_importing_title">Importando</string>
     <string name="opml_importing_msg">Analizando OPML y obteniendo suscripciones…</string>

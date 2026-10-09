@@ -286,6 +286,7 @@
     <string name="confirm_clear_cache">Vide les classements, chaînes, images et transcriptions générées en cache. Abonnements et téléchargements non affectés.</string>
     <string name="confirm_clear_downloads">Supprime tous les fichiers audio téléchargés. Irréversible.</string>
     <string name="confirm_clear_history">Efface tout l\'historique et les positions de reprise.</string>
+    <string name="confirm_clear_queue">Efface tous les épisodes de la file « À suivre ». Cette action est définitive.</string>
 
     <string name="opml_importing_title">Importation</string>
     <string name="opml_importing_msg">Analyse de l\'OPML et récupération des abonnements…</string>
