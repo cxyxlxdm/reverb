@@ -482,7 +482,7 @@
     },
     {
       "name": "perm_network_info",
-      "value": "判断当前网络类型以避免计费网络下大流量下载"
+      "value": "判断当前是否为蜂窝网络，以避免在蜂窝网络下大流量下载"
     },
     {
       "name": "perm_background_audio",
@@ -774,7 +774,7 @@
     },
     {
       "name": "download_wifi_required",
-      "value": "当前网络按用量计费，已取消下载"
+      "value": "当前是蜂窝网络，已取消下载"
     },
     {
       "name": "download_no_network",
@@ -815,6 +815,10 @@
     {
       "name": "confirm_clear_history",
       "value": "将清空全部收听记录与续播位置。"
+    },
+    {
+      "name": "confirm_clear_queue",
+      "value": "将清空待播队列中的全部单集,无法恢复。"
     },
     {
       "name": "set_share_log",

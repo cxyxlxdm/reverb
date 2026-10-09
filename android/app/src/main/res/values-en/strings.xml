@@ -286,6 +286,7 @@
     <string name="confirm_clear_cache">This clears cached charts, channels, images and generated transcripts. Subscriptions and downloads are unaffected.</string>
     <string name="confirm_clear_downloads">This deletes all downloaded audio files and cannot be undone.</string>
     <string name="confirm_clear_history">This clears all listening history and resume positions.</string>
+    <string name="confirm_clear_queue">This clears every episode in the up next queue. It cannot be undone.</string>
 
     <string name="opml_importing_title">Importing</string>
     <string name="opml_importing_msg">Parsing OPML and fetching subscriptions…</string>

@@ -3,7 +3,7 @@ import { L } from '../util/L';
 import { Episode } from '../model/Models';
 import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, Artwork, Glyph, Sym } from './Widgets';
-import { formatDurationSec, CHIPS_RESERVE_H } from './Components';
+import { formatDurationSec, CHIPS_RESERVE_H, ConfirmDialog, ConfirmSpec } from './Components';
 
 /// 待播(up next):点击单集直接跳播(摘出立即播),上移 / 下移 / 移除 / 清空。
 /// 对应 Android `QueueScreen.kt`。队列语义由 PlayerController 持有(优先于上下文队列)。
@@ -16,33 +16,52 @@ export struct QueuePage {
   @Prop fontScale: number;
   @ObjectLink player: PlayerController;
   onBack: () => void = () => {};
+  /// 待确认的「清空队列」(null = 没在确认)。那颗按钮只写这个数,动作在确认框里跑。
+  @State pendingClear: ConfirmSpec | null = null;
 
   build() {
-    Column() {
-      Row() {
-        TopBar({
-          scheme: this.scheme, fontScale: this.fontScale,
-          title: L.s('queue_title'), onBack: () => this.onBack()
+    // 确认框要连标题栏一起遮住,所以根是 Stack 而不是 Column(与 `LibraryPage` 同一形状)。
+    Stack() {
+      Column() {
+        Row() {
+          TopBar({
+            scheme: this.scheme, fontScale: this.fontScale,
+            title: L.s('queue_title'), onBack: () => this.onBack()
+          })
+            .layoutWeight(1)
+          if (this.player.userQueue.length > 0) {
+            Text(L.s('action_clear'))
+              .fontSize(TypeScale.label * this.fontScale)
+              .fontColor(this.scheme.primary)
+              .padding({ right: Metrics.pagePadding })
+              .onClick(() => {
+                this.pendingClear = new ConfirmSpec(L.s('queue_title'), L.s('confirm_clear_queue'),
+                  L.s('action_clear_confirm'), () => this.player.clearQueue());
+              })
+          }
+        }
+        .width('100%')
+        .alignItems(VerticalAlign.Center)
+
+        // 列表本体与音阁那个分段**共用一个组件**(下面是空态,也是一个组件里的两分支),
+        // 免得两处各写一遍行的操作与 key 规则 —— 那两条坑(H145 的 idx-in-key)会各修一半。
+        QueueBody({
+          scheme: this.scheme, fontScale: this.fontScale, player: this.player,
+          bottomPad: 0, chipReserve: false
         })
           .layoutWeight(1)
-        if (this.player.userQueue.length > 0) {
-          Text(L.s('action_clear'))
-            .fontSize(TypeScale.label * this.fontScale)
-            .fontColor(this.scheme.primary)
-            .padding({ right: Metrics.pagePadding })
-            .onClick(() => this.player.clearQueue())
-        }
       }
       .width('100%')
-      .alignItems(VerticalAlign.Center)
+      .height('100%')
 
-      // 列表本体与音阁那个分段**共用一个组件**(下面是空态,也是一个组件里的两分支),
-      // 免得两处各写一遍行的操作与 key 规则 —— 那两条坑(H145 的 idx-in-key)会各修一半。
-      QueueBody({
-        scheme: this.scheme, fontScale: this.fontScale, player: this.player,
-        bottomPad: 0, chipReserve: false
-      })
-        .layoutWeight(1)
+      if (this.pendingClear !== null) {
+        ConfirmDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          spec: this.pendingClear,
+          onDismiss: () => { this.pendingClear = null; }
+        })
+      }
     }
     .width('100%')
     .height('100%')

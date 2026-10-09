@@ -190,39 +190,43 @@ export class DownloadManager {
   }
 
   /**
-   * 计费网络闸门。判据与 Android `blockedByCellular()` 同口径:**按"这条链路是否计费"判,
-   * 不按 bearer 是不是 Wi-Fi 判**。
+   * 下载闸门。**只有链路是蜂窝时才拦**(2026-10-09 真机改定,判据来源见下面第二段)。
    *
-   * 原先本端写的是 `bearerTypes 里没有 WIFI ⇒ 拦`,和 Android 的 `isActiveNetworkMetered`
-   * 在两种网上给出相反答案:限量热点(计费的 Wi-Fi)Android 拦、本端放行;以太网/免流通道
-   * 本端拦、Android 放行。而"仅 Wi-Fi"这个开关对用户承诺的是**不花流量**,不是"必须连路由器"。
+   * 上一版把判据从 bearer 改成"networkCap 里有没有 NOT_METERED",理由是要与 Android 的
+   * `isActiveNetworkMetered` 同口径 —— 方向没错,**这台设备根本不提供这个信号**:连着 Wi-Fi
+   * (实测 `bearer=[1]`)时系统给的 `networkCap` 是 `[12,15,16]`,即 INTERNET / NOT_VPN /
+   * VALIDATED,**不含 NOT_METERED(11)**。于是"没上报不计费"被读成"计费",Wi-Fi 下载当场被拦,
+   * 用户报的那条 bug 原样复现(取证日志:`闸门拦下 bearer=[1] cap=[12,15,16]`)。
+   * 所以本端的 `networkCap` 只能当**放行信号**(含 11 一定不计费),不能当拦截依据;
+   * 拦截依据只能用链路类型 —— 这也正是"仅在 Wi-Fi 下载"这个开关对用户承诺的东西(别走流量)。
    *
-   * 两个方向也与 Android 一致:
+   * 代价写清楚:**本端识别不了"计费的 Wi-Fi 热点"**(限量热点会被放行),因为连普通 Wi-Fi
+   * 都不上报 NOT_METERED,这个信号在 ArkTS 侧不可用;Android 侧仍能识别,两端在这条上
+   * 就是不等价,不要试图"修一致"。
+   *
+   * 两个兜底方向仍与 Android 一致:
    * - **设置读不到就按"不允许蜂窝"**(Android 是 `?: false`;本端原先 `settings === null` 直接放行);
-   * - 拿不到 capability 时按"不计费"放行(Android 的 ConnectivityManager 取不到时同样放行),
-   *   拦下载比拦错下载更烦人。
+   * - 拿不到 capability 数组时放行(拦下载比拦错下载更烦人)。
    */
   private async downloadGate(): Promise<DownloadResult> {
     try {
       const handle = await connection.getDefaultNet();
       const caps = await connection.getNetCapabilities(handle);
-      if (caps.bearerTypes.length === 0) return DownloadResult.NO_NETWORK;
+      const bearers = caps.bearerTypes;
+      if (bearers.length === 0) return DownloadResult.NO_NETWORK;
       const settings = this.settings;
       if (settings !== null && settings.allowCellular) return DownloadResult.STARTED;
       const netCap = caps.networkCap;
-      // 空数组与 undefined 同等对待:那都是"系统没告诉我们计费与否",按不计费放行
-      // (与上面「拿不到 capability 时放行」同口径 —— 拦下载比拦错下载更烦人)。
-      // 只兜 undefined 的旧写法若真遇上 `[]`,会在连着 Wi-Fi 的机器上弹「当前不是 Wi-Fi」。
-      const notMetered = netCap === undefined || netCap.length === 0
-        || netCap.indexOf(connection.NetCap.NET_CAPABILITY_NOT_METERED) >= 0;
-      if (!notMetered) {
-        // 拦下来的时候把系统给的两组 capability 原样打出来:这条判据按 networkCap 判,
-        // 而用户看到的是「按用量计费」的提示 —— 只有这两个数组能分辨"真连着计费网"
-        // 与"设备上报得不对"(见 H162)。放行时不打,免得正常路径每次下载都刷一行。
-        Log.i('Download', `闸门拦下 bearer=${JSON.stringify(caps.bearerTypes)} `
-          + `cap=${JSON.stringify(netCap)} 判定=计费`);
-      }
-      return notMetered ? DownloadResult.STARTED : DownloadResult.WIFI_REQUIRED;
+      const declaredNotMetered = netCap !== undefined && netCap.length > 0
+        && netCap.indexOf(connection.NetCap.NET_CAPABILITY_NOT_METERED) >= 0;
+      // VPN 隧道挂在蜂窝上时 bearer 只给 4,这条会放行 —— 漏拦的情形写在这里,不装看不见。
+      const isCellular = bearers.indexOf(connection.NetBearType.BEARER_CELLULAR) >= 0;
+      if (declaredNotMetered || !isCellular) return DownloadResult.STARTED;
+      // 拦下来的时候把系统给的两组值原样打出来:判据按 bearer 判,而提示文案历史上说过两次
+      // 别的口径(「不是 Wi-Fi」/「按用量计费」)—— 只有这两行能分辨"真连着蜂窝"与"设备上报得不对"(见 H162、H166)。
+      Log.i('Download', `闸门拦下 bearer=${JSON.stringify(bearers)} `
+        + `cap=${JSON.stringify(netCap)} 判定=蜂窝`);
+      return DownloadResult.WIFI_REQUIRED;
     } catch (e) {
       Log.w('Download', `读取当前网络失败 ${(e as Error).message}`);
       return DownloadResult.NO_NETWORK;

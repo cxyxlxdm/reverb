@@ -482,7 +482,7 @@
     },
     {
       "name": "perm_network_info",
-      "value": "判斷目前網路類型以避免計費網路下大流量下載"
+      "value": "判斷目前是否為行動網路，以避免在行動網路下大流量下載"
     },
     {
       "name": "perm_background_audio",
@@ -774,7 +774,7 @@
     },
     {
       "name": "download_wifi_required",
-      "value": "目前網路按用量計費，已取消下載"
+      "value": "目前為行動網路，已取消下載"
     },
     {
       "name": "download_no_network",
@@ -815,6 +815,10 @@
     {
       "name": "confirm_clear_history",
       "value": "將清空全部收聽記錄與續播位置。"
+    },
+    {
+      "name": "confirm_clear_queue",
+      "value": "將清空待播佇列中的全部單集,無法恢復。"
     },
     {
       "name": "set_share_log",

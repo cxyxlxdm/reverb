@@ -482,7 +482,7 @@
     },
     {
       "name": "perm_network_info",
-      "value": "Se usa para detectar el tipo de red y evitar descargas grandes en redes medidas"
+      "value": "Sirve para detectar si estás en datos móviles y evitar descargas grandes fuera de Wi-Fi"
     },
     {
       "name": "perm_background_audio",
@@ -774,7 +774,7 @@
     },
     {
       "name": "download_wifi_required",
-      "value": "Red con límite de datos. Descarga cancelada."
+      "value": "Estás en una red de datos móviles. Descarga cancelada."
     },
     {
       "name": "download_no_network",
@@ -815,6 +815,10 @@
     {
       "name": "confirm_clear_history",
       "value": "Borra todo el historial y las posiciones de reanudación."
+    },
+    {
+      "name": "confirm_clear_queue",
+      "value": "Borra todos los episodios de la cola «A continuación». No se puede deshacer."
     },
     {
       "name": "set_share_log",

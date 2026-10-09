@@ -39,6 +39,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -87,6 +88,21 @@ import kotlinx.coroutines.launch
 const val TAG_FAV = "fav"
 const val TAG_DL = "dl"
 
+/**
+ * 音阁六段的**页号**。段条右端那颗动作和 `when (page)` 都用它,不用裸数字。
+ *
+ * 为什么不写裸数字(见 H164 / H165):这两处是**按序号**挂的,而序号会随增删段变化 ——
+ * 「最新」提升成顶层页那次,若只改 sections 列表不改判断,历史段就会挂上待播的动作。
+ * 具名常量把契约写在名字上:**加一段时改的是这一组数,漏改会编译期对不上名字**;
+ * 值本身仍是那六个数(顺序与鸿蒙 `LibraryPage` 同,用户肌肉记忆也挂在这儿)。
+ */
+private const val SEG_SUBS = 0
+private const val SEG_FAV = 1
+private const val SEG_DL = 2
+private const val SEG_QUEUE = 3
+private const val SEG_HISTORY = 4
+private const val SEG_NOTES = 5
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenListenStats: () -> Unit) {
@@ -117,6 +133,35 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
     val pagerState = rememberPagerState(pageCount = { sections.size })
     val section = pagerState.currentPage
     val scope = rememberCoroutineScope()
+    // 待确认的「清空哪一段」(-1 = 没有)。段尾那两颗清空按钮只写这个数,确认框在这儿统一弹,
+    // 于是「历史」与「待播」两条清空路径共用同一个形状(与队列页那颗也一致)。
+    var pendingClear by remember { mutableIntStateOf(-1) }
+
+    if (pendingClear == SEG_QUEUE || pendingClear == SEG_HISTORY) {
+        val isHistory = pendingClear == SEG_HISTORY
+        AlertDialog(
+            onDismissRequest = { pendingClear = -1 },
+            title = {
+                Text(stringResource(
+                    if (isHistory) R.string.set_clear_history else R.string.queue_title
+                ))
+            },
+            text = {
+                Text(stringResource(
+                    if (isHistory) R.string.confirm_clear_history else R.string.confirm_clear_queue
+                ))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    if (isHistory) container.historyStore.clear() else PlayerController.clearQueue()
+                    pendingClear = -1
+                }) { Text(stringResource(R.string.action_clear_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingClear = -1 }) { Text(stringResource(R.string.action_cancel)) }
+            }
+        )
+    }
 
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
@@ -142,16 +187,16 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 when (page) {
-                    0 -> SubscriptionsSection(subsGrid, onOpen)
-                    1 -> FavoritesSection()
-                    2 -> DownloadsSection()
+                    SEG_SUBS -> SubscriptionsSection(subsGrid, onOpen)
+                    SEG_FAV -> FavoritesSection()
+                    SEG_DL -> DownloadsSection()
                     // 待播段就是 `PlayerController.userQueue` 本体 —— 与独立队列页同源,
                     // 不是另一份列表。复用 `QueueBody`(独立页标题栏以下的那一段)。
-                    3 -> QueueBody(topPad = GLASS_CHIPS_TOP_PAD)
+                    SEG_QUEUE -> QueueBody(topPad = GLASS_CHIPS_TOP_PAD)
                     // 从这里开始**必须写显式页号**:原来是 `else -> HistorySection`,
                     // 加第 6 段时若不拆开,历史会被挤到批注段的位置上(点了历史看到批注)。
-                    4 -> HistorySection(history)
-                    else -> NotesSection()
+                    SEG_HISTORY -> HistorySection(history)
+                    SEG_NOTES -> NotesSection()
                 }
             }
             GlassChipsRow(
@@ -182,21 +227,24 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                     // 三态图标与点击口径收在 `Components.kt PlayModeButton`
                     // (频道主页「共 N 集」那一行与顶层「追更」页用的都是同一颗)。
                     // 两段各有一份模式,所以这里传的是**这一段自己的** tag —— 两段看到两个值。
-                    if (section == 1 || section == 2) PlayModeButton(
-                        if (section == 1) TAG_FAV else TAG_DL
+                    if (section == SEG_FAV || section == SEG_DL) PlayModeButton(
+                        if (section == SEG_FAV) TAG_FAV else TAG_DL
                     )
                     // 待播段**刻意不挂模式按钮**:这一列就是 `PlayerController.userQueue` 本体,
                     // 起播走 `playFromQueue`,模式(顺序/单曲循环/随机)在播放器那一层已经生效。
                     // 给它挂一颗,它改的是"另一列的设置"而那一列就是它自己 —— 只是多一个能设错的地方。
-                    if (section == 3 && queue.isNotEmpty()) {
+                    //
+                    // 两颗「清空」现在都**不直接动手**,只记下要清哪一段:一刀切且没有找回办法,
+                    // 与设置页里「清空播放历史」同待遇(那边一直是先确认再清)。
+                    if (section == SEG_QUEUE && queue.isNotEmpty()) {
                         TextButton(
-                            onClick = { PlayerController.clearQueue() },
+                            onClick = { pendingClear = SEG_QUEUE },
                             contentPadding = PaddingValues(start = 16.dp, end = 8.dp, top = 8.dp, bottom = 8.dp)
                         ) { Text(stringResource(R.string.action_clear_confirm)) }
                     }
-                    if (section == 4 && history.isNotEmpty()) {
+                    if (section == SEG_HISTORY && history.isNotEmpty()) {
                         TextButton(
-                            onClick = { container.historyStore.clear() },
+                            onClick = { pendingClear = SEG_HISTORY },
                             // start 16dp:与左边正在横滚的 chips 留出可见的缝(装机反馈
                             // 「间距再大一些」);end 8dp + 容器那 8dp ⇒ 文字离条的右圆顶 16dp。
                             // 鸿蒙 `LibraryPage.barActions()` 的 padding 是同一组数,改要两端一起改。
@@ -204,7 +252,11 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                         ) { Text(stringResource(R.string.action_clear_confirm)) }
                     }
                     // 订阅分段:右侧「行 / 宫格」排列切换。图标显示切换后的目标布局。
-                    if (section == 0 && subs.isNotEmpty()) {
+                    //
+                    // ⚠️ **不看订阅数**(鸿蒙 `LibraryPage.barActions()` 同一条,那边还留着实测记录):
+                    // 排列方式是**全局设置**,列表空着也能设,下次进来看得到;加上 `isNotEmpty()`
+                    // 就成了「一台没订阅的手机两边行为立刻不一样」+ 用户反馈的「右侧没有排序按钮」。
+                    if (section == SEG_SUBS) {
                         IconButton(onClick = { container.settingsStore.setSubsGrid(!subsGrid) }) {
                             Icon(
                                 if (subsGrid) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.GridView,
