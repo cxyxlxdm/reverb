@@ -7,7 +7,14 @@ import { parsePubMillis } from '../util/DateParse';
 import { Log } from '../util/Logger';
 
 /**
- * 「最新」收件箱:跨全部订阅聚合最新单集。
+ * 「追更」收件箱:跨全部订阅聚合**全部单集**(内存侧不截断,落盘有界,见 persist)。
+ *
+ * 2026-10-10 之前是「每源最新 12 集 / 全局 100 条」,于是这一页只显示每个频道的头几集 ——
+ * 与"这一格用来管理我订阅的全部内容"的定位不符。放开之后真正要重算的两笔:
+ *  1. **排序成本**:比较器里不能再解析 pubDate(见 sortStable);
+ *  2. **落盘体量**:全量约七千集(实测 20 个源,中位数 ~200,最大 2,828),整份写盘是几 MB。
+ * 顺带一句:本端 `Repository.feed` 本来就整份下载并解析全量 RSS,那两道截断从来只限制
+ * "留下多少条",不省网络也不省解析。
  *
  * 移植时必须保留 Android/macOS 已验证的三个设计(都是踩过坑换来的):
  *  1. **有缓存时不做增量替换** —— 否则可见列表会先坍缩再重建,既跳闪又会顶起下拉刷新偏移;
@@ -25,8 +32,7 @@ export class InboxStore {
   refreshing: boolean = false;
 
   private static FILE = 'inbox.json';
-  private static MAX = 100;
-  private static PER_FEED_MAX = 12;      // 每源只取最新 12 集,避免大源刷屏
+  private static PERSIST_MAX = 300;      // 落盘只留最新 300 条(内存留全量),理由见 persist
   private static PARALLELISM = 8;        // 有界并发
 
   private loadedSignature = '';
@@ -65,8 +71,13 @@ export class InboxStore {
 
     this.busy = true;
     this.refreshing = true;
+    // 全量之后这条耗时是**必须能看见**的量:merge/sort 没有协程帮忙,全程在 UI 线程上跑
+    // (硬规矩 8),而这一页的数据规模刚从 100 条变成几千条。装机验收读这行数字。
+    const t0 = Date.now();
     const hasCache = this.episodes.length > 0;
     const collected: Episode[] = [];
+    // pubDate → 毫秒的**本次刷新**的键表:每集只解析一次,排序比较器只查表(见 sortStable)。
+    const keys = new Map<string, number>();
 
     try {
       let next = 0;
@@ -75,10 +86,10 @@ export class InboxStore {
           const i = next;
           next += 1;
           if (i >= feeds.length) return;
-          const eps = await this.loadCapped(feeds[i], repo);
+          const eps = await this.loadFeed(feeds[i], repo, keys);
           for (let k = 0; k < eps.length; k++) collected.push(eps[k]);
           // 冷启动才逐源刷 UI(给进度反馈);有缓存则一律等最终原子替换
-          if (!hasCache) this.episodes = InboxStore.merge(collected);
+          if (!hasCache) this.episodes = InboxStore.merge(collected, keys);
         }
       };
       const pool: Promise<void>[] = [];
@@ -86,49 +97,63 @@ export class InboxStore {
       for (let i = 0; i < n; i++) pool.push(worker());
       await Promise.all(pool);
 
-      const latest = InboxStore.merge(collected);
+      const tMerge = Date.now();
+      const latest = InboxStore.merge(collected, keys);
+      const mergeMs = Date.now() - tMerge;
       // 失败不覆盖:全部源失败时保留旧内容,宁可陈旧也不白屏
       if (latest.length > 0 || !hasCache) this.episodes = latest;
       if (latest.length > 0) {
         this.persist();
         this.loadedSignature = InboxStore.signature(subs);
       }
-      Log.i('Inbox', `刷新完成 源=${feeds.length} 得到 ${latest.length} 条`);
+      Log.i('Inbox', `刷新完成 源=${feeds.length} 得到 ${latest.length} 条 `
+        + `落盘 ${Math.min(latest.length, InboxStore.PERSIST_MAX)} 条 末次合并=${mergeMs}ms 总=${Date.now() - t0}ms`);
     } finally {
       this.busy = false;
       this.refreshing = false;
     }
   }
 
-  /// 单源拉取 + 每源截断。不能再用 Promise.race 假超时：race 只丢结果,底层请求仍继续占资源。
-  private async loadCapped(feedUrl: string, repo: PodcastRepository): Promise<Episode[]> {
+  /// 单源拉取。**不截断**(旧口径是每源只留最新 12 集)—— 这一页要能翻到全部集数。
+  /// 解析出的时刻顺手记进 [keys],让 merge 那边每集只解析一次。
+  private async loadFeed(feedUrl: string, repo: PodcastRepository, keys: Map<string, number>): Promise<Episode[]> {
     const feed = await repo.feed(feedUrl);
     if (feed === null) return [];
     const eps = feed.episodes.filter((e: Episode) => e.audioUrl.length > 0);
-    const sorted = InboxStore.sortStable(eps);
-    return sorted.slice(0, InboxStore.PER_FEED_MAX);
+    for (let i = 0; i < eps.length; i++) {
+      if (!keys.has(eps[i].id)) keys.set(eps[i].id, parsePubMillis(eps[i].pubDate));
+    }
+    return eps;
   }
 
-  /// 按 id 去重 + 稳定排序 + 总量截断。
-  private static merge(all: Episode[]): Episode[] {
+  /// 按 id 去重 + 稳定排序。**不在这里截断**,全量留在内存(落盘才截,见 persist)。
+  private static merge(all: Episode[], keys: Map<string, number>): Episode[] {
     const seen = new Set<string>();
     const uniq: Episode[] = [];
     for (let i = 0; i < all.length; i++) {
       const e = all[i];
       if (e.id.length === 0 || seen.has(e.id)) continue;
       seen.add(e.id);
+      // 去重时补解析:loadFeed 只填了「有音频地址」的那批,而 merge 也可能收到别的来源
+      if (!keys.has(e.id)) keys.set(e.id, parsePubMillis(e.pubDate));
       uniq.push(e);
     }
-    const sorted = InboxStore.sortStable(uniq);
-    return sorted.length > InboxStore.MAX ? sorted.slice(0, InboxStore.MAX) : sorted;
+    return InboxStore.sortStable(uniq, keys);
   }
 
   /// 稳定全序:发布时间倒序,时间相同则按 id 升序(消除"内容没变却闪动")。
-  private static sortStable(src: Episode[]): Episode[] {
+  ///
+  /// 时刻从 [keys] 查,**不在比较器里调 parsePubMillis**:全量之后一轮七千集,
+  /// 一次排序的比较次数在十万量级,而本端这个解析函数每次要 split/正则/多次 parseInt。
+  /// 硬规矩 6 那条乘法(调用次数 × 每次成本)在这里就是靠"每集只解析一次"拆掉的 ——
+  /// 且本端没有协程,merge/sort 全部跑在 UI 线程,原先 100 条时这笔账根本不构成问题。
+  private static sortStable(src: Episode[], keys: Map<string, number>): Episode[] {
     const a = src.slice();
     a.sort((x: Episode, y: Episode): number => {
-      const dx = parsePubMillis(x.pubDate);
-      const dy = parsePubMillis(y.pubDate);
+      const kx = keys.get(x.id);
+      const ky = keys.get(y.id);
+      const dx = kx === undefined ? 0 : kx;
+      const dy = ky === undefined ? 0 : ky;
       if (dx !== dy) return dy - dx;
       return x.id < y.id ? -1 : (x.id > y.id ? 1 : 0);
     });
@@ -141,11 +166,21 @@ export class InboxStore {
     return urls.join('|');
   }
 
-  /// 惰性落盘(冷启动时每源都会刷一次列表,序列化只做最后一次)
+  /// 惰性落盘(冷启动时每源都会刷一次列表,序列化只做最后一次)。
+  ///
+  /// **只写最新 [PERSIST_MAX] 条,而内存里是全量** —— 有意的分工:这份文件的作用只有
+  /// 「冷启动秒显」,而 `load()` 在启动路径上同步读它(整份 JSON 解析七千集会卡启动,
+  /// 与 H65 同一个形状);每条连 `description` 原文一起存,单条约 7 KB(macOS 那边旧包实测过
+  /// `inbox.json` = 747 KB / 100 条,本机 RSS 侧 48.6 MB / 7,464 集同量级,见 H168)
+  /// ⇒ **全量落盘是几十 MB 而不是几 MB**。300 条 ≈ 2 MB,是旧那 100 条的三倍,
+  /// 这一倍数装机要盯:首帧若变慢先降到 100,再谈给冷启动那份裁掉 description。
+  /// 写的是排序后的**前缀**,所以秒显那段就是全量列表的开头,刷新完只做后缀追加、不重排。
+  /// 代价:深滚之后杀进程,重进要先等刷新完才够得着后面的集(或去频道主页,那里本来就是全量)。
   private persist(): void {
     JsonFile.writeJsonDebouncedLazy(InboxStore.FILE, (): Object => {
       const arr: Object[] = [];
-      for (let i = 0; i < this.episodes.length; i++) arr.push(Codec.episodeToJson(this.episodes[i]));
+      const limit = Math.min(this.episodes.length, InboxStore.PERSIST_MAX);
+      for (let i = 0; i < limit; i++) arr.push(Codec.episodeToJson(this.episodes[i]));
       return arr;
     });
   }
