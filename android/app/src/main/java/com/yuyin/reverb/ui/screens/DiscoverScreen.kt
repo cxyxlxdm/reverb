@@ -525,8 +525,8 @@ private fun ReorderCategoriesDialog(
  * 「从添加订阅开始 + 导入推荐订阅」。那是给零订阅新用户看的引导,已有一堆订阅的人
  * 每次打开先看它很怪,而且首屏没有任何“我的订阅有什么新的”——那恰恰是播客应用首屏最该有的。
  *
- * 「最新更新」直接用已有的 InboxStore,与「音阁 · 最新」是同一份数据、两个入口:
- * 首屏看新内容,音阁做管理。
+ * 「最新更新」直接用已有的 InboxStore,与顶层「追更」页(`InboxScreen.kt`)是**同一个 store**:
+ * 首屏只看最新一截([HOME_LATEST_MAX]),全量管理在那一格。
  */
 @Composable
 private fun SubscribeStarter(
@@ -602,13 +602,23 @@ private fun StarterOnboarding(
 }
 
 /**
+ * 首屏「最新更新」这一节的条数上限。见 [HomeFeed] 注释里那两条理由
+ * (底部导入入口要够得着 + 这一节是预览,全量在「追更」)。
+ */
+private const val HOME_LATEST_MAX = 20
+
+/**
  * 有订阅时的首屏：继续收听 + 最新更新 + 底部一行不显眼的导入入口。
  *
  * 整屏是**一个 LazyColumn**（继续收听横条与底部入口都是列表项），不做"固定头 + 可滚列表"
  * —— 那会在小屏上把最新更新压成一条缝。
  *
- * 刷新与「音阁 · 最新」共用 InboxStore：进页 LaunchedEffect(subs) 触发一次，
+ * 刷新与「追更」共用 InboxStore：进页 LaunchedEffect(subs) 触发一次，
  * InboxStore 自带防重入，两处同时进入不会重复抓。
+ *
+ * 这一节读的是 store 的**前 [HOME_LATEST_MAX] 条**而不是全量(2026-10-10 起 store 内存侧不截断了)。
+ * 两条理由:① 这一节下面还挂着「导入更多」那一行,全量之后它被顶到几千行以下,再也够不着;
+ * ② 这一节的定位是"打开就看到有新内容"的预览,列表管理在底部中间那一格(「追更」)。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -620,6 +630,9 @@ private fun HomeFeed(continueEntries: List<HistoryEntry>) {
 
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
     val episodes by container.inboxStore.episodes.collectAsStateWithLifecycle()
+    // 首屏只铺前 HOME_LATEST_MAX 条(理由见函数注释)。store 的列表已按发布时间倒序,
+    // 所以 take 拿到的就是最新的那一截;起播传这一截,队列口径与屏上看到的保持一致。
+    val homeEpisodes = remember(episodes) { episodes.take(HOME_LATEST_MAX) }
     val history by container.historyStore.history.collectAsStateWithLifecycle()
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
@@ -666,13 +679,13 @@ private fun HomeFeed(continueEntries: List<HistoryEntry>) {
                 )
             }
             if (episodes.isNotEmpty()) {
-                items(episodes, key = { it.id }) { ep ->
+                items(homeEpisodes, key = { it.id }) { ep ->
                     val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
                     EpisodeListItem(
                         episode = ep,
                         isCurrent = current?.id == ep.id,
                         isPlaying = isPlaying,
-                        onPlay = { PlayerController.playOrToggle(ep, episodes) },
+                        onPlay = { PlayerController.playOrToggle(ep, homeEpisodes) },
                         showPodcastTitle = true,
                         played = played,
                         onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },

@@ -17,6 +17,12 @@ import { InboxStore } from '../store/InboxStore';
 import { TapGuard } from '../util/TapGuard';
 import { Log } from '../util/Logger';
 
+/**
+ * 首屏「最新更新」这一节的条数上限(与 Android `DiscoverScreen.kt` 的 `HOME_LATEST_MAX` 同值)。
+ * 两条理由见 `homeFeed` 注释。
+ */
+const HOME_LATEST_MAX = 20;
+
 /// 发现页:分类热门榜(缓存秒开 + 后台刷新 + 下拉刷新)+ 搜索(节目/单集双分段)
 /// + RSS 地址直接导入。对应 Android `DiscoverScreen.kt`。
 @Component
@@ -37,7 +43,8 @@ export struct DiscoverPage {
   @ObjectLink radio: RadioStation;
   /**
    * 「最新」聚合。`CATALOG=false` 的降级渠道下,**有订阅的人的首屏主体就是它**(见 subscribeStarter)。
-   * 与「音阁 · 最新」是同一份数据、两个入口 —— 不是各存一份。
+   * 与顶层「追更」页(`FeedPage`)是**同一个 store**,但这一节只铺最新 [HOME_LATEST_MAX] 条
+   * (`homeEpisodes()`);全量列表与翻到底的管理都在那一格。
    */
   @ObjectLink inbox: InboxStore;
   /// 单集行要显示"正在播放"高亮,故需观察播放态(只做渲染;playNext/enqueue 那种纯写走 app.player)
@@ -226,7 +233,22 @@ export struct DiscoverPage {
     if (subs.length === 0) return;
     if (force) await this.inbox.refresh(subs, this.app.repository);
     else await this.inbox.refreshIfStale(subs, this.app.repository);
-    Log.i('Discover', `最新:当前 ${this.inbox.episodes.length} 条`);
+    // 这一行是装机读规模的入口:这一节铺多少 / store 全量多少,两个数都在
+    Log.i('Discover', `最新一节=${Math.min(this.inbox.episodes.length, HOME_LATEST_MAX)} `
+      + `追更全量=${this.inbox.episodes.length} 条`);
+  }
+
+  /**
+   * 首屏这一节要铺的那一截:store 列表的**最新 [HOME_LATEST_MAX] 条**。
+   *
+   * 为什么在页面侧切而不是让 store 给两份:store 的列表已按发布时间倒序,`slice` 拿到的
+   * 就是最新一截,不必再排一次;而全量归「追更」那一格,首屏只是预览。
+   *
+   * 写成方法而不是局部变量:`@Builder` 体内不能声明局部变量(编译器直接拒绝,见 H137),
+   * 而这一节起播要把"屏上看到的这一截"当队列传下去,两处必须同一份口径。
+   */
+  private homeEpisodes(): Episode[] {
+    return this.inbox.episodes.slice(0, HOME_LATEST_MAX);
   }
 
   /// 先取缓存秒显,再后台刷新。force=true 为下拉刷新(跳过缓存直接刷)。
@@ -707,8 +729,9 @@ export struct DiscoverPage {
    * 这样做**没有放宽合规口径**:展示的全是用户自己订阅的内容,不是可浏览的第三方节目目录
    * (分类榜 / 电台 / 关键词检索一律仍然不存在,见 Features.CATALOG)。
    *
-   * 这一节的「最新」与顶层「追更」页(`FeedPage`)是同一份 InboxStore、同一份全量列表,
-   * 两个入口指向同一份数据 —— 有意保留:首屏是"打开就看到",追更页是这一列自己的管理入口
+   * 这一节的「最新」与顶层「追更」页(`FeedPage`)是**同一个 InboxStore**,但这一节只铺
+   * 最新 `HOME_LATEST_MAX` 条(为什么切、以及为什么这一节下面那个导入入口还能够得到,见 `homeFeed`)。
+   * 两个入口指向同一个数据源是有意保留:首屏是"打开就看到",追更页是这一列自己的管理入口
    * (标题栏那颗模式按钮按 `inbox` 存这一列的模式;这一节起播传空 tag,读不到那个模式)。
    */
   @Builder
@@ -778,10 +801,15 @@ export struct DiscoverPage {
   }
 
   /**
-   * 有订阅时的首屏:继续收听 + 最新更新 + 底部导入入口。
+   * 有订阅时的首屏:继续收听 + 最新更新(最新 `HOME_LATEST_MAX` 条)+ 底部导入入口。
    *
    * 整屏是**一个 List**,继续收听横条与底部入口都作为列表项一起滚 ——
    * 分成"固定头 + 可滚列表"会在小屏上把最新更新压成一条缝。
+   *
+   * 这一节**只铺一截**而不是全量(2026-10-10 store 改成内存全量之后必须做的配套):
+   *  1. 它的下面还挂着「导入更多」那一行,全量之后被顶到几千行以下,再也够不着;
+   *  2. 这一节的定位是"打开就看到有新内容"的预览,列表管理与往下翻都在中间那一格(「追更」)。
+   * 切的是排序后的前缀,所以这一节看到的就是最新的那几条,与追更页开头逐条一致。
    */
   @Builder
   homeFeed() {
@@ -801,7 +829,7 @@ export struct DiscoverPage {
             .padding({ left: Metrics.pagePadding, top: 4, bottom: 6 })
         }
         if (this.inbox.episodes.length > 0) {
-          ForEach(this.inbox.episodes, (e: Episode) => {
+          ForEach(this.homeEpisodes(), (e: Episode) => {
             ListItem() {
               EpisodeListItem({
                 scheme: this.scheme, fontScale: this.fontScale, episode: e,
@@ -809,7 +837,7 @@ export struct DiscoverPage {
                 isCurrent: this.player.current !== null && this.player.current.id === e.id,
                 isPlaying: this.player.isPlaying,
                 played: this.history.isPlayed(e.id),
-                onPlay: () => this.onPlayEpisode(e, this.inbox.episodes, ''),
+                onPlay: () => this.onPlayEpisode(e, this.homeEpisodes(), ''),
                 onPlayNext: () => { this.app.player.playNext(e); },
                 onEnqueue: () => { this.app.player.enqueue(e); }
               })

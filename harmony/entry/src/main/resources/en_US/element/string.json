@@ -170,11 +170,11 @@
     },
     {
       "name": "empty_inbox_nosubs",
-      "value": "Subscribe to shows to see their latest episodes here"
+      "value": "Subscribe to shows to see all their episodes here"
     },
     {
       "name": "empty_inbox",
-      "value": "No updates yet, pull to refresh"
+      "value": "No episodes yet, pull to refresh"
     },
     {
       "name": "empty_favorites",
@@ -1138,7 +1138,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: find shows or episodes by keyword, or paste an RSS URL\n· Share shows: create an image with the show artwork, title, description and Reverb branding\n· Radio: roam at random or follow time-of-day moods\n· Updates: every new episode from the shows you follow, on its own tab\n· Library: six shelves — subscriptions, up next, favorites, downloads, history and notes\n· Offline: download episodes, optionally Wi-Fi only\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background and lock screen controls\n· Transcript: for episodes whose publisher provides one, read along in the player\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player page\n· Update reminders: get notified when a new episode lands\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
+      "value": "· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: find shows or episodes by keyword, or paste an RSS URL\n· Share shows: create an image with the show artwork, title, description and Reverb branding\n· Radio: roam at random or follow time-of-day moods\n· Updates: every episode from the shows you follow, newest first, on its own tab\n· Library: six shelves — subscriptions, up next, favorites, downloads, history and notes\n· Offline: download episodes, optionally Wi-Fi only\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background and lock screen controls\n· Transcript: for episodes whose publisher provides one, read along in the player\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player page\n· Update reminders: get notified when a new episode lands\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
     },
     {
       "name": "about_h_philosophy",
