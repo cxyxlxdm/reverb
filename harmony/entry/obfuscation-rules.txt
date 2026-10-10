@@ -32,9 +32,15 @@
 #   这两项不改变任何"按名字找东西"的运行时行为,是首次发布的安全底线。
 #
 # ── namecache ─────────────────────────────────────────────────────
-# 打开 -print-namecache 并**把产出的 nameCache.json 一并入库**:
-# 后续版本用 -apply-namecache 复用同一份映射,保证跨版本混淆结果稳定
-# (崩溃栈可还原、增量更新不会因改名而全量替换)。
+# ⚠️ 2026-10-10 更正这段口径(原先写"入库 + 后续版本用 -apply-namecache 复用同一份映射",
+# 而**这个文件里根本没有 -apply-namecache** —— 那个词只出现在注释里,从未生效):
+#   · 现在只有 -print-namecache,所以这份 json 是**每次 release 全量重编号的输出**
+#     (加一点代码就漂 8,000+ 行),它不是任何一步的输入;
+#   · 崩溃栈还原用的是 **harmony/dist/reverb-symbol.zip 里的 entry/entry-nameCache.json**
+#     (实测与工作区这份逐字节相同),那才是每次发布的权威映射,且随包一起归档;
+#   · 因此"跨版本混淆结果稳定 / 增量更新不因改名而全量替换"这两句**目前不成立**。
+# 要真做得加一行 `-apply-namecache ./obfuscation-namecache.json`,而那会改变产物的符号名,
+# 属于要重打 + 真机冒烟的改动,不在注释里顺手宣称。(留/撤这份入库副本同样待拍板。)
 
 -enable-toplevel-obfuscation
 -compact
