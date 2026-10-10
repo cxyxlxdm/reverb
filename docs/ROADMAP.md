@@ -318,7 +318,8 @@ macOS 的 1.0.3 尚未出包 —— 它的播放模式是**同日在 1.0.3 定�
     又因加注释从 `SettingsPage.ets:347/390/766` 变成 **349 / 392 / 775** —— 同三处、条数不变。
   - **未覆盖范围**(照规矩明说):macOS 无包(本机六层不够,见三-A);**release 签名包没有装机跑过**,
     运行时证据全部来自同码 debug 包(硬规矩 12);arsc / dex / abc 里只扫了上面点名的串,不是全量词表;
-    **真蜂窝下的拦截分支无证据**(该机无 SIM);`hap` 内 18 个条目没有逐个解出内容比对;证书有效期未在线校验。
+    **真蜂窝下的拦截分支无证据**(该机无 SIM);`hap` 内 18 个条目没有逐个解出内容比对;证书有效期未在线校验
+    (**2026-10-10 已补:有效期从包内读到,在线状态仍未查 —— 见下面「提审前的独立复跑」**)。
 - **站点这一条已闭环(2026-10-09 23:48 部署)**:`site/reverb/privacy.html` 那句在本轮被改了两次
   (先「是否按用量计费」,装机证明计费信号取不到之后又改成「读取当前**网络类型**…(Android 侧还据此判断是否计费)」)
   ⇒ **第一次于当天 08:14 上线,第二次于 23:48 上线**。方向判定按流程第 0 步跑:先 `curl` 取线上哈希
@@ -496,11 +497,39 @@ macOS 的 1.0.3 尚未出包 —— 它的播放模式是**同日在 1.0.3 定�
       「哪一份 flavor 的覆盖生效」由 arsc 直接证明(新串在 store 包里、旧串不在),比截图更贴这一问;
       **store 关于页五语的渲染折行与排版仍是未验路径**。
 
+    ### ✅ 提审前的独立复跑(2026-10-10,只复验、**不重打包**)
+    - **为什么不重打**:两条 `find` 各自跑过 ——
+      `-newer android/dist/reverb.apk` 只列出 `android/app/src/store/res/` 下那 5 个文件(第十四次已把它们打进新 store 包),
+      `-newer harmony/dist/reverb.app` 对鸿蒙源码**为空**,`-newer android/dist/reverb-store.apk`(最晚那份)**整体为空**。
+      ⇒ 判据仍然是「包必须晚于最后一次**源码**改动」,不是「晚于提交」。
+    - **这一轮不复用上一次的记录,每条命令自己跑一遍**(处理量:default dex 6,405,060 B / arsc 445,256 B;
+      store dex 6,390,276 B / arsc 440,704 B;鸿蒙 abc 824,612 B / index 87,165 B;hap 18 个条目 / 2,454,922 B)。
+      结果与上面两段记录的数字**逐条相同**:default dex 三条 `persisted=` `parse=` `sort=` **1 / 0**;
+      store arsc 15 条新串 **1 / 0**、7 条旧串 **0 / 1**;鸿蒙 abc `末次合并` **1 / 0**、`判定=蜂窝` 1 / 1、`判定=计费` 0 / 0;
+      鸿蒙 index 关于页五语 **1 / 0**、旧句 **0 / 1**;清空确认五语取值各 **1 / 1**(回归)。
+      期望 0 的落点同样自己数过:鸿蒙 `debugKey` / `whisper` / `libreverb_asr` / `models/` / `signCert` / `storeFile` /
+      `keyAlias` / `material/` 在 abc 与 index **各 0**;store 的 `whisper` 在 arsc 与 dex **各 0**(区分大小写)。
+    - **补上三项一直在"未覆盖"里的取证**:
+      ① **签名连续性**:`keytool -printcert -jarfile` 读到两个 1.0.4 渠道与 **1.0.2 归档那两个包同一串
+      SHA-256**(`9C:BC:97:E4:…:E4:4E`)⇒ 老用户是覆盖升级,不是换签名;证书 Owner `CN=Yuyin Reverb, OU=Reverb, O=Reverb, L=Hangzhou, ST=Zhejiang, C=CN`,
+      scheme **v2 true / v3 true / v1 false**(v3.1、v4、SourceStamp 全 false),`apksigner verify` 退出码 0。
+      ② **证书有效期从包里读出来**:2026-09-05 → 2054-01-21(SHA384withRSA)⇒ **"未在线校验"现在只指在线的
+      CRL / 平台侧状态没查**,不再是"连有效期都不知道"。
+      ③ **鸿蒙 release 侧的三个标记**:`module.json` 的 `app` = `versionCode 1000004` / `versionName 1.0.4` /
+      **`debug=false`、`buildMode=release`、`apiReleaseType=Release`**,权限**集合相等**(三条,缺 0 多 0)、
+      `backgroundModes=['audioPlayback']`、`backup_config.json` includes 9 项含 `notes.json`。
+    - ⚠️ **两条自己踩到的口径纠正**:`aapt dump badging` 接 `| grep` 之后 `$?` 是 **grep 的退出码**,
+      所以"退出码 0"必须**去掉管道单独取一次**(本轮就是这么补验的);
+      `grep -oa whisper` **加 `-i` 会把 default 从 12 / 1 变成 16 / 6**(多出来的是 R8 保留的 `WhisperEngine` 类名),
+      渠道差异那句的命令**必须写死成区分大小写**。两条与 H155 / H156 同族。
+    - **仍未覆盖**:release 包没装机跑过;真蜂窝拦截无证据(该机无 SIM);hap 18 条目未逐个解出比对;
+      store 关于页五语未装机通读(#149);证书**在线**状态未校验。
+
     ### 未覆盖范围(照规矩明说)
     - macOS 无包(本机六层不够,见三-A);**release 签名包没有装机跑过**,运行时证据全部来自同码 debug 包(硬规矩 12)。
     - arsc / dex / abc / index 里**只扫了上面点名的串,不是全量词表**;鸿蒙 hap 的 18 个条目没有逐个解出内容比对。
     - **真蜂窝下的拦截分支无证据**(该机无 SIM),五语拦截 Toast 同样没取到。
-    - 证书有效期未在线校验。
+    - 证书的**在线状态 / CRL** 未校验(有效期已从包里读到:2026-09-05 → 2054-01-21,见上面「提审前的独立复跑」②)。
     - **会漂的记号再记一次**:release 构建那三条 `The 'fill' API is supported since SDK 26.0.0` 的行号
       会随注释增删继续漂(上一轮是 `SettingsPage.ets` 349 / 392 / 775)⇒ **按条数与文件认,不按行号认**。
   - **本轮读出来、刻意不在本轮做的三条(如实登记)**:
