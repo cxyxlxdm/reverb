@@ -7571,6 +7571,16 @@ Android `components/GlassNavBar.kt`:
 **未覆盖**:三格观感、透镜形状、拇指命中、`selectedTab` 的 `rememberSaveable` 在旧值(0/1)与新格序下的
 恢复(用户上次停在音阁=1,现在 1 是追更)—— **这条本轮没查,装机时看一眼**。macOS 不涉及(它没有底部栏)。
 
+**补记(2026-10-09 真机)**:上面这几条**只有第一条按预期落地,最后一条本机压根造不出取证条件**。
+- **拇指命中已量过**(两端各自的等分矩形与分界坐标在 `docs/ROADMAP.md` 门 2「第二批」① 那一段),
+  取证纪律按 **H165** 走:每次点击前重新 dump 取矩形,不抄上一次的坐标。
+- **`selectedTab` 旧值恢复按三条办法都造不出进程死亡**(`am kill` / `kill` / `always_finish_activities=1`),
+  所以它**仍是未验项**,只能给代码级结论:这一项走 `rememberSaveable` 的 instance state、**不落盘**,
+  与"冷启动落在哪一格"不是同一条路径(冷启动读的是持久化的那一格)。如实记在 **H167**。
+- **透镜/药丸的观感**仍是拇指判据,不在本轮收口(#31 / #35 / #36 / #37 / #136 同批)。
+- ⚠️ **这一轮顺带抓出的不是几何而是文案**:Android 的**关于页有两份**(`app/src/store/res` 覆盖同名键),
+  改主 flavor 的五语不会带着商店渠道那份走 —— 记在 **H169**,它由解包 grep 抓出而不是装机。
+
 ---
 
 ### H164 音阁段尾那颗「清空」按**序号**判断:往中间插一段就会让它指到批注段,而清空历史没有二次确认
@@ -7609,6 +7619,12 @@ Android `LibraryScreen.kt` 的 `if (section in 1..3)` / `section == 4` / `sectio
 
 **验收**:两端编译过;段的净位移靠读代码确认(4=历史、5=批注)。**真机上六个分段逐段点一遍右端那颗动作**
 才算验完(#140)——尤其是「待播」那颗清空只清队列、不误清历史。
+
+**补记(2026-10-09,#140 已跑)**:六段逐段点过、各当场读出变化,「这一段没内容就不摆动作」也读到;
+「待播」那颗确认**只清队列**(历史与下载不动,判据是应用自己的落盘与日志,不是界面看起来对)。
+这一轮另外做了两件事:**段序号从裸数字收成具名常量 `SEG_*`**(两端各一份),以及**两颗「清空」与队列页那颗补上二次确认**
+—— 后者是因为教训 2 那条风险真的发生了,取证时把用户的历史清掉,记在 **H165**。
+⚠️ **教训 2 的本体(动作绑到段自己的数据)仍未做**,已登记为待办;现在靠常量与确认框两道缓解,不是解决。
 
 ---
 
@@ -7765,13 +7781,17 @@ latest = accumulated.values
   在合并时按 id 填,`sortedStable(accumulated.values, keys)` 的比较器只做 `keys[it.id] ?: 0L`。
   于是解析次数从"百万量级"回到 **N(每轮 7,464 次)**,查表是 O(1) 且无分配。
 - **落盘有界、内存全量**:`persistMax = 300`。这条不是性能洁癖 —— `load()` 跑在 **Application 主线程**
-  (`ReverbApp.kt:56` 构造 `InboxStore(app)`),而**每条连 `description`(shownotes 原文)一起存,单条约 7 KB**:
-  macOS 那边旧包量过 `inbox.json` = **747 KB / 100 条**,本机 RSS 侧 **48.6 MB / 7,464 集** 是同一个量级
-  ⇒ **全量落盘是几十 MB,不是几 MB**,在冷启动同步解析就是 **H65 那个形状**。
+  (`ReverbApp.kt:56` 构造 `InboxStore(app)`),而**每条连 `description`(shownotes 原文)一起存**,
+  单条大小**按频道简介长短差一个数量级**。装机实测(2026-10-10,把两端沙箱里的 `inbox.json` 拉出来逐条量):
+  鸿蒙 300 条那份 **333,160 B**,单条 min 628 / 中位 811 / max 1,554 B;
+  Android 300 条那份 **741,253 B**,单条 min 678 / 中位 1,354 / max **9,143 B**(另一档 160 条那份中位 3,611 B)。
+  ⇒ 按中位 0.8–3.6 KB 外推到七千集,**全量落盘是 6–27 MB 这一档**;
+  (先前记的"单条约 7 KB / 300 条 ≈ 2 MB"是拿 macOS 旧包那份 747 KB / 100 条推的,**装机证明它偏高**,已按实测改成区间。)
   落的是**排序后的前缀**,所以秒显阶段看到的正是全量列表的开头,刷新完只做后缀追加,不会"前 300 条换顺序"。
-  **代价两条都如实写:① 深滚之后杀进程,重进要从头显;② 300 条 ≈ 2 MB,是旧那 100 条的三倍** ——
-  这是本轮唯一一处"明知变差仍选它"的取舍(要的是秒显覆盖得住"当天打开就往下翻"的深度),
-  **装机首帧若变慢,先降到 100 再谈给冷启动那份裁掉 `description`。**
+  **代价两条都如实写:① 深滚之后杀进程,重进要从头显;② 300 条是旧那 100 条封顶的三倍条数**
+  —— 但绝对量实测在 0.33–0.74 MB,而**冷启动没因此变慢**(Android `am start -W` 三份读数:
+  160 条缓存 2,564 ms / 300 条缓存 2,291 ms / 另一轮 1,308 ms;鸿蒙 `[Inbox] 加载 300 条` 落在启动后 16 ms 内)
+  ⇒ **这一倍数实测无代价**,原先写的"装机若变慢先降到 100"作为观察项保留。
 - **发现页首屏那一节切到 20 条**(`HOME_LATEST_MAX`),读的仍是同一个 store。这条是**可达性**不是性能:
   全量会把那一节下面的「导入更多」行顶到几千行以外。
   鸿蒙侧那一截写成方法 `homeEpisodes()` 而不是局部变量 —— `@Builder` / `build()` 体内不能声明局部变量(H137 实测 `10905209`)。
@@ -7789,12 +7809,38 @@ latest = accumulated.values
 **验收方式**:
 - ✅ Android `./gradlew :app:compileDefaultReleaseKotlin :app:compileStoreReleaseKotlin -q` **exit 0**;
   鸿蒙 `assembleHap --mode module -p product=default -p buildMode=debug` **BUILD SUCCESSFUL in 22 s**。
-- ⚠️ **上面那 180 万次是本子算出来的量级,装机数字才是判据**。为此在两端各留了一行读数:
-  Android `refresh done episodes=… persisted=… parse=…ms sort=…ms`,
-  鸿蒙 `刷新完成 源=… 得到 … 条 落盘 … 条 末次合并=…ms 总=…ms`。
-  ⇒ 装机要读的是**两组对**:①`episodes` / `得到 N 条` 应当是**数千而不是 100**(证明截断真的拆了);
-  ②`sort=…ms` / `末次合并=…ms` 应当**远小于**一次刷新的总时长(证明键表有效)。**这两个数本机造不出来** ——
-  要真订阅 + 真网络,所以本轮如实记作「只过到编译 + 构建」(见 `docs/ROADMAP.md` 门 2)。
+- ✅ **装机数字全读到了(2026-10-10 双端真机)**,判据是"两组对",逐条如下。
+  - **①「截断真拆了」——同机差分最硬。** Android(Pixel 3,`8CBX1LP64`,同一台、同一批订阅):
+    装本轮包**之前**那份包跑到 `refresh done episodes=24`(旧口径 12×2),装完跑到
+    `episodes=160 persisted=160 parse=93ms sort=1ms`;而 `curl` 那两个源是 **73 + 87 = 160** 个 `<item>`。
+    再加第三个源(390 集)成 3 订阅:`refresh done episodes=550 persisted=300 parse=261ms sort=3ms`
+    ⇒ **内存侧 = 三源之和(160+390),落盘侧 = 封顶 300**,两侧同时成立。
+    鸿蒙(1 个订阅、390 集那份 feed):`刷新完成 源=1 得到 390 条 落盘 300 条 末次合并=0ms 总=657ms`,
+    而 `curl` 同一 feed 是 **1,040,671 B / 390 个 `<item>`** ⇒ "得到 390"就是全量(旧口径只会是 12)。
+  - **②「键表有效」:** Android `sort` 从 160 条的 1 ms 到 550 条的 3 ms(**几乎不随 N 涨**),
+    `parse` 93 → 261 ms(**随 N 线性**),两者都远小于一次刷新的总时长;鸿蒙 `末次合并=0ms`。
+    这正是"每集解析一次 + 比较器查表"该有的形状 —— 若在比较器里解析,`sort` 会跟着 N log N 炸开。
+  - **③「翻到底真的够得着」:** Android 从 160 条那一栏 swipe 29 次到底,末行是
+    `自我进化论｜No.1 …` `Thu, 30 Jan 2020`(= 那一栏的最早一集);550 条那一栏 swipe 到第 8 轮到底,
+    末行 `女孩子的潜台词到底是什么` `Tue, 18 Dec 2018`(= 三个源里最早的一集)。
+    鸿蒙同一集:`uitest dumpLayout` 末屏 `y=2117 女孩子的潜台词到底是什么 / y=2192 Tue, 18 Dec 2018`。
+  - **④「冷启动没被 300 条拖慢」:** Android `am start -W` 三份读数 **2,564 / 2,291 / 2,283 ms**
+    (分别对应 160 条、300 条、恢复回 160 条的缓存),差值小于抖动;
+    鸿蒙 `[Inbox] 加载 300 条` 落在启动后 **16 ms** 内(`[App] 本地数据就绪 … 最新=300`)。
+  - **夹具与还原:** 第三个订阅是**沙箱写 `subscriptions.json`** 造的(输入法把 URL 转成了拼音,
+    走不了搜索框)。测完把原文件写回并按 md5 证明**与动手前逐字节一致**(`db7dd0d8…` 那次是新内容,
+    还原后与备份 `1782 B` 一致),再冷启一次读到 `subs=2 / episodes=160 persisted=160`。
+    ⚠️ 如实记一条没解释干净的:**第一次改完夹具那一轮日志读到 `subs=2`**,重做一遍才是 `subs=3`
+    (那一轮的 `app launch … subs=` 与 `refresh start subs=` 都是 3,自洽)。没复现第二次,
+    所以不登记成 bug,但它不属于"已解释"。
+- ⚠️ **两条判据取不到,各有原因**:
+  ① **发现页首屏那一节的 `最新一节=20` 在两端当前渠道根本不渲染** —— 那一节在
+    `!Features.CATALOG` / `!BuildConfig.CATALOG` 分支里,而两端今天所有渠道的 CATALOG 都是 `true`
+    (鸿蒙 `Features.ets:19`,Android `build.gradle:69/88`)。⇒ 20 条这一刀是**降级渠道的配套**,
+    装机无法验,**只能靠代码与编译**。这条也顺手纠正了我自己写在门 2 里的判据(那句"回发现页读这行"不成立)。
+  ② **滚动流畅度只拿到弱证据**:Android `dumpsys gfxinfo` 在这页 swipe 全程 **1,128 帧 / Janky 7.36% /
+    95th 36 ms**,直方图里最长的两格是冷启动那两下(1,650 / 1,800 ms);**取证窗口里混着
+    `uiautomator dump` 自身的停顿**,所以它只能说"没出现新的长卡顿",不能说"全量列表滚动无成本"。
 - ❌ **改完仍留在原地的两问**,已登记不当本轮已修:
   ① **`markPlayed` 对"不在收听历史里的单集"两端都静默 no-op** —— 旧截断下这一列几乎全是带进度的新集,
     全量之后"没播过的集"成了常态,于是 Android 那颗"标记已播完"点下去没反应;鸿蒙追更页压根没这颗按钮。
@@ -7810,3 +7856,97 @@ latest = accumulated.values
   没有它我今天会为了几千行引入 `LazyForEach`,并为此付出一条 0 先例的复杂度。
 ④ **主线程同步读的那份缓存必须独立于内存态的规模**(内存可以全量,落盘要有界),
   否则"UI 侧的数据层优化"会在冷启动那一路变成 H65。
+⑤ **"单条多大"这种数别从另一端的旧包推。** 我按 macOS 那份 `747 KB / 100 条` 写了"单条约 7 KB、
+  300 条 ≈ 2 MB",装机拉出两端各自的 `inbox.json` 一量:中位其实是 **0.8 KB(鸿蒙)/ 1.4–3.6 KB(Android)**,
+  300 条落在 **0.33–0.74 MB** —— 差了一个量级还多。三端存的键与简介长度都不同,**推出来的倍数不可信**;
+  能跨端借用的只有"形状"(简介全文进盘 ⇒ 单条随频道波动),数值必须本机/本机量。
+
+### H169 Android 的关于页**有两份**:改了主 flavor 的五语,store 渠道那份覆盖不会跟着变
+
+**现象**(2026-10-10,门 5 第十三次解包验收时读到的,不是用户报的)。给「追更 = 全部订阅频道的全部单集」
+做包内串证,同一条 `LC_ALL=C grep -oa … | wc -l` 打在两份 `resources.arsc` 上:
+
+| 判据串(应为 1) | default | store |
+|---|---|---|
+| `播过的单集全在这一栏`(简中) | **1 / 旧包 0** | **0 / 旧包 0** |
+| `every episode from the shows you follow`(英) | **1 / 旧包 0** | **0 / 旧包 0** |
+
+第一列是本轮预期的"新码在包里";第二列两侧都是 0 —— 而**旧包也是 0**,说明这不是"新串没打进去",
+而是**这条串在 store 包里压根不存在**。回读 `android/app/src/store/res/values/strings.xml` 证实:
+store 的 `about_p_features` 还写着 `· 音阁：订阅、最新、收藏、下载、历史、批注分栏管理`,
+**既没有「追更」那一栏,音阁也还是旧的"最新"那一栏**。`git log` 那份文件最后改于 `6b55e55`,
+早于 2026-10-08 的"底部第三格"那一轮 —— 后面几轮(624049a / af15fd7 / cb910b3)改关于页时**一次都没碰过它**。
+
+**根因**,一层是机制、一层是我读规则的方式:
+1. **机制:flavor 的 source set 是覆盖,不是继承。** `store/res/values*/strings.xml` 里只要**定义了同名键**,
+   商店包里就是那一份,`main/res` 的新值**不会自动带过去**。Android 关于页因此**物理上是两份文案**
+   (当初覆写是为了让商店渠道不提离线识别:store 那份只覆写 6 个键 ——
+   `about_p_features`、`privacy_consent_asr`、`privacy_consent_mic`、`set_word_highlight_sub`、`lic_whisper`、`lic_whisper_model`)。
+2. **我读的那句规则把"几份"误导成了"5 份"。** AGENTS.md 硬规矩 5 写的是
+   「**五个语种一起改**」+ 表格里一行小字「Android 需按渠道分别写」。
+   于是"数文件"这个动作天然数出 5 份(实际主 flavor 5 份 + store 覆盖 5 份 = **10 份**),
+   而渠道那一维只在另一行里、不在计数里。**规则是对的,计数方式骗了我。**
+
+顺带在同一处读出来的**第二条、更早就存在的漂移**(如实分开):store 那份的「播放」一行**没提播放模式**,
+而播放模式在 `BuildConfig` 里**没有任何渠道门控**(门控只有 `SPECTRUM` / `CATALOG`;
+`grep 'BuildConfig\.'` 只命中频谱、设置页分类条、许可页与 `PodcastRepository`)⇒ 两渠道都有这功能。
+追进去:`bf2b9ee`「关于页补『播放模式』一项:两端五语种共 10 份」那次补的是 **main flavor + 鸿蒙**
+(`git show --stat` = 5 份 `main/res` + 5 份 harmony resources),**store 覆盖那 5 份同样被漏掉**。
+它不属于本轮改口范围,但与主问题同因,所以一并修。
+
+**修法**:store 五语各两处 + 一处 —— 插入「追更」那一栏(逐字取自主 flavor 同语种,不另写措辞)、
+音阁改成「订阅、收藏、下载、待播、历史、批注六栏管理」、「播放」一行补「播放模式（顺序 / 单曲循环 / 随机）」:
+
+| 文件 | 插入的「追更」栏(与 main flavor 逐字相同) |
+|---|---|
+| `store/res/values/strings.xml` | `· 追更：订阅频道播过的单集全在这一栏，按时间倒序一直往下翻，可下拉刷新、单独设这一栏的播放模式` |
+| `store/res/values-zh-rTW/strings.xml` | `· 追更：訂閱頻道播過的單集全在這一欄，…可下拉更新、單獨設定這一欄的播放模式` |
+| `store/res/values-en/strings.xml` | `· Updates: every episode from the shows you follow, newest first, on its own tab` |
+| `store/res/values-fr/strings.xml` | `· Nouveautés : tous les épisodes de vos émissions suivies, … dans un onglet dédié` |
+| `store/res/values-es/strings.xml` | `· Novedades: todos los episodios de tus programas seguidos, … en su propia pestaña` |
+
+「音阁六栏含待播」与「播放模式」同样落到这五份。
+**没有把 store 那一行整体替换成主 flavor 那份** —— 两份文案的**差异本身是有意的**
+(store 的逐字稿那行只说"发布方提供逐字稿的单集",因为它确实没有离线转写),
+所以只补**共同的缺失项**,保留渠道各自的措辞差。
+
+**验收方式**:
+- ✅ 五份 `xmllint --noout` 全过;`grep -c about_p_features` 每份恰 1;五语新句各 1、旧句各 0(源码侧)。
+- ✅ `./gradlew :app:compileDefaultReleaseKotlin :app:compileStoreReleaseKotlin -q` **exit 0**。
+- ✅ **只重打 store 一个包**(`./build-release.sh --store` exit 0)。
+  本轮五个文件**全在 `src/store/` 下**,不进 default flavor 的编译树 ⇒ default 与鸿蒙仍是 09:27 / 09:26 那两份。
+  判据不是"我说它不影响":`find android/app/src harmony/entry/src … -newer android/dist/reverb.apk`
+  列出的**恰好只有这 5 个文件**。
+  ⚠️ **如实一条:新包与旧包字节数相同(都 3,534,995 B)而 md5 不同**(`6de60003…` vs `631e8e0f…`)
+  —— 包体是 deflate 的,所以"字节数没变"不是"没重打"的证据;
+  真正的证据在里面那一层:`resources.arsc` **439,804 → 440,704 B(+900 B)**,与"五份文案各加一栏"的方向一致。
+- ✅ **arsc 成对判据**(处理量:新包 arsc 440,704 B / 旧包 439,804 B;包内条目 165)。
+  11 条新串在**新 store 包 = 1、旧 store 包 = 0**;7 条旧串**新包 = 0、旧包 = 1**
+  (`订阅、最新` / `訂閱、最新` / `subscriptions, latest` / `abonnements, nouveautés` /
+  `suscripciones, novedades` / `分栏管理` / `分欄管理`)⇒ **两侧都验,负对照成立**。
+- ✅ **同一条命令先在旧包上跑过**才敢把 0 读成"清零":`new=0 old=0` 与 `new=1 old=0` 是两种事实,
+  只有配对判据能分辨"这条串在这个包里根本没有"和"这条串没打进去"。
+- ✅ 其余 store 判据复跑:目录接口 URL `itunes.apple.com` arsc 5 / dex 4、`fyyd` 10 / 5、`gpodder` 10 / 4(非 0);
+  `unzip -l | grep -icE 'lib/|whisper-model'` = **0**;`whisper.cpp` arsc **0** / `lic_whisper` arsc **0**(default 对应 **10 / 2**);
+  权限清单 `aapt2 dump permissions` **退出码 0 / 10 行 / stderr 0 行**并整份打印过 —— **无 RECORD_AUDIO**,
+  且与旧包**逐字节 diff 相同**;`apksigner verify --verbose` **退出码 0**,v2 true / v3 true / v1 false;
+  成本与闸门日志串 new=old 各 1(`persisted=` `parse=` `sort=` `blocked by cellular` `isActiveNetworkMetered` `refresh done`)
+  ⇒ 本轮只动文案,代码未变。
+- ⚠️ **一条"看起来该是 0 其实是 1"的分类**:store 的 `classes.dex` 里 `RECORD_AUDIO` 命中 **1**(旧包同样 1)。
+  读上下文是 `android.permission.READ_MEDIA_VIDEO\0android.permission.RECORD_AUDIO\0…` 一串**权限名常量表**,
+  不是 manifest 声明(权限清单里没有)⇒ **装机不会申请该权限**;它是 main 源码集里被 R8 保留下来的字符串常量。
+  判据按"权限清单 = 0"走,**别把 dex 那一处读成渠道隔离失败**。
+- ⚠️ **这一份没有装机读过**:改的是商店渠道关于页文案,而两渠道**同包名**(`com.yuyin.reverb.android`),
+  装 store 变体会覆盖用户机上那份 default debug(硬规矩 12)。
+  「哪一份 flavor 的覆盖生效」这一问由 arsc 直接证明(新串在 store 包里、旧串不在),它比截图更贴判据;
+  **渲染出来折行不折行、五语排版,仍是未验路径**。
+
+**教训与可复用的规律**:
+① **Android 的文案计数要带渠道这一维:主 flavor 5 份 + store 覆盖 5 份 = 10 份。**
+  凡是改 `about_p_features` / 隐私同意 / 许可这类**被 store 覆写过**的键,先 grep 一遍
+  `android/app/src/store/res/values*/strings.xml` 里有没有同名键,有就必须同一轮改完。
+② **验收表里出现 `new=0 old=0` 要当成一个信号,而不是"这条不适用"** —— 这次它就是"这个包里根本没有这条串"。
+③ **「包里有 / 没有都要可验证」这条方法论本轮第一次抓到的不是夹带,而是缺失**:
+  解包 grep 不只防"不该有的东西进包",也防"该有的自述没进包"。
+④ **同一处读出来的相邻漂移要分开登记归属**:播放模式那一条是 1.0.3 那轮 `bf2b9ee` 漏的,不是本轮改出来的;
+  一起修是因为同因,但写清来源才不会把旧账记成新伤。
