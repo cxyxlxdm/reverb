@@ -819,8 +819,17 @@
   - ✗ `-enable-export-obfuscation`:单 HAP 收益有限,而 `EntryAbility` / `FeedUpdateExtension`
     由配置按名拉起。
   - ✓ `-enable-toplevel-obfuscation` + `-compact`:不改变任何"按名字找东西"的运行时行为。
-- **namecache 要入库**:开 `-print-namecache`,把 `obfuscation-namecache.json` 一并提交;
-  后续版本 `-apply-namecache` 复用同一映射,崩溃栈才能还原、增量更新不会因改名全量替换。
+- **namecache 要入库**:开 `-print-namecache`,把 `obfuscation-namecache.json` 一并提交。
+  ⚠️ **2026-10-10 更正这句的后半段**(原写「后续版本 `-apply-namecache` 复用同一映射,
+  崩溃栈才能还原、增量更新不会因改名全量替换」):规则文件里**从来没有 `-apply-namecache` 这一行**,
+  那个词只出现在注释里 ⇒ "跨版本复用同一映射"从未生效,每次 release 是全量重编号
+  (所以加一点代码就漂 8,000+ 行)。**崩溃栈还原不依赖它** —— 用的是同一次构建产出的
+  `dist/reverb-symbol.zip` 里那份 `entry/entry-nameCache.json`(实测与工作区那份逐字节相同,md5 一致),
+  即"每版各一份映射"本来就是按包归档的,与 git 里那份无关。
+  真要跨版本稳定得补 `-apply-namecache`,那会改变产物符号名 ⇒ 属重打 + 真机冒烟的改动,不是注释级修正。
+  **规律:`X 入库以便后续 Y` 这类句子最容易写成愿望而不是事实** —— 验收只要一条
+  `grep -n '\-apply-namecache' **/obfuscation-rules.txt`,命中只出现在注释行就等于没生效。
+  (同族判据见硬规矩 1「声明有 / 声明没有都必须解包或跑命令验」,以及 H156:命令没跑与 0 命中长得一样。)
 - **必须真机冒烟,且要挑"依赖名字"的路径验**:启动 → 榜单加载 → 继续收听(读历史) →
   起播与续播位置 → 音阁五分段 → 历史列表 → 设置页各项读出。本次逐项通过。
 - **教训 / 规律**:
