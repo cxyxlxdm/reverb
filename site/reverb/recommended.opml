@@ -2,7 +2,7 @@
 <opml version="2.0">
   <head>
     <title>余音 Reverb 推荐订阅</title>
-    <dateCreated>2026-08-20</dateCreated>
+    <dateCreated>2026-10-10</dateCreated>
   </head>
   <body>
     <outline type="rss" text="资讯早7点" title="资讯早7点" xmlUrl="https://feed.xyzfm.space/wb39te6k9gqw"/>
@@ -14,11 +14,11 @@
     <outline type="rss" text="搞钱女孩" title="搞钱女孩" xmlUrl="https://www.ximalaya.com/album/74797134.xml"/>
     <outline type="rss" text="独树不成林" title="独树不成林" xmlUrl="https://feed.xyzfm.space/y9qnpfdrctnx"/>
     <outline type="rss" text="Hidden Brain" title="Hidden Brain" xmlUrl="https://feeds.simplecast.com/kwWc0lhf"/>
-    <outline type="rss" text="原来是这样 Dscience" title="原来是这样 Dscience" xmlUrl="http://rss.lizhi.fm/rss/318375.xml"/>
+    <outline type="rss" text="原来是这样 Dscience" title="原来是这样 Dscience" xmlUrl="https://rss.lizhi.fm/rss/318375.xml"/>
     <outline type="rss" text="岩中花述" title="岩中花述" xmlUrl="https://feed.xyzfm.space/hwen8wf69c6g"/>
-    <outline type="rss" text="凹凸电波" title="凹凸电波" xmlUrl="http://www.ximalaya.com/album/19206382.xml"/>
+    <outline type="rss" text="凹凸电波" title="凹凸电波" xmlUrl="https://www.ximalaya.com/album/19206382.xml"/>
     <outline type="rss" text="自我进化论" title="自我进化论" xmlUrl="https://feed.xyzfm.space/artr8kfmlmxh"/>
     <outline type="rss" text="天真不天真" title="天真不天真" xmlUrl="https://feed.xyzfm.space/mcklbwxjdvfu"/>
-    <outline type="rss" text="肥话连篇" title="肥话连篇" xmlUrl="http://www.ximalaya.com/album/56109512.xml"/>
+    <outline type="rss" text="肥话连篇" title="肥话连篇" xmlUrl="https://www.ximalaya.com/album/56109512.xml"/>
   </body>
 </opml>

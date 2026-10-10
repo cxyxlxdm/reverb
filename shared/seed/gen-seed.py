@@ -186,6 +186,14 @@ def lookup(ids, region):
         feed = (o.get("feedUrl") or "").strip()
         if not feed:
             continue
+        # Apple 的 lookup 里有少量条目回的是明文 feedUrl(2026-08-19 那份清单里 9 条:
+        # ximalaya 7 + lizhi 2)。这里一次性升 https,是为了让「内置清单」不再成为
+        # App 需要全局明文流量的理由 —— 清单只进 default 渠道与 macOS,商店渠道压根没这个文件,
+        # 但 manifest 上那条全局明文开关是三端共用的(见 H120 后续第 3 条)。
+        # 升级前逐个探过:9/9 https 可访问,且拿到的 enclosure 全是 https。
+        # 万一某个源哪天不支持 https,`--check` 会把它判成失效源并从清单里剔掉,不会静默留下坏链。
+        if feed.startswith("http://"):
+            feed = "https://" + feed[len("http://"):]
         # 付费节目分集多为会员专享、拉不到直链,种子清单里直接排除:
         # 兜底内容点开就播不了,比空白更糟
         if (o.get("collectionPrice") or 0) > 0 or (o.get("trackPrice") or 0) > 0:
