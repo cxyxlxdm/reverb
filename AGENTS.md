@@ -144,6 +144,7 @@ bash tools/selftest-verify.sh      # 手搭假 bundle 跑正向 + 把八类失�
 
 **不入库,流程与踩过的坑记在本地运营手册**(`docs/STORE-OPS.md`,gitignore 中,
 仅本机可见)。仓库内只需记住:`*/dist/` 与 `*/store/` 下的东西永远不要 `git add`。
+**换版时界面动过就要整套重拍,并与 `dist/` 里那份 release 包同批重建 kit** —— 判据见硬规矩 20。
 
 ---
 
@@ -319,6 +320,36 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 文案和图标混着发布身份;而它们对读代码的人本来就没有价值。真正对外的信息另有出口:
 版本变更写 **`CHANGELOG.md`(入库,是对外版本说明的上游)**,
 隐私与合规写 `docs/PRIVACY.md`,迁移与本地资产清单写 `docs/LOCAL-ASSETS.md`。
+
+---
+
+### 20. 发布单位只有一个:各端 `dist/` 里那份**最终 release 包** —— 且界面变了要整套重拍截图
+
+不管去处是鸿蒙应用市场,还是 GitHub Releases 上的 Android apk / macOS dmg,
+**拿出去的必须是那次 release 构建的产物**:不是 debug 包,不是 `*/build/outputs/` 里的中间产物,
+也不是上一版留在 `dist/` 的旧包。三端的位置与"这就是发布物"的判据(跑命令,不是看构建日志):
+
+| 端 | 发布物 | 判据 |
+|---|---|---|
+| Android | `android/dist/reverb.apk`(自分发)/ `reverb-store.apk`(大陆商店) | `./build-release.sh [--store]`;脚本里已用 `apksigner` 读证书 DN,**是调试证书就 exit 1**(不是"verify 通过"就算数)。版本再对 `CHANGELOG.md`:`aapt2 dump badging` —— 注意 **aapt2 不在开发机 PATH**(H156),用 `$SDK/build-tools/<ver>/aapt2` 全路径,且"命令没跑成"和"版本不对"要按退出码分开读 |
+| HarmonyOS | `harmony/dist/reverb.app` **+ `reverb-symbol.zip`**(符号包一并传,否则市场侧还原不了崩溃栈) | `build-release.sh` 末尾那条 `debugKey` 断言(命中即 exit 1);`reverb-unsigned.app` **只是备查,别传** |
+| macOS | `macos/dist/余音-Reverb-<版本>-universal.dmg`(架构标记由 `EXPECTED` 推导,不是写死) | `./package.sh` 的架构硬断言(缺一个架构就不出 dmg);**`…-1.0.2-arm64.dmg` 那种单架构历史包不能顶替** —— Intel Mac 装 arm64 没有退路 |
+
+**报"包已就绪"要带出处**:那份文件的字节数与 `ls -lT` 时间戳,并说明它**晚于最后一次源码改动**
+(`find android/app/src shared/seed \( -name '*.kt' -o -name '*.xml' -o -name '*.json' -o -name '*.py' \) -newer android/dist/reverb.apk`
+列出来的必须为空。**括号不能省** —— 省了 `-newer` 只作用在第一个 `-name` 上,其余两类文件全被放过,
+判据会假绿。鸿蒙把 `android/app/src` 换成 `harmony/entry/src`、产物换成 `harmony/dist/reverb.app`。)
+这不是格式要求,是防"代码改了、包没重打" —— 那件事真发生过并被判过多次(见 H154 那轮"包比码旧"),
+而 `dist/` 里躺着旧包时它**看起来是就绪的**。
+
+**界面布局一变,同一轮的截图整套重拍,发布侧跟着换。**
+商店图(`*/store/`,不入库)与官网首页引用的 `site/reverb/shots/*.jpg`(同样不入库,部署时手工上传)
+是**同一批取景的两条出口**,所以只更新一侧就是自相矛盾 —— 线上首页会替你说出一句过期的话。
+两个容易漏的点:①**底栏 / 主导航这类改动会让所有含底栏的截图同时过期,不是只有首页那一张**;
+②重拍之后要对着 `site/reverb/index.html` 里 `<img src="shots/…">` 的**张数与 `alt`** 核一遍 ——
+它等于在对外声明"顶层有几个入口",与硬规矩 5 的自述同步是同一件事。
+流水线(1080×1920 直出会被拒收、深浅要 `cmd uimode night` 成对开关、数据用净化备份)与逐版记录,
+在 `docs/STORE-OPS.md` 三 与七;上传仍是**逐个文件 + 先 `--dry-run` + 三方 SHA-256 验收**(同文六)。
 
 ---
 
