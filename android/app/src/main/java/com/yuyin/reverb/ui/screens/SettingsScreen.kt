@@ -59,6 +59,7 @@ import com.yuyin.reverb.data.local.BackupManager
 import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.data.remote.OpmlSupport
+import com.yuyin.reverb.playback.AudioCacheManager
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.playback.asr.AsrFactory
@@ -137,6 +138,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             container.popularCache.sizeBytes() +
                 container.feedCache.sizeBytes() +
                 container.transcriptStore.usageBytes() +
+                // 播过的整集音频(与下面那条"已下载"是两笔,各占各的目录)
+                AudioCacheManager.usageBytes() +
                 runCatching { context.imageLoader.diskCache?.size ?: 0L }.getOrDefault(0L)
         }
         dlBytes = withContext(Dispatchers.IO) { DownloadManager.usageBytes() }
@@ -428,6 +431,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             container.feedCache.clear()
             // 逐字稿也算缓存:都能重新取回来,不该占着地方
             container.transcriptStore.clearAll()
+            // 播过的整集音频同样能重下,所以归在"清除缓存"这一路;
+            // **不碰 DownloadManager** —— 用户点名下载的那份只有"清除下载"能删。
+            AudioCacheManager.clearAll()
             runCatching {
                 val loader = context.imageLoader
                 loader.memoryCache?.clear(); loader.diskCache?.clear()

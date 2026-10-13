@@ -147,6 +147,12 @@ export class PlayerController {
   private playbackStarted = false;
   /// 已下载单集的本地路径提供者(闭包注入,解耦下载模块;采纳 macOS 设计)
   localFileProvider: ((e: Episode) => string | null) | null = null;
+  /**
+   * 「这一集是走网络起播的」通知(闭包注入,与上面同一解耦风格)。
+   * 这是**播过即缓存的唯一触发点**:放在这里而不是列表/详情页,因为只有这一处代表
+   * 用户真的要听这一集 —— 否则"扫一眼列表"就会拉几十 MB。
+   */
+  networkPlayNotice: ((e: Episode) => void) | null = null;
   /// 播放状态变化回调(供 AVSession 同步)
   onStateChanged: (() => void) | null = null;
 
@@ -474,6 +480,14 @@ export class PlayerController {
       return;
     }
     Log.i('Player', `播放 "${e.title}" 源=${useLocal ? '本地' : '网络'} resume=${resumeMs}ms generation=${generation}`);
+    /**
+     * 走网络起播 → 通知缓存模块把整集拉一份(与 Android 的 `AudioCacheManager.cache` 同一触发点)。
+     *
+     * 电台那一路**不缓存**:`radioMode` 为真时是"无限随机换台",每台都会触发一次几十 MB 的
+     * 整集拉取,用户听着玩一小时就能把预算刷爆。判据用 `radioMode` 而不是调用方参数,
+     * 因为本端 startEpisode 没带电台标志;手动播放会先 stopRadio 再进来,那时它已是 false。
+     */
+    if (!useLocal && !this.radioMode && this.networkPlayNotice !== null) this.networkPlayNotice(e);
 
     try {
       const p = await this.ensurePlayer();

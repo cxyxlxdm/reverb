@@ -1,5 +1,6 @@
 import { Scheme, TypeScale, withAlpha, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
+import { ArtworkCache } from '../store/ArtworkCache';
 
 /// 通用小部件:图标 / 页头 / 返回顶栏 / 空态 / 加载态 / 封面。
 /// 对应 Android `ui/screens/Widgets.kt` + 部分 `ui/components/Components.kt`。
@@ -71,6 +72,17 @@ export class Sym {
   static readonly discoverFill: Resource = $r('sys.symbol.discover_fill');
   static readonly libraryFill: Resource = $r('sys.symbol.music_note_list_fill');
   static readonly library: Resource = $r('sys.symbol.music_note_list');         // Rounded.LibraryMusic
+  /**
+   * 底部 tab「追更」。Android 侧是 `Icons.Rounded.RssFeed`(`ReverbRoot.kt:182`)。
+   *
+   * Symbol 字体里**没有 rss 那枚**,对等形状是「无线电波」`dot_radiowaves_left_and_right`
+   * (名字取自 SDK 的 `sysResource.js` symbol 表,已核对存在 —— `sys.symbol.*` 写错不报错、
+   * 直接空白,见下面 noteDelete 那段)。它**没有 `_fill` 变体**,所以这一项选中态只换色 + 加粗,
+   * 判据写在 `BottomBar.SystemTabItem.hasFill`。
+   */
+  static readonly feed: Resource = $r('sys.symbol.dot_radiowaves_left_and_right');
+  /** 播放条收束进 tab 栏之后,左端那颗「回主页」(Android 侧无此态)。 */
+  static readonly home: Resource = $r('sys.symbol.house');
   static readonly shuffle: Resource = $r('sys.symbol.shuffle');                 // Rounded.Shuffle
   // 播放模式三态里的「单曲循环」。Material 侧是 Rounded.RepeatOne,Symbol 字体的对等件
   // 就是 repeat_1(循环箭头里带一个 1);**不要拿 `repeat` 冒充** —— 那枚是"列表循环",
@@ -160,7 +172,7 @@ export struct ScreenHeader {
       // 的页面金线位置与音阁页错开,两页不对齐。
       // 为什么宽从 40 收到 35:这是**装饰(外壳)**不是文字,按屏幕宽等比对齐 ——
       // Android 40/427.6 = 9.4%,鸿蒙同一屏幕逻辑宽只有 374.2vp,写 40 就是 10.7%
-      // (整块外壳的换算与来由见 GlassTabBar.BAR_H、CHIPS_STRIP_H)。
+      // (整块外壳的换算与来由见 `shelved/GlassTabBar.ets` 的 `BAR_H`、`CHIPS_STRIP_H`)。
       // 高度**没有**跟着收:3×0.876 = 2.6,只差 0.4vp,这是描边级的量、读不出来;
       // 而"这根线占了多宽"是看得见的比例。标题字号留在 24 没动 —— 那是可读性常量,
       // 按绝对物理大小对齐(24fp × 1.18 ≈ Android 28sp),见 H51 的补充。
@@ -261,13 +273,59 @@ export struct LoadingBox {
   }
 }
 
+/**
+ * 封面取源的**唯一一条路**(`Artwork` 与 `SquareArtwork` 共用,别抄两遍)。
+ *
+ * 返回该 url 已有的本地副本 uri(没有则空串,由调用方直接用远程 url);
+ * 同时把这张图挂进缓存队列,落盘成功后通过 [onHit] 回来换源。
+ *
+ * 这里只做一次 Map 查表和一次入队,**没有同步 IO** —— 这两个组件在列表里成几十份地构造,
+ * 渲染路径上落一次磁盘读就是硬规矩 6 那条老账。
+ */
+function artworkSource(url: string, onHit: (uri: string) => void): string {
+  if (url.length === 0) return '';
+  const cache = ArtworkCache.get();
+  const have = cache.uriFor(url);
+  cache.ensure(url, have === null ? onHit : null);
+  return have === null ? '' : have;
+}
+
 /// 固定尺寸封面。空 url 用低饱和底 + 波形图标占位(对齐 Android Artwork)。
 @Component
 export struct Artwork {
   @Prop scheme: Scheme;
-  @Prop url: string;
+  /** `@Watch`:列表复用 / 换台时 url 会变,本地副本必须跟着重解,否则显示的是上一张的本地图。 */
+  @Prop @Watch('onUrlChange') url: string;
   @Prop dim: number = 56;
   @Prop corner: number = 12;
+  /**
+   * 这一张封面的**本地副本 uri**(空串表示还没有,直接用远程 URL)。
+   * 断网时「已加载过的列表」还能看到图,靠的就是这一格 —— 见 `store/ArtworkCache`。
+   */
+  @State localUri: string = '';
+
+  aboutToAppear(): void {
+    this.resolveLocal();
+  }
+
+  onUrlChange(): void {
+    this.resolveLocal();
+  }
+
+  private resolveLocal(): void {
+    this.localUri = artworkSource(this.url, (uri: string) => { this.localUri = uri; });
+  }
+
+  /**
+   * 本地副本读不出来就回落远程源。
+   *
+   * 会出现这一手的场合是「清除缓存」按下去时,别的页还在页面栈里、它 holding 的 uri 已经指向
+   * 被删掉的文件 —— 不兜这一下,那些封面会**一直空白**,而不是退回联网重取。
+   * 判据是"此刻用的是本地图":置空后这一张走远程,远程也失败时再进来是 no-op,不会来回切。
+   */
+  private dropLocalCopy(): void {
+    if (this.localUri.length > 0) this.localUri = '';
+  }
 
   build() {
     Stack() {
@@ -281,9 +339,10 @@ export struct Artwork {
         Glyph({ symbol: Sym.playing, dim: Math.max(14, this.dim * 0.42), color: this.scheme.primary })
       }
       if (this.url.length > 0) {
-        Image(this.url)
+        Image(this.localUri.length > 0 ? this.localUri : this.url)
           .width(this.dim).height(this.dim)
           .objectFit(ImageFit.Cover)
+          .onError(() => { this.dropLocalCopy(); })
       }
     }
     .width(this.dim).height(this.dim)
@@ -296,8 +355,27 @@ export struct Artwork {
 @Component
 export struct SquareArtwork {
   @Prop scheme: Scheme;
-  @Prop url: string;
+  @Prop @Watch('onUrlChange') url: string;
   @Prop corner: number = Metrics.cardCorner;
+  /// 同 `Artwork.localUri`:宫格是「已加载过的列表」断网后最主要的受害界面,必须走本地副本
+  @State localUri: string = '';
+
+  aboutToAppear(): void {
+    this.resolveLocal();
+  }
+
+  onUrlChange(): void {
+    this.resolveLocal();
+  }
+
+  private resolveLocal(): void {
+    this.localUri = artworkSource(this.url, (uri: string) => { this.localUri = uri; });
+  }
+
+  /// 同 `Artwork.dropLocalCopy`
+  private dropLocalCopy(): void {
+    if (this.localUri.length > 0) this.localUri = '';
+  }
 
   build() {
     Stack() {
@@ -316,11 +394,12 @@ export struct SquareArtwork {
          * 卡片上的 `bindContextMenu` 根本不弹 —— 而长按同一张卡的标题文字却正常。
          * 症状是"菜单在图的区域失灵",极易误判成菜单本身的问题(见 H100)。
          */
-        Image(this.url)
+        Image(this.localUri.length > 0 ? this.localUri : this.url)
           .width('100%')
           .aspectRatio(1)
           .objectFit(ImageFit.Cover)
           .draggable(false)
+          .onError(() => { this.dropLocalCopy(); })
       }
     }
     .width('100%')

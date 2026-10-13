@@ -143,8 +143,28 @@ Android 的文件清单(**鸿蒙完全同名**;macOS 除热榜缓存与随包种
 subscriptions.json  favorites.json   history.json      inbox.json
 downloads.json      stamps.json      notes.json        listen_stats.json
 feed_cache.json     popular_cache.json  playback_state.json
-transcripts/<单集>.<语言>.json
+audio_cache.json    transcripts/<单集>.<语言>.json
 ```
+
+**`audio_cache.json` 是「播放缓存」的账本,它与 `downloads.json` 是两套文件、两本账、两个清理入口**
+(2026-10-12 Android 与鸿蒙同时落,macOS 未做)。三条口径值得在移植时照抄:
+
+- **为什么不是"边播边存"**:鸿蒙的 AVPlayer 播 http 流时**字节不经过 JS 层**,这一端压根拿不到数据;
+  Android 侧虽有 `CacheDataSource` 这条现成的路,仍选**同一条语义** —— 首播时后台把整集拉全。
+  换来的是"缓存目录里的每一个文件都是完整可离线播的一集"这个可验证的简单不变式,
+  代价是多一次流量(受同一道蜂窝闸门管)。
+- **三层分离是结构性的**:目录 `audio_cache/` vs `downloads/`、账本 `audio_cache.json` vs `downloads.json`、
+  设置页两颗按钮各清各的。预算淘汰(300 MB / 按最久没听)**只遍历缓存账本**,
+  所以"缓存把用户点名下载的那一份挤掉"在实现层就不成立,不靠界面判断。
+- **选源次序 = 下载 → 缓存 → 流式**,而且这一步必须**同步**返回(鸿蒙复用已有的 `localFileProvider` 链:
+  引导音频 → 下载 → 缓存)。所以缓存命中表是内存 `Map<id, 绝对路径>`,
+  不能在那个调用点上 `fs.stat` —— 那是把 IO 摊进播放链路(硬规矩 6)。
+  账本里的每一条**开机时按"文件在、非空"逐条同步校验**(条目数由预算封顶,个位数),
+  真正 O(文件数) 的目录扫描(清孤儿文件与半截 `.part`)排在异步那一轮,不在启动路径上。
+- **电台流不缓存**:直播流没有"整集"可存,而且每台几十 MB 会把预算刷爆。
+- 封面图片另有第三层缓存:Android 复用 Coil 的磁盘缓存,**鸿蒙是自研 `store/ArtworkCache.ets`**
+  (ArkUI 没有带磁盘缓存的图片库;20 MB 预算、限并发 4、无账本文件 —— 目录扫描就是它的账)。
+  它计入设置页同一个"缓存"数字,与音频那两层同进同退。
 
 **`playback_state.json` 是"会话态",但里面装着用户资产**(2026-10-02 Android 先落,
 2026-10-06 鸿蒙同构并真机验过,macOS 待移植):`{version, current, listTag, context[], contextIndex, upNext[]}`。

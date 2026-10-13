@@ -10,6 +10,8 @@ import { FeedCacheStore } from './store/FeedCacheStore';
 import { GuideEpisode } from './store/GuideEpisode';
 import { ListenStatsStore } from './store/ListenStatsStore';
 import { DownloadStore } from './store/DownloadStore';
+import { AudioCacheStore } from './store/AudioCacheStore';
+import { ArtworkCache } from './store/ArtworkCache';
 import { StampStore } from './store/StampStore';
 import { NoteStore } from './store/NoteStore';
 import { PlaybackStateStore } from './store/PlaybackStateStore';
@@ -17,6 +19,7 @@ import { CategoryStore } from './store/CategoryStore';
 import { TranscriptStore } from './store/TranscriptStore';
 import { SpeechTranscriber } from './playback/SpeechTranscriber';
 import { DownloadManager } from './playback/DownloadManager';
+import { AudioCacheManager } from './playback/AudioCacheManager';
 import { PodcastRepository } from './net/PodcastRepository';
 import { Episode } from './model/Models';
 import { PlayerController } from './playback/PlayerController';
@@ -51,6 +54,11 @@ export class AppContainer {
   readonly transcripts: TranscriptStore = new TranscriptStore();
   readonly downloads: DownloadStore = new DownloadStore();
   readonly downloadManager: DownloadManager = DownloadManager.get();
+  /// 「播过即缓存」的账本与执行者(与 downloads 分目录、分账本、分清理入口)
+  readonly audioCacheStore: AudioCacheStore = new AudioCacheStore();
+  readonly audioCache: AudioCacheManager = AudioCacheManager.get();
+  /// 封面磁盘缓存:本端 `Image(url)` 没有可依赖的离线缓存,断网时图片全空,所以自己落一份
+  readonly artwork: ArtworkCache = ArtworkCache.get();
   readonly repository: PodcastRepository;
   readonly player: PlayerController = PlayerController.get();
   readonly radio: RadioStation = RadioStation.get();
@@ -109,6 +117,11 @@ export class AppContainer {
     }
     this.downloads.load();
     this.downloadManager.init(ctx.filesDir, this.downloads, this.settings);
+    // 缓存这一组同样是**纯本地**(建目录 + 读账本 + 扫一遍自己的目录),不起播就不联网,
+    // 所以放在同意门之前装配;真正拉音频/图片的那一步在 startGated 注入的通知里,由用户点播触发。
+    this.audioCacheStore.load();
+    this.audioCache.init(ctx.filesDir, this.audioCacheStore, this.settings);
+    this.artwork.init(ctx.filesDir);
     this.listenStats.load();
     this.listenStats.seedFromHistory(this.history.history);
 
@@ -145,13 +158,19 @@ export class AppContainer {
     // 播放层装配:注入历史/设置,并把状态变化同步给系统媒体会话
     this.player.bind(this.history, this.settings);
     this.player.bindState(this.playbackState);
-    // 已下载优先本地播放(闭包注入,解耦下载模块)。
-    // 引导音频也走这条路:它的"本地文件"是从 rawfile 拷出来的那一份。
+    // 选源四级:**引导 > 下载 > 缓存 > 网络**(Android 那边没有"引导走本地文件"这一级,
+    // 它的引导音频用 asset URI 直接起播,所以是 下载 > 缓存 > 网络)。
+    // 下载排在缓存前是因为它是用户点名留下的那一份;缓存命中时 AudioCacheManager
+    // 顺手记一次访问 —— LRU 靠它。
     this.player.localFileProvider = (e: Episode) => {
       const guide = GuideEpisode.pathFor(e.id);
       if (guide !== null) return guide;
-      return this.downloadManager.localPath(e.id);
+      const dl = this.downloadManager.localPath(e.id);
+      if (dl !== null) return dl;
+      return this.audioCache.localPathForPlay(e.id);
     };
+    // 走网络起播时排一次「整集落缓存」(fire-and-forget,不影响这次起播)
+    this.player.networkPlayNotice = (e: Episode) => { this.audioCache.cache(e); };
     this.player.bindListen(
       (e: Episode, delta: number) => { this.listenStats.add(e, delta); },
       () => { this.listenStats.flush(); });

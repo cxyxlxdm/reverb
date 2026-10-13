@@ -625,10 +625,21 @@ object PlayerController {
         lastCountedEpId = episode.id     // 统计基线对齐续播起点，避免把 resume 跳转记成收听
         lastCountedPosMs = pendingSeekMs
 
-        val local = DownloadManager.localPath(episode.id)
-        val useLocal = local != null && File(local).exists()
-        log.d(TAG, "source ${if (useLocal) "local" else "stream"} seekTo=$pendingSeekMs id=${episode.id}")
-        val uri = if (useLocal) Uri.fromFile(File(local!!)) else Uri.parse(episode.audioUrl)
+        // 选源三级:**下载 > 缓存 > 流式**。
+        // 下载排在最前是因为它是用户点名留下的那一份,语义上比 App 自作主张的缓存更"该被用"。
+        // 落到流式那一路才排后台整集缓存 —— 这里是「播过就不要再联网」的唯一触发点,
+        // 放在播放而不是列表/详情页,是因为只有这一处代表用户真的要听这一集。
+        val downloaded = DownloadManager.localPath(episode.id)?.takeIf { File(it).exists() }
+        val cached = if (downloaded == null) AudioCacheManager.localPath(episode.id) else null
+        val local = downloaded ?: cached
+        log.d(TAG, "source ${if (local != null) if (downloaded != null) "local" else "cache" else "stream"} " +
+            "seekTo=$pendingSeekMs id=${episode.id}")
+        if (cached != null) AudioCacheManager.onPlayFromCache(episode.id)  // LRU 要记"这次真的听了它"
+        // **电台那一路不缓存**:它是"无限随机换台",每一台都触发一次几十 MB 的整集拉取,
+        // 用户听着玩一小时就能把预算刷爆。判据用调用点传进来的 isRadio,而不是 _radioMode,
+        // 因为手动播放会先 stopRadio 再进来 —— 到这儿时那个字段已经是 false。
+        if (local == null && !isRadio) AudioCacheManager.cache(episode)
+        val uri = if (local != null) Uri.fromFile(File(local)) else Uri.parse(episode.audioUrl)
 
         val item = MediaItem.Builder()
             .setUri(uri)
