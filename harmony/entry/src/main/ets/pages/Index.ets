@@ -31,6 +31,7 @@ import { PlayerController } from '../playback/PlayerController';
 import { Podcast, Episode, emptyPodcast } from '../model/Models';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
+import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import window from '@ohos.window';
 import { TapGuard } from '../util/TapGuard';
 
@@ -109,6 +110,7 @@ struct Index {
     };
     this.readInsets();
     this.applySystemBar();
+    this.applyColorMode();
     Log.i('UI', `外壳就绪 systemDark=${this.systemDark}`);
   }
 
@@ -169,6 +171,31 @@ struct Index {
 
   private scheme(): Scheme {
     return Theme.scheme(this.settings.themeMode, this.settings.accentIndex, this.systemDark);
+  }
+
+  /**
+   * 把应用内主题档位**告诉系统**,和上面那句 `setWindowSystemBarProperties` 是同一类事:
+   * 主题不是只有组件树那一半。
+   *
+   * 底部栏用的是系统材质 `BlurStyle.COMPONENT_THICK`,它取的是「**应用生效深浅态**」——
+   * 而我们从不声明,于是它等于**设备**的深浅态。默认主题是水墨(2),设备在浅色模式时
+   * 装机实测到的是**一块白磨砂压在水墨界面上**;同一块磨砂在收束态还是播放条的背景。
+   * 系统弹窗、半屏面板、键盘同理。
+   *
+   * 档位 3「纯白」是浅色的一种,所以只有 2 映射 DARK、0 映射 NOT_SET,其余走 LIGHT。
+   */
+  private applyColorMode(): void {
+    const mode: number = this.settings.themeMode;
+    const cm: ConfigurationConstant.ColorMode = mode === 2
+      ? ConfigurationConstant.ColorMode.COLOR_MODE_DARK
+      : (mode === 0 ? ConfigurationConstant.ColorMode.COLOR_MODE_NOT_SET
+        : ConfigurationConstant.ColorMode.COLOR_MODE_LIGHT);
+    try {
+      const ctx = this.getUIContext().getHostContext() as common.UIAbilityContext;
+      ctx.getApplicationContext().setColorMode(cm);
+    } catch (e) {
+      Log.w('UI', `设置应用深浅态失败 ${(e as Error).message}`);
+    }
   }
 
   private fontScale(): number {
@@ -305,6 +332,8 @@ struct Index {
             this.tick = this.tick + 1;
             // 主题可能刚被改过,系统栏内容色要跟着翻
             this.applySystemBar();
+            // 系统材质那一半也要翻(底部栏那块磨砂不读我们的 Scheme)
+            this.applyColorMode();
           },
           onOpenAbout: () => { this.stack.pushPathByName('about', null); },
           onOpenLicenses: () => { this.stack.pushPathByName('licenses', null); },
@@ -598,10 +627,10 @@ struct Index {
          * - `barHeight(56)`:系统默认也是 56,显式写出来免得以后有人以为它跟着内容自适应;
          * - `barOverlap(true)` + `barBackgroundBlurStyle`:栏**透**——糊的是它背后那行列表内容。
          *   这要求页面给底部让出余量([underBarPad]),否则滚到底末项被栏压住;
-         * - `barBackgroundColor` 那层 0.86 的 surface 是**必需的**:磨砂本身跟随**系统**深浅色,
-         *   而本应用的深浅可以在设置里独立选(见 Theme.scheme 的三个入参)。系统浅色 + 应用深色
-         *   时,光有磨砂会是一块亮底,深色文字压上去就读不清 —— 压一层应用自己的 surface 才随主题走。
-         *   0.86 是"盖得住磨砂、又还留得见内容在动"那一档,装机后按观感再调;
+         * - **栏的深浅不由这里决定,由 [applyColorMode] 决定**。磨砂取的是「应用生效深浅态」,
+         *   不是我们的 `Scheme`;早先这里写着「压一层 0.86 的 surface 就随主题走」,装机推翻 ——
+         *   `barBackgroundColor` 盖不住那份材质(见 H174)。现在这层只负责**压住多少内容透上来**
+         *   (0.86 是"盖得住、又还看得见列表在动"那一档),深浅的对错在 `applyColorMode` 那一侧;
          * - `divider`:栏与内容之间那道发丝线(自绘版是手写的 0.5 Divider,系统这版有原生入口)。
          */
         .barHeight(TAB_BAR_H)
@@ -643,6 +672,14 @@ struct Index {
          * 曲线与播放条内部那几个几何量同源([morphSpring])—— 两处不同步就是"散架"。
          */
         .padding({ bottom: this.miniBottom() })
+        /**
+         * **自身不吃触摸**。这一层是"落点容器",它的 `padding({ bottom })` 一直铺到屏底,
+         * 默认命中模式下会把整块透明区域(含 tab 栏那 56vp)的点击全吞掉 —— 于是
+         * **"只要播放条在显示,三个 tab 就全部点不动"**(装机实测:点音阁无反应,
+         * 而同一坐标在收起态会命中播放条自己的按钮)。
+         * `HitTestMode.None` 只放过容器自身,子节点(播放条那一行)照常响应。
+         */
+        .hitTestBehavior(HitTestMode.None)
         .animation({ curve: morphSpring() })
       }
     }
