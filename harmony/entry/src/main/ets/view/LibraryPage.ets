@@ -51,9 +51,11 @@ const SEG_NOTES: number = 5;
 export struct LibraryPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
-  /// 玻璃 tab 栏悬浮后,滚动内容需让出的底部空间(手势条+栏+迷你条,Index 算好传入)。
+  /// 底部栏悬浮后,滚动内容需让出的底部空间(栏 + 手势区 + 播放条,Index 算好传入)。
   /// 只用于各 List 的 contentEndOffset / 宫格的尾部占位行。
   @Prop bottomPad: number = 0;
+  /// 滚动量交给外壳,由它决定播放条收不收进底部栏(见 DiscoverPage 同名注释)
+  onScrollDy: (dy: number) => void = () => {};
   @ObjectLink player: PlayerController;
   /**
    * 本页渲染用到的 store 一律经 `@ObjectLink` 接收(各 store 均已 `@Observed`,
@@ -377,6 +379,7 @@ export struct LibraryPage {
         .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 10, bottom: 20 })
         // Grid 没有 contentEndOffset(List 专属 API):滚动余量靠上面的尾部占位 GridItem
         .scrollBar(BarState.Off)
+        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
         .width('100%').height('100%')
       } else {
         List() {
@@ -396,6 +399,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
+        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
         .width('100%').height('100%')
       }
     }
@@ -448,6 +452,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
+        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
         .width('100%').height('100%')
       }
     }
@@ -485,6 +490,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
+        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
         .width('100%').height('100%')
       }
     }
@@ -570,6 +576,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
+        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
         .width('100%').height('100%')
       }
     }
@@ -606,6 +613,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
+        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
         .width('100%').height('100%')
       }
     }

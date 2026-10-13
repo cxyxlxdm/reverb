@@ -15,7 +15,10 @@ import { PodcastDetailPage } from '../view/PodcastDetailPage';
 import { NoteStore, EpisodeNote } from '../store/NoteStore';
 import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
-import { GlassTabBar, barFootprint } from '../view/GlassTabBar';
+import {
+  SystemTabItem, TAB_BAR_H, TAB_KEY, MORPH_KEY, MORPH_SLOPE,
+  MINI_H, MINI_GAP, morphSpring, barReserve
+} from '../view/BottomBar';
 import { LibraryPage } from '../view/LibraryPage';
 import { SettingsPage } from '../view/SettingsPage';
 import { PrivacyConsentPage } from '../view/PrivacyConsentPage';
@@ -59,7 +62,18 @@ struct Index {
   @State listenStats: ListenStatsStore = AppContainer.get().listenStats;
   @State downloadManager: DownloadManager = AppContainer.get().downloadManager;
   @State radio: RadioStation = AppContainer.get().radio;
-  @State tab: number = 0;
+  /**
+   * 当前 tab。**放 AppStorage 而不是 @State**:底部栏的三项是 Tabs 用 CustomBuilder 生成的,
+   * 它们自己订阅这个键(见 `BottomBar.SystemTabItem`),不依赖"父级 build 有没有重跑"。
+   */
+  @StorageLink(TAB_KEY) tab: number = 0;
+  /**
+   * 播放条是否收束进底部栏。同样走 AppStorage(栏项要读),这里 @StorageLink 是**写的一侧**:
+   * 滚动累计量到阈值就翻它,见 [feedScroll]。
+   */
+  @StorageLink(MORPH_KEY) collapsed: boolean = false;
+  /// 收/展的累计滚动量(vp)。只在 [feedScroll] 里读写,不进状态、不触发重渲。
+  private morphAcc: number = 0;
   /**
    * 设备此刻是否深色。**由 EntryAbility 写 AppStorage**(启动种一次,系统切深浅时在
    * `onConfigurationUpdate` 里再写),这里只 @StorageLink 读 —— 理由见 `Theme.SYSTEM_DARK_KEY`。
@@ -89,6 +103,9 @@ struct Index {
     app.player.onStateChanged = () => {
       if (prev !== null) prev();
       this.tick = this.tick + 1;
+      // 已经没有播放条了,收束标志必须跟着清:否则下次起播时栏项一上来就是淡没状态,
+      // 界面上看就是"底部栏空了半条"
+      if (this.collapsed && this.player.current === null) this.collapsed = false;
     };
     this.readInsets();
     this.applySystemBar();
@@ -410,22 +427,108 @@ struct Index {
     }
   }
 
-  /// 页面滚动内容需为玻璃悬浮层让出的底部空间:
-  /// 栏的落点(`barFootprint` = 栏高 + 手势区的那一道留白)+ 迷你条(2 细线 + 42 封面 +
-  /// 上下 8 = 60)+ 分隔线 0.5。
-  /// 迷你条的出现/消失经 onStateChanged → tick 触发重渲,这里随之重算并经 @Prop 传下去。
-  /// 式子必须与 GlassTabBar 里那个 Column 的高度同源(所以导入 `barFootprint` 而不是
-  /// 自己拼 `bottomInset + BAR_H`)—— 收小留白时最容易漏这一处,漏了列表末尾多出一条空白。
+  /**
+   * 三个 tab 页的滚动都汇到这里(页面各自在滚动容器上挂 `.onDidScroll` 再传上来)。
+   *
+   * 口径与参考对象一致:**往下滚(看后面的内容)收束,往上滚展开**。
+   * 判据用**累计量**而不是单帧量 —— `onDidScroll` 每帧给的是这一帧滚了多少,
+   * 惯性滑动里一帧只有 1–8vp,按单帧判阈值要么一碰就翻、要么永远不翻。
+   * 每次翻转后清零,所以"往回滚 40vp"要重新攒满,不会在临界点来回抖。
+   *
+   * ⚠️ 这个回调**每帧都跑**,所以里面只许有加减法和一次布尔比较(硬规矩 6)。
+   * 真正被改的状态只有 `collapsed`,而它只让栏项的 opacity 与播放条的四个几何量重算,
+   * 不动列表数据、也不让页面重新 measure(让位量按展开态恒定,见 [underBarPad])。
+   */
+  private feedScroll(dy: number): void {
+    if (this.player.current === null) return;
+    this.morphAcc += dy;
+    if (this.morphAcc >= MORPH_SLOPE) {
+      this.morphAcc = 0;
+      // 显式判重再赋值:连续往下滚会反复越过阈值,而"同值也要写进 AppStorage"会让三个
+      // 栏项和播放条每攒满 40vp 就白重算一遍
+      if (!this.collapsed) this.collapsed = true;
+    } else if (this.morphAcc <= -MORPH_SLOPE) {
+      this.morphAcc = 0;
+      if (this.collapsed) this.collapsed = false;
+    }
+  }
+
+  /// 收束态左端那颗回主页:只把播放条放回两行共存,不改当前 tab(它不是"回发现页")。
+  private expandMini(): void {
+    this.morphAcc = 0;
+    this.collapsed = false;
+  }
+
+  /**
+   * 播放条这一整块距屏底的落点。
+   *
+   * - 展开:抬到栏**上方**再留 8vp 缝(参考片实测那两道 26px);
+   * - 收束:落进栏那 56vp 里,于是只剩手势区那一道。
+   *
+   * 栏本体由 Tabs 画,它下面垫的是 `padding({bottom: bottomInset})`
+   * (见 [shell] 里那句注释),所以两种落点都以"屏底往上 bottomInset"为基准,不用自己算栏高。
+   */
+  private miniBottom(): number {
+    return this.collapsed ? this.bottomInset : this.bottomInset + TAB_BAR_H + MINI_GAP;
+  }
+
+  /**
+   * 页面滚动内容需为底部悬浮层让出的空间 = 栏高 + 手势区 + 播放条(展开态那一档)。
+   *
+   * 式子收在 `BottomBar.barReserve` 里,和栏自己的几何同源 —— 收小留白时最容易漏这一处,
+   * 漏了列表末尾多出一条空白(或者末项被栏压住)。
+   *
+   * ⚠️ **不含 collapsed**:收束时播放条整块落进栏里,本可以少让 68vp,但那样每次翻转都要
+   * 重排整条列表,而翻转恰恰发生在滚动中。宁可末尾多一条空白。
+   */
   private underBarPad(): number {
-    const mini = this.player.current !== null ? 60.5 : 0;
-    return barFootprint(this.bottomInset) + mini;
+    return barReserve(this.bottomInset, this.player.current !== null);
+  }
+
+  /// 三个 tab 项的栏内容。@Builder 只负责"挂上组件",**所有会变的量都由组件自己订阅**
+  /// (见 `BottomBar.SystemTabItem` 的注释),这里不按值传选中态。
+  @Builder
+  slotDiscover() {
+    SystemTabItem({
+      index: 0,
+      label: $r('app.string.nav_discover'),
+      icon: Sym.discover,
+      iconFill: Sym.discoverFill,
+      settings: this.settings
+    })
+  }
+
+  @Builder
+  slotFeed() {
+    SystemTabItem({
+      index: 1,
+      label: $r('app.string.nav_feed'),
+      // 追更那枚在 symbol 表里**没有实心变体**(radiowaves 家族全量只有 `dot_radiowaves` /
+      // `dot_radiowaves_message(_fill)` / `music_note_radiowaves_left_and_right` 等,
+      // `dot_radiowaves_left_and_right_fill` 不存在),选中态改由"换色 + 加粗"表达(见 Sym.feed)
+      icon: Sym.feed,
+      iconFill: Sym.feed,
+      hasFill: false,
+      settings: this.settings
+    })
+  }
+
+  @Builder
+  slotLibrary() {
+    SystemTabItem({
+      index: 2,
+      label: $r('app.string.nav_library'),
+      icon: Sym.library,
+      iconFill: Sym.libraryFill,
+      settings: this.settings
+    })
   }
 
   @Builder
   shell() {
-    // Stack 叠层:内容在下、撑满全屏(**延伸到玻璃栏与手势条底下**),迷你条 +
-    // 玻璃 tab 栏悬浮在上。旧结构是「Tabs → 迷你条 → 栏」纵向排开互不重叠;
-    // 改玻璃栏后必须让内容从栏下滚过,模糊才有东西可糊。
+    // Stack 叠层:内容(Tabs)在下、撑满全屏,播放条在上。
+    // 之所以还要这一层 Stack:播放条要能**落进**系统 tab 栏那 56vp 里(收束态),
+    // 而栏是 Tabs 自己画的,页面内容进不去 —— 只能盖在上面。
     Stack({ alignContent: Alignment.Bottom }) {
       Column() {
         Tabs({ barPosition: BarPosition.End, index: this.tab }) {
@@ -441,10 +544,12 @@ struct Index {
               inbox: this.inbox,
               player: this.player,
               bottomPad: this.underBarPad(),
+              onScrollDy: (dy: number) => this.feedScroll(dy),
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
           }
+          .tabBar(this.slotDiscover())
 
 
           TabContent() {
@@ -456,9 +561,11 @@ struct Index {
               subscriptions: this.subscriptions,
               history: this.history,
               bottomPad: this.underBarPad(),
+              onScrollDy: (dy: number) => this.feedScroll(dy),
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
           }
+          .tabBar(this.slotFeed())
 
 
           TabContent() {
@@ -473,6 +580,7 @@ struct Index {
               history: this.history,
               downloadManager: this.downloadManager,
               bottomPad: this.underBarPad(),
+              onScrollDy: (dy: number) => this.feedScroll(dy),
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
               notes: this.notes,
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag),
@@ -481,55 +589,62 @@ struct Index {
               onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); }
             })
           }
+          .tabBar(this.slotLibrary())
 
         }
-        // 依旧隐掉 Tabs 自带 bar(barHeight(0)),底部栏用 GlassTabBar。
-        // 迷你条在栏**上方**的顺序与 Android 一致 —— 两者同处悬浮层,顺序天然成立。
-        .barHeight(0)
+        /**
+         * 栏交给系统画(自绘的玻璃透镜栏已退役进 `harmony/shelved/`)。
+         *
+         * - `barHeight(56)`:系统默认也是 56,显式写出来免得以后有人以为它跟着内容自适应;
+         * - `barOverlap(true)` + `barBackgroundBlurStyle`:栏**透**——糊的是它背后那行列表内容。
+         *   这要求页面给底部让出余量([underBarPad]),否则滚到底末项被栏压住;
+         * - `barBackgroundColor` 那层 0.86 的 surface 是**必需的**:磨砂本身跟随**系统**深浅色,
+         *   而本应用的深浅可以在设置里独立选(见 Theme.scheme 的三个入参)。系统浅色 + 应用深色
+         *   时,光有磨砂会是一块亮底,深色文字压上去就读不清 —— 压一层应用自己的 surface 才随主题走。
+         *   0.86 是"盖得住磨砂、又还留得见内容在动"那一档,装机后按观感再调;
+         * - `divider`:栏与内容之间那道发丝线(自绘版是手写的 0.5 Divider,系统这版有原生入口)。
+         */
+        .barHeight(TAB_BAR_H)
         .barMode(BarMode.Fixed)
         .scrollable(false)
+        .barOverlap(true)
+        .barBackgroundBlurStyle(BlurStyle.COMPONENT_THICK)
+        .barBackgroundColor(withAlpha(this.scheme().surface, 0.86))
+        .divider({ strokeWidth: 0.5, color: withAlpha(this.scheme().outline, 0.6) })
         .onChange((i: number) => { this.tab = i; })
         .width('100%')
         .height('100%')
       }
       .width('100%')
       .height('100%')
-      .padding({ top: this.topInset })
       /**
-       * 玻璃栏的**折射取源**:栏要折射的是"自己背后那块内容",而内容恰好就是这一层。
-       * 挂在 Column(而不是 Navigation)上 —— 悬浮的迷你条与栏都是它的兄弟节点,
-       * 截这一层天然不含栏自己,镜内不会套一份"栏的副本"。
+       * 上下各避开系统栏。**bottom 这一项就是"靠下"那两条反馈的正解**:
+       * 自绘版把整条栏压在手势避让区里(只留 0.62 倍,栏底几乎贴着小白条),
+       * 现在栏整体抬到手势区上方 —— 栏底到屏底恰好是完整的避让区,
+       * 与参考片实测的 91px = 28vp 对上。
        */
-      .id('glassBackdrop')
+      .padding({ top: this.topInset, bottom: this.bottomInset })
 
-      Column() {
-        if (this.player.current !== null) {
+      if (this.player.current !== null) {
+        Column() {
           MiniPlayerBar({
             scheme: this.scheme(),
             fontScale: this.fontScale(),
             player: this.player,
+            collapsed: this.collapsed,
             onExpand: () => { this.stack.pushPathByName('player', null); },
-            onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
+            onOpenQueue: () => { this.stack.pushPathByName('queue', null); },
+            onHome: () => this.expandMini()
           })
-          // 仅在迷你条出现时画分隔线(与 Android 一致)
-          Divider()
-            .strokeWidth(0.5)
-            .color(withAlpha(this.scheme().outline, 0.6))
         }
-        GlassTabBar({
-          scheme: this.scheme(),
-          fontScale: this.fontScale(),
-          tab: this.tab,
-          inset: this.bottomInset,
-          items: [
-            { label: $r('app.string.nav_discover'), icon: $r('app.media.ic_tab_discover') },
-            { label: $r('app.string.nav_feed'), icon: $r('app.media.ic_tab_feed') },
-            { label: $r('app.string.nav_library'), icon: $r('app.media.ic_tab_library') }
-          ],
-          onSelect: (i: number) => { this.tab = i; }
-        })
+        .width('100%')
+        /**
+         * 落点随收束态在 `bottomInset` 与 `bottomInset + 56 + 8` 之间弹簧过去,
+         * 曲线与播放条内部那几个几何量同源([morphSpring])—— 两处不同步就是"散架"。
+         */
+        .padding({ bottom: this.miniBottom() })
+        .animation({ curve: morphSpring() })
       }
-      .width('100%')
     }
     .width('100%')
     .height('100%')

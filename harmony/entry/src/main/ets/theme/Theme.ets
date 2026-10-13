@@ -183,7 +183,7 @@ export function fontIndexClamped(i: number): number {
  *
  * **另一类东西不在这张表里,而且判据相反**:栏高 / 图标 / 内边距 / 分段条是**外壳**,
  * 要按 374.2/427.6 = **0.876** 换算而不是等值照抄(底部 tab 栏与分类条已按此收小,
- * 换算过程与真机复量见 `GlassTabBar.BAR_H`、`CHIPS_STRIP_H` 与 H122)。
+ * 换算过程与真机复量见 `shelved/GlassTabBar.ets` 的 `BAR_H`、`CHIPS_STRIP_H` 与 H122)。
  * 唯一跟着外壳收的字号是 tab 标签(11→10fp),因为它只有两个字、是栏的一部分。
  *
  * 右侧注释是对应的 Material 3 名称,以后两端调字号要一起动。
