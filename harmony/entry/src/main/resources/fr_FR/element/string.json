@@ -770,7 +770,7 @@
     },
     {
       "name": "set_wifi_only_sub",
-      "value": "Désactivez pour autoriser les données mobiles"
+      "value": "Désactivez pour autoriser les téléchargements et le cache en données mobiles"
     },
     {
       "name": "download_wifi_required",
@@ -790,7 +790,7 @@
     },
     {
       "name": "set_clear_cache_sub",
-      "value": "Caches des chaînes et transcriptions · %s"
+      "value": "Classements, chaînes, images, transcriptions et audio écouté · %s"
     },
     {
       "name": "set_clear_downloads",
@@ -806,7 +806,7 @@
     },
     {
       "name": "confirm_clear_cache",
-      "value": "Efface les chaînes et les transcriptions générées en cache. Les abonnements et les téléchargements ne sont pas affectés."
+      "value": "Efface les classements, chaînes, images, transcriptions générées en cache et l'audio déjà écouté. Les abonnements et les téléchargements ne sont pas affectés."
     },
     {
       "name": "confirm_clear_downloads",
@@ -1025,6 +1025,10 @@
       "value": "Cette annotation sera supprimée, sans récupération possible.\n\n« %1$s »"
     },
     {
+      "name": "a11y_home",
+      "value": "Accueil"
+    },
+    {
       "name": "a11y_play",
       "value": "Lire"
     },
@@ -1138,7 +1142,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : six rubriques — abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Hors ligne : téléchargez des épisodes, au besoin uniquement en Wi-Fi\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
+      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : six rubriques — abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Hors ligne : téléchargez des épisodes sur l\\'appareil, au besoin uniquement en Wi-Fi\n· Cache de lecture : les épisodes écoutés restent sur l'appareil et se relisent hors connexion ; listes et pochettes déjà chargées restent consultables sans réseau, à effacer dans Réglages\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
     },
     {
       "name": "about_h_philosophy",
@@ -1182,7 +1186,7 @@
     },
     {
       "name": "privacy_consent_body",
-      "value": "Reverb traite principalement les données sur votre appareil. Il n’a ni serveur du développeur, ni compte, publicité, analytique, attribution, connexion ou notification push tierce, rapport de plantage ou suivi inter-applications. Abonnements, historique, favoris, téléchargements, statistiques d’écoute, réglages, identifiant d’installation aléatoire et journaux sont traités localement et ne sont pas envoyés automatiquement au développeur. La version HarmonyOS utilise les capacités système et son propre code. À partir de la version 1.0.2, si la sauvegarde est activée dans les réglages du système (« Sauvegarde et restauration », l’espace cloud du système ou Phone Clone sur HarmonyOS), le système d’exploitation copie abonnements, favoris, historique, enregistrements de téléchargement (liens uniquement), marqueurs, annotations, statistiques d’écoute et réglages vers votre propre compte cloud système ou votre nouvel appareil ; l’audio, les caches de transcriptions et de classements, ainsi que les journaux ne sont pas inclus, et le réglage se trouve dans les paramètres du système.\n\nEn ligne, les termes recherchés, la région ou la catégorie sont envoyés aux annuaires publics Apple, fyyd et gpodder. RSS, pochettes, audio et transcriptions sont demandés directement aux éditeurs ou hébergeurs, qui voient donc votre adresse IP, le User-Agent et la ressource demandée. Les journaux peuvent contenir des identifiants d’émission ou d’épisode et les noms d’hôte des services consultés ; ils ne quittent l’application que si vous choisissez de les partager ou exporter. Consultez la politique complète.\n\nEn touchant « Accepter et continuer », vous confirmez avoir lu et accepté cette politique."
+      "value": "Reverb traite principalement les données sur votre appareil. Il n’a ni serveur du développeur, ni compte, publicité, analytique, attribution, connexion ou notification push tierce, rapport de plantage ou suivi inter-applications. Abonnements, historique, favoris, téléchargements, cache de lecture, statistiques d’écoute, réglages, identifiant d’installation aléatoire et journaux sont traités localement et ne sont pas envoyés automatiquement au développeur. La version HarmonyOS utilise les capacités système et son propre code. À partir de la version 1.0.2, si la sauvegarde est activée dans les réglages du système (« Sauvegarde et restauration », l’espace cloud du système ou Phone Clone sur HarmonyOS), le système d’exploitation copie abonnements, favoris, historique, enregistrements de téléchargement (liens uniquement), marqueurs, annotations, statistiques d’écoute et réglages vers votre propre compte cloud système ou votre nouvel appareil ; l’audio, les caches de transcriptions et de classements, ainsi que les journaux ne sont pas inclus, et le réglage se trouve dans les paramètres du système.\n\nEn ligne, les termes recherchés, la région ou la catégorie sont envoyés aux annuaires publics Apple, fyyd et gpodder. RSS, pochettes, audio et transcriptions sont demandés directement aux éditeurs ou hébergeurs, qui voient donc votre adresse IP, le User-Agent et la ressource demandée. Les journaux peuvent contenir des identifiants d’émission ou d’épisode et les noms d’hôte des services consultés ; ils ne quittent l’application que si vous choisissez de les partager ou exporter. Consultez la politique complète.\n\nEn touchant « Accepter et continuer », vous confirmez avoir lu et accepté cette politique."
     },
     {
       "name": "privacy_consent_asr",

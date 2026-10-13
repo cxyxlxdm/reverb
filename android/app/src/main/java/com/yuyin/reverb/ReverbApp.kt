@@ -7,6 +7,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.yuyin.reverb.data.local.AudioCacheStore
 import com.yuyin.reverb.data.local.CategoryStore
 import com.yuyin.reverb.data.local.DownloadStore
 import com.yuyin.reverb.data.local.FavoriteStore
@@ -27,6 +28,7 @@ import com.yuyin.reverb.data.local.UpdateStore
 import com.yuyin.reverb.data.remote.PodcastRepository
 import com.yuyin.reverb.data.remote.TranscriptFetcher
 import com.yuyin.reverb.playback.asr.AsrFactory
+import com.yuyin.reverb.playback.AudioCacheManager
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.update.FeedUpdateWorker
@@ -56,6 +58,11 @@ class AppContainer(app: Application) {
     val inboxStore = InboxStore(app)
     val categoryStore = CategoryStore(app)
     val downloadStore = DownloadStore(app)
+    /**
+     * 「播过即缓存」的账本。刻意与 [downloadStore] 分成两份:下载是用户点名留的、进备份、
+     * 由「清除下载」负责;缓存是 App 为「下次别联网」自己攒的、可被 300 MB 预算挤掉、**不进备份**。
+     */
+    val audioCacheStore = AudioCacheStore(app)
     val historyStore = HistoryStore(app)
     val listenStatsStore = ListenStatsStore(app)
     val favoriteStore = FavoriteStore(app)
@@ -96,6 +103,9 @@ class ReverbApp : Application(), Configuration.Provider {
         container = AppContainer(this)
 
         DownloadManager.init(this, container.httpClient, container.downloadStore, container.settingsStore)
+        // 缓存的 init 不发任何网络请求(只建目录 + 一次对账扫盘),所以与同意门无关,放这里没问题;
+        // 真正拉音频要等用户点播放,那时门早已过了。
+        AudioCacheManager.init(this, container.httpClient, container.audioCacheStore, container.settingsStore)
         PlayerController.bindHistory(container.historyStore)
         PlayerController.bindSettings(container.settingsStore)
         PlayerController.bindListenStats(container.listenStatsStore)
@@ -122,6 +132,10 @@ class ReverbApp : Application(), Configuration.Provider {
                     "favs=${container.favoriteStore.favorites.value.size} history=${container.historyStore.history.value.size} " +
                     "stamps=${container.stampStore.stamps.value.size} notes=${container.noteStore.notes.value.size} " +
                     "downloads=${container.downloadStore.downloads.value.size} " +
+                    // 缓存条数打在这里(读内存账本,不扫盘):它是唯一能区分"没缓存成"与
+                    // "缓存过但文件已不在"的地方。字节数**不在这里取** —— usageBytes() 要 listFiles,
+                    // 那是给启动加一次主线程磁盘往返(口径见 H65),设置页需要时自己去算。
+                    "audioCache=${AudioCacheManager.cachedCount()} " +
                     // 队列不属任何备份分区,但它是用户排出来的东西 —— 装机取证要靠这一行判断
                     // "冷启动到底读回了没有"(读回失败与"本来就没排队"在界面上是同一个样子)。
                     "upNext=${container.playbackStateStore.snapshot.upNext.size} " +

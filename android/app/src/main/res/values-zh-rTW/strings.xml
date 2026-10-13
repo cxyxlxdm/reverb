@@ -76,7 +76,7 @@
     <string name="guide_card_sub">30 秒 · 內建音訊，不連網也能播</string>
     <string name="privacy_consent_title">隱私政策與資料說明</string>
     <string name="privacy_consent_catalog">節目檢索與熱門榜。本版本會存取 Apple 播客檢索（itunes.apple.com）、Apple 熱門榜（rss.marketingtools.apple.com）、fyyd.de、gpodder.net 等公開介面；這些請求不攜帶任何驗證憑證與使用者識別碼。</string>
-    <string name="privacy_consent_body">餘音以本機處理為主。沒有開發者後端、帳號、廣告、統計、歸因、第三方登入、第三方推播、當機回報或跨應用程式追蹤。訂閱、歷史、收藏、下載、收聽統計、設定、安裝隨機識別碼和執行日誌在本機處理，不會自動上傳給開發者；Android 使用 AndroidX、OkHttp、Coil 等開源基礎程式庫，但不含上述資料回報 SDK。自 1.0.2 起，若你在系統設定中開啟備份（Android 雲端備份、廠商換機遷移），作業系統會把訂閱、收藏、歷史、下載紀錄（僅連結）、印記、批註、收聽統計與設定備份到你自己的系統雲端帳號或新裝置；音訊、逐字稿快取、排行榜快取與日誌不在其中，開關也在系統設定裡。\n\n連網時，搜尋詞、地區或分類會傳給 Apple、fyyd、gpodder 等公開目錄；RSS、封面、音訊和逐字稿直接向發布方或託管方請求，因此對方會看到 IP 位址、User-Agent 和存取資源。日誌可能包含節目或單集識別碼及所存取服務的主機名稱，只有你主動分享或匯出時才會離開應用程式。詳情請閱讀完整隱私政策。\n\n點按「同意並繼續」表示你已閱讀並接受本政策。</string>
+    <string name="privacy_consent_body">餘音以本機處理為主。沒有開發者後端、帳號、廣告、統計、歸因、第三方登入、第三方推播、當機回報或跨應用程式追蹤。訂閱、歷史、收藏、下載、播放快取、收聽統計、設定、安裝隨機識別碼和執行日誌在本機處理，不會自動上傳給開發者；Android 使用 AndroidX、OkHttp、Coil 等開源基礎程式庫，但不含上述資料回報 SDK。自 1.0.2 起，若你在系統設定中開啟備份（Android 雲端備份、廠商換機遷移），作業系統會把訂閱、收藏、歷史、下載紀錄（僅連結）、印記、批註、收聽統計與設定備份到你自己的系統雲端帳號或新裝置；音訊、逐字稿快取、排行榜快取與日誌不在其中，開關也在系統設定裡。\n\n連網時，搜尋詞、地區或分類會傳給 Apple、fyyd、gpodder 等公開目錄；RSS、封面、音訊和逐字稿直接向發布方或託管方請求，因此對方會看到 IP 位址、User-Agent 和存取資源。日誌可能包含節目或單集識別碼及所存取服務的主機名稱，只有你主動分享或匯出時才會離開應用程式。詳情請閱讀完整隱私政策。\n\n點按「同意並繼續」表示你已閱讀並接受本政策。</string>
     <string name="privacy_read_full">閱讀完整隱私政策</string>
     <string name="privacy_accept">同意並繼續</string>
     <string name="privacy_decline">不同意並退出</string>
@@ -260,12 +260,12 @@
     <string name="set_skip_fwd">快進</string>
     <string name="unit_seconds">%d 秒</string>
     <string name="set_wifi_only">僅在 Wi-Fi 下載</string>
-    <string name="set_wifi_only_sub">關閉後行動網路也允許下載</string>
+    <string name="set_wifi_only_sub">關閉後行動網路也允許下載與快取</string>
     <string name="set_updates">訂閱更新提醒</string>
     <string name="set_updates_sub">訂閱有新一集時通知你</string>
 
     <string name="set_clear_cache">清除快取</string>
-    <string name="set_clear_cache_sub">榜單、頻道、圖片與逐字稿快取 · %s</string>
+    <string name="set_clear_cache_sub">榜單、頻道、圖片、逐字稿與已播音訊快取 · %s</string>
     <string name="set_clear_downloads">清除下載</string>
     <string name="set_clear_downloads_sub">已下載音訊 · %s</string>
     <string name="set_clear_history">清空播放歷史</string>
@@ -283,7 +283,7 @@
     <string name="dlg_skip_fwd_title">快進秒數</string>
     <string name="dlg_language_title">語言</string>
 
-    <string name="confirm_clear_cache">將清除榜單、頻道快取、圖片與已產生的逐字稿，不影響訂閱與下載。</string>
+    <string name="confirm_clear_cache">將清除榜單、頻道快取、圖片、已產生的逐字稿與已播音訊快取，不影響訂閱與下載。</string>
     <string name="confirm_clear_downloads">將刪除全部已下載的音訊檔，無法復原。</string>
     <string name="confirm_clear_history">將清空全部收聽記錄與續播位置。</string>
     <string name="confirm_clear_queue">將清空待播佇列中的全部單集，無法恢復。</string>
@@ -313,7 +313,7 @@
     <string name="about_h_what">這是什麼</string>
     <string name="about_p_what">餘音是一款輕量的播客用戶端。發現好節目、訂閱收聽、離線下載、隨時續播，專注「聽」本身。</string>
     <string name="about_h_features">主要功能</string>
-    <string name="about_p_features">· 發現：按地區與分類瀏覽每日熱門，可自訂分類排序、橫滑切換\n· 搜尋：按名稱或直接貼上 RSS 位址\n· 頻道分享：產生含 Logo、頻道名、簡介與餘音落款的圖片\n· 追更：訂閱頻道播過的單集全在這一欄，按時間倒序一直往下翻，可下拉更新、單獨設定這一欄的播放模式\n· 音閣：訂閱、收藏、下載、待播、歷史、批註六欄管理\n· 離線下載：邊聽邊快取，可僅 Wi-Fi 下載\n· 逐字稿：本機離線轉寫，或直接讀發布方提供的稿\n· 播放：倍速、快進快退、睡眠定時、播放模式（順序 / 單曲循環 / 隨機）、自動續播、背景與鎖定畫面控制\n· 批註：聽到某一句有感觸，就記下那一秒和此刻的一句話；音閣「批註」欄把它們連成一條時間線，點一下從那一句接著聽\n· 節目筆記：播放頁橫滑查看\n· 訂閱更新提醒：有新一集時通知\n· 系統級備份：訂閱、收藏、歷史、下載記錄（僅連結）、印記、批註、收聽統計與設定隨系統備份與換機遷移，音訊與逐字稿不在備份內\n· 外觀：深色/淺色/跟隨系統、字級、主題配色、多語言</string>
+    <string name="about_p_features">· 發現：按地區與分類瀏覽每日熱門，可自訂分類排序、橫滑切換\n· 搜尋：按名稱或直接貼上 RSS 位址\n· 頻道分享：產生含 Logo、頻道名、簡介與餘音落款的圖片\n· 追更：訂閱頻道播過的單集全在這一欄，按時間倒序一直往下翻，可下拉更新、單獨設定這一欄的播放模式\n· 音閣：訂閱、收藏、下載、待播、歷史、批註六欄管理\n· 離線下載：下載的單集長期留在本機，可僅 Wi-Fi 下載\n· 播放快取：播過的單集自動留在本機，下次直接離線播放；斷網時已載入的清單與封面仍可瀏覽，可在設定一鍵清除\n· 逐字稿：本機離線轉寫，或直接讀發布方提供的稿\n· 播放：倍速、快進快退、睡眠定時、播放模式（順序 / 單曲循環 / 隨機）、自動續播、背景與鎖定畫面控制\n· 批註：聽到某一句有感觸，就記下那一秒和此刻的一句話；音閣「批註」欄把它們連成一條時間線，點一下從那一句接著聽\n· 節目筆記：播放頁橫滑查看\n· 訂閱更新提醒：有新一集時通知\n· 系統級備份：訂閱、收藏、歷史、下載記錄（僅連結）、印記、批註、收聽統計與設定隨系統備份與換機遷移，音訊與逐字稿不在備份內\n· 外觀：深色/淺色/跟隨系統、字級、主題配色、多語言</string>
     <string name="about_h_philosophy">設計理念</string>
     <string name="about_p_philosophy">美學上取「水墨 + 青瓷 + 梁金」的底色，名稱與圖示呼應「餘音繞梁」——聲波環繞橫梁，餘韻不散。\n\n取源上堅持全鏈路免費、無需登入、無需任何 API Key：檢索一律基於公開來源，最終始終回到發布方自己的 RSS，直接串流播放原始音訊——版權乾淨、成本為零。\n\n隱私上，訂閱、歷史和下載儲存在裝置本機，不會自動上傳給開發者，也不用於跨應用程式追蹤。</string>
 

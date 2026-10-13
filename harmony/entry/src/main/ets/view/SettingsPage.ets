@@ -528,7 +528,11 @@ export struct SettingsPage {
     const popular = await this.app.popularCache.sizeBytes();
     const feeds = await this.app.feedCache.sizeBytes();
     const transcripts = await this.app.transcripts.usageBytes();
-    this.cacheBytes = popular + feeds + transcripts;
+    // 音频缓存与封面缓存各算各的目录,和"下载"那格**没有交集**(那边只数 downloads 目录)。
+    // 这条分界是产品口径:缓存是可重生成的临时物,下载是用户显式要留的,清一个不能伤另一个。
+    const audio = await this.app.audioCache.usageBytes();
+    const artwork = this.app.artwork.usageBytes();
+    this.cacheBytes = popular + feeds + transcripts + audio + artwork;
     this.dlBytes = await this.app.downloadManager.usageBytes();
   }
 
@@ -565,8 +569,14 @@ export struct SettingsPage {
     this.app.popularCache.clear();
     this.app.feedCache.clear();
     this.app.transcripts.clearAll();
-    this.recomputeSizes();
-    Log.i('Settings', '已清除热门榜、频道缓存与逐字稿');
+    // 音频缓存与封面缓存:两个目录都在 `clearAll()` 里自己作废内存表,
+    // 所以清完之后界面不会还拿着一把指向已删文件的本地 uri(封面的那一层另有回落,见 Widgets)。
+    // **不碰 downloadManager** —— 下载是用户显式要留的,和缓存不是一条口径(见 recomputeSizes)。
+    // 这两个 clearAll 是异步删文件,**必须等它们回来再重算**:否则这一格显示的是"还没删完"的
+    // 字节数,用户看到的就是"按了没归零",与没清一样。
+    Promise.all([this.app.audioCache.clearAll(), this.app.artwork.clearAll()])
+      .then((): void => { this.recomputeSizes(); });
+    Log.i('Settings', '已清除热门榜、频道缓存、逐字稿、音频缓存与封面缓存');
   }
 
   doClearDownloads(): void {
