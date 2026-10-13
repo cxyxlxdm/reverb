@@ -29,10 +29,18 @@ const HOME_LATEST_MAX = 20;
 export struct DiscoverPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
-  /// 玻璃 tab 栏悬浮后,滚动内容需让出的底部空间(手势条+栏+迷你条,Index 算好传入)。
+  /// 底部栏悬浮后,滚动内容需让出的底部空间(栏 + 手势区 + 播放条,Index 算好传入)。
   /// 只用于各 List 的 contentEndOffset —— 最后一项要能滚出栏底、取得到,内容又要
-  /// 从栏下经过玻璃才糊得出来。
+  /// 从栏下滚过才被糊出来(`barOverlap(true)`)。
   @Prop bottomPad: number = 0;
+  /**
+   * 把这一帧的滚动量(vp,向下为正)交给外壳,由它决定播放条收不收进栏(`Index.feedScroll`)。
+   *
+   * 每一处**竖向**滚动容器都要挂(`.onDidScroll`),漏一处就是从那一屏往下滚不收起 ——
+   * 本页有五处(List:继续收听 / 最新 / 分类 / 电台 / …),另加一条横向 Scroll 与一个
+   * 对话框内的 List **不挂**:前者不该触发收束,后者压根不在栏上方的内容里。
+   */
+  onScrollDy: (dy: number) => void = () => {};
   /// 见 LibraryPage 同名注释:驱动界面的 store 必须被观察,不能 `this.app.xxx` 直读。
   /// 电台按钮(图标/激活态/准备中)与「继续收听」都依赖它们。
   @ObjectLink settings: SettingsStore;
@@ -796,6 +804,7 @@ export struct DiscoverPage {
     }
     .scrollBar(BarState.Off)
     .contentEndOffset(this.bottomPad)
+    .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
     .width('100%')
     .layoutWeight(1)
   }
@@ -859,6 +868,7 @@ export struct DiscoverPage {
       }
       .scrollBar(BarState.Off)
       .contentEndOffset(this.bottomPad)
+      .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
       .width('100%').height('100%')
     }
     .onRefreshing(() => { this.refreshInbox(true); })
@@ -1017,6 +1027,7 @@ export struct DiscoverPage {
           }
           .scrollBar(BarState.Off)
           .contentEndOffset(this.bottomPad)
+          .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
           .width('100%').height('100%')
         }
       }
@@ -1175,6 +1186,7 @@ export struct DiscoverPage {
           }
           .scrollBar(BarState.Off)
           .contentEndOffset(this.bottomPad)
+          .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
           .layoutWeight(1)
         }
       } else {
@@ -1207,6 +1219,7 @@ export struct DiscoverPage {
           }
           .scrollBar(BarState.Off)
           .contentEndOffset(this.bottomPad)
+          .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
           .layoutWeight(1)
         }
       }

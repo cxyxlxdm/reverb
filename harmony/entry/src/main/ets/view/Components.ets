@@ -490,7 +490,9 @@ export struct EpisodeListItem {
  * **44 → 38(2026-09-29):按占屏比例换算,不是随手收一档。** 装机反馈「顶部也明显偏大」。
  * Android 这条是 44dp、本机原先也是 44vp —— 数值相同,但本机逻辑宽 374.2vp、Android 那台
  * 427.6dp,同值即占屏大 14%。38/374.2 = 10.2% ≈ 44/427.6 = 10.3% ⇒ 这才是"和 Android 一样"。
- * 同一档换算在底部栏(`GlassTabBar.BAR_H` 48→42)与它的留白上一起做的,理由与实测数据写在那处。
+ * 同一档换算在底部栏(已退役的 `GlassTabBar.BAR_H` 48→42,存档在 `harmony/shelved/`)
+ * 与它的留白上一起做的,理由与实测数据写在那处。**这一轮底部栏换成系统 `Tabs` 的 56vp,
+ * 不再走 0.876 换算** —— 顶部分段条这条换算本身没被推翻,别拿新栏的高度反过来复核它。
  *
  * ⚠️ **条本身缩了,chip 的"盒子"没跟着缩**:实测 chip 高 29.8vp,而 Android 的 Material
  * FilterChip 是 34dp,鸿蒙本来就比 Android 小(占屏 8.0% vs 7.9%,已经对齐),盒子再缩
@@ -503,7 +505,7 @@ export const CHIPS_STRIP_H = 38;
 
 /**
  * 分段条里 chip 的文字字号(fp)。**14 → 12(2026-09-29)**,与底部 tab 标签 11→10 同一档
- * 换算(×0.876,来由见 `GlassTabBar.BAR_H` 与 H122)。
+ * 换算(×0.876,来由见 `shelved/GlassTabBar.ets` 的 `BAR_H` 与 H122)。
  *
  * 原先这里用 `TypeScale.labelLarge`(= Android Material FilterChip 的 14sp),**数值两端相同**
  * —— 但"相同"在这台机器上不等于"一样":本机 1vp ≈ 1.18 个标准 dp,同字号在鸿蒙物理上大 18%、
@@ -585,7 +587,8 @@ export class ChipsSwipeSync {
 }
 
 /// 横向分类 chips(与内容分页双向联动)。本体是玻璃条:实时模糊 + 半透明染色,
-/// 与底部 GlassTabBar 同一套参数;调用方负责把它悬浮在滚动内容上方。
+/// 参数沿用已退役的自绘底部栏那一套(现存档于 `harmony/shelved/GlassTabBar.ets`);
+/// 调用方负责把它悬浮在滚动内容上方。
 @Component
 export struct ChipsRow {
   @Prop scheme: Scheme;
@@ -761,7 +764,7 @@ export struct ChipsRow {
           Scroll(this.scroller) {
             Stack({ alignContent: Alignment.Start }) {
               /**
-               * 透明胶囊(与 GlassTabBar 同款语言):罩住选中 chip 的半透明衬底 + 发丝描边。
+               * 透明胶囊:罩住选中 chip 的半透明衬底 + 发丝描边。
                * 独立成子组件:Swiper 手势期间每帧只重建这一颗胶囊,不牵动整条 ChipsRow。
                */
               ChipsCapsule({
@@ -870,7 +873,10 @@ export struct ChipsRow {
       .width('100%')
       .height(CHIPS_STRIP_H)
       .borderRadius(CHIPS_STRIP_H / 2)
-      // 玻璃本体:参数与 GlassTabBar 一致(见彼处注释),两端观感统一
+      // 玻璃本体。**这组参数现在是全项目唯一的一份** —— 原先和自绘底部栏同源
+      // (`radius: 40 / saturation: 1.3 / surface 0.6 染色 + outline 0.45 发丝描边`,
+      // 那一份已退役到 `harmony/shelved/GlassTabBar.ets`),所以"改这里两端就一致"
+      // 不再成立:底部栏改用系统 `Tabs` 的 `barBackgroundBlurStyle`,不归这里管。
       .backgroundEffect({
         radius: 40,
         saturation: 1.3,
