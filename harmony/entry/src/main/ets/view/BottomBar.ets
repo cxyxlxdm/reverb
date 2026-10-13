@@ -47,11 +47,18 @@ export const TAB_LABEL_FP: number = 10;
 export const MINI_H: number = 60;
 /** 展开态播放条与栏之间的留白(参考片实测 26px = 8vp)。 */
 export const MINI_GAP: number = 8;
-/** 收束态:播放条整块落进栏那 56vp —— 2 + 5 + 44 + 5 = 56,封面比展开态大一档。 */
+/** 收束态:播放条整块落进栏那 56vp —— 2 + 4 + 44 + 6 = 56,封面比展开态大一档。 */
 export const MINI_COVER_WIDE: number = 42;
 export const MINI_COVER_NARROW: number = 44;
 export const MINI_PAD_WIDE: number = 8;
-export const MINI_PAD_NARROW: number = 5;
+/**
+ * 收束态上下 padding **不对称**(装机量出来的):整块 182px 与栏严格等高、顶对齐,
+ * 但里面那条 2vp 进度线(实测 7px)把内容往下推了半格,封面中心落在 2510.5,
+ * 而栏中心是 2506 —— 低 1.4vp。参照物华为音乐的收束封面中心 2506.5 是正中的。
+ * 上 4 / 下 6 把进度线那 2vp 补回来,封面中心 = 2 + 4 + 22 = 28vp = 栏中心。
+ */
+export const MINI_PAD_NARROW_TOP: number = 4;
+export const MINI_PAD_NARROW_BOTTOM: number = 6;
 /** 收束态左侧回主页按钮的槽宽(参考片 56×56 方槽)。 */
 export const HOME_SLOT: number = 56;
 /**

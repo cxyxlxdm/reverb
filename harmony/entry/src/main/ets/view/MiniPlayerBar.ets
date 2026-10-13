@@ -4,7 +4,7 @@ import { PlayerController } from '../playback/PlayerController';
 import { Artwork, Glyph, Sym } from './Widgets';
 import {
   HomeSlot, morphSpring,
-  MINI_COVER_NARROW, MINI_COVER_WIDE, MINI_PAD_NARROW, MINI_PAD_WIDE
+  MINI_COVER_NARROW, MINI_COVER_WIDE, MINI_PAD_NARROW_TOP, MINI_PAD_NARROW_BOTTOM, MINI_PAD_WIDE
 } from './BottomBar';
 
 /**
@@ -155,11 +155,13 @@ export struct MiniPlayerBar {
       }
       .width('100%')
       /**
-       * 上下 padding 是这一层唯一随两态变的量(8 ↔ 5),所以 `.animation()` 就挂在它所在的
+       * 上下 padding 是这一层唯一随两态变的量(8 ↔ 4/6),所以 `.animation()` 就挂在它所在的
        * 节点上。左右两端**不动**:14/16 是内容页边距口径,跟着 tab 栏走反而会和页面对不齐。
+       * 收束态那两值**不相等** —— 差的那 2vp 正好是头顶上那条进度线,理由见常量注释。
        */
-      .padding({ left: 14, right: 16, top: this.collapsed ? MINI_PAD_NARROW : MINI_PAD_WIDE,
-        bottom: this.collapsed ? MINI_PAD_NARROW : MINI_PAD_WIDE })
+      .padding({ left: 14, right: 16,
+        top: this.collapsed ? MINI_PAD_NARROW_TOP : MINI_PAD_WIDE,
+        bottom: this.collapsed ? MINI_PAD_NARROW_BOTTOM : MINI_PAD_WIDE })
       .alignItems(VerticalAlign.Center)
       .animation({ curve: morphSpring() })
     }
