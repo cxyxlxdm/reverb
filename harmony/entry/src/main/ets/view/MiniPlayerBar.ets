@@ -14,8 +14,8 @@ import {
  *
  * **两态**(2026-10-13 加,对齐预装华为音乐):
  * - 展开(`collapsed=false`):整块 60vp,坐在 tab 栏**上方** 8vp 处,不透明 surface 底;
- * - 收束(`collapsed=true`):整块 56vp **落进 tab 栏那一条**里,底色透掉(让系统栏的磨砂
- *   当自己的背景),左端让出 56vp 给 [HomeSlot] 那颗回主页按钮。
+ * - 收束(`collapsed=true`):整块 56vp **落进 tab 栏那一条**里,底色透掉(让 `HdsTabs` 那份
+ *   `systemMaterialEffect` 的系统磨砂当自己的背景),左端让出 56vp 给 [HomeSlot] 那颗回主页按钮。
  *
  * 两态是**同一套节点、只差几个几何量**,不是两个布局 —— 这是"丝滑"的唯一来源:
  * 换布局会让整行内容重挂,而重挂没有中间帧。这里封面尺寸/上下 padding/左槽宽度/底色
@@ -168,8 +168,9 @@ export struct MiniPlayerBar {
     .width('100%')
     /**
      * 展开态用自己的 surface 底(它压在页面内容上,不给底会透出列表文字);
-     * 收束态**全透** —— 这一行此时就在系统 tab 栏里,让栏那份 `barBackgroundBlurStyle`
-     * 的磨砂当背景,才和左右两侧的 tab 栏同构。给个 surface 底就把磨砂盖死了。
+     * 收束态**全透** —— 这一行此时就在悬浮胶囊那 56vp 里,让 `HdsTabs` 那份
+     * `barFloatingStyle.systemMaterialEffect` 的系统磨砂当背景,才和左右两侧的 tab 栏同构。
+     * 给个 surface 底就把磨砂盖死了。
      */
     .backgroundColor(this.collapsed ? withAlpha(this.scheme.surface, 0) : this.scheme.surface)
     .animation({ curve: morphSpring() })
