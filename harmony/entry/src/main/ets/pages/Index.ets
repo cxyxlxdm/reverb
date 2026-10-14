@@ -1,4 +1,4 @@
-import { Theme, Scheme, TypeScale, Tracking, Metrics, withAlpha } from '../theme/Theme';
+import { Theme, Scheme, TypeScale, Tracking, Metrics } from '../theme/Theme';
 import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
 import { InboxStore } from '../store/InboxStore';
@@ -16,9 +16,10 @@ import { NoteStore, EpisodeNote } from '../store/NoteStore';
 import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
 import {
-  SystemTabItem, TAB_BAR_H, TAB_KEY, MORPH_KEY, MORPH_SLOPE,
+  SystemTabItem, barFloating, pickMaterialType, TAB_BAR_H, TAB_KEY, MORPH_KEY, MORPH_SLOPE,
   MINI_H, MINI_GAP, morphSpring, barReserve
 } from '../view/BottomBar';
+import { hdsMaterial, HdsTabs } from '@kit.UIDesignKit';
 import { LibraryPage } from '../view/LibraryPage';
 import { SettingsPage } from '../view/SettingsPage';
 import { PrivacyConsentPage } from '../view/PrivacyConsentPage';
@@ -64,8 +65,9 @@ struct Index {
   @State downloadManager: DownloadManager = AppContainer.get().downloadManager;
   @State radio: RadioStation = AppContainer.get().radio;
   /**
-   * 当前 tab。**放 AppStorage 而不是 @State**:底部栏的三项是 Tabs 用 CustomBuilder 生成的,
-   * 它们自己订阅这个键(见 `BottomBar.SystemTabItem`),不依赖"父级 build 有没有重跑"。
+   * 当前 tab。**放 AppStorage 而不是 @State**:栏项的选中色由 `SystemTabItem` 自己订阅这个键
+   * (见 `BottomBar.TAB_KEY`),不依赖"父级 build 有没有重跑"。
+   * 提交只有两个来源:栏的点按(`.onChange` 回写)与系统回退等处的程序化改值,都写这一个键。
    */
   @StorageLink(TAB_KEY) tab: number = 0;
   /**
@@ -75,6 +77,11 @@ struct Index {
   @StorageLink(MORPH_KEY) collapsed: boolean = false;
   /// 收/展的累计滚动量(vp)。只在 [feedScroll] 里读写,不进状态、不触发重渲。
   private morphAcc: number = 0;
+  /**
+   * 悬浮栏的材质档位。**冷启动探测一次**,不进 build 重算(见 `BottomBar.pickMaterialType`)。
+   * 探测是必需的:直接写 IMMERSIVE 在不支持的机器上会得到**透明栏**(官方示例明确点过这一条)。
+   */
+  private readonly materialType: hdsMaterial.MaterialType = pickMaterialType();
   /**
    * 设备此刻是否深色。**由 EntryAbility 写 AppStorage**(启动种一次,系统切深浅时在
    * `onConfigurationUpdate` 里再写),这里只 @StorageLink 读 —— 理由见 `Theme.SYSTEM_DARK_KEY`。
@@ -87,6 +94,12 @@ struct Index {
   /// 状态栏 / 导航条避让高度(px→vp)。窗口设了全屏布局,故需自行避让。
   @State topInset: number = 0;
   @State bottomInset: number = 0;
+  /**
+   * 当前窗口宽(vp)。悬浮栏的 `barWidth` 要用它 —— 见 `BottomBar.barFloating` 里那条
+   * 「不要给 '100%'」:百分比顶掉侧边距,宽度必须是"窗口宽 − 2×23vp"这个绝对量。
+   * 和避让区同一次异步读取带回来,所以首帧是 0(那一帧不给 barWidth)。
+   */
+  @State windowWVp: number = 0;
   @State player: PlayerController = PlayerController.get();
   /// 播放状态变化触发重渲的计数(PlayerController 非 @Observed 字段级追踪,用它兜底刷新)
   @State tick: number = 0;
@@ -123,7 +136,8 @@ struct Index {
     this.applySystemBar();
   }
 
-  /// 读状态栏与手势导航条高度,换算为 vp 作内边距(避免页头压住状态栏)。
+  /// 读状态栏/手势导航条避让高度与**窗口宽**(px→vp)。窗口设了全屏布局,故需自行避让;
+  /// 窗口宽是给悬浮栏算 `barWidth` 用的(见 [windowWVp])。
   private readInsets(): void {
     try {
       const win = window.getLastWindow(this.getUIContext().getHostContext());
@@ -133,7 +147,9 @@ struct Index {
         const nav = w.getWindowAvoidArea(window.AvoidAreaType.TYPE_NAVIGATION_INDICATOR);
         this.topInset = ui.px2vp(top.topRect.height);
         this.bottomInset = ui.px2vp(nav.bottomRect.height);
-        Log.i('UI', `避让 top=${this.topInset} bottom=${this.bottomInset}`);
+        // 全屏布局下窗口宽 == 屏宽。用窗口而不是 display:旋转 / 分屏时跟着窗口走。
+        this.windowWVp = ui.px2vp(w.getWindowProperties().windowRect.width);
+        Log.i('UI', `避让 top=${this.topInset} bottom=${this.bottomInset} winW=${this.windowWVp}`);
       }).catch((e: Error) => {
         Log.w('UI', `读取避让区失败 ${e.message}`);
       });
@@ -494,8 +510,8 @@ struct Index {
    * - 展开:抬到栏**上方**再留 8vp 缝(参考片实测那两道 26px);
    * - 收束:落进栏那 56vp 里,于是只剩手势区那一道。
    *
-   * 栏本体由 Tabs 画,它下面垫的是 `padding({bottom: bottomInset})`
-   * (见 [shell] 里那句注释),所以两种落点都以"屏底往上 bottomInset"为基准,不用自己算栏高。
+   * 栏由 `HdsTabs` 画,它自己按 `barBottomMargin = bottomInset` 浮在避让区上方
+   * (见 `BottomBar.barFloating`),所以两种落点都以"屏底往上 bottomInset"为基准,不用自己算栏高。
    */
   private miniBottom(): number {
     return this.collapsed ? this.bottomInset : this.bottomInset + TAB_BAR_H + MINI_GAP;
@@ -555,12 +571,12 @@ struct Index {
 
   @Builder
   shell() {
-    // Stack 叠层:内容(Tabs)在下、撑满全屏,播放条在上。
-    // 之所以还要这一层 Stack:播放条要能**落进**系统 tab 栏那 56vp 里(收束态),
-    // 而栏是 Tabs 自己画的,页面内容进不去 —— 只能盖在上面。
+    // Stack 叠层(自上而下两层):内容(HdsTabs,栏由它画)在底、播放条在顶。
+    // 之所以还要这层 Stack:播放条要能**落进**栏那 56vp 里(收束态),而栏是悬浮胶囊、
+    // 压在页面内容之上,页面内容进不去 —— 只能盖在上面。
     Stack({ alignContent: Alignment.Bottom }) {
       Column() {
-        Tabs({ barPosition: BarPosition.End, index: this.tab }) {
+        HdsTabs({ barPosition: BarPosition.End, index: this.tab }) {
           TabContent() {
             DiscoverPage({
               scheme: this.scheme(),
@@ -580,7 +596,6 @@ struct Index {
           }
           .tabBar(this.slotDiscover())
 
-
           TabContent() {
             FeedPage({
               scheme: this.scheme(),
@@ -595,7 +610,6 @@ struct Index {
             })
           }
           .tabBar(this.slotFeed())
-
 
           TabContent() {
             LibraryPage({
@@ -622,38 +636,43 @@ struct Index {
 
         }
         /**
-         * 栏交给系统画(自绘的玻璃透镜栏已退役进 `harmony/shelved/`)。
+         * 栏交给 **`HdsTabs` 的悬浮样式**画(2026-10-14,路线 A;自绘胶囊退役进
+         * `harmony/shelved/PillTabBar.ets`,恢复步骤在那份文件头部)。
+         *
+         * **悬浮样式要求三条同时成立**(官方示例的硬条件,少一条就画成普通通栏):
+         * `barOverlap(true)` + `vertical(false)` + `barPosition(BarPosition.End)`。
          *
          * - `barHeight(56)`:系统默认也是 56,显式写出来免得以后有人以为它跟着内容自适应;
-         * - `barOverlap(true)` + `barBackgroundBlurStyle`:栏**透**——糊的是它背后那行列表内容。
-         *   这要求页面给底部让出余量([underBarPad]),否则滚到底末项被栏压住;
-         * - **栏的深浅不由这里决定,由 [applyColorMode] 决定**。磨砂取的是「应用生效深浅态」,
-         *   不是我们的 `Scheme`;早先这里写着「压一层 0.86 的 surface 就随主题走」,装机推翻 ——
-         *   `barBackgroundColor` 盖不住那份材质(见 H174)。现在这层只负责**压住多少内容透上来**
-         *   (0.86 是"盖得住、又还看得见列表在动"那一档),深浅的对错在 `applyColorMode` 那一侧;
-         * - `divider`:栏与内容之间那道发丝线(自绘版是手写的 0.5 Divider,系统这版有原生入口)。
+         * - `barOverlap(true)`:栏**透**——糊的是它背后那行列表内容。这要求页面给底部让出
+         *   余量([underBarPad]),否则滚到底末项被栏压住;
+         * - `barFloatingStyle`:侧边距 23vp、宽度 = 窗口宽 − 2×23vp、距屏底 = 整个手势避让区,
+         *   材质档位见 `BottomBar.barFloating`;
+         * - **不再写 `barBackgroundColor` / `barBackgroundBlurStyle` / `divider`**。这三条是
+         *   "近似磨砂"那一版的零件,而这一版要验的正是**系统材质自己长什么样** —— 同时压上去
+         *   就等于又自绘一层,装机看到的不是系统的东西(深浅态那一侧的坑见 H174);
+         * - `scrollable(false)`:左右滑切页仍关着,与自绘版一致(列表里有横滑组件,会抢手势);
+         * - **`padding` 只留 top**(见下一层):栏底到屏底那一段由 `barBottomMargin` 给,
+         *   所以 Tabs 必须铺到屏底,列表才滚得到栏**背后**。系统栏那版在这里压了
+         *   `bottom: bottomInset`,那是"栏贴着手势区上沿"的形状,已经不适用。
          */
         .barHeight(TAB_BAR_H)
         .barMode(BarMode.Fixed)
+        .vertical(false)
         .scrollable(false)
         .barOverlap(true)
-        .barBackgroundBlurStyle(BlurStyle.COMPONENT_THICK)
-        .barBackgroundColor(withAlpha(this.scheme().surface, 0.86))
-        .divider({ strokeWidth: 0.5, color: withAlpha(this.scheme().outline, 0.6) })
+        .barFloatingStyle(barFloating(this.bottomInset, this.windowWVp, this.materialType))
         .onChange((i: number) => { this.tab = i; })
         .width('100%')
         .height('100%')
       }
       .width('100%')
       .height('100%')
-      /**
-       * 上下各避开系统栏。**bottom 这一项就是"靠下"那两条反馈的正解**:
-       * 自绘版把整条栏压在手势避让区里(只留 0.62 倍,栏底几乎贴着小白条),
-       * 现在栏整体抬到手势区上方 —— 栏底到屏底恰好是完整的避让区,
-       * 与参考片实测的 91px = 28vp 对上。
-       */
-      .padding({ top: this.topInset, bottom: this.bottomInset })
+      .padding({ top: this.topInset })
 
+      /**
+       * 播放条。**挂在 Tabs 之后**:两者同处底部对齐的 Stack,后写的在上,
+       * 收束态播放条才盖得住悬浮栏那 56vp。
+       */
       if (this.player.current !== null) {
         Column() {
           MiniPlayerBar({

@@ -573,6 +573,24 @@ macOS 的 1.0.3 尚未出包 —— 它的播放模式是**同日在 1.0.3 定�
 | 10 | **H174 的连带复核** | ⚠️ **只验了本端底部栏与状态栏图标**。同一根因还会出现在系统弹窗、半屏面板、输入法 —— 现在它们跟着 `setColorMode` 一起对了,但**没有逐个截图留证**。另:「跟随系统」那一档(0)映射 `NOT_SET` 之后是否仍真的跟随,**本轮没在深色系统上复验**(设备一直在浅色模式) |
 | 9 | **硬规矩 20:截图整套重拍** | ⛔ **待装机之后**。底栏变了 ⇒ **所有含底栏的商店截图与官网 `site/reverb/shots/*.jpg` 同时过期**,不是只有首页那一张;kit 要和新包同批重建。**鸿蒙在架 1.0.4 不受影响**,这条排在 1.0.5 出包那一轮 |
 
+#### 1.0.5 追加二批(2026-10-14):系统栏换成 `HdsTabs` **悬浮页签**(真材质),自绘胶囊退役
+
+上一批装机之后又走了自绘悬浮胶囊(`PillTabBar`,已进 `harmony/shelved/`),这一批把问题问到底:
+**「预装华为音乐那种悬浮 + 真磨砂 + 按压光晕」系统到底给不给**?查证结论给的是**大部分给、交互不给**:
+`@kit.UIDesignKit` 的 `HdsTabs` + `barFloatingStyle`(悬浮、左右留边、底部抬起、`systemMaterialEffect`
+真材质、按压点光源)是公开 API,而**「按住横向拖动切格」与「光晕 1:1 跟手」在 HDS 里没有任何公开入口**
+(`HdsTabsAttribute` 全量属性里没有拖动/手势项,逐条证据写在 `view/BottomBar.ets` 头部)。
+用户拍板走这条,并接受交互退回**点按切换**。
+
+| # | 门 | 现状与判据 |
+|---|---|---|
+| 11 | **代码 + 自绘胶囊二次退役** | ✅ **已做完**:`Index.shell()` 的 `Tabs` → `HdsTabs`,`barFloatingStyle(barFloating(inset, windowWidthVp, materialType))` 一次给齐三个必需条件(`barOverlap(true)` + `vertical(false)` + `barPosition(End)`);**刻意摘掉**上一版盖在系统材质上的 `barBackgroundColor` / `barBackgroundBlurStyle` / `divider`(留着就等于"量的是我们自己的那层压色,不是系统材质",见 H174);材质**探针取**(`pickMaterialType()` 读 `getSystemMaterialTypes()`,有 IMMERSIVE 用 IMMERSIVE,否则 ADAPTIVE —— 探针失败的症状是栏透明);栏里每一格**仍是自绘 `SystemTabItem`**,因为 `BottomTabBarStyle` 用系统主题色,会丢掉本 App 的强调色与手动深浅;`harmony/shelved/PillTabBar.ets` + README 复原清单 |
+| 12 | **SDK 口径的代价** | ✅ `build-profile.json5` 两个 product 的 `compatibleSdkVersion` / `targetSdkVersion` 从 `6.0.2(22)` 升到 **`6.1.0(23)`**(`barFloatingStyle` / `miniBar` / `hdsMaterial` 都标 `@since 6.1.0(23)`)。⚠️ **这意味着 6.0.x 的设备不再能安装本包**,上架前要按这一条复核受众口径。<br>另外 `HdsTabsMiniBar.barLayoutMode` 是 **6.1.1(24)**,在本口径下**不可用** —— 所以播放条收束这一轮**仍是我们自己那套**(随播放条叠在系统栏之上),没换成系统 `miniBar`:一次只换一个变量 |
+| 13 | **编译** | ✅ 鸿蒙 `assembleHap`(debug)BUILD SUCCESSFUL。**踩过的坑**:`barFloatingStyle` 那串属性名写在块注释里时,旁边若带 `**` 强调会被解析成 `*/` **提前闭合注释**,正文当代码编译 ⇒ 251 条离奇报错(现象是 `Cannot find name '不动'`)。改完编译过,但**这类"注释里出现 `*/`"的形状要防** |
+| 14 | **装机判据** | ✅ **本机(BRA-AL00,密度 3.25)第一轮跑过**,判据与结果逐条:<br>① **真材质生效** ✅ —— 列表从胶囊背后滚过时能读出封面被糊进胶囊(浅色块在胶囊左端透出),不是"整条透明";<br>② **几何** ✅ —— `dumpLayout` 量到 `TabBar [74,2415][1141,2597]`,参照物(预装华为音乐)`[75,2415][1141,2597]`,差 1px(23vp 在本机是 74.75px);栏底 2688−2597=91px=28vp=整个手势避让区;**这一条是第一轮没过的**(只给 `barSideMargin` 时胶囊按内容收缩居中 `[224,2415][992,2597]`,补 `barWidth` 后又踩到 `'100%'` 顶没侧边距 ⇒ 见 **H176**,现按"窗口宽 − 2×23vp"给);<br>③ **点按切换** ✅ 三格各点一次都换页;**按下点光源**⚠️ 瞬态,截图取不到证,**留给人眼**;<br>④ **选中色跟强调色** ✅ 选中那格图标与文案是本项目的水墨绿,未选中是 onSurfaceVariant;<br>⑤ **播放条收束落点** ✅ 收束态整块落在胶囊带 `[2415,2597]` 内、展开态在胶囊上方留 8vp;<br>⑥ **深浅** ⚠️ 深色本轮量过,**浅色没在这版上复拍**(换 `barWidth` 之前那次冷启动是浅色,胶囊与材质正常);<br>⑦ **底部余量** ⚠️ 只滚到底验了「追更」一页,末项在胶囊之上不压住 |
+| 15 | **装机第一轮留下的三条待办** | (a)**收束态播放条右端那颗队列按钮越过胶囊右沿约 7vp**(`__Common__` 右边界 1164 vs 胶囊 1141)—— 这是**自绘那版就有的口径**(左右 padding 14/16 从 10-13 那批起没动),不是今天引入,所以本轮没顺手改;要改就是收束态把整行内缩到"窗口宽 − 2×23vp"。(b)**首帧中间格不画**那个一次性现象:本轮两次冷启动各数了三格的亮像素(3206 / 1071 / 806),**复现不出来**,先记着,再出现时按"系统栏项首帧"这条线查。(c)**浅色态在这版上补拍一次**,与 (a) 同批做 |
+| 16 | **下一步候选** | 把播放条收束交给系统:`HdsTabsFloatingStyle.miniBar` + `HdsTabsController.applyMiniBarStyle(COLLAPSE/EXPAND)` + `applyHideAnimation(SCROLL_ANIMATION)`;`barLayoutMode` 要 6.1.1(24),动它之前先决定口径是否再升一档 |
+
 ---
 
 ## 二、分发与官网部署(运营事项,不在此文)
