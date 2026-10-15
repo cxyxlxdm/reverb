@@ -1025,8 +1025,8 @@
       "value": "將刪除這條批註，無法復原。\n\n「%1$s」"
     },
     {
-      "name": "a11y_home",
-      "value": "回主頁"
+      "name": "a11y_expand_player",
+      "value": "展開播放條"
     },
     {
       "name": "a11y_play",

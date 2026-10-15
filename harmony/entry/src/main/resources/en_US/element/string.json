@@ -1025,8 +1025,8 @@
       "value": "This note will be deleted for good.\n\n\"%1$s\""
     },
     {
-      "name": "a11y_home",
-      "value": "Home"
+      "name": "a11y_expand_player",
+      "value": "Expand player"
     },
     {
       "name": "a11y_play",
