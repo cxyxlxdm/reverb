@@ -1025,8 +1025,8 @@
       "value": "将删除这条批注，无法恢复。\n\n「%1$s」"
     },
     {
-      "name": "a11y_home",
-      "value": "回主页"
+      "name": "a11y_expand_player",
+      "value": "展开播放条"
     },
     {
       "name": "a11y_play",

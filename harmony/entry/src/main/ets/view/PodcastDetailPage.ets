@@ -24,6 +24,14 @@ export struct PodcastDetailPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
   @Prop seed: Podcast;                  // 列表点进来时已知的频道信息(先渲染,再用 RSS 补全)
+  /**
+   * 列表末尾让出的高度(= 悬浮播放条的 条高 + 它与避让区的缝)。
+   *
+   * 播放条在这一页是**浮层**(见 `Index` 的 podcast 分支),不再占自己那一行,
+   * 所以末项要能滚到条子之上 —— 不给这个余量,最后一集就永远被压住。
+   * 与三个 tab 页的 `bottomPad` 同一条口径(那边见 `DiscoverPage.contentEndOffset`)。
+   */
+  @Prop bottomPad: number = 0;
   onBack: () => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
 
@@ -335,6 +343,7 @@ export struct PodcastDetailPage {
           .scrollBar(BarState.Off)
           .width('100%')
           .height('100%')
+          .contentEndOffset(this.bottomPad)
         }
         .layoutWeight(1)
         .onRefreshing(() => { this.refresh(); })

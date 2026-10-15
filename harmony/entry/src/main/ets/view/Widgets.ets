@@ -81,8 +81,6 @@ export class Sym {
    * 判据写在 `BottomBar.SystemTabItem.hasFill`。
    */
   static readonly feed: Resource = $r('sys.symbol.dot_radiowaves_left_and_right');
-  /** 播放条收束进 tab 栏之后,左端那颗「回主页」(Android 侧无此态)。 */
-  static readonly home: Resource = $r('sys.symbol.house');
   static readonly shuffle: Resource = $r('sys.symbol.shuffle');                 // Rounded.Shuffle
   // 播放模式三态里的「单曲循环」。Material 侧是 Rounded.RepeatOne,Symbol 字体的对等件
   // 就是 repeat_1(循环箭头里带一个 1);**不要拿 `repeat` 冒充** —— 那枚是"列表循环",

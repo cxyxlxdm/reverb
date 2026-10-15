@@ -1025,8 +1025,8 @@
       "value": "Cette annotation sera supprimée, sans récupération possible.\n\n« %1$s »"
     },
     {
-      "name": "a11y_home",
-      "value": "Accueil"
+      "name": "a11y_expand_player",
+      "value": "Développer le lecteur"
     },
     {
       "name": "a11y_play",

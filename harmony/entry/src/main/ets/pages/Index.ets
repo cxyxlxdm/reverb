@@ -17,7 +17,7 @@ import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
 import {
   SystemTabItem, barFloating, pickMaterialType, TAB_BAR_H, TAB_KEY, MORPH_KEY, MORPH_SLOPE,
-  MINI_H, MINI_GAP, morphSpring, barReserve
+  MINI_H, MINI_GAP, MINI_SIDE_MARGIN, morphSpring, barReserve
 } from '../view/BottomBar';
 import { hdsMaterial, HdsTabs } from '@kit.UIDesignKit';
 import { LibraryPage } from '../view/LibraryPage';
@@ -439,7 +439,17 @@ struct Index {
     }
     else if (name === 'podcast') {
       NavDestination() {
-        Column() {
+        /**
+         * 频道页的播放条是**悬浮层**,不是 Column 的末行(2026-10-15 改)。
+         *
+         * 旧写法它自己占一行、底边正好贴在避让区上沿 —— 于是胶囊下半截的两个圆角
+         * 吃在屏幕边里,读出来就是"底部一块不透明的长方形板",和三个 tab 页上那颗
+         * 悬浮椭圆不是同一个东西。现在两页同一口径:左右同那道 23vp 缝(在组件内部的
+         * [MINI_SIDE_MARGIN])、底边离避让区 8vp([MINI_GAP]),列表侧用 `contentEndOffset`
+         * 让出 **56 = 条高 48 + 缝 8**,否则末项永远滚不出条子底下。
+         * 这一页没有 tab 栏,所以**永不收束**(`collapsed` 用组件默认值 false)。
+         */
+        Stack({ alignContent: Alignment.Bottom }) {
           PodcastDetailPage({
             scheme: this.scheme(),
             fontScale: this.fontScale(),
@@ -450,10 +460,10 @@ struct Index {
             listenStats: this.listenStats,
             // 单集行的「正在播放」高亮要读播放态
             player: this.player,
+            bottomPad: this.player.current === null ? 0 : MINI_H + MINI_GAP,
             onBack: () => { this.stack.pop(); },
             onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
           })
-            .layoutWeight(1)
           if (this.player.current !== null) {
             MiniPlayerBar({
               scheme: this.scheme(),
@@ -462,6 +472,7 @@ struct Index {
               onExpand: () => { this.stack.pushPathByName('player', null); },
               onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
             })
+              .margin({ bottom: MINI_GAP })
           }
         }
         .width('100%').height('100%')
@@ -481,7 +492,8 @@ struct Index {
    * 每次翻转后清零,所以"往回滚 40vp"要重新攒满,不会在临界点来回抖。
    *
    * ⚠️ 这个回调**每帧都跑**,所以里面只许有加减法和一次布尔比较(硬规矩 6)。
-   * 真正被改的状态只有 `collapsed`,而它只让栏项的 opacity 与播放条的四个几何量重算,
+   * 真正被改的状态只有 `collapsed`,而它只让栏项的 opacity、播放条的四个几何量,以及**每翻转一次**
+   * 重建一份 `barFloatingStyle`(第五轮起里面多了 `barOpacity`)重算 —— 都是按次而非按帧,
    * 不动列表数据、也不让页面重新 measure(让位量按展开态恒定,见 [underBarPad])。
    */
   private feedScroll(dy: number): void {
@@ -498,7 +510,7 @@ struct Index {
     }
   }
 
-  /// 收束态左端那颗回主页:只把播放条放回两行共存,不改当前 tab(它不是"回发现页")。
+  /// 收束态左端那颗小圆球:只把播放条放回两行共存,不改当前 tab(盘上是当前那一格,点它不切页)。
   private expandMini(): void {
     this.morphAcc = 0;
     this.collapsed = false;
@@ -523,7 +535,7 @@ struct Index {
    * 式子收在 `BottomBar.barReserve` 里,和栏自己的几何同源 —— 收小留白时最容易漏这一处,
    * 漏了列表末尾多出一条空白(或者末项被栏压住)。
    *
-   * ⚠️ **不含 collapsed**:收束时播放条整块落进栏里,本可以少让 68vp,但那样每次翻转都要
+   * ⚠️ **不含 collapsed**:收束时播放条整块落进栏里,本可以少让 56vp,但那样每次翻转都要
    * 重排整条列表,而翻转恰恰发生在滚动中。宁可末尾多一条空白。
    */
   private underBarPad(): number {
@@ -646,7 +658,10 @@ struct Index {
          * - `barOverlap(true)`:栏**透**——糊的是它背后那行列表内容。这要求页面给底部让出
          *   余量([underBarPad]),否则滚到底末项被栏压住;
          * - `barFloatingStyle`:侧边距 23vp、宽度 = 窗口宽 − 2×23vp、距屏底 = 整个手势避让区,
-         *   材质档位见 `BottomBar.barFloating`;
+         *   材质档位见 `BottomBar.barFloating`;**其中 `barOpacity` 按 `collapsed` 取**
+         *   (2026-10-15 第五轮):收束态整条系统栏淡到 0,因为那一行由播放条自己当容器,
+         *   两层胶囊叠着就不是参考片那个形态。代价是**这一行三个 tab 在收束态点不动** —— 那条
+         *   现在是设计的必然(先点球展开再切格),不是待修的 bug,口径见 `BottomBar` 头部那一节;
          * - **不再写 `barBackgroundColor` / `barBackgroundBlurStyle` / `divider`**。这三条是
          *   "近似磨砂"那一版的零件,而这一版要验的正是**系统材质自己长什么样** —— 同时压上去
          *   就等于又自绘一层,装机看到的不是系统的东西(深浅态那一侧的坑见 H174);
@@ -660,7 +675,7 @@ struct Index {
         .vertical(false)
         .scrollable(false)
         .barOverlap(true)
-        .barFloatingStyle(barFloating(this.bottomInset, this.windowWVp, this.materialType))
+        .barFloatingStyle(barFloating(this.bottomInset, this.windowWVp, this.materialType, this.collapsed))
         .onChange((i: number) => { this.tab = i; })
         .width('100%')
         .height('100%')
@@ -682,7 +697,7 @@ struct Index {
             collapsed: this.collapsed,
             onExpand: () => { this.stack.pushPathByName('player', null); },
             onOpenQueue: () => { this.stack.pushPathByName('queue', null); },
-            onHome: () => this.expandMini()
+            onBallTap: () => this.expandMini()
           })
         }
         .width('100%')
