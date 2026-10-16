@@ -127,14 +127,36 @@ private const val REST_TINT = 0.10f
 private const val LENS_SCALE = 1.22f
 
 /**
- * 栏高。页面让出的底部余量必须跟着栏的落点走 —— MainShell 目前直接量叠层 Column 的
- * 实测高度(本值 + 迷你播放条 + 间距),这等价于鸿蒙那边 `barFootprint()` 的"同一个式子
- * 算两处",不要再在别处写第二个栏高。
+ * 栏高。**2026-10-15 从 48 抬到 52** —— 播放条要跟成鸿蒙那一形态,而收束态的判据是
+ * **整块与栏等高**(`Components.MINI_H_COLLAPSED = GLASS_BAR_H`):栏不抬,收进来的胶囊就
+ * 装不下那一档的封面 40 + 上下各 6。
+ *
+ * ⚠️ **为什么是 52 而不是照抄鸿蒙的 56**,两条都写在案:
+ * ① 本端有一条**同方向的否例**(见 [GlassNavBar] 类注释走过的弯路那串第 6 条):为了容纳放大后的
+ *   透镜把栏从 44 抬到 56,被否「**高度增加太多了,只需要增加一点点**」,最后停在 48。
+ *   这次的要求是「底部 tab 的高度增大」,没给数,所以按那条否例只抬 **4**;
+ * ② 抬到 56 会顺手毁掉明确要求保留的那件事 —— 按住时透镜高 ≈53.7dp,现在上下各鼓出
+ *   2.85dp(这就是"玻璃浮在栏外面"的读感来源);栏一旦到 56,53.7 < 56,**镜被装进板子里**,
+ *   鼓出量归零。52 这一档还剩上下各 0.85dp,已经很薄。
+ * 所以这两条**都要装机读**:觉得栏还是矮 → 抬到 56,但同时要把 [REST_H] 抬一档把鼓出量找回来
+ * (那是另一次改判);觉得玻璃不鼓了 → 先动 [REST_H](44→47 就把 52 这一档的鼓出量还原),
+ * 栏高不动。**两个数各调各的,一次一个。**
+ * ⚠️ 本轮 [REST_H] / [ASPECT] / [ITEM_INSET] / [LENS_SCALE] **一个没动** —— 它们是 Pixel 3
+ * 逐帧量过、被否八遍定下来的,和栏高一起改就读不出哪一处起的作用。
+ *
+ * 页面让出的底部余量必须跟着栏的落点走 —— MainShell 直接量叠层的实测高度(本值 + 那道缝 +
+ * 播放条展开态那一档 + 手势区),这等价于鸿蒙那边 `barFootprint()` 的"同一个式子算两处",
+ * 不要再在别处写第二个栏高。
  */
-val GLASS_BAR_H = 48.dp
+val GLASS_BAR_H = 52.dp
 
-/** 整条栏距屏幕左右:胶囊放大后不能顶出屏幕(12 那一档被反馈"栏太长、顶到边")。 */
-private val SIDE_PAD = 24.dp
+/**
+ * 整条栏距屏幕左右:胶囊放大后不能顶出屏幕(12 那一档被反馈"栏太长、顶到边")。
+ * **播放条胶囊读同一个数**(见 `Components.MINI_SIDE_PAD`)—— 宽度只有一个来源,
+ * 栏改了播放条跟着改,不会各漂各的;鸿蒙那边是同一对常量
+ * (`BAR_SIDE_MARGIN` / `MINI_SIDE_MARGIN`)承担同一条约束。
+ */
+val GLASS_SIDE_PAD = 24.dp
 
 /**
  * tab 内容的中心从栏边缘内收这么多 —— 按钮间距就是这么收小的。
@@ -261,7 +283,8 @@ private const val SPRING_STIFFNESS = 224f
  * 玻璃感靠半透明 surface 打底 + 发丝描边 + 投影近似。透明度取 [BASE_TINT] 而非鸿蒙的 0.34:
  * 没有模糊时太透会让文字压在滚动内容上读不清。这一档差异就是折射那条待做的账。
  *
- * **容器为什么不能裁剪**:透镜按住时 ≈53.7dp 高,超出 [GLASS_BAR_H] 的 48dp —— 一 clip
+ * **容器为什么不能裁剪**:透镜按住时 ≈53.7dp 高,超出 [GLASS_BAR_H](48 时鼓出上下各 2.85dp,
+ * 2026-10-15 抬到 52 后只剩 0.85dp —— 这一档还剩多少要装机读,见 [GLASS_BAR_H] 那条)—— 一 clip
  * 就被栏的圆角齐着切平,玻璃就"贴"在栏里而不是"浮"在外面(需求明确要"超出 tab")。
  * 所以圆角只作为背景与描边的形状参数传进去。
  *
@@ -283,7 +306,23 @@ fun GlassNavBar(
     tabs: List<GlassTabSpec>,
     selected: Int,
     onSelect: (Int) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * 播放条是否已经收进这一行。为 true 时**整条栏淡到 0**(底板材质 + 静止底 + 透镜 + 三格内容
+     * 一起没),那一行交给播放条自己 —— 对应鸿蒙 `barFloating` 里那条 `barOpacity: collapsed ? 0 : 1`。
+     *
+     * 为什么必须淡掉:收束态胶囊的高就是栏高,两条胶囊叠在同一条带上读起来就是
+     * "播放条装在 tab 容器里面"(两层底),而参考片那一态只有一层容器。
+     * ⚠️ 随之而来的一条**是设计不是 bug**:这一态那一行只有播放条与那颗球,**三个 tab 点不动**;
+     * 想切格先点那颗球展开。所以这里连按下预选与横拖提交一起关掉(见 [currentCollapsed] 两处判断),
+     * 只留指针事件被消费掉 —— 放进下层会让那一行的空白处漏到页面上去。
+     *
+     * ⚠️ 淡入淡出走**弹簧**而不是鸿蒙那条瞬变:鸿蒙的 `barOpacity` 藏在样式对象里、不是节点的
+     * 属性动画对象,所以翻转那一瞬栏底立刻没了,那台的注释里备着"改成逐帧驱动"的解法;
+     * Android 这边天然能做,就用与播放条形变同一条曲线(同 [MINI_MORPH_DAMP]),
+     * 否则栏自己缩、播放条滑过来,两条曲线不同步会看出散架。
+     */
+    collapsed: Boolean = false
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val density = LocalDensity.current
@@ -292,6 +331,16 @@ fun GlassNavBar(
     // 捕获旧 selected 会把提交送到上一个 tab 上
     val currentSelected by rememberUpdatedState(selected)
     val currentOnSelect by rememberUpdatedState(onSelect)
+    // 同一条理由:收束态的判据活在整个手势回调里,不能读按下那一刻的旧值
+    val currentCollapsed by rememberUpdatedState(collapsed)
+
+    // 整条栏的不透明度。⚠️ 留成 State 不解包成 `by`:委托读值会把当前组合作用域订阅上,
+    // 于是弹簧途中整条栏(含内容层)跟着重建 —— 和 [growth] 同一条口径,失效范围要落到最小。
+    val barFade = animateFloatAsState(
+        targetValue = if (collapsed) 0f else 1f,
+        animationSpec = spring(dampingRatio = MINI_MORPH_DAMP, stiffness = MINI_MORPH_STIFFNESS),
+        label = "barFade"
+    )
 
     val restWpx = with(density) { REST_W.toPx() }
     val itemInsetPx = with(density) { ITEM_INSET.toPx() }
@@ -456,7 +505,10 @@ fun GlassNavBar(
     Box(
         modifier
             .fillMaxWidth()
-            .padding(horizontal = SIDE_PAD)
+            .padding(horizontal = GLASS_SIDE_PAD)
+            // 收束态淡掉**整条栏**:挂在最外层的图层上,于是底板、投影、静止底、透镜、内容
+            // 一起没 —— 少挂一处就会看到"板子没了但影子还在"(和透镜那一层同一个理由)。
+            .graphicsLayer { alpha = barFade.value }
     ) {
         Box(
             Modifier
@@ -503,7 +555,10 @@ fun GlassNavBar(
                 .pointerInput(tabs.size) {
                     detectHorizontalDragGestures(
                         onDragStart = { _ ->
-                            if (slotW() > 0f) {
+                            // `&& !currentCollapsed`:收束态这一行归播放条与那颗球,横拖不接管。
+                            // 不进这个分支 = dragging 恒 false = 松手时 settle 直接 return,
+                            // 于是「淡掉的栏不会被拖到别的格」,而指针事件照常被这层消费掉。
+                            if (slotW() > 0f && !currentCollapsed) {
                                 // 预览动画若还在跑,先掐掉:下面的 snapTo 与它抢同一个 Animatable
                                 previewJob?.cancel()
                                 previewJob = null
@@ -548,9 +603,13 @@ fun GlassNavBar(
                 .pointerInput(tabs.size) {
                     detectTapGestures(
                         onPress = { off ->
-                            interacting = true
+                            // 收束态三处一起关掉(按下点亮 / 预选 / 松手提交),见 [collapsed] 那条
+                            // 「三个 tab 点不动是这一形态的必然」。这里**不提前 return**:
+                            // 下面那句 tryAwaitRelease 仍要走完,这一下才算被本层消费掉 ——
+                            // 放过去会漏到内容层,变成"淡掉的栏把点击让给了底下的列表"。
+                            if (!currentCollapsed) interacting = true
                             val idx = tabAt(off.x)
-                            if (idx != currentSelected) {
+                            if (idx != currentSelected && !currentCollapsed) {
                                 // 按下即预选:药丸先滑到手指所在的 tab,页面等松手再切
                                 previewIdx = idx
                                 nearIdx = idx
@@ -563,7 +622,7 @@ fun GlassNavBar(
                             // 只在非拖拽态熄灭:横拖接管时 dragging=true,interacting
                             // 归拖拽路径(settle)管,这里清了会把拖拽全程的放大掐灭
                             if (!dragging) interacting = false
-                            if (released && !dragging) {
+                            if (released && !dragging && !currentCollapsed) {
                                 val commitIdx = if (previewIdx >= 0) previewIdx else idx
                                 previewIdx = -1
                                 nearIdx = -1

@@ -78,6 +78,15 @@ struct Index {
   /// 收/展的累计滚动量(vp)。只在 [feedScroll] 里读写,不进状态、不触发重渲。
   private morphAcc: number = 0;
   /**
+   * **手指按住屏幕那一段**的滚动方向(0 未定 / +1 往后翻 / −1 往前翻)。只在 [feedScroll] 里读写。
+   *
+   * 存在的理由:列表撞到边界之后的**回弹**也走 `onDidScroll`,而且符号与刚才那一下相反
+   * —— 一路往下滑到底会被回弹掀回展开态(装机逐帧取证见 [feedScroll] 那段 ⚠️)。
+   * 回弹是 `ScrollState.Fling`,而"手指真的在往回划"必先经过 `ScrollState.Scroll`,
+   * 所以方向记忆只在 Scroll 帧更新,Fling 帧只许延续、不许反悔。
+   */
+  private morphDir: number = 0;
+  /**
    * 悬浮栏的材质档位。**冷启动探测一次**,不进 build 重算(见 `BottomBar.pickMaterialType`)。
    * 探测是必需的:直接写 IMMERSIVE 在不支持的机器上会得到**透明栏**(官方示例明确点过这一条)。
    */
@@ -491,13 +500,38 @@ struct Index {
    * 惯性滑动里一帧只有 1–8vp,按单帧判阈值要么一碰就翻、要么永远不翻。
    * 每次翻转后清零,所以"往回滚 40vp"要重新攒满,不会在临界点来回抖。
    *
-   * ⚠️ 这个回调**每帧都跑**,所以里面只许有加减法和一次布尔比较(硬规矩 6)。
+   * ⚠️ 这个回调**每帧都跑**,所以里面只许有加减法和几次布尔比较(硬规矩 6)。
    * 真正被改的状态只有 `collapsed`,而它只让栏项的 opacity、播放条的四个几何量,以及**每翻转一次**
    * 重建一份 `barFloatingStyle`(第五轮起里面多了 `barOpacity`)重算 —— 都是按次而非按帧,
    * 不动列表数据、也不让页面重新 measure(让位量按展开态恒定,见 [underBarPad])。
+   *
+   * ⚠️ **展开那一支必须按"这一阵动的拖拽方向"过滤,不能只看 dy 的符号**(2026-10-16 装机逐帧取证)。
+   * 现象:首页一路往下滑到底,播放条刚收进去就自己弹回展开态,而且**每次划到底都必然发生**。
+   * 在发现页那一处真正在滚的容器上挂探针打 `(dy, st)` 之后,结论是
+   * **列表撞到边界之后的回弹同样走 `onDidScroll`,而且是 `st=Fling`、符号与刚才那一下相反**:
+   * 一次惯性划到底 = 拖拽段 `st=Scroll` 每帧 +1~+5vp(累计过 40 → 收束、清零),
+   * 松手后回弹段 `st=Fling` 每帧 −3~−10.6vp、**一整串合计 −45 ~ −48vp** ——
+   * 阈值只有 40,所以回弹必然把 `collapsed` 掀回 false。当场 30 次翻转里 15 次是这种"收束后 0.5~1.3 秒被回弹掀翻"。
+   * 修法是把方向**锚在手指真的按住屏幕的那一段**:只有 `Scroll` 帧更新 [morphDir],
+   * `Fling`/`Idle` 帧只许延续它 —— 回弹与拖拽段反号 ⇒ 不计入 ⇒ **滑到底保持收束**;
+   * 而"轻轻一划靠惯性往回滚"这种真意图照旧算(它的拖拽段本身就是负号)。
+   * 顺带把硬规矩 9 补上:程序化滚动(`scrollTo` / 换 tab 复位)没有拖拽段,`morphDir` 仍是 0
+   * ⇒ 两支都不认,原先那种"进页自动滚一段就把栏掀一下"的路径一并堵掉。
+   *
+   * 另一端**不需要同构**:Android 那侧读的是 `NestedScrollConnection` 的 `consumed`,
+   * 边界回弹不进 `consumed`(它走 overscroll 通道),所以那边装机 10 轮划到底没有这一现象。
+   * 按硬规矩 2,这属于"两端滚动回调给的东西本来就不同形",不是可以互相类推的参数。
    */
-  private feedScroll(dy: number): void {
+  private feedScroll(dy: number, st: ScrollState): void {
     if (this.player.current === null) return;
+    const dir: number = dy > 0 ? 1 : (dy < 0 ? -1 : 0);
+    if (dir === 0) return;
+    if (st === ScrollState.Scroll) {
+      this.morphDir = dir;
+    } else if (this.morphDir !== dir) {
+      // 惯性段与方向相反的帧 = 边界回弹,不是用户改主意的证据
+      return;
+    }
     this.morphAcc += dy;
     if (this.morphAcc >= MORPH_SLOPE) {
       this.morphAcc = 0;
@@ -513,6 +547,7 @@ struct Index {
   /// 收束态左端那颗小圆球:只把播放条放回两行共存,不改当前 tab(盘上是当前那一格,点它不切页)。
   private expandMini(): void {
     this.morphAcc = 0;
+    this.morphDir = 0;
     this.collapsed = false;
   }
 
@@ -601,7 +636,7 @@ struct Index {
               inbox: this.inbox,
               player: this.player,
               bottomPad: this.underBarPad(),
-              onScrollDy: (dy: number) => this.feedScroll(dy),
+              onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
@@ -617,7 +652,7 @@ struct Index {
               subscriptions: this.subscriptions,
               history: this.history,
               bottomPad: this.underBarPad(),
-              onScrollDy: (dy: number) => this.feedScroll(dy),
+              onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
           }
@@ -635,7 +670,7 @@ struct Index {
               history: this.history,
               downloadManager: this.downloadManager,
               bottomPad: this.underBarPad(),
-              onScrollDy: (dy: number) => this.feedScroll(dy),
+              onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
               notes: this.notes,
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag),

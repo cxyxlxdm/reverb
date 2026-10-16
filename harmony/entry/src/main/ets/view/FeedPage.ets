@@ -44,7 +44,7 @@ export struct FeedPage {
   /// 底部栏悬浮,列表要让出的空间(与音阁/发现同一口径,Index 算好传入)
   @Prop bottomPad: number = 0;
   /// 滚动量交给外壳,由它决定播放条收不收进底部栏(见 DiscoverPage 同名注释)
-  onScrollDy: (dy: number) => void = () => {};
+  onScrollDy: (dy: number, st: ScrollState) => void = () => {};
   /**
    * store 一律 `@ObjectLink` 接收,不要退回 `this.app.xxx` 直读 ——
    * 裸对象字段变了界面不重渲(这条坑记在 H26 / H27,音阁那四处交互就是它)。
@@ -117,7 +117,7 @@ export struct FeedPage {
             // 顶部不再需要 CHIPS_RESERVE_H 占位行:那一层是给悬浮的**分段条**让位的,
             // 这一页没有分段条,页头已经把它压在下面。底部照旧让给玻璃栏。
             .contentEndOffset(this.bottomPad)
-            .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+            .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
             .width('100%').height('100%')
           }
         }
