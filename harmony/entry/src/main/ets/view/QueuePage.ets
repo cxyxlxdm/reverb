@@ -16,6 +16,9 @@ export struct QueuePage {
   @Prop fontScale: number;
   @ObjectLink player: PlayerController;
   onBack: () => void = () => {};
+  /// 封面点进去的频道页(与 `FeedPage` / `LibraryPage` 同一颗动作,由外壳 `Index.ets` 注入)。
+  /// 待播这一列**只有跳转、没有多选** —— 队列本身就是一个待播集合,长按菜单里没有可批量收进去的目标。
+  onOpenChannel: (feedUrl: string) => void = () => {};
   /// 待确认的「清空队列」(null = 没在确认)。那颗按钮只写这个数,动作在确认框里跑。
   @State pendingClear: ConfirmSpec | null = null;
 
@@ -47,7 +50,8 @@ export struct QueuePage {
         // 免得两处各写一遍行的操作与 key 规则 —— 那两条坑(H145 的 idx-in-key)会各修一半。
         QueueBody({
           scheme: this.scheme, fontScale: this.fontScale, player: this.player,
-          bottomPad: 0, chipReserve: false
+          bottomPad: 0, chipReserve: false,
+          showChannelJump: true, onOpenChannel: this.onOpenChannel
         })
           .layoutWeight(1)
       }
@@ -81,6 +85,13 @@ export struct QueueBody {
   @Prop fontScale: number;
   @Prop bottomPad: number = 0;
   @Prop chipReserve: boolean = false;
+  /**
+   * 封面是否单独可点进频道页。默认关,与 `EpisodeListItem.showChannelJump` 同一条口径
+   * (漏传退回"整行只跳播",而不是画出一颗看着能点的假封面)。
+   */
+  @Prop showChannelJump: boolean = false;
+  /// 动作走闭包、不走值:V1 里无装饰器的成员变量只在建组件时赋值一次(见 H29/H145)。
+  onOpenChannel: (feedUrl: string) => void = () => {};
   @ObjectLink player: PlayerController;
 
   build() {
@@ -122,7 +133,19 @@ export struct QueueBody {
     Row({ space: 10 }) {
       // 点击区 = 封面 + 文案;操作图标与它平级而非嵌套,避免 ArkUI 嵌套 onClick 的手势歧义。
       Row({ space: 10 }) {
-        Artwork({ scheme: this.scheme, url: e.artworkUrl, dim: 46, corner: 8 })
+        // 封面上叠一层「只吃这一块」的透明盖(与播放条 `MiniPlayerBar`、列表行同一形状)。
+        // ⚠️ `onTouch` 里那条 `stopPropagation` **不能省**:本端子组件 onClick 处理完照样
+        // 冒泡给父 onClick(见 H185 同族实测),不拦的话点封面 = 进频道 + 立刻跳播这一集。
+        Stack() {
+          Artwork({ scheme: this.scheme, url: e.artworkUrl, dim: 46, corner: 8 })
+          if (this.showChannelJump && e.feedUrl.length > 0) {
+            Column().width(46).height(46).borderRadius(8)
+              .backgroundColor(Color.Transparent)
+              .onClick(() => this.onOpenChannel(e.feedUrl))
+              .onTouch((event: TouchEvent) => event.stopPropagation())
+              .accessibilityText(L.s('a11y_open_channel'))
+          }
+        }
         Column({ space: 3 }) {
           Text(e.title)
             .fontSize(TypeScale.titleSmall * this.fontScale)

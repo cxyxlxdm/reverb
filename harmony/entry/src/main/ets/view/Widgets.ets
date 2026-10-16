@@ -130,6 +130,17 @@ export class Sym {
    * 表里另有 `line_3_horizontal`(三条),Android 那枚是**两条**,故取 `_2`。
    */
   static readonly dragHandle: Resource = $r('sys.symbol.line_2_horizontal');    // Rounded.DragHandle
+  /**
+   * 批量条上的「全选」。Android 那侧是 `Icons.Rounded.SelectAll`,而且是**图标不是文字** ——
+   * 理由直接照搬(见 `Components.kt SelectionBar`):es/fr 的「已选 N」+「全选」+「加入待播」
+   * 三串文字挤在同一行会顶出屏外。这条在鸿蒙只会更严重(本机逻辑宽比 Android 那台窄 14%)。
+   *
+   * 名字取自 SDK 的 `toolchains/id_defined.json`(type=symbol,已核对存在),不是凭形状猜的 ——
+   * `sys.symbol.*` 写错**不报错、直接空白**(见上面 noteDelete 那段)。表里另有
+   * `checkmark_square_on_square_fill`(实心),Android 那枚是描边,故取不带 `_fill` 的那条。
+   * ⚠️ **装机要扫一眼它画得出图形**:表里有名只等于"不会被静默丢弃",不等于真机渲染得出。
+   */
+  static readonly selectAll: Resource = $r('sys.symbol.checkmark_square_on_square'); // Rounded.SelectAll
 }
 
 /// 顶层页大标题头:标题 + 可选副标 + 右侧动作插槽 + 下方一道「梁金」细线。

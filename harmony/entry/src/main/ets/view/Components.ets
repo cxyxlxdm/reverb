@@ -187,6 +187,29 @@ export struct EpisodeListItem {
   onTogglePlayed: () => void = () => {};
 
   /**
+   * 点封面进这一集所属的频道页。Android 侧那份判据是两重的
+   * (`LocalOpenPodcastChannel` 外壳有没有提供入口 + 调用方的 `coverOpensChannel`),
+   * ArkTS 没有 composition local,两重**塌成一颗显式开关**:调用方要么「开门 + 给动作」一起传,
+   * 要么都不传 —— 只开不给就是「看着能点、点了没反应」的假封面。
+   * **频道详情页不开**:已经在这档的页面里再点就是往栈上压一份自己(与 Android 第三条门同值)。
+   */
+  @Prop showChannelJump: boolean = false;
+  onOpenChannel: (feedUrl: string) => void = () => {};
+  /**
+   * 多选(批量加入待播),与 Android 的 `showBatch / onEnterSelection / selectionMode /
+   * selected / onToggleSelect` 一一对应。
+   *
+   * 已选集合**由调用方(整列)持有,不存在行里**:「全选」要能一次改整列,作用域本来就得是整列 ——
+   * 与 Android 同一个理由(那边还多一条"行会被 LazyColumn 回收",本工程的 `List` + `ForEach`
+   * 只建可见行,见 `FeedPage` 注释,那条理由在本端不成立)。
+   */
+  @Prop showBatch: boolean = false;
+  onEnterSelection: () => void = () => {};
+  @Prop selectionMode: boolean = false;
+  @Prop selected: boolean = false;
+  onToggleSelect: () => void = () => {};
+
+  /**
    * 行按压态:onTouch 手动驱动,不用 stateStyles —— stateStyles 的 pressed 对
    * 子图标上的触摸同样会亮(真机反馈:点行内「入队」键,整行高亮,看着像点了播放)。
    * 行体亮/灭由这里的事件流控制,右侧各图标以 onTouch stopPropagation 截断冒泡;
@@ -216,6 +239,17 @@ export struct EpisodeListItem {
   @State pressX: number = 0;
   @State pressY: number = 0;
 
+  /**
+   * 封面那一格在**整行坐标系**里的左上角偏移,由封面的 `onAreaChange` 记下来。
+   *
+   * 用途只有一个:封面自己的长按手势给出的 `localX/localY` 是相对封面的,弹菜单的锚点却挂在
+   * 整行上(见上面 `openMenuAt`)。用字段而不是每次现算:`Area.position` 只在布局变化时给,
+   * 长按那一瞬间读现成的值是**零成本**,而渲染路径上不解析东西是硬规矩 6。
+   * 不做成 @State:它变了不需要重渲,只是下一次长按换算要用。
+   */
+  private coverOX: number = 0;
+  private coverOY: number = 0;
+
   /// 长按弹出的菜单。项与 Android `EpisodeListItem` 的 DropdownMenu 一一对应。
   @Builder
   contextMenu() {
@@ -229,6 +263,13 @@ export struct EpisodeListItem {
           this.onEnqueue();
           this.showToast(L.s('queue_added'));
         })
+      // 「多选」排在「加入队列」之后、与 Android 同位:这两颗是同一件事的两种规模
+      // (逐条 / 一批),而「标记已播完」是另一路的读法,放在最后。
+      if (this.showBatch) {
+        MenuItem({ content: L.s('batch_select') })
+          .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
+          .onClick(() => this.onEnterSelection())
+      }
       if (this.showPlayedToggle) {
         MenuItem({ content: this.played ? L.s('mark_unplayed') : L.s('mark_played') })
           .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
@@ -250,6 +291,66 @@ export struct EpisodeListItem {
   /// (行内键 + 长按菜单)统一有反馈,调用方不必各自补。写法同 PodcastDetailPage.showToast。
   private showToast(message: string): void {
     this.getUIContext().getPromptAction().showToast({ message: message });
+  }
+
+  /// 频道跳转这一门:开关 + `feedUrl` 非空(与 Android `coverChannelJump` 的②③条同值;
+  /// ①「外壳有没有提供入口」在本端塌进 `showChannelJump` 那一颗里,见属性注释)。
+  private canJumpChannel(): boolean {
+    return this.showChannelJump && this.episode.feedUrl.length > 0;
+  }
+
+  /**
+   * 封面那一格是否**接管**自己身上的触摸(点 + 长按)。
+   *
+   * 这是**结构上的分叉判据**(见 build 里那两处调用),不是挂在同一棵树上的一个判断:
+   * 接管 ⇒ 走 `coverTaken()`(自带 onClick / LongPressGesture,并在 onTouch 里 `stopPropagation`);
+   * 不接管 ⇒ 走 `coverPlain()`(一个 handler 都不挂,触摸原样落到整行)。
+   * 判据必须与 `coverTap()` 里的分支**同一处**定义,否则会出现"接了这一下却没人做事"。
+   */
+  private coverTakesTap(): boolean {
+    return this.selectionMode || this.canJumpChannel();
+  }
+
+  /**
+   * 按在封面上的那一下:选择态 = 勾选,能跳 = 进频道页。
+   *
+   * ⚠️ **没有"否则起播"这一支,而且只有 `coverTaken()` 那一棵树会调到这里。**
+   * ArkUI 的 `onClick` **不跨节点冒泡**:子节点挂了它,那一下就被子节点消费,整行那颗
+   * `onClick` 不会再跑(本轮装机数过勾选条读数:多选态按封面,「已选」从 1 变 2 而不是原地不动
+   * —— 若两处都执行,同一行会被勾上又取消)。所以接管的时候这里**不需要**也**不该**去做整行的动作。
+   * (这里原先写的"子 onClick 照样冒泡给父 onClick"是一条错判据,已按实测改口,见 H187。
+   * 会冒泡的是 `onTouch`,那是"按压高亮"另一件事,见 `coverTaken` 的 ②。)
+   * 不接管 ⇒ 连这颗 handler 都不挂,那一下原样落到整行
+   * (为什么必须"不挂"而不是"挂了提前 return",见 `coverPlain` 头上那段)。
+   */
+  private coverTap(): void {
+    if (this.selectionMode) {
+      this.onToggleSelect();
+    } else if (this.canJumpChannel()) {
+      this.onOpenChannel(this.episode.feedUrl);
+    }
+  }
+
+  /// 整行的点击。选择模式里「播这一集」换成「勾选 / 取消」(Android `rowModifier` 的 when 分支)。
+  private rowTap(): void {
+    if (this.selectionMode) this.onToggleSelect(); else this.onPlay();
+  }
+
+  /**
+   * 长按:采下按下点并把菜单弹出来。
+   *
+   * @param fromCoverX / @param fromCoverY 触发源是封面时,`localX/localY` 相对的是**封面那一格**,
+   *   而锚点摆在整行的 Stack 里,所以要加上封面在行内的偏移(由 `onAreaChange` 记下来)。
+   *   Android 侧同一件事是靠「在整行的 Initial 遍里采 pressPoint」做的(见 H185),本端没有
+   *   Initial 遍这种钩子,只能换算。
+   */
+  private openMenuAt(event: GestureEvent, coverX: number, coverY: number): void {
+    // 选择模式里整行只剩勾选一个语义,长按不弹菜单(与 Android 同口径)
+    if (this.selectionMode) return;
+    const f = event.fingerList.length > 0 ? event.fingerList[0] : null;
+    this.pressX = (f === null ? 0 : f.localX) + coverX;
+    this.pressY = (f === null ? 0 : f.localY) + coverY;
+    this.menuShown = true;
   }
 
   /**
@@ -285,6 +386,112 @@ export struct EpisodeListItem {
     return this.played ? this.scheme.onSurfaceVariant : this.scheme.onBackground;
   }
 
+  /**
+   * 封面本体:图 + 压暗层 + (勾选环 | 播放角标)。
+   *
+   * ⚠️ **不带任何参数、也不带触摸** —— 触摸在两个调用处分开挂(见 `coverTaken` / `coverPlain`)。
+   * 写成无参 @Builder 是有意的:带值参数的 @Builder 只求值一次(见 H29/H145),那样勾选环就永不刷新。
+   */
+  @Builder
+  coverFace() {
+    Artwork({ scheme: this.scheme, url: this.episode.artworkUrl, dim: 52, corner: 10 })
+    Row()
+      .width(52).height(52)
+      .borderRadius(10)
+      .backgroundColor(withAlpha('#000000', this.isCurrent ? 0.42 : 0.28))
+    if (this.selectionMode) {
+      /**
+       * 勾选态压在封面上(与 Android 同位置:行里再摆一颗 checkbox 会把 52 的封面挤变形,
+       * 而「选中」本来就是这一行唯一要说的话)。
+       *
+       * **形状自己画,不借 Symbol** —— Android 那侧是 `CheckCircle` / `RadioButtonUnchecked`
+       * 两枚现成图标,鸿蒙这边没有能在真机上验过的对应符号名,而 Symbol 名写错**不报错、
+       * 直接空白**(见 Widgets 的 Glyph 注释),只能拿已经在装机用过的 `checkmark`(Sym.played)
+       * 加一个环凑出同一语义:选中 = 实心强调色圆 + 白勾,未选 = 白色描边圆环。
+       */
+      Column()
+        .width(24).height(24)
+        .borderRadius(12)
+        .border({
+          width: 2,
+          color: this.selected ? this.scheme.primary : withAlpha('#FFFFFF', 0.9)
+        })
+        .backgroundColor(this.selected ? this.scheme.primary : Color.Transparent)
+        .accessibilityText(L.s(this.selected ? 'a11y_selected' : 'a11y_unselected'))
+      if (this.selected) {
+        Glyph({ symbol: Sym.played, dim: 16, color: Color.White })
+      }
+    } else {
+      // 裸三角 / 双竖条,不是 `sys.media.ohos_ic_public_play` 那枚**带白色圆底**的:
+      // 圆底那枚叠在封面上显得笨重,与 Android 的裸 PlayArrow 观感差一截。
+      // 用 Symbol 字体的实心变体(名字已在真机上验过能渲染 —— Symbol 名写错不报错、
+      // 直接空白,所以换这类资源必须真机看一眼,见 Widgets 注释)。
+      Glyph({
+        symbol: this.isCurrent && this.isPlaying ? Sym.pauseFill : Sym.playFill,
+        dim: 24,
+        color: Color.White
+      })
+        // 封面已经是「进频道页」的入口时,那颗播放/暂停只是状态显示:读屏不能再念「播放」,
+        // 否则标签说的和点出来的不是同一件事(与 Android 的 contentDescription=null 同口径)。
+        .accessibilityText(this.canJumpChannel() ? '' :
+          (this.isCurrent && this.isPlaying ? L.s('a11y_pause') : L.s('a11y_play')))
+    }
+  }
+
+  /**
+   * 封面**不接管**那一格:一个 handler 都不挂,触摸原样落到整行(点 = 起播,长按 = 弹菜单),
+   * 与加这颗开关之前完全一致。
+   *
+   * ⚠️ 为什么不是"照样挂上 handler、回调里提前 return"(第一版就是这么写的,真机即坏):
+   * 封面上**只要挂了 `onClick`,那一下就被封面吃掉、不再交给整行** —— 于是没开跳转门的列表
+   * (频道详情页)点封面**什么都不发生**,而它本来是靠这一下起播的。装机实测 2026-10-16:
+   * 同一行按标题起播正常、按封面零反应。与 H185 是同一条坑的另一面 ——
+   * **手势一挂上就参与仲裁,回调里 return ≠ 没挂**。所以"接不接管"必须是**结构上的两棵树**,
+   * 不能是同一棵树上的一个判断。
+   */
+  @Builder
+  coverPlain() {
+    Stack() {
+      this.coverFace()
+    }
+    .width(52).height(52)
+  }
+
+  /**
+   * 封面**接管**那一格(选择态,或这一集能跳频道页)。三条一起看,少一条就是
+   * "按在头像上没反应"或"点头像连播都切了":
+   *
+   * ① `onAreaChange` 记下这格在整行里的偏移,给下面的长按换算锚点用(见 `coverOX`)。
+   * ② `onTouch` 截断冒泡:**触摸事件会冒泡到父节点**(右侧那三颗图标全都靠 `stopPropagation`
+   *    灭掉整行的按压高亮,见下面那三处)。这里同样截断,是为了让按压态由封面自己驱动
+   *    (`this.pressed`),而不是让整行跟着亮 —— 点击语义并不依赖它(`onClick` 不跨节点冒泡,见 H187)。
+   * ③ 长按**自带一份**。与 Android 的 H185 同一族坑 —— 这一格既然消费了这串触摸,
+   *    父行那颗 `LongPressGesture` 就再也看不见它,按在头像上长按会变成"没反应"。
+   *    Android 的解法是封面改用 `combinedClickable` 并把 `onLongClick` 委托给同一个菜单;
+   *    本端的等价写法就是这里这颗 `LongPressGesture`(同阈值、同一个 `openMenuAt`)。
+   *    Tap 与 LongPress 挂在同一节点上的互斥关系,这一行本来就在用(整行的 onClick +
+   *    长按已在真机验过:长按只弹菜单,不会顺带起播)。
+   */
+  @Builder
+  coverTaken() {
+    Stack() {
+      this.coverFace()
+    }
+    .width(52).height(52)
+    .onAreaChange((_o: Area, n: Area) => {
+      this.coverOX = Number(n.position.x);
+      this.coverOY = Number(n.position.y);
+    })
+    .onTouch((event: TouchEvent) => {
+      this.pressed = event.type === TouchType.Down;
+      event.stopPropagation();
+    })
+    .gesture(LongPressGesture({ duration: LIST_MENU_LONG_PRESS_MS })
+      .onAction((event: GestureEvent) => { this.openMenuAt(event, this.coverOX, this.coverOY); }))
+    .onClick(() => this.coverTap())
+    .accessibilityText(this.canJumpChannel() ? L.s('a11y_open_channel') : '')
+  }
+
   build() {
     Stack({ alignContent: Alignment.TopStart }) {
       Row({ space: 12 }) {
@@ -293,24 +500,13 @@ export struct EpisodeListItem {
         // **播放入口就叠在封面上**,行右侧不再另放一个圆钮(与 Android 一致)。
         // 原先右侧那个 34 见方的灰圆圈让每行多一个抢眼的重元素,与封面争视线,
         // 而整行本来就可点播放 —— 它并不提供额外能力,只是把行撑宽、把标题挤成两行。
-        Stack() {
-          Artwork({ scheme: this.scheme, url: this.episode.artworkUrl, dim: 52, corner: 10 })
-          Row()
-            .width(52).height(52)
-            .borderRadius(10)
-            .backgroundColor(withAlpha('#000000', this.isCurrent ? 0.42 : 0.28))
-          // 裸三角 / 双竖条,不是 `sys.media.ohos_ic_public_play` 那枚**带白色圆底**的:
-          // 圆底那枚叠在封面上显得笨重,与 Android 的裸 PlayArrow 观感差一截。
-          // 用 Symbol 字体的实心变体(名字已在真机上验过能渲染 —— Symbol 名写错不报错、
-          // 直接空白,所以换这类资源必须真机看一眼,见 Widgets 注释)。
-          Glyph({
-            symbol: this.isCurrent && this.isPlaying ? Sym.pauseFill : Sym.playFill,
-            dim: 24,
-            color: Color.White
-          })
-            .accessibilityText(this.isCurrent && this.isPlaying ? L.s('a11y_pause') : L.s('a11y_play'))
+        //
+        // 接管与不接管是**两棵树**,判据 `coverTakesTap()` 与理由都写在 `coverPlain` 头上。
+        if (this.coverTakesTap()) {
+          this.coverTaken()
+        } else {
+          this.coverPlain()
         }
-        .width(52).height(52)
 
         Column({ space: 3 }) {
           // 标题 + 已播对勾(与 Android 一致:对勾紧跟标题,16 号,onSurfaceVariant 色)
@@ -369,7 +565,10 @@ export struct EpisodeListItem {
         .layoutWeight(1)
 
         // 行内收藏心形(与 Android 同位置:元信息之后、下载控件之前)
-        if (this.showFavorite) {
+        // ⚠️ 选择模式里这三类图标**一律不显示**(不是禁灰),与 Android 同一条理由:
+        // 它们在行内自己消费点击,留着就是"点行尾那一下取消收藏、点行中间勾选"——
+        // 同一行两种语义,用户无从预期。
+        if (this.showFavorite && !this.selectionMode) {
           Glyph({
             symbol: this.isFavorite ? Sym.favorite : Sym.favoriteOff,
             dim: 20,
@@ -387,7 +586,7 @@ export struct EpisodeListItem {
         // 行内「加入播放列表」(showQueueAdd 打开时):与收藏心形同位置规则、同命中区外扩。
         // 图标用列表+加号(add_songlist)而不是队列符号 —— 它的动作是「入队」,
         // 与「打开队列页」的队列图标同形会误导(真机反馈)。
-        if (this.showQueueAdd) {
+        if (this.showQueueAdd && !this.selectionMode) {
           Glyph({ symbol: Sym.queueAdd, dim: 20, color: this.scheme.onSurfaceVariant })
             .responseRegion({ x: -8, y: -8, width: 36, height: 36 })
             .accessibilityText(L.s('queue_add'))
@@ -402,24 +601,27 @@ export struct EpisodeListItem {
         // 下载三态,与 Android `DownloadControl` 一一对应:
         // 已下载 = DownloadDone(强调色,点击删除)/ 进行中·排队 = 进度圈 / 未下载 = Download
         // 原先用「已存」「下载」文字代替 —— sys.media.* 没有这两个图标,换 Symbol 后有正主。
-        if (this.downloadState === DownloadState.DOWNLOADING || this.downloadState === DownloadState.QUEUED) {
-          LoadingProgress().width(20).height(20).color(this.scheme.primary)
-        } else if (this.downloadState === DownloadState.COMPLETED) {
-          Glyph({ symbol: Sym.downloaded, dim: 20, color: this.scheme.primary })
-            .accessibilityText(L.s('a11y_downloaded'))
-            .onTouch((event: TouchEvent) => event.stopPropagation())
-            .onClick(() => this.onDeleteDownload())
-        } else if (this.downloadState >= 0) {
-          Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
-            .accessibilityText(L.s('action_download'))
-            .onTouch((event: TouchEvent) => event.stopPropagation())
-            .onClick(() => this.onDownload())
+        // 外面这一层 `!selectionMode` 与上面收藏/入队同一理由(选择模式里不留第二种点击语义)。
+        if (!this.selectionMode) {
+          if (this.downloadState === DownloadState.DOWNLOADING || this.downloadState === DownloadState.QUEUED) {
+            LoadingProgress().width(20).height(20).color(this.scheme.primary)
+          } else if (this.downloadState === DownloadState.COMPLETED) {
+            Glyph({ symbol: Sym.downloaded, dim: 20, color: this.scheme.primary })
+              .accessibilityText(L.s('a11y_downloaded'))
+              .onTouch((event: TouchEvent) => event.stopPropagation())
+              .onClick(() => this.onDeleteDownload())
+          } else if (this.downloadState >= 0) {
+            Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
+              .accessibilityText(L.s('action_download'))
+              .onTouch((event: TouchEvent) => event.stopPropagation())
+              .onClick(() => this.onDownload())
+          }
         }
       }
       .width('100%')
       .alignItems(VerticalAlign.Center)
       .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 12, bottom: 12 })
-      .onClick(() => this.onPlay())
+      .onClick(() => this.rowTap())
       /**
        * 按压态底色。长按要等满 `LIST_MENU_LONG_PRESS_MS` 才出菜单,等待期原本零反馈 ——
        * 手指按住时「不知道按没按上」,观感就是「长按反馈慢」(Android 同样时长但有 ripple 垫着)。
@@ -441,12 +643,7 @@ export struct EpisodeListItem {
        * 菜单本身挂在 build 末尾那个 1×1 锚点上 —— 参数的理由与 offset 失效的证据都写在彼处。
        */
       .gesture(LongPressGesture({ duration: LIST_MENU_LONG_PRESS_MS })
-        .onAction((event: GestureEvent) => {
-          const f = event.fingerList.length > 0 ? event.fingerList[0] : null;
-          this.pressX = f === null ? 0 : f.localX;
-          this.pressY = f === null ? 0 : f.localY;
-          this.menuShown = true;
-        }))
+        .onAction((event: GestureEvent) => { this.openMenuAt(event, 0, 0); }))
 
       /**
        * 菜单锚点:1×1、摆在按下点,`bindContextMenu` 挂在它身上。
@@ -480,6 +677,127 @@ export struct EpisodeListItem {
         })
     }
   }
+}
+
+/**
+ * 多选浮条的高度(不含它与底部栏之间那道缝)。
+ *
+ * Android 侧那条带实测 44dp,连同 4dp 缝一起以 `SELECTION_BAR_SLOT = 48dp` 让位。
+ * 本端按「占屏比例」而不是「数值」对齐(同 `CHIPS_STRIP_H` 44→38 那笔账的算法):
+ * 本机逻辑宽 374.2vp / Android 那台 427.6dp ⇒ 44dp ≈ 38.5vp,取整 **38**,
+ * 与顶部那条分段条同一档 —— 两端这三条带(分段条 / 播放条 / 批量条)同高才读得出是一套。
+ */
+export const BATCH_BAR_H = 38;
+
+/**
+ * 多选浮条**自己 + 它与底部栏的缝**共占的高度:各列表在选择模式里把它加进
+ * 滚动容器的 `contentEndOffset`,否则末行正好被这条带压掉半截。
+ *
+ * ⚠️ 避让量要**同时进两处**才成立:浮条的落点(`bottomPad + BATCH_BAR_GAP` 那条 margin)
+ * 和列表的让位(`bottomPad + BATCH_AVOID`)。只进一处 = 要么条压住最后一行,
+ * 要么底部多空一截。这条规律在 H184 / H185 各成立过一次,这里是第三次。
+ */
+export const BATCH_AVOID = BATCH_BAR_H + 6;
+
+/**
+ * 多选状态下浮在列表底部的那条操作条(「已选 N · 全选 · 加入待播 · 退出」)。
+ * 与 Android 的 `SelectionBar` + `EpisodeBatchBar` 两层合一:本端没有"各页各抄一遍提示"
+ * 的风险,把**结果提示**也收在同一层(见下面的 `batchEnqueueAndToast`)。
+ *
+ * 为什么浮在**底部**:各列的末项本来就要滚到玻璃栏上方才看得见,底部那条带
+ * (`bottomPad` 已经把栏算进去了)是这段列表唯一"空着"的位置;放顶部就要跟标题栏 /
+ * 悬浮分段条抢,而分段条右端已经有播放模式与清空那颗(见 `LibraryPage.barActions`)。
+ *
+ * ⚠️ **本组件不持有任何集合,三个动作全是闭包。** ArkUI V1 里没有装饰器的成员变量
+ * 只在建组件时赋值一次:把 `episodes` / `picked: Set` 当普通字段传进来,页面改了集合
+ * 这边读到的还是旧的那份 —— 而"全选"按旧集合算会**漏掉后加载进来的那些集**,这种错
+ * 只在数据多的时候出现,极难在装机时撞上。计数走 @Prop(会被观察、会刷新),
+ * 动作走闭包(每次执行都现读页面的当前值)。同一条规律见 H29 / H145。
+ *
+ * @param picked  已选条数(页面持有集合,这里只收计数)
+ * @param total   这一列当前显示的条数 —— 「全选」按它判"是否已选完"
+ * @param onSelectAll / onEnqueue / onExit 由页面实现,闭包内读的是页面的当前集合
+ */
+@Component
+export struct EpisodeBatchBar {
+  @Prop scheme: Scheme;
+  @Prop fontScale: number;
+  @Prop picked: number = 0;
+  @Prop total: number = 0;
+  onSelectAll: () => void = () => {};
+  onEnqueue: () => void = () => {};
+  onExit: () => void = () => {};
+
+  private allSelected(): boolean {
+    return this.total > 0 && this.picked >= this.total;
+  }
+
+  build() {
+    // picked 为 0 时调用方就不摆这一层(与各段"没内容就不摆动作"同一条规矩)。
+    Row({ space: 4 }) {
+      Text(L.f('batch_selected', this.picked))
+        .fontSize(TypeScale.body * this.fontScale)
+        .fontColor(this.scheme.onBackground)
+        .maxLines(1)
+        .textOverflow({ overflow: TextOverflow.Ellipsis })
+        // 与 Android 的 `weight(1f, fill = false)`:按内容宽,必要时收缩,把省略号留给这一串,
+        // 三颗动作永远留在行内(es/fr 的对应串 15~25 字符,不这么写整条会顶出屏外)
+        .flexShrink(1)
+      Glyph({ symbol: Sym.selectAll, dim: 20, color: this.allSelected()
+        ? withAlpha(this.scheme.onSurfaceVariant, 0.3) : this.scheme.onSurfaceVariant })
+        // **图标而不是文字**,与 Android 同一条理由(es/fr 三串文字会顶出屏外,见 Widgets 的 Sym.selectAll)
+        .padding({ left: 8, right: 8, top: 9, bottom: 9 })
+        .accessibilityText(L.s('batch_select_all'))
+        // 已选数 == 总数时**这颗自我 disable**:再按一次什么都不会发生,是假按钮。
+        // ⚠️ 判据只能这样测(行为),不能去看节点的 clickable 属性 —— ArkUI dump 出来的
+        // 属性对这类条件动作并不可靠,Android 侧同一颗在 uiautomator 里也读不出差别(见 H185)。
+        .onClick(() => {
+          if (this.allSelected()) return;
+          this.onSelectAll();
+        })
+      Text(L.s('batch_enqueue'))
+        .fontSize(TypeScale.labelLarge * this.fontScale)
+        .fontColor(this.scheme.primary)
+        .padding({ left: 10, right: 10, top: 8, bottom: 8 })
+        .onClick(() => this.onEnqueue())
+      Glyph({ symbol: Sym.close, dim: 18, color: this.scheme.onSurfaceVariant })
+        .padding({ left: 6, right: 6, top: 8, bottom: 8 })
+        .accessibilityText(L.s('batch_exit'))
+        .onClick(() => this.onExit())
+    }
+    .width('auto')
+    .constraintSize({ maxWidth: 300 })
+    .height(BATCH_BAR_H)
+    .alignItems(VerticalAlign.Center)
+    .padding({ left: 12, right: 6 })
+    .backgroundColor(this.scheme.surface)
+    .borderRadius(BATCH_BAR_H / 2)
+    .shadow({ radius: 6, color: withAlpha('#000000', 0.28), offsetY: 2 })
+  }
+}
+
+/// 批量勾选的**真正新增条数**(提示要说的是这个数,不是勾选数)。
+///
+/// ⚠️ 这一层只做筛选,**不许自己逐条 `PlayerController.enqueue`**:单条那版每次调用都同步
+/// 落一次盘,全选一列(实测 1994 集)会把 UI 线程占到卡死 —— 见 H186。整体走 `enqueueAll`。
+export function enqueuePicked(episodes: Episode[], picked: Set<string>): number {
+  const fresh: Episode[] = episodes.filter((e: Episode) => picked.has(e.id));
+  return PlayerController.get().enqueueAll(fresh);
+}
+
+/**
+ * 「加入待播」这一颗的完整动作:**入队 → 报结果 → 退出选择态**。
+ *
+ * 为什么要单独抽出来:入队结果在「待播」那一页,当前列表看不出任何变化,不提示等于没按上;
+ * 而**报的必须是新增数而不是勾选数** —— 全选一列再按一次,勾了 200 条、一条都没新增,
+ * 说"已加入 200 集"就是说谎(判据 `PlayerController.enqueueAll` 的返回值)。
+ * 四列(追更 / 收藏 / 下载 / 历史)各抄一遍这句话迟早抄歪,所以收在这里。
+ */
+export function batchEnqueueAndToast(ui: UIContext, episodes: Episode[], picked: Set<string>): void {
+  const added = enqueuePicked(episodes, picked);
+  ui.getPromptAction().showToast({
+    message: added === 0 ? L.s('batch_added_none') : L.f('batch_added', added)
+  });
 }
 
 /**

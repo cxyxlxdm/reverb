@@ -439,7 +439,8 @@ struct Index {
         QueuePage({
           scheme: this.scheme(), fontScale: this.fontScale(),
           player: this.player,
-          onBack: () => { this.stack.pop(); }
+          onBack: () => { this.stack.pop(); },
+          onOpenChannel: (feedUrl: string) => this.openPodcastByFeed(feedUrl)
         })
       }
       .hideTitleBar(true)
@@ -647,6 +648,9 @@ struct Index {
               bottomPad: this.underBarPad(),
               onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
+              // 封面/头像单独可点 → 频道页。与上面那颗不同:那颗拿整个 Podcast(发现页
+              // 手上就有),这颗只拿 feedUrl(列表行只有这一集),由 openPodcastByFeed 查/合成种子。
+              onOpenChannel: (feedUrl: string) => this.openPodcastByFeed(feedUrl),
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
           }
@@ -662,6 +666,7 @@ struct Index {
               history: this.history,
               bottomPad: this.underBarPad(),
               onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
+              onOpenChannel: (feedUrl: string) => this.openPodcastByFeed(feedUrl),
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
           }
@@ -681,6 +686,7 @@ struct Index {
               bottomPad: this.underBarPad(),
               onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
+              onOpenChannel: (feedUrl: string) => this.openPodcastByFeed(feedUrl),
               notes: this.notes,
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag),
               onPlayNote: (n: EpisodeNote) => this.playNote(n),
@@ -739,8 +745,12 @@ struct Index {
             fontScale: this.fontScale(),
             player: this.player,
             collapsed: this.collapsed,
+            // 三个 tab 外壳这一颗**开**封面跳转;频道详情页那处(上面 `podcast` 分支)保持关,
+            // 在那里点自己这档的头像等于往栈上再压一份同一个页面。
+            coverOpensChannel: true,
             onExpand: () => { this.stack.pushPathByName('player', null); },
             onOpenQueue: () => { this.stack.pushPathByName('queue', null); },
+            onOpenChannel: (feedUrl: string) => this.openPodcastByFeed(feedUrl),
             onBallTap: () => this.expandMini()
           })
         }

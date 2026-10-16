@@ -1142,7 +1142,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: find shows or episodes by keyword, or paste an RSS URL\n· Share shows: create an image with the show artwork, title, description and Reverb branding\n· Radio: roam at random or follow time-of-day moods\n· Updates: every episode from the shows you follow, newest first, on its own tab\n· Library: six shelves — subscriptions, up next, favorites, downloads, history and notes\n· Offline: download episodes to this device, optionally Wi-Fi only\n· Playback cache: episodes you play stay on this device and replay offline; loaded lists and artwork stay browsable without a connection, clearable in Settings\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background and lock screen controls\n· Transcript: for episodes whose publisher provides one, read along in the player\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player page\n· Update reminders: get notified when a new episode lands\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
+      "value": "· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: find shows or episodes by keyword, or paste an RSS URL\n· Share shows: create an image with the show artwork, title, description and Reverb branding\n· Radio: roam at random or follow time-of-day moods\n· Updates: every episode from the shows you follow, newest first, on its own tab\n· Library: six shelves — subscriptions, up next, favorites, downloads, history and notes\n· Batch and shortcuts: tap an episode cover to open its channel; in Updates, Favorites, Downloads and History, long-press a row and pick \"Select multiple\" to add the whole batch to Up next\n· Offline: download episodes to this device, optionally Wi-Fi only\n· Playback cache: episodes you play stay on this device and replay offline; loaded lists and artwork stay browsable without a connection, clearable in Settings\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background and lock screen controls\n· Transcript: for episodes whose publisher provides one, read along in the player\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player page\n· Update reminders: get notified when a new episode lands\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
     },
     {
       "name": "about_h_philosophy",
@@ -1355,6 +1355,46 @@
     {
       "name": "saved_fail",
       "value": "Save failed"
+    },
+    {
+      "name": "a11y_open_channel",
+      "value": "Open channel"
+    },
+    {
+      "name": "a11y_selected",
+      "value": "Selected"
+    },
+    {
+      "name": "a11y_unselected",
+      "value": "Not selected"
+    },
+    {
+      "name": "batch_select",
+      "value": "Select multiple"
+    },
+    {
+      "name": "batch_select_all",
+      "value": "Select all"
+    },
+    {
+      "name": "batch_selected",
+      "value": "Selected %d"
+    },
+    {
+      "name": "batch_enqueue",
+      "value": "Add to Up next"
+    },
+    {
+      "name": "batch_exit",
+      "value": "Exit selection"
+    },
+    {
+      "name": "batch_added",
+      "value": "Added %d episodes to Up next"
+    },
+    {
+      "name": "batch_added_none",
+      "value": "Those episodes are already in Up next"
     }
   ]
 }

@@ -66,6 +66,17 @@ export struct MiniPlayerBar {
   onOpenQueue: () => void = () => {};
   /// 收束态点左端那颗小圆球:展开回两行共存(它显示的是当前那一格,动作**不是**切 tab)
   onBallTap: () => void = () => {};
+  /**
+   * 点封面进这一集所属的频道页。**默认关**,由用得到的那一处(Index 的 tab 外壳)显式打开:
+   * ArkTS 没有 Android 那个 CompositionLocal,「外壳有没有提供入口」这重门只能由调用方给,
+   * 默认开就成了"看着能点、点了没反应"的假封面。
+   *
+   * ⚠️ **频道详情页那一处必须保持关**(Index 里 `podcast` 分支的 `MiniPlayerBar`):
+   * 已经在这档的页面里点头像,等于往栈上再压一份同一个页面。与 Android 的
+   * `coverOpensChannel`(`ReverbRoot.kt:507/594`)同一条门。
+   */
+  @Prop coverOpensChannel: boolean = false;
+  onOpenChannel: (feedUrl: string) => void = () => {};
 
   /**
    * 进度线的百分比,**取整**。
@@ -109,6 +120,29 @@ export struct MiniPlayerBar {
     const dur = this.player.durationMs;
     const p = dur <= 0 ? 0 : Math.min(100, Math.max(0, Math.floor(this.player.positionMs / dur * 100)));
     if (p !== this.pct) this.pct = p;
+  }
+
+  /// 封面边长。收束态缩到窄档(与 `Artwork` 的 `dim` 同一个值,覆盖层要按它摆)。
+  private coverDim(): number {
+    return this.collapsed ? MINI_COVER_NARROW : MINI_COVER_WIDE;
+  }
+
+  /**
+   * 封面这一格能不能跳频道页 = **门开着** + **这一集带 feedUrl** + **动作真的传进来了**。
+   *
+   * 三条一起判的理由与列表行同一条(见 `Components.EpisodeListItem.canJumpChannel`):
+   * 只判前两条会画出一点就什么也不发生的假封面。本端 `onOpenChannel` 有默认空实现,
+   * 所以判"闭包有没有被传"做不到 —— 真正防住它的是 `coverOpensChannel` **默认 false**
+   * (调用方不显式打开就没有这一层),与 Android 那个"外壳没提供入口 ⇒ jump 为 null"同效。
+   */
+  private canJumpChannel(): boolean {
+    const e = this.player.current;
+    return this.coverOpensChannel && e !== null && e.feedUrl.length > 0;
+  }
+
+  private coverFeedUrl(): string {
+    const e = this.player.current;
+    return e === null ? '' : e.feedUrl;
   }
 
   build() {
@@ -157,11 +191,39 @@ export struct MiniPlayerBar {
         Stack({ alignContent: Alignment.TopStart }) {
           Row({ space: 10 }) {
             Row({ space: 10 }) {
-              Artwork({
-                scheme: this.scheme,
-                url: this.player.current === null ? '' : this.player.current.artworkUrl,
-                dim: this.collapsed ? MINI_COVER_NARROW : MINI_COVER_WIDE, corner: 8
-              })
+              /**
+               * 封面 + 一层**只吃封面**的点击覆盖层(点它进频道页,这一行其余地方仍是展开播放页)。
+               * 对应 Android `MiniPlayer` 里那个 `matchParentSize` 覆盖层。
+               *
+               * ⚠️ 覆盖层必须写在**包住 Artwork 的 Stack 里**,不能做成这一行的兄弟节点:
+               * Android 第一版那么写过,多占一格 `spacedBy(10dp)` 把胶囊里的排布顶歪
+               * (见 `Components.kt` 那段)。本端 Stack 是叠层、不参与行测量,天生没有那一格,
+               * 但**尺寸要自己按封面给** —— ArkUI 没有 `matchParentSize`,给 `'100%'` 会跟着
+               * Stack 的默认尺寸(= 最大子节点=封面)之外再被行拉宽。
+               *
+               * ⚠️ **必须 `stopPropagation`**:本工程实测「子节点的 onClick 处理完照样冒泡给
+               * 父节点的 onClick」(列表行右侧各图标全靠这条截断)。不截断的话点封面 =
+               * 进频道页**并且**展开播放页 —— 两个页面叠着推上去,回去要按两次返回。
+               *
+               * `backgroundColor(Color.Transparent)` 不是装饰:一块没有任何底色、没有子节点的
+               * `Column` 在 ArkUI 里不参与绘制,给它一个显式透明底是保证这层真的在那里接点击。
+               */
+              Stack() {
+                Artwork({
+                  scheme: this.scheme,
+                  url: this.player.current === null ? '' : this.player.current.artworkUrl,
+                  dim: this.coverDim(), corner: 8
+                })
+                if (this.canJumpChannel()) {
+                  Column()
+                    .width(this.coverDim()).height(this.coverDim())
+                    .borderRadius(8)
+                    .backgroundColor(Color.Transparent)
+                    .onClick(() => this.onOpenChannel(this.coverFeedUrl()))
+                    .onTouch((event: TouchEvent) => event.stopPropagation())
+                    .accessibilityText(L.s('a11y_open_channel'))
+                }
+              }
               Column({ space: 2 }) {
                 Text(this.player.current === null ? '' : this.player.current.title)
                   .fontSize(TypeScale.label * this.fontScale)

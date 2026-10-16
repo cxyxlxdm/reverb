@@ -58,6 +58,11 @@ export struct DiscoverPage {
   /// 单集行要显示"正在播放"高亮,故需观察播放态(只做渲染;playNext/enqueue 那种纯写走 app.player)
   @ObjectLink player: PlayerController;
   onOpenPodcast: (p: Podcast) => void = () => {};
+  /**
+   * 单集行**点封面**进频道页(与上面那颗不同:那颗拿的是已经有的 Podcast,这一颗只拿
+   * `feedUrl`,由外壳去订阅里查、查不到合成最小种子)。与行上的 `showChannelJump` 成对传。
+   */
+  onOpenChannel: (feedUrl: string) => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
 
   @State catIndex: number = 0;
@@ -848,7 +853,11 @@ export struct DiscoverPage {
                 played: this.history.isPlayed(e.id),
                 onPlay: () => this.onPlayEpisode(e, this.homeEpisodes(), ''),
                 onPlayNext: () => { this.app.player.playNext(e); },
-                onEnqueue: () => { this.app.player.enqueue(e); }
+                onEnqueue: () => { this.app.player.enqueue(e); },
+                // 封面单独可点 → 这一集所属频道页(与 Android 的 DiscoverScreen 同口径:
+                // 那边由 CompositionLocal 提供入口,本端要显式传开关 + 动作这一对)。
+                // 这一列**不给多选**:它是"打开就看到"的预览,批量入口在顶层「追更」页。
+                showChannelJump: true, onOpenChannel: this.onOpenChannel
               })
             }
           }, (e: Episode) => e.id)
@@ -1212,7 +1221,10 @@ export struct DiscoverPage {
                   // 这两个只是**写**操作,不参与本页渲染,故可直接用容器里的单例;
                   // H26 说的"必须 @ObjectLink"针对的是**渲染读取**,不是这种纯动作。
                   onPlayNext: () => { this.app.player.playNext(e); },
-                  onEnqueue: () => { this.app.player.enqueue(e); }
+                  onEnqueue: () => { this.app.player.enqueue(e); },
+                  // 搜索结果里的每一条都来自**别的频道**,而显示频道名不等于能进那个频道。
+                  // 多选同样不开(与首页那一节同口径:结果列表是临时视图,批量入口在四个常驻列)。
+                  showChannelJump: true, onOpenChannel: this.onOpenChannel
                 })
               }
             }, (e: Episode) => e.id)

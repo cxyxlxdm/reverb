@@ -1175,6 +1175,36 @@ export class PlayerController {
     this.persistState();
   }
 
+  /**
+   * 批量入队:整批**一次去重、一次换数组、一次落盘**,返回真正新增的条数。
+   *
+   * ⚠️ **调用方不许用 `episodes.forEach(e => this.enqueue(e))` 代替这一条。**
+   * 单条那版每次调用都同步落一次盘(`persistState` → `PlaybackStateStore.save` →
+   * `JsonFile.writeJson` → `fs.writeSync`,那里是**故意不去抖**的),而「全选」一列
+   * 是几千条:Android 侧第一版就写成逐条循环,实测把主线程占到 **ANR**
+   * (`Waited 5006ms for MotionEvent`),读数与根因见 `docs/TROUBLESHOOTING.md` H186。
+   * 这一版整批只做一次数组替换 + 一次写盘,量级差在「次数」而不是「每次成本」——
+   * 与硬规矩 6 的算法同一条。
+   *
+   * 返回值是**新增数**不是**入参条数**:队列按 id 去重且对重复项静默忽略,而队列内容在
+   * 「待播」那一页、当前列表里看不见 —— 提示若报勾选的条数就是一句谎话(见 H185)。
+   */
+  enqueueAll(episodes: Episode[]): number {
+    const seen = new Set<string>();
+    this.userQueue.forEach((x: Episode) => { seen.add(x.id); });
+    const fresh: Episode[] = [];
+    episodes.forEach((e: Episode) => {
+      if (!seen.has(e.id)) { seen.add(e.id); fresh.push(e); }
+    });
+    // 日志无条件打:`added=0` 正是「全选一列但整列都已在待播里」那一轮,装机要靠这行判"没加"还是"加了 0 条"
+    Log.i('Queue', `enqueueAll added=${fresh.length} of=${episodes.length} size=${this.userQueue.length + fresh.length}`);
+    if (fresh.length === 0) return 0;
+    this.userQueue = this.userQueue.concat(fresh);
+    this.updateNavFlags();
+    this.persistState();
+    return fresh.length;
+  }
+
   playNext(e: Episode): void {
     const rest = this.userQueue.filter((x: Episode) => x.id !== e.id);
     this.userQueue = [e].concat(rest);
