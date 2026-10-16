@@ -8,7 +8,7 @@ import { DownloadManager } from '../playback/DownloadManager';
 import { NoteStore, EpisodeNote } from '../store/NoteStore';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, Glyph, Sym, Artwork } from './Widgets';
-import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, PlayModeButton, ConfirmDialog, ConfirmSpec, formatTime } from './Components';
+import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, PlayModeButton, ConfirmDialog, ConfirmSpec, formatTime, EpisodeBatchBar, BATCH_AVOID, batchEnqueueAndToast } from './Components';
 import { QueueBody } from './QueuePage';
 
 /**
@@ -76,6 +76,11 @@ export struct LibraryPage {
   @ObjectLink notes: NoteStore;
   @ObjectLink downloadManager: DownloadManager;
   onOpenPodcast: (p: Podcast) => void = () => {};
+  /**
+   * 单集行点封面进频道页。与行上的 `showChannelJump` **成对传**,理由见 `FeedPage` 同名注释
+   * (ArkTS 没有 Android 那个 CompositionLocal,判据只能写成"开关 + 动作"两个 prop)。
+   */
+  onOpenChannel: (feedUrl: string) => void = () => {};
   onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
   /// 批注行:从**那一秒**起播(由 Index 走 `player.playAt`,与 `onPlayEpisode` 不是一条路)
   onPlayNote: (n: EpisodeNote) => void = () => {};
@@ -101,6 +106,21 @@ export struct LibraryPage {
   /// 待确认的「清空某一段」(历史 / 待播)。与 pendingDelete 分开两颗,是因为两者的
   /// 确认文案与动作不同,而 ConfirmSpec 已经把差异装在自己的四个字段里。
   @State pendingClear: ConfirmSpec | null = null;
+
+  /**
+   * 三段(收藏 / 下载 / 历史)**各一份**多选已选集合。
+   *
+   * 为什么不合成一份:与 Android 同形 —— 那边也是每个 Section 各自 `remember { mutableStateOf(...) }`
+   * (`LibraryScreen.kt:324/386/466`)。合成一份的话,横滑到下一段时上一段的勾选还挂在屏幕上,
+   * 而「全选 / 加入待播」按的是**当前显示的那一列** ⇒ 勾着收藏的 8 条滑到下载,一句"已加入 8 集"
+   * 报的是别的列的数。各段一份,切段就是各看各的,不需要"切段清空"这一步。
+   *
+   * ⚠️ **只走整体替换**(`this.pickedFav = new Set(...)`),不许 `add/delete`:
+   * ArkUI V1 对 @State 上的 Set 方法调用是否触发重渲没有可靠口径,赋值一定有。
+   */
+  @State pickedFav: Set<string> = new Set();
+  @State pickedDl: Set<string> = new Set();
+  @State pickedHist: Set<string> = new Set();
 
   /**
    * 六个分段。与 Android `LibraryScreen` 同序(订阅 / 收藏 / 下载 / 待播 / 历史 / 批注)。
@@ -409,12 +429,14 @@ export struct LibraryPage {
   // ── 待播(手动排的接下来播放列表)──
   @Builder
   queueSection() {
-    // 与独立队列页共用 `QueuePage.QueueBody`,所以这里只补两件事:
-    // 顶出一行给悬浮分段条让位(chipReserve),底部让出玻璃 tab 栏的空间(bottomPad)。
+    // 与独立队列页共用 `QueuePage.QueueBody`,所以这里只补三件事:
+    // 顶出一行给悬浮分段条让位(chipReserve),底部让出玻璃 tab 栏的空间(bottomPad),
+    // 封面那颗跳转把这一页自己的动作闭包递下去(与另外几段同一个走法)。
     Column() {
       QueueBody({
         scheme: this.scheme, fontScale: this.fontScale, player: this.player,
-        bottomPad: this.bottomPad, chipReserve: true
+        bottomPad: this.bottomPad, chipReserve: true,
+        showChannelJump: true, onOpenChannel: this.onOpenChannel
       })
     }
     .width('100%').height('100%')
@@ -423,37 +445,61 @@ export struct LibraryPage {
   // ── 收藏 ──
   @Builder
   favoritesSection() {
-    Column() {
-      if (this.favorites.favorites.length === 0) {
-        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_favorites') })
-      } else {
-        List() {
-          // 顶部占位:理由见订阅段同名注释
-          ListItem() {
-            Row().width('100%').height(CHIPS_RESERVE_H)
-          }
-          ForEach(this.favorites.favorites, (e: Episode) => {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column() {
+        if (this.favorites.favorites.length === 0) {
+          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_favorites') })
+        } else {
+          List() {
+            // 顶部占位:理由见订阅段同名注释
             ListItem() {
-              EpisodeListItem({
-                scheme: this.scheme, fontScale: this.fontScale, episode: e,
-                showPodcastTitle: true,
-                isCurrent: this.player.current !== null && this.player.current.id === e.id,
-                isPlaying: this.player.isPlaying,
-                played: this.history.isPlayed(e.id),
-                onPlay: () => this.onPlayEpisode(e, this.favorites.favorites, TAG_FAV),
-                showFavorite: true,
-                isFavorite: this.favorites.isFavorite(e.id),
-                onToggleFavorite: () => { this.favorites.toggle(e); },
-                onPlayNext: () => { this.player.playNext(e); },
-                onEnqueue: () => { this.player.enqueue(e); }
-              })
+              Row().width('100%').height(CHIPS_RESERVE_H)
             }
-          }, (e: Episode) => e.id)
+            ForEach(this.favorites.favorites, (e: Episode) => {
+              ListItem() {
+                EpisodeListItem({
+                  scheme: this.scheme, fontScale: this.fontScale, episode: e,
+                  showPodcastTitle: true,
+                  isCurrent: this.player.current !== null && this.player.current.id === e.id,
+                  isPlaying: this.player.isPlaying,
+                  played: this.history.isPlayed(e.id),
+                  onPlay: () => this.onPlayEpisode(e, this.favorites.favorites, TAG_FAV),
+                  showFavorite: true,
+                  isFavorite: this.favorites.isFavorite(e.id),
+                  onToggleFavorite: () => { this.favorites.toggle(e); },
+                  onPlayNext: () => { this.player.playNext(e); },
+                  onEnqueue: () => { this.player.enqueue(e); },
+                  showChannelJump: true, onOpenChannel: this.onOpenChannel,
+                  showBatch: true,
+                  onEnterSelection: () => { this.pickedFav = new Set<string>([e.id]); },
+                  selectionMode: this.pickedFav.size > 0,
+                  selected: this.pickedFav.has(e.id),
+                  onToggleSelect: () => { this.pickedFav = this.toggleInto(this.pickedFav, e.id); }
+                })
+              }
+              // key 带勾选位:ForEach 在 key 不变时复用行不重建,勾选态就刷不出来(H113)。
+            }, (e: Episode) => `${e.id}|${this.pickedFav.has(e.id) ? 1 : 0}`)
+          }
+          .scrollBar(BarState.Off)
+          .contentEndOffset(this.endOffset(this.pickedFav))
+          .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
+          .width('100%').height('100%')
         }
-        .scrollBar(BarState.Off)
-        .contentEndOffset(this.bottomPad)
-        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
-        .width('100%').height('100%')
+      }
+      .width('100%').height('100%')
+
+      if (this.pickedFav.size > 0) {
+        EpisodeBatchBar({
+          scheme: this.scheme, fontScale: this.fontScale,
+          picked: this.pickedFav.size, total: this.favorites.favorites.length,
+          onSelectAll: () => { this.pickedFav = this.setOfAll(this.favorites.favorites); },
+          onEnqueue: () => {
+            batchEnqueueAndToast(this.getUIContext(), this.favorites.favorites, this.pickedFav);
+            this.pickedFav = new Set<string>();
+          },
+          onExit: () => { this.pickedFav = new Set<string>(); }
+        })
+          .margin({ bottom: this.bottomPad })
       }
     }
     .width('100%').height('100%')
@@ -462,39 +508,81 @@ export struct LibraryPage {
   // ── 下载 ──
   @Builder
   downloadsSection() {
-    Column() {
-      if (this.downloads.downloads.length === 0) {
-        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_downloads') })
-      } else {
-        List() {
-          // 顶部占位:理由见订阅段同名注释
-          ListItem() {
-            Row().width('100%').height(CHIPS_RESERVE_H)
-          }
-          ForEach(this.downloads.downloads, (d: DownloadRow) => {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column() {
+        if (this.downloads.downloads.length === 0) {
+          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_downloads') })
+        } else {
+          List() {
+            // 顶部占位:理由见订阅段同名注释
             ListItem() {
-              EpisodeListItem({
-                scheme: this.scheme, fontScale: this.fontScale, episode: d.episode,
-                showPodcastTitle: true,
-                isCurrent: this.player.current !== null && this.player.current.id === d.episode.id,
-                isPlaying: this.player.isPlaying,
-                played: this.history.isPlayed(d.episode.id),
-                downloadState: 2,
-                onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes(), TAG_DL),
-                onDeleteDownload: () => { this.askDeleteDownload(d.episode); },
-                onPlayNext: () => { this.player.playNext(d.episode); },
-                onEnqueue: () => { this.player.enqueue(d.episode); }
-              })
+              Row().width('100%').height(CHIPS_RESERVE_H)
             }
-          }, (d: DownloadRow) => d.episode.id)
+            ForEach(this.downloads.downloads, (d: DownloadRow) => {
+              ListItem() {
+                EpisodeListItem({
+                  scheme: this.scheme, fontScale: this.fontScale, episode: d.episode,
+                  showPodcastTitle: true,
+                  isCurrent: this.player.current !== null && this.player.current.id === d.episode.id,
+                  isPlaying: this.player.isPlaying,
+                  played: this.history.isPlayed(d.episode.id),
+                  downloadState: 2,
+                  onPlay: () => this.onPlayEpisode(d.episode, this.downloadEpisodes(), TAG_DL),
+                  onDeleteDownload: () => { this.askDeleteDownload(d.episode); },
+                  onPlayNext: () => { this.player.playNext(d.episode); },
+                  onEnqueue: () => { this.player.enqueue(d.episode); },
+                  showChannelJump: true, onOpenChannel: this.onOpenChannel,
+                  showBatch: true,
+                  onEnterSelection: () => { this.pickedDl = new Set<string>([d.episode.id]); },
+                  selectionMode: this.pickedDl.size > 0,
+                  selected: this.pickedDl.has(d.episode.id),
+                  onToggleSelect: () => { this.pickedDl = this.toggleInto(this.pickedDl, d.episode.id); }
+                })
+              }
+            }, (d: DownloadRow) => `${d.episode.id}|${this.pickedDl.has(d.episode.id) ? 1 : 0}`)
+          }
+          .scrollBar(BarState.Off)
+          .contentEndOffset(this.endOffset(this.pickedDl))
+          .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
+          .width('100%').height('100%')
         }
-        .scrollBar(BarState.Off)
-        .contentEndOffset(this.bottomPad)
-        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
-        .width('100%').height('100%')
+      }
+      .width('100%').height('100%')
+
+      if (this.pickedDl.size > 0) {
+        EpisodeBatchBar({
+          scheme: this.scheme, fontScale: this.fontScale,
+          picked: this.pickedDl.size, total: this.downloads.downloads.length,
+          onSelectAll: () => { this.pickedDl = this.setOfAll(this.downloadEpisodes()); },
+          onEnqueue: () => {
+            batchEnqueueAndToast(this.getUIContext(), this.downloadEpisodes(), this.pickedDl);
+            this.pickedDl = new Set<string>();
+          },
+          onExit: () => { this.pickedDl = new Set<string>(); }
+        })
+          .margin({ bottom: this.bottomPad })
       }
     }
     .width('100%').height('100%')
+  }
+
+  /// 多选:勾选 / 取消一条。**返回新集合**,调用方整体赋值(理由见 `pickedFav` 的注释)。
+  private toggleInto(cur: Set<string>, id: string): Set<string> {
+    const next = new Set<string>(cur);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  }
+
+  /// 多选:「全选」这一列。传入的必须是**屏幕上显示的那一份**,否则会把没显示的也勾进去。
+  private setOfAll(list: Episode[]): Set<string> {
+    const next = new Set<string>();
+    list.forEach((e: Episode) => next.add(e.id));
+    return next;
+  }
+
+  /// 选择模式下各列表要多让出的高度(浮条自己 + 它与底部栏的缝),理由见 `BATCH_AVOID`。
+  private endOffset(picked: Set<string>): number {
+    return this.bottomPad + (picked.size > 0 ? BATCH_AVOID : 0);
   }
 
   private downloadEpisodes(): Episode[] {
@@ -522,62 +610,89 @@ export struct LibraryPage {
   // ── 历史 ──
   @Builder
   historySection() {
-    Column() {
-      if (this.history.history.length === 0) {
-        EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_history') })
-      } else {
-        List() {
-          // 顶部占位:理由见订阅段同名注释
-          ListItem() {
-            Row().width('100%').height(CHIPS_RESERVE_H)
-          }
-          ForEach(this.history.history, (h: HistoryRow) => {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column() {
+        if (this.history.history.length === 0) {
+          EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_history') })
+        } else {
+          List() {
+            // 顶部占位:理由见订阅段同名注释
             ListItem() {
-              EpisodeListItem({
-                scheme: this.scheme, fontScale: this.fontScale, episode: h.episode,
-                showPodcastTitle: true,
-                isCurrent: this.player.current !== null && this.player.current.id === h.episode.id,
-                isPlaying: this.player.isPlaying,
-                played: h.played,
-                onPlay: () => this.onPlayEpisode(h.episode, this.historyEpisodes(), ''),
-                /**
-                 * 历史页**必须**给这个开关。发现页「继续收听」卡上的「标记已播完」
-                 * 就是把这里的 `played` 置真 —— 那一横条的数据源正是这份历史列表
-                 * (未播完 + 进度在 10s~95%)。不在这儿给「标记未播完」,那个动作
-                 * 就成了不可撤销的,而 app 里没有撤销机制。
-                 * 进度本身不受影响:恢复后它带着原来的位置重新回到横条。
-                 * (macOS 的单集右键菜单是无条件带这一项的,这里向它对齐。)
-                 */
-                showPlayedToggle: true,
-                // 读 store 而不是 `!h.played`:闭包里的 `h` 是**生成这一行那一刻**的快照,
-                // 而快照会过期(见下面键值的注释)。动作要拿当前值,只能回 store 问一次。
-                // 这里是**一次点击**问一次,不在渲染路径上,`isPlayed` 的整表扫描可以接受。
-                onTogglePlayed: () => { this.history.markPlayed(h.episode.id, !this.history.isPlayed(h.episode.id)); },
-                onPlayNext: () => { this.player.playNext(h.episode); },
-                onEnqueue: () => { this.player.enqueue(h.episode); }
-              })
+              Row().width('100%').height(CHIPS_RESERVE_H)
             }
-          }, (h: HistoryRow) => `${h.episode.id}|${h.played ? 1 : 0}`)
-          /**
-           * 键值里必须带 `played`,否则长按菜单点「标记已播完」之后**这一行原地不动**:
-           * store 那边数组整个换了新的(每项都是新建对象),`@ObjectLink` 也确实通知了本页,
-           * 但 ForEach 按**键值**决定要不要重跑 itemGenerator —— 键没变就不重跑,
-           * 于是从迭代项身上取的那些参数(`h.played`、`h.episode`)一律停在创建那一刻。
-           *
-           * ⚠️ 同一行里 `isPlaying` 却是会变的,别被这个误导成"个别字段坏了":
-           * 它读的是**另一个** @Observed 对象(`this.player`),走的是属性级订阅那条路,
-           * 不经过 ForEach 的键值判断。规律是「**从被迭代的那个数组里取的字段,
-           * 改了不会就地刷新;从别的被观察对象取的会**」。真机两侧都量过,见 H154。
-           *
-           * 代价只有"点一下标记,这一行重建一次",而重建正是我们要的效果。
-           * 不改成"从 store 读 `played`"来绕:那个值仍然来自同一个数组,同样不刷新,
-           * 还额外给每一行加一次整表扫描(≤100 行 × O(n),渲染路径上不做解析——硬规矩 6)。
-           */
+            ForEach(this.history.history, (h: HistoryRow) => {
+              ListItem() {
+                EpisodeListItem({
+                  scheme: this.scheme, fontScale: this.fontScale, episode: h.episode,
+                  showPodcastTitle: true,
+                  isCurrent: this.player.current !== null && this.player.current.id === h.episode.id,
+                  isPlaying: this.player.isPlaying,
+                  played: h.played,
+                  onPlay: () => this.onPlayEpisode(h.episode, this.historyEpisodes(), ''),
+                  /**
+                   * 历史页**必须**给这个开关。发现页「继续收听」卡上的「标记已播完」
+                   * 就是把这里的 `played` 置真 —— 那一横条的数据源正是这份历史列表
+                   * (未播完 + 进度在 10s~95%)。不在这儿给「标记未播完」,那个动作
+                   * 就成了不可撤销的,而 app 里没有撤销机制。
+                   * 进度本身不受影响:恢复后它带着原来的位置重新回到横条。
+                   * (macOS 的单集右键菜单是无条件带这一项的,这里向它对齐。)
+                   */
+                  showPlayedToggle: true,
+                  // 读 store 而不是 `!h.played`:闭包里的 `h` 是**生成这一行那一刻**的快照,
+                  // 而快照会过期(见下面键值的注释)。动作要拿当前值,只能回 store 问一次。
+                  // 这里是**一次点击**问一次,不在渲染路径上,`isPlayed` 的整表扫描可以接受。
+                  onTogglePlayed: () => { this.history.markPlayed(h.episode.id, !this.history.isPlayed(h.episode.id)); },
+                  onPlayNext: () => { this.player.playNext(h.episode); },
+                  onEnqueue: () => { this.player.enqueue(h.episode); },
+                  showChannelJump: true, onOpenChannel: this.onOpenChannel,
+                  showBatch: true,
+                  onEnterSelection: () => { this.pickedHist = new Set<string>([h.episode.id]); },
+                  selectionMode: this.pickedHist.size > 0,
+                  selected: this.pickedHist.has(h.episode.id),
+                  onToggleSelect: () => { this.pickedHist = this.toggleInto(this.pickedHist, h.episode.id); }
+                })
+              }
+            }, (h: HistoryRow) => `${h.episode.id}|${h.played ? 1 : 0}|${this.pickedHist.has(h.episode.id) ? 1 : 0}`)
+            /**
+             * 键值里必须带 `played`,否则长按菜单点「标记已播完」之后**这一行原地不动**:
+             * store 那边数组整个换了新的(每项都是新建对象),`@ObjectLink` 也确实通知了本页,
+             * 但 ForEach 按**键值**决定要不要重跑 itemGenerator —— 键没变就不重跑,
+             * 于是从迭代项身上取的那些参数(`h.played`、`h.episode`)一律停在创建那一刻。
+             *
+             * ⚠️ 同一行里 `isPlaying` 却是会变的,别被这个误导成"个别字段坏了":
+             * 它读的是**另一个** @Observed 对象(`this.player`),走的是属性级订阅那条路,
+             * 不经过 ForEach 的键值判断。规律是「**从被迭代的那个数组里取的字段,
+             * 改了不会就地刷新;从别的被观察对象取的会**」。真机两侧都量过,见 H154。
+             *
+             * 代价只有"点一下标记,这一行重建一次",而重建正是我们要的效果。
+             * 不改成"从 store 读 `played`"来绕:那个值仍然来自同一个数组,同样不刷新,
+             * 还额外给每一行加一次整表扫描(≤100 行 × O(n),渲染路径上不做解析——硬规矩 6)。
+             *
+             * 键值里**还带勾选位**,是同一条规律的第二次应用:`selected` 是这一行从
+             * `this.pickedHist` 取出来的渲染值,勾一下若不换键,封面就一直是旧的那一格
+             * (收藏/下载两段同理,见那两处)。
+             */
+          }
+          .scrollBar(BarState.Off)
+          .contentEndOffset(this.endOffset(this.pickedHist))
+          .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
+          .width('100%').height('100%')
         }
-        .scrollBar(BarState.Off)
-        .contentEndOffset(this.bottomPad)
-        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
-        .width('100%').height('100%')
+      }
+      .width('100%').height('100%')
+
+      if (this.pickedHist.size > 0) {
+        EpisodeBatchBar({
+          scheme: this.scheme, fontScale: this.fontScale,
+          picked: this.pickedHist.size, total: this.history.history.length,
+          onSelectAll: () => { this.pickedHist = this.setOfAll(this.historyEpisodes()); },
+          onEnqueue: () => {
+            batchEnqueueAndToast(this.getUIContext(), this.historyEpisodes(), this.pickedHist);
+            this.pickedHist = new Set<string>();
+          },
+          onExit: () => { this.pickedHist = new Set<string>(); }
+        })
+          .margin({ bottom: this.bottomPad })
       }
     }
     .width('100%').height('100%')

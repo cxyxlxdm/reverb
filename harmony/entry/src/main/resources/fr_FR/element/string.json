@@ -1142,7 +1142,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : six rubriques — abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Hors ligne : téléchargez des épisodes sur l\\'appareil, au besoin uniquement en Wi-Fi\n· Cache de lecture : les épisodes écoutés restent sur l'appareil et se relisent hors connexion ; listes et pochettes déjà chargées restent consultables sans réseau, à effacer dans Réglages\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
+      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : six rubriques — abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Lot et raccourcis : touchez la pochette d'un épisode pour ouvrir sa chaîne ; dans Nouveautés, Favoris, Téléchargements et Historique, appuyez longuement puis choisissez « Sélectionner plusieurs » pour les ajouter en bloc à la file\n· Hors ligne : téléchargez des épisodes sur l\\'appareil, au besoin uniquement en Wi-Fi\n· Cache de lecture : les épisodes écoutés restent sur l'appareil et se relisent hors connexion ; listes et pochettes déjà chargées restent consultables sans réseau, à effacer dans Réglages\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
     },
     {
       "name": "about_h_philosophy",
@@ -1355,6 +1355,46 @@
     {
       "name": "saved_fail",
       "value": "Échec de l'enregistrement"
+    },
+    {
+      "name": "a11y_open_channel",
+      "value": "Ouvrir la chaîne"
+    },
+    {
+      "name": "a11y_selected",
+      "value": "Sélectionné"
+    },
+    {
+      "name": "a11y_unselected",
+      "value": "Non sélectionné"
+    },
+    {
+      "name": "batch_select",
+      "value": "Sélectionner plusieurs"
+    },
+    {
+      "name": "batch_select_all",
+      "value": "Tout sélectionner"
+    },
+    {
+      "name": "batch_selected",
+      "value": "%d sélectionnés"
+    },
+    {
+      "name": "batch_enqueue",
+      "value": "Ajouter à la file"
+    },
+    {
+      "name": "batch_exit",
+      "value": "Quitter la sélection"
+    },
+    {
+      "name": "batch_added",
+      "value": "%d épisodes ajoutés à la file"
+    },
+    {
+      "name": "batch_added_none",
+      "value": "Ces épisodes sont déjà dans la file"
     }
   ]
 }

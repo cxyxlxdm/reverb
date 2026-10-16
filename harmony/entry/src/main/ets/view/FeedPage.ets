@@ -6,7 +6,7 @@ import { SubscriptionStore, HistoryStore } from '../store/Stores';
 import { InboxStore } from '../store/InboxStore';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, LoadingBox } from './Widgets';
-import { EpisodeListItem, PlayModeButton } from './Components';
+import { EpisodeListItem, PlayModeButton, EpisodeBatchBar, BATCH_AVOID, batchEnqueueAndToast } from './Components';
 import { Log } from '../util/Logger';
 
 /**
@@ -54,6 +54,23 @@ export struct FeedPage {
   @ObjectLink subscriptions: SubscriptionStore;
   @ObjectLink history: HistoryStore;
   onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
+  /**
+   * 点封面进这一集所属的频道页。外壳(Index 的三个 tab 那一支)传 `openPodcastByFeed`。
+   *
+   * ⚠️ 与行上的 `showChannelJump` **成对传**:ArkTS 没有 Android 那个 CompositionLocal,
+   * 判据只能写成"开关 + 动作"两个 prop,只开不给就是"看着能点、点了没反应"的假封面。
+   */
+  onOpenChannel: (feedUrl: string) => void = () => {};
+
+  /**
+   * 多选(批量加入待播)的已选集合。**放在这一层而不是行里** —— 「全选」要能一次改整列,
+   * 作用域本来就是整列(与 Android `InboxBody` 的 `picked` 同位)。
+   *
+   * ⚠️ **只走整体替换**(`this.picked = new Set(...)`),不许 `this.picked.add(...)`:
+   * ArkUI V1 对 `@State` 上的 Set 是否观察其方法调用没有可靠口径,而赋值一定触发重渲。
+   * Android 那份本来就是 immutable Set 的整体替换,两边同形。
+   */
+  @State picked: Set<string> = new Set();
 
   private app: AppContainer = AppContainer.get();
 
@@ -75,58 +92,112 @@ export struct FeedPage {
   }
 
   build() {
-    Column() {
-      ScreenHeader({
-        scheme: this.scheme,
-        fontScale: this.fontScale,
-        title: L.s('nav_feed'),
-        // 标题栏右端这颗是**本列的播放模式按钮**。它原先挂在音阁分段条的右端,
-        // 搬家不能把功能搬丢:三态图标与点击口径与频道主页、收藏、下载共用同一颗
-        // (`Components.PlayModeButton`)。
-        action: () => { this.modeAction() }
-      })
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column() {
+        ScreenHeader({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          title: L.s('nav_feed'),
+          // 标题栏右端这颗是**本列的播放模式按钮**。它原先挂在音阁分段条的右端,
+          // 搬家不能把功能搬丢:三态图标与点击口径与频道主页、收藏、下载共用同一颗
+          // (`Components.PlayModeButton`)。
+          action: () => { this.modeAction() }
+        })
 
-      Refresh({ refreshing: this.inbox.refreshing }) {
-        Column() {
-          if (this.subscriptions.subscriptions.length === 0) {
-            EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox_nosubs') })
-          } else if (this.inbox.episodes.length === 0) {
-            if (this.inbox.refreshing) {
-              LoadingBox({ scheme: this.scheme, fontScale: this.fontScale })
+        Refresh({ refreshing: this.inbox.refreshing }) {
+          Column() {
+            if (this.subscriptions.subscriptions.length === 0) {
+              EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox_nosubs') })
+            } else if (this.inbox.episodes.length === 0) {
+              if (this.inbox.refreshing) {
+                LoadingBox({ scheme: this.scheme, fontScale: this.fontScale })
+              } else {
+                EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox') })
+              }
             } else {
-              EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox') })
+              List() {
+                ForEach(this.inbox.episodes, (e: Episode) => {
+                  ListItem() {
+                    EpisodeListItem({
+                      scheme: this.scheme, fontScale: this.fontScale, episode: e,
+                      showPodcastTitle: true,
+                      isCurrent: this.player.current !== null && this.player.current.id === e.id,
+                      isPlaying: this.player.isPlaying,
+                      played: this.history.isPlayed(e.id),
+                      onPlay: () => this.onPlayEpisode(e, this.inbox.episodes, TAG_INBOX),
+                      onPlayNext: () => { this.player.playNext(e); },
+                      onEnqueue: () => { this.player.enqueue(e); },
+                      showChannelJump: true, onOpenChannel: this.onOpenChannel,
+                      showBatch: true,
+                      onEnterSelection: () => { this.picked = new Set<string>([e.id]); },
+                      selectionMode: this.picked.size > 0,
+                      selected: this.picked.has(e.id),
+                      onToggleSelect: () => this.togglePick(e.id)
+                    })
+                  }
+                }, (e: Episode) => this.rowKey(e.id))
+              }
+              .scrollBar(BarState.Off)
+              // 顶部不再需要 CHIPS_RESERVE_H 占位行:那一层是给悬浮的**分段条**让位的,
+              // 这一页没有分段条,页头已经把它压在下面。底部照旧让给玻璃栏。
+              .contentEndOffset(this.endOffset())
+              .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
+              .width('100%').height('100%')
             }
-          } else {
-            List() {
-              ForEach(this.inbox.episodes, (e: Episode) => {
-                ListItem() {
-                  EpisodeListItem({
-                    scheme: this.scheme, fontScale: this.fontScale, episode: e,
-                    showPodcastTitle: true,
-                    isCurrent: this.player.current !== null && this.player.current.id === e.id,
-                    isPlaying: this.player.isPlaying,
-                    played: this.history.isPlayed(e.id),
-                    onPlay: () => this.onPlayEpisode(e, this.inbox.episodes, TAG_INBOX),
-                    onPlayNext: () => { this.player.playNext(e); },
-                    onEnqueue: () => { this.player.enqueue(e); }
-                  })
-                }
-              }, (e: Episode) => e.id)
-            }
-            .scrollBar(BarState.Off)
-            // 顶部不再需要 CHIPS_RESERVE_H 占位行:那一层是给悬浮的**分段条**让位的,
-            // 这一页没有分段条,页头已经把它压在下面。底部照旧让给玻璃栏。
-            .contentEndOffset(this.bottomPad)
-            .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
-            .width('100%').height('100%')
           }
+          .width('100%').height('100%')
         }
-        .width('100%').height('100%')
+        .onRefreshing(() => { this.refreshInbox(true); })
+        .layoutWeight(1)
       }
-      .onRefreshing(() => { this.refreshInbox(true); })
-      .layoutWeight(1)
+      .width('100%').height('100%')
+
+      // 多选浮条。只在非选择态**不组合**(与各段"没内容就不摆动作"同一条规矩),
+      // 落点与列表让位量的配对见 `BATCH_AVOID` 的注释 —— 两处都要进。
+      if (this.picked.size > 0) {
+        EpisodeBatchBar({
+          scheme: this.scheme, fontScale: this.fontScale,
+          picked: this.picked.size, total: this.inbox.episodes.length,
+          onSelectAll: () => this.pickAll(),
+          onEnqueue: () => this.enqueuePicked(),
+          onExit: () => { this.picked = new Set<string>(); }
+        })
+          .margin({ bottom: this.bottomPad })
+      }
     }
     .width('100%').height('100%')
+  }
+
+  /// 勾选 / 取消一条(整体替换,理由见 `picked` 的注释)。
+  private togglePick(id: string): void {
+    const next = new Set<string>(this.picked);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    this.picked = next;
+  }
+
+  private pickAll(): void {
+    const next = new Set<string>();
+    this.inbox.episodes.forEach((e: Episode) => next.add(e.id));
+    this.picked = next;
+  }
+
+  /// 批量入队 → 提示 → 退出选择态。三步收在 `batchEnqueueAndToast` 里,四个列共用一份口径。
+  private enqueuePicked(): void {
+    batchEnqueueAndToast(this.getUIContext(), this.inbox.episodes, this.picked);
+    this.picked = new Set<string>();
+  }
+
+  /**
+   * ⚠️ **key 必须带上勾选位**。`ForEach` 在 key 不变时**复用行、不重建**,于是
+   * `selected` 这个 @Prop 就不会更新 —— 点勾选没反应。这条坑在本仓库踩过一次
+   * (H113:音阁「就地标记已播完」不刷新,修法就是往 key 里拼那个渲染位)。
+   */
+  private rowKey(id: string): string {
+    return `${id}|${this.picked.has(id) ? 1 : 0}`;
+  }
+
+  private endOffset(): number {
+    return this.bottomPad + (this.picked.size > 0 ? BATCH_AVOID : 0);
   }
 
   @Builder
