@@ -62,6 +62,7 @@ import com.yuyin.reverb.ui.components.GLASS_BAR_H
 import com.yuyin.reverb.ui.components.GlassNavBar
 import com.yuyin.reverb.ui.components.GlassTabSpec
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
+import com.yuyin.reverb.ui.components.LocalOpenPodcastChannel
 import com.yuyin.reverb.ui.components.MINI_GAP
 import com.yuyin.reverb.ui.components.MINI_H
 import com.yuyin.reverb.ui.components.MINI_MORPH_SLOPE
@@ -97,6 +98,15 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
         }
     }
 
+    // 「点封面/头像进频道页」的入口:在 NavHost 外层提供一次,列表行、待播那一行、
+    // 迷你播放条各自按 `episode.feedUrl` 判可点不可点(见 Components.kt coverChannelJump)。
+    // ⚠️ 必须 `remember`:这条 lambda 每次重组新建的话,所有读它的列表都会跟着失效重排,
+    // 而它抓的 rootNav 本来就是稳定的(rememberNavController)。
+    val openPodcastChannel: (String) -> Unit = remember(rootNav) {
+        { feed -> rootNav.navigate("podcast/${Uri.encode(feed)}") }
+    }
+
+    CompositionLocalProvider(LocalOpenPodcastChannel provides openPodcastChannel) {
     NavHost(navController = rootNav, startDestination = "main") {
         composable("main") { MainShell(rootNav) }
         // 频道详情作为全屏页(与播放页/设置同级),整体转场,避免进详情时底部栏收起导致的上下闪动;
@@ -105,7 +115,9 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
             val feed = entry.arguments?.getString("feed").orEmpty()
             FloatingMini(
                 onExpand = { rootNav.navigate("player") },
-                onOpenQueue = { rootNav.navigate("queue") }
+                onOpenQueue = { rootNav.navigate("queue") },
+                // 已经在这档的页面里:播放条封面再点就是往栈上压一份同一个页面
+                miniCoverOpensChannel = false
             ) {
                 PodcastDetailScreen(feedUrl = feed, onBack = { rootNav.popBackStack() })
             }
@@ -139,6 +151,7 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
         composable("listen_stats") { FullScreen { ListenStatsScreen(onBack = { rootNav.popBackStack() }) } }
         composable("about") { FullScreen { AboutScreen(onBack = { rootNav.popBackStack() }) } }
         composable("licenses") { FullScreen { LicensesScreen(onBack = { rootNav.popBackStack() }) } }
+    }
     }
 }
 
@@ -489,6 +502,9 @@ private fun MiniPlayerBar(
     ballIcon: ImageVector? = null,
     onRestore: () -> Unit = {},
     collapseIntoBar: Boolean = false,
+    /// 封面点击是否跳频道页。默认 true,**只有频道详情页那份传 false**(经 [FloatingMini] 传下来):
+    /// 在那里点自己这档的头像等于往栈上再压一份同一个页面。
+    coverOpensChannel: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
@@ -521,7 +537,8 @@ private fun MiniPlayerBar(
                 collapsed = collapsed,
                 ballIcon = ballIcon,
                 onRestore = onRestore,
-                collapseIntoBar = collapseIntoBar
+                collapseIntoBar = collapseIntoBar,
+                coverOpensChannel = coverOpensChannel
             )
         }
     }
@@ -556,6 +573,8 @@ private fun MiniPlayerBar(
 private fun FloatingMini(
     onExpand: () -> Unit,
     onOpenQueue: () -> Unit = {},
+    /// 透给播放条封面:频道详情页要传 false(已经在这一档的页面里)。
+    miniCoverOpensChannel: Boolean = true,
     content: @Composable () -> Unit
 ) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
@@ -572,6 +591,7 @@ private fun FloatingMini(
             MiniPlayerBar(
                 onExpand = onExpand,
                 onOpenQueue = onOpenQueue,
+                coverOpensChannel = miniCoverOpensChannel,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navInset + MINI_GAP)
             )
         }

@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -37,6 +38,8 @@ import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.CheckCircle
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.DownloadDone
 import androidx.compose.material.icons.rounded.Favorite
@@ -44,7 +47,9 @@ import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.RadioButtonUnchecked
 import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Shuffle
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material3.FilterChipDefaults
@@ -58,8 +63,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -84,6 +91,8 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
@@ -158,6 +167,35 @@ val GLASS_CHIPS_EDGE_FADE_W = 36.dp
  * (内容从玻璃下滚过才有"透"可言),末项又要能滚出栏上方 —— 全靠这个让位。
  */
 val LocalGlassBottomPad = staticCompositionLocalOf { 0.dp }
+
+/**
+ * 「跳进这一集所属频道页」的入口,由 [com.yuyin.reverb.ui.ReverbRoot] 在 NavHost 外层注入一次。
+ *
+ * 为什么走 CompositionLocal 而不是逐层传参:消费点有三类(共用行 [EpisodeListItem]、
+ * 待播页自写的那一行、[MiniPlayer] 的封面),而它们到外壳之间隔着音阁的六个分段与
+ * 队列页的两种宿主(独立页 / 内嵌段)—— 显式传要改十几个签名,而这条信息本来就是**外壳级**的,
+ * 与 [LocalGlassBottomPad] 同一类。
+ *
+ * 用 `compositionLocalOf` 而不是 `static`:static 的语义是"值永不变",而这个是导航回调,
+ * 一旦哪天改成按页提供,static 会让**所有读者**整体重建,症状还很难归因。
+ */
+val LocalOpenPodcastChannel = compositionLocalOf<((String) -> Unit)?> { null }
+
+/**
+ * 派生「点封面进频道页」的回调,三条门任一不满足就返回 null —— 返回 null 时封面**不加**
+ * clickable,点击照旧落到整行(起播),不会出现"看着能点、点了没反应"。
+ *
+ * ① 外壳提供了入口(见 [LocalOpenPodcastChannel]);
+ * ② `episode.feedUrl` 非空 —— 与播放页频道名那处同一个判据(`PlayerScreen`),
+ *    老数据里 feedUrl 可能缺失,不判就是往路由里塞空串;
+ * ③ [allow] —— **频道详情页自己传 false**:已经在这档的页面里,再点就是往栈上压一份自己。
+ */
+@Composable
+fun coverChannelJump(episode: Episode, allow: Boolean = true): (() -> Unit)? {
+    val open = LocalOpenPodcastChannel.current
+    if (!allow || open == null || episode.feedUrl.isBlank()) return null
+    return { open(episode.feedUrl) }
+}
 
 /**
  * 分类玻璃条:悬浮胶囊条 + 一颗透明胶囊指示器,**随内容 Pager 的拖动 1:1 平移**。
@@ -554,7 +592,21 @@ fun EpisodeListItem(
     /// 行内「加入播放列表」键,只在节目详情页开(对齐鸿蒙):浏览选集为主的场景,
     /// 一步入队比长按菜单顺手。Compose 里子 IconButton 消费点击,行 ripple 不会连带亮起
     /// —— 鸿蒙那边要靠 stopPropagation 手工截断的问题,这边的系统行为本来就是对的。
-    showQueueAdd: Boolean = false
+    showQueueAdd: Boolean = false,
+    /// 点封面跳进这一集所属的频道页(判据见 [coverChannelJump])。
+    /// **频道详情页传 false**,其余调用方不用管 —— 是否真的可点还要看外壳有没有提供入口。
+    coverOpensChannel: Boolean = true,
+    /// ---- 多选(批量加入待播)----
+    /// 选择模式由**调用方的已选集合**驱动(见各列表页的 `picked`),行自身不存这份状态:
+    /// 行会被 LazyColumn 回收,状态留在行里就会随滚动丢失(且无法"全选")。
+    /// `selectionMode` 为真时整行的点击语义**从「播这一集」换成「勾选/取消」**,
+    /// 长按菜单也不再出现。
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onToggleSelect: (() -> Unit)? = null,
+    /// 长按菜单里那颗「多选」:由调用方进入选择模式并带上被长按的这一集。
+    /// null = 这一列不做批量(发现首屏、搜索结果、频道详情页)。
+    onEnterSelection: (() -> Unit)? = null
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -567,21 +619,29 @@ fun EpisodeListItem(
      * 由 Compose 自己决定往下还是往上、往右还是往左展开(贴边时自动翻转),不用手算。
      */
     var pressPoint by remember { mutableStateOf(Offset.Zero) }
-    val hasMenu = onTogglePlayed != null || onPlayNext != null || onEnqueue != null
+    val hasMenu = onTogglePlayed != null || onPlayNext != null || onEnqueue != null || onEnterSelection != null
+    // 封面点击 → 频道页。null 时封面不加点击,整行照旧(起播)。判据见 [coverChannelJump]
+    val jumpToChannel = if (selectionMode) null else coverChannelJump(episode, coverOpensChannel)
+    val openChannelLabel = stringResource(R.string.a11y_open_channel)
     val rowModifier = Modifier
         .fillMaxWidth()
         .then(
-            if (hasMenu) Modifier
-                // Initial 阶段只「偷看」按下位置,不消费事件 —— 否则会和 combinedClickable
-                // 抢同一个指针,点击/长按都会失效。
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        pressPoint = down.position
+            when {
+                // 选择模式:整行只剩「勾选」这一个语义,长按也不弹菜单
+                // (菜单那三项在批量面前逐条做没有意义)。
+                selectionMode -> Modifier.clickable { onToggleSelect?.invoke() }
+                hasMenu -> Modifier
+                    // Initial 阶段只「偷看」按下位置,不消费事件 —— 否则会和 combinedClickable
+                    // 抢同一个指针,点击/长按都会失效。
+                    .pointerInput(Unit) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                            pressPoint = down.position
+                        }
                     }
-                }
-                .combinedClickable(onClick = onPlay, onLongClick = { menuOpen = true })
-            else Modifier.clickable(onClick = onPlay)
+                    .combinedClickable(onClick = onPlay, onLongClick = { menuOpen = true })
+                else -> Modifier.clickable(onClick = onPlay)
+            }
         )
         .padding(horizontal = 16.dp, vertical = 12.dp)
     Box {
@@ -590,7 +650,27 @@ fun EpisodeListItem(
         verticalAlignment = Alignment.CenterVertically
     ) {
         // 封面缩略图 + 播放/暂停轻蒙层:更有色彩,并保留播放态与播放入口(整行可点)
-        Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier
+                .size(52.dp)
+                .then(
+                    if (jumpToChannel != null)
+                        Modifier
+                            .clip(RoundedCornerShape(10.dp))
+                            // ⚠️ 这里必须是 combinedClickable 而不是 clickable:
+                            // 子节点的 Main 遍先于父节点且会消费按下,单纯 clickable 会让
+                            // **落在封面上的那一下长按什么都得不到**(整行的长按菜单被截走又没人接),
+                            // 用户按在头像上长按就变成"没反应"。所以封面自己也要接住长按:
+                            // 弹的还是同一个菜单(pressPoint 在整行的 Initial 遍里已经记下了手指位置)。
+                            .combinedClickable(
+                                onClick = jumpToChannel,
+                                onLongClick = { if (hasMenu) menuOpen = true else onToggleSelect?.invoke() }
+                            )
+                            .semantics { contentDescription = openChannelLabel }
+                    else Modifier
+                ),
+            contentAlignment = Alignment.Center
+        ) {
             Artwork(episode.artworkUrl, size = 52, corner = 10)
             Box(
                 Modifier
@@ -598,12 +678,28 @@ fun EpisodeListItem(
                     .clip(RoundedCornerShape(10.dp))
                     .background(Color.Black.copy(alpha = if (isCurrent) 0.42f else 0.28f))
             )
-            Icon(
-                if (isCurrent && isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                contentDescription = stringResource(if (isPlaying && isCurrent) R.string.a11y_pause else R.string.a11y_play),
-                tint = Color.White,
-                modifier = Modifier.size(24.dp)
-            )
+            if (selectionMode) {
+                // 勾选态压在封面上:行里再摆一颗 checkbox 会把 52dp 的封面挤变形,
+                // 而"选中"本来就是这一行唯一要说的话。
+                Icon(
+                    if (selected) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
+                    contentDescription = stringResource(
+                        if (selected) R.string.a11y_selected else R.string.a11y_unselected
+                    ),
+                    tint = if (selected) MaterialTheme.colorScheme.primary else Color.White.copy(alpha = 0.9f),
+                    modifier = Modifier.size(24.dp)
+                )
+            } else {
+                // 封面已经是「进频道页」的入口时,那颗播放/暂停只作状态显示:
+                // 读屏不能再念「播放」,否则标签说的和点出来的不是同一件事。
+                Icon(
+                    if (isCurrent && isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                    contentDescription = if (jumpToChannel != null) null
+                    else stringResource(if (isPlaying && isCurrent) R.string.a11y_pause else R.string.a11y_play),
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+            }
         }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -664,7 +760,9 @@ fun EpisodeListItem(
                 )
             }
         }
-        if (onToggleFavorite != null) {
+        // ⚠️ 选择模式里这三颗一律**不显示**(不是禁灰):它们在行内自己消费点击,
+        // 留着就是"点行尾那一下取消收藏、点行中间勾选"—— 同一行两种语义,用户无从预期。
+        if (onToggleFavorite != null && !selectionMode) {
             IconButton(onClick = onToggleFavorite) {
                 Icon(
                     if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
@@ -673,7 +771,7 @@ fun EpisodeListItem(
                 )
             }
         }
-        if (showQueueAdd && onEnqueue != null) {
+        if (showQueueAdd && onEnqueue != null && !selectionMode) {
             // 与鸿蒙同位次(收藏心形之后、下载控件之前);图标用 PlaylistAdd(列表+加号),
             // 不用 QueueMusic —— 那是「打开队列页」的入口,同形不同义会误导(鸿蒙真机反馈)。
             IconButton(onClick = {
@@ -688,7 +786,7 @@ fun EpisodeListItem(
                 )
             }
         }
-        if (onDownload != null || onDeleteDownload != null) {
+        if (!selectionMode && (onDownload != null || onDeleteDownload != null)) {
             DownloadControl(downloadStatus, onDownload, onDeleteDownload)
         }
     }
@@ -712,6 +810,14 @@ fun EpisodeListItem(
                         }
                     )
                 }
+                // 「多选」排在「加入队列」之后:这两颗是同一件事的两种规模
+                // (逐条 / 一批),而「标记已播完」是另一路的读法,放在最后。
+                if (onEnterSelection != null) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.batch_select)) },
+                        onClick = { menuOpen = false; onEnterSelection() }
+                    )
+                }
                 if (onTogglePlayed != null) {
                     DropdownMenuItem(
                         text = { Text(stringResource(if (played) R.string.mark_unplayed else R.string.mark_played)) },
@@ -722,6 +828,135 @@ fun EpisodeListItem(
             }
         }
     }
+}
+
+/**
+ * 多选状态下浮在列表底部的那条操作条(「已选 N · 全选 · 加入待播 · 退出」)。
+ *
+ * 为什么浮在**底部**:各列的末项本来就要滚到玻璃栏上方才看得见,底部那条带
+ * (`LocalGlassBottomPad` 已经把它自己算进去了)是这段列表唯一"空着"的位置;
+ * 放顶部就要跟标题栏/分段玻璃条抢,而分段条右端已经有播放模式与清空那颗
+ * (见 `LibraryScreen` 的 endAction)。
+ *
+ * 「全选」用图标而不是文字:西/法语下「已选 N」+「全选」+「加入待播」三串文字在一行里
+ * 会顶出屏幕(es 的"Añadir a la cola"本身就有 16 个字符),图标不受语种长度影响。
+ *
+ * @param allSelected 已选数 == 总数时「全选」变灰 —— 再按一次没有任何变化,是假按钮
+ *        (与各段"没内容就不摆动作"同一条规矩)。
+ */
+@Composable
+fun SelectionBar(
+    selectedCount: Int,
+    totalCount: Int,
+    allSelected: Boolean,
+    onSelectAll: () -> Unit,
+    onEnqueue: () -> Unit,
+    onExit: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val scheme = MaterialTheme.colorScheme
+    Row(
+        modifier
+            // 上限挡住西/法语:那条串里「已选 N」+「加入待播」两串文字在同一行,
+            // es/fr 的对应串各 15~25 字符,不封顶会把整条推出屏外(图标也一起看不见)。
+            // 超出的部分由下面的计数文字省略号收掉,动作两颗始终在行内。
+            .widthIn(max = 320.dp)
+            .shadow(6.dp, RoundedCornerShape(28.dp))
+            .clip(RoundedCornerShape(28.dp))
+            .background(scheme.surface)
+            .padding(start = 16.dp, end = 2.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            stringResource(R.string.batch_selected, selectedCount),
+            style = MaterialTheme.typography.bodyMedium,
+            color = scheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        IconButton(onClick = onSelectAll, enabled = !allSelected, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Rounded.SelectAll,
+                contentDescription = stringResource(R.string.batch_select_all),
+                tint = if (allSelected) scheme.onSurfaceVariant.copy(alpha = 0.3f) else scheme.onSurfaceVariant
+            )
+        }
+        TextButton(onClick = onEnqueue) {
+            Text(stringResource(R.string.batch_enqueue))
+        }
+        IconButton(onClick = onExit, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Rounded.Close,
+                contentDescription = stringResource(R.string.batch_exit),
+                tint = scheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * 批量加入待播的**新增数**(调用方拿它出提示)。
+ *
+ * 不能直接报 `picked.size`:[PlayerController.enqueueAll] 对「已在队列里」的那一集是**忽略**的
+ * (与单条 [PlayerController.enqueue] 同口径),而队列里的内容在「待播」那一页,
+ * 用户在当前列表里看不见 —— 报了 8 实际只进 3 条,提示就成了说谎。
+ *
+ * ⚠️ 这一层**只做筛选,不许自己循环 `PlayerController.enqueue`**。批量入队必须整体走
+ * [PlayerController.enqueueAll]:单条那版每条都同步落一次盘,全选一列(实测 1994 集)
+ * 会把主线程占到 ANR(见 H186)。
+ */
+fun enqueuePicked(episodes: List<Episode>, picked: Set<String>): Int =
+    PlayerController.enqueueAll(episodes.filter { it.id in picked })
+
+/**
+ * 多选条的**占位高度**:条子实测 44dp(40dp 的图标按钮 + 上下各 2dp 内边距)再加它与玻璃栏
+ * 顶沿之间那 4dp 缝。各列表在选择模式里把它加进 `contentPadding` 的下沿,
+ * 否则末行正好被这条带压掉半截(平时的下沿只有 24dp,是给单行留的)。
+ */
+val SELECTION_BAR_SLOT = 48.dp
+
+/**
+ * 四个列表(追更 / 收藏 / 下载 / 历史)共用的那条批量条:把 [SelectionBar] 的三条动作
+ * (全选 / 加入待播 / 退出)连同**结果提示**一起收在一处。
+ *
+ * 为什么要有这一层而不是四个页面各写一遍:「加入待播」之后该报几条,判据在
+ * [enqueuePicked] 那侧而不是页面里;四个页面各抄一遍,漏掉某个页面的提示是必然的。
+ *
+ * 已选集合由**调用方持有**(一个 `mutableStateOf<Set<String>>`),这里只通过 [onPicked] 整体替换。
+ * 状态不放行里:行会被 LazyColumn 回收,而且「全选」要能一次改整列。
+ *
+ * @param picked 空集 = 不在选择模式,这一层不组合(底部那条带只在多选时出现)
+ * @param episodes 这一列当前显示的全部单集(「全选」与新增数都按它算,所以必须是**显示的那一份**)
+ */
+@Composable
+fun EpisodeBatchBar(
+    picked: Set<String>,
+    episodes: List<Episode>,
+    onPicked: (Set<String>) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    if (picked.isEmpty()) return
+    val context = LocalContext.current
+    SelectionBar(
+        selectedCount = picked.size,
+        totalCount = episodes.size,
+        allSelected = picked.size >= episodes.size,
+        onSelectAll = { onPicked(episodes.map { it.id }.toSet()) },
+        onEnqueue = {
+            val added = enqueuePicked(episodes, picked)
+            // 入队结果在「待播」那一页,当前列表看不出任何变化,不提示等于没按上
+            Toast.makeText(
+                context,
+                if (added == 0) context.getString(R.string.batch_added_none)
+                else context.getString(R.string.batch_added, added),
+                Toast.LENGTH_SHORT
+            ).show()
+            onPicked(emptySet())
+        },
+        onExit = { onPicked(emptySet()) },
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -971,6 +1206,8 @@ const val MINI_MORPH_STIFFNESS = 341f
  *                  ⚠️ 这一道抬升**必须写在组件内部、由同一条 `f` 派生**:若在 `MainShell` 里
  *                  按值取一个动画分数传进来,那个 State 会被外壳解包 ⇒ 动画途中**每一帧重排
  *                  整棵外壳**(三张满屏列表),而外壳里根本没有需要逐帧变的量(硬规矩 6/7)。
+ * @param coverOpensChannel 封面点击是否跳频道页。**频道详情页传 false**(判据见 [coverChannelJump]):
+ *                  在那里点自己这档的头像等于往栈上再压一份同一个页面。
  */
 @Composable
 fun MiniPlayer(
@@ -986,7 +1223,8 @@ fun MiniPlayer(
     collapsed: Boolean = false,
     ballIcon: ImageVector? = null,
     onRestore: () -> Unit = {},
-    collapseIntoBar: Boolean = false
+    collapseIntoBar: Boolean = false,
+    coverOpensChannel: Boolean = true
 ) {
     val f by animateFloatAsState(
         targetValue = if (collapsed) 1f else 0f,
@@ -1008,6 +1246,11 @@ fun MiniPlayer(
     // 摘掉会让整行内容一次性左移,而封面/文字正按弹簧滑过来,两种运动叠在一起就是"抖"。
     val slotW = (MINI_BALL_SLOT + MINI_BALL_GAP) * fc
     val cover = if (collapsed) MINI_COVER_NARROW else MINI_COVER_WIDE
+    val coverCorner = if (collapsed) (cover / 2).dp else 8.dp
+    // 封面的第二重语义:点它进频道页(整块仍是展开播放页)。判据与列表行同一条,
+    // 在频道详情页由调用方关掉(见 [coverChannelJump] 的第三条门)。
+    val coverJump = coverChannelJump(episode, coverOpensChannel)
+    val openChannelLabel = stringResource(R.string.a11y_open_channel)
     val endPad = MINI_PAD_END + (MINI_PAD_END_COLLAPSED - MINI_PAD_END) * fc
     // 落点:展开态抬到栏上方再留一道缝,收束态落进栏那一条带里(与 [blockH] 同源同一条曲线)。
     val lift = if (collapseIntoBar) (GLASS_BAR_H + MINI_GAP) * (1f - fc) else 0.dp
@@ -1085,7 +1328,22 @@ fun MiniPlayer(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        Artwork(episode.artworkUrl, size = cover, corner = if (collapsed) cover / 2 else 8)
+                        // ⚠️ 覆盖层必须写在**包住 Artwork 的 Box 里并用 matchParentSize**:
+                        // 把它做成 Row 的兄弟节点会多占一格 spacedBy(10dp) 的位置(第一版就是这么写的),
+                        // 而 matchParentSize 不参与父测量 —— 胶囊里的排布一格都不动。
+                        // Main 遍子节点先于父节点并消费按下 ⇒ 点头像只进频道、不展开播放页。
+                        Box {
+                            Artwork(episode.artworkUrl, size = cover, corner = if (collapsed) cover / 2 else 8)
+                            if (coverJump != null) {
+                                Box(
+                                    Modifier
+                                        .matchParentSize()
+                                        .clip(RoundedCornerShape(coverCorner))
+                                        .clickable(onClick = coverJump)
+                                        .semantics { contentDescription = openChannelLabel }
+                                )
+                            }
+                        }
                         Column(Modifier.weight(1f)) {
                             Text(
                                 episode.title,

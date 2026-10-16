@@ -216,7 +216,9 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                                 onPlayNext = { PlayerController.playNext(ep) },
                                 onEnqueue = { PlayerController.enqueue(ep) },
                                 // 详情页行内「加入播放列表」键(对齐鸿蒙):浏览场景一步入队
-                                showQueueAdd = true
+                                showQueueAdd = true,
+                                // 封面不加「进频道页」:已经在这档的页面里,再点就是往栈上压一份自己
+                                coverOpensChannel = false
                             )
                         }
                     }
