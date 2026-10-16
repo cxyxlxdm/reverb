@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Close
@@ -32,9 +33,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,6 +46,7 @@ import com.yuyin.reverb.R
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
+import com.yuyin.reverb.ui.components.coverChannelJump
 
 /**
  * 待播(up next):手动排的接下来播放列表,点击单集直接跳播,可上下移动、移除、清空。
@@ -110,6 +115,7 @@ fun QueueScreen(onBack: () -> Unit) {
 @Composable
 fun QueueBody(topPad: Dp = Dp(0f)) {
     val queue by PlayerController.userQueue.collectAsStateWithLifecycle()
+    val openChannelLabel = stringResource(R.string.a11y_open_channel)
 
     if (queue.isEmpty()) {
         EmptyHint(stringResource(R.string.queue_empty))
@@ -124,6 +130,9 @@ fun QueueBody(topPad: Dp = Dp(0f)) {
         )
     ) {
         itemsIndexed(queue, key = { _, ep -> ep.id }) { index, ep ->
+            // 封面单独可点 → 这一集所属频道页(判据与列表行同一条,见 Components.kt coverChannelJump)。
+            // 待播这一列不做批量勾选:它**就是**队列本身,再"加入待播"是空操作。
+            val jump = coverChannelJump(ep)
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -132,7 +141,20 @@ fun QueueBody(topPad: Dp = Dp(0f)) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Artwork(ep.artworkUrl, size = 44, corner = 8)
+                Box {
+                    Artwork(ep.artworkUrl, size = 44, corner = 8)
+                    if (jump != null) {
+                        // ⚠️ 覆盖层写在包住 Artwork 的 Box 里、用 matchParentSize:
+                        // 做成 Row 的兄弟节点会多占一格,把 12dp 那道缝的排布顶歪。
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .clip(RoundedCornerShape(8.dp))
+                                .clickable(onClick = jump)
+                                .semantics { contentDescription = openChannelLabel }
+                        )
+                    }
+                }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(

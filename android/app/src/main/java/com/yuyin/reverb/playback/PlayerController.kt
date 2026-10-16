@@ -228,6 +228,37 @@ object PlayerController {
         persistState()
     }
 
+    /**
+     * 批量追加到队尾:**一次**去重、**一次**换列表、**一次**落盘,返回真正新增的条数。
+     *
+     * 为什么不能让调用方循环 [enqueue]:那条路每条都要「扫一遍现有队列 + 复制一遍列表 +
+     * 同步落一次盘」,而 [com.yuyin.reverb.data.local.PlaybackStateStore.save] 每次都要序列化
+     * 最多 `UP_NEXT_CAP`(300)条并 `writeText` —— 循环 N 次就是 N 次全量写盘。
+     * 实测「追更」全选 1994 集走循环时主线程被占满,系统弹「余音没有响应」
+     * (`Input dispatching timed out … Waited 5006ms for MotionEvent`),见 H186。
+     * 这里把成本压成一条:去重靠 HashSet,写盘只有最后一次。
+     *
+     * 去重口径与 [enqueue] 一致(同 id 只进一次),但对**入参内部**的重复 id 也成立 ——
+     * 循环版是靠"后一条撞上前一条已入队"实现的,批量版必须自己守住这条不变式:
+     * 队列里永远没有重复 id。
+     */
+    fun enqueueAll(episodes: List<Episode>): Int {
+        val current = _userQueue.value
+        val seen = HashSet<String>(current.size + episodes.size).apply { current.forEach { add(it.id) } }
+        val fresh = ArrayList<Episode>(episodes.size)
+        for (e in episodes) {
+            if (seen.add(e.id)) fresh.add(e)
+        }
+        // 日志无条件打:`added=0` 这一种正是「全选一列但整列都已在队列里」的那一轮,
+        // 装机时要靠它证明按钮确实按上了。放在提前 return 之后就成了静默路径。
+        log.i(TAG, "enqueueAll added=${fresh.size} of=${episodes.size} size=${current.size + fresh.size}")
+        if (fresh.isEmpty()) return 0
+        _userQueue.value = current + fresh
+        updateNavFlags()
+        persistState()
+        return fresh.size
+    }
+
     /** 插到队首:下一个就播它(去重后置顶)。 */
     fun playNext(episode: Episode) {
         _userQueue.value = listOf(episode) + _userQueue.value.filterNot { it.id == episode.id }

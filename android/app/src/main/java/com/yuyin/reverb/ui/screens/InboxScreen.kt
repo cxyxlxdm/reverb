@@ -29,9 +29,11 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.ui.components.EpisodeBatchBar
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.PlayModeButton
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
+import com.yuyin.reverb.ui.components.SELECTION_BAR_SLOT
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -53,6 +55,10 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val pullState = rememberPullToRefreshState()
+
+    // 多选(批量加入待播)的已选集合。放在这一层而不是行里:行会被 LazyColumn 回收,
+    // 且「全选」要一次改整列。空集 = 不在选择模式。
+    var picked by remember { mutableStateOf(emptySet<String>()) }
 
     // 首刷标记:仅在「有订阅但缓存为空」时显示有界的「刷新中」,刷新结束(成功/失败)即收起,
     // 避免无内容时无限转圈。缓存已有时后台静默刷新,不打断浏览。
@@ -90,7 +96,8 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
                 Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = topPad,
-                    bottom = 24.dp + LocalGlassBottomPad.current
+                    bottom = 24.dp + LocalGlassBottomPad.current +
+                        if (picked.isNotEmpty()) SELECTION_BAR_SLOT else 0.dp
                 )
             ) {
                 items(episodes, key = { it.id }) { ep ->
@@ -104,7 +111,13 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
                         played = played,
                         onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
                         onPlayNext = { PlayerController.playNext(ep) },
-                        onEnqueue = { PlayerController.enqueue(ep) }
+                        onEnqueue = { PlayerController.enqueue(ep) },
+                        selectionMode = picked.isNotEmpty(),
+                        selected = ep.id in picked,
+                        onToggleSelect = {
+                            picked = if (ep.id in picked) picked - ep.id else picked + ep.id
+                        },
+                        onEnterSelection = { picked = setOf(ep.id) }
                     )
                 }
             }
@@ -120,6 +133,15 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
                 modifier = Modifier.align(Alignment.TopCenter).padding(top = topPad)
             )
         }
+        EpisodeBatchBar(
+            picked = picked,
+            episodes = episodes,
+            onPicked = { picked = it },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = LocalGlassBottomPad.current + 4.dp)
+        )
     }
 }
 

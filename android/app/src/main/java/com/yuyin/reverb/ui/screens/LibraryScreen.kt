@@ -63,6 +63,7 @@ import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.components.Artwork
+import com.yuyin.reverb.ui.components.EpisodeBatchBar
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.GLASS_CHIPS_TOP_PAD
 import com.yuyin.reverb.ui.components.GlassChipsRow
@@ -70,6 +71,7 @@ import com.yuyin.reverb.ui.components.PlayModeButton
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.PodcastGridItem
 import com.yuyin.reverb.ui.components.PodcastListItem
+import com.yuyin.reverb.ui.components.SELECTION_BAR_SLOT
 import com.yuyin.reverb.ui.components.formatTime
 import kotlinx.coroutines.launch
 
@@ -318,36 +320,57 @@ private fun FavoritesSection() {
 
     val history by container.historyStore.history.collectAsStateWithLifecycle()
 
+    // 多选(批量加入待播)的已选集合;判据与「追更」页同一套,见 `Components.kt EpisodeBatchBar`
+    var picked by remember { mutableStateOf(emptySet<String>()) }
+
     if (favorites.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_favorites))
         return
     }
-    // 存储里就是「最新收藏在前」(`FavoriteStore.toggle` 用 add(0, …)),显示不再翻。
-    // 行内点某一集起播时,整列 favorites 会成为播放队列 —— 显示顺序与队列顺序必须是同一份。
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            top = GLASS_CHIPS_TOP_PAD,
-            bottom = 24.dp + LocalGlassBottomPad.current
-        )
-    ) {
-        items(favorites, key = { it.id }) { ep ->
-            val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
-            EpisodeListItem(
-                episode = ep,
-                isCurrent = current?.id == ep.id,
-                isPlaying = isPlaying,
-                // 队列跟着屏幕上的顺序走
-                onPlay = { PlayerController.playOrToggle(ep, favorites, TAG_FAV) },
-                showPodcastTitle = true,
-                isFavorite = true,
-                onToggleFavorite = { container.favoriteStore.toggle(ep) },
-                played = played,
-                onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
-                onPlayNext = { PlayerController.playNext(ep) },
-                onEnqueue = { PlayerController.enqueue(ep) }
+    Box(Modifier.fillMaxSize()) {
+        // 存储里就是「最新收藏在前」(`FavoriteStore.toggle` 用 add(0, …)),显示不再翻。
+        // 行内点某一集起播时,整列 favorites 会成为播放队列 —— 显示顺序与队列顺序必须是同一份。
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                top = GLASS_CHIPS_TOP_PAD,
+                bottom = 24.dp + LocalGlassBottomPad.current +
+                    if (picked.isNotEmpty()) SELECTION_BAR_SLOT else 0.dp
             )
+        ) {
+            items(favorites, key = { it.id }) { ep ->
+                val played = history.firstOrNull { it.episode.id == ep.id }?.played ?: false
+                EpisodeListItem(
+                    episode = ep,
+                    isCurrent = current?.id == ep.id,
+                    isPlaying = isPlaying,
+                    // 队列跟着屏幕上的顺序走
+                    onPlay = { PlayerController.playOrToggle(ep, favorites, TAG_FAV) },
+                    showPodcastTitle = true,
+                    isFavorite = true,
+                    onToggleFavorite = { container.favoriteStore.toggle(ep) },
+                    played = played,
+                    onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                    onPlayNext = { PlayerController.playNext(ep) },
+                    onEnqueue = { PlayerController.enqueue(ep) },
+                    selectionMode = picked.isNotEmpty(),
+                    selected = ep.id in picked,
+                    onToggleSelect = {
+                        picked = if (ep.id in picked) picked - ep.id else picked + ep.id
+                    },
+                    onEnterSelection = { picked = setOf(ep.id) }
+                )
+            }
         }
+        EpisodeBatchBar(
+            picked = picked,
+            episodes = favorites,
+            onPicked = { picked = it },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = LocalGlassBottomPad.current + 4.dp)
+        )
     }
 }
 
@@ -360,37 +383,60 @@ private fun DownloadsSection() {
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     // 删除是不可逆操作，点对号后先弹确认，避免误删
     var pendingDelete by remember { mutableStateOf<DownloadedEpisode?>(null) }
+    var picked by remember { mutableStateOf(emptySet<String>()) }
+    // 「全选」与批量新增数都按这一列算,所以取**显示的那一份**。remember 而不是每次现算:
+    // 这一列可以有几几百行,而它落在渲染路径上(硬规矩 6)。
+    val episodes = remember(downloads) { downloads.map { it.episode } }
 
     if (downloads.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_downloads))
         return
     }
-    // 与收藏段同理:存储顺序即「最新下载在前」,显示不再翻。
-    // 行内点某一集起播时,整列 `downloads.map { it.episode }` 会成为播放队列 —— 顺序必须是同一份。
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            top = GLASS_CHIPS_TOP_PAD,
-            bottom = 24.dp + LocalGlassBottomPad.current
-        )
-    ) {
-        items(downloads) { d ->
-            val played = history.firstOrNull { it.episode.id == d.episode.id }?.played ?: false
-            EpisodeListItem(
-                episode = d.episode,
-                isCurrent = current?.id == d.episode.id,
-                isPlaying = isPlaying,
-                onPlay = { PlayerController.playOrToggle(d.episode, downloads.map { it.episode }, TAG_DL) },
-                // 下载同样是跨节目混排,节目名要显示(见历史段注释)
-                showPodcastTitle = true,
-                downloadStatus = DownloadStatus.Completed,
-                onDeleteDownload = { pendingDelete = d },
-                played = played,
-                onTogglePlayed = { container.historyStore.markPlayed(d.episode.id, !played) },
-                onPlayNext = { PlayerController.playNext(d.episode) },
-                onEnqueue = { PlayerController.enqueue(d.episode) }
+    Box(Modifier.fillMaxSize()) {
+        // 与收藏段同理:存储顺序即「最新下载在前」,显示不再翻。
+        // 行内点某一集起播时,整列 `downloads.map { it.episode }` 会成为播放队列 —— 顺序必须是同一份。
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                top = GLASS_CHIPS_TOP_PAD,
+                bottom = 24.dp + LocalGlassBottomPad.current +
+                    if (picked.isNotEmpty()) SELECTION_BAR_SLOT else 0.dp
             )
+        ) {
+            items(downloads) { d ->
+                val played = history.firstOrNull { it.episode.id == d.episode.id }?.played ?: false
+                EpisodeListItem(
+                    episode = d.episode,
+                    isCurrent = current?.id == d.episode.id,
+                    isPlaying = isPlaying,
+                    onPlay = { PlayerController.playOrToggle(d.episode, episodes, TAG_DL) },
+                    // 下载同样是跨节目混排,节目名要显示(见历史段注释)
+                    showPodcastTitle = true,
+                    downloadStatus = DownloadStatus.Completed,
+                    onDeleteDownload = { pendingDelete = d },
+                    played = played,
+                    onTogglePlayed = { container.historyStore.markPlayed(d.episode.id, !played) },
+                    onPlayNext = { PlayerController.playNext(d.episode) },
+                    onEnqueue = { PlayerController.enqueue(d.episode) },
+                    selectionMode = picked.isNotEmpty(),
+                    selected = d.episode.id in picked,
+                    onToggleSelect = {
+                        picked = if (d.episode.id in picked) picked - d.episode.id
+                        else picked + d.episode.id
+                    },
+                    onEnterSelection = { picked = setOf(d.episode.id) }
+                )
+            }
         }
+        EpisodeBatchBar(
+            picked = picked,
+            episodes = episodes,
+            onPicked = { picked = it },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = LocalGlassBottomPad.current + 4.dp)
+        )
     }
 
     pendingDelete?.let { d ->
@@ -417,32 +463,54 @@ private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntr
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
 
+    var picked by remember { mutableStateOf(emptySet<String>()) }
+    val episodes = remember(history) { history.map { it.episode } }
+
     if (history.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_history))
         return
     }
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(
-            top = GLASS_CHIPS_TOP_PAD,
-            bottom = 24.dp + LocalGlassBottomPad.current
-        )
-    ) {
-        items(history) { h ->
-            EpisodeListItem(
-                episode = h.episode,
-                isCurrent = current?.id == h.episode.id,
-                isPlaying = isPlaying,
-                onPlay = { PlayerController.playOrToggle(h.episode, history.map { it.episode }) },
-                // 历史是跨节目混排,节目名要显示 —— 与「最新」「收藏」「下载」一致
-                // (鸿蒙侧四段都传,Android 这里和下载段此前漏了)
-                showPodcastTitle = true,
-                played = h.played,
-                onTogglePlayed = { container.historyStore.markPlayed(h.episode.id, !h.played) },
-                onPlayNext = { PlayerController.playNext(h.episode) },
-                onEnqueue = { PlayerController.enqueue(h.episode) }
+    Box(Modifier.fillMaxSize()) {
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(
+                top = GLASS_CHIPS_TOP_PAD,
+                bottom = 24.dp + LocalGlassBottomPad.current +
+                    if (picked.isNotEmpty()) SELECTION_BAR_SLOT else 0.dp
             )
+        ) {
+            items(history) { h ->
+                EpisodeListItem(
+                    episode = h.episode,
+                    isCurrent = current?.id == h.episode.id,
+                    isPlaying = isPlaying,
+                    onPlay = { PlayerController.playOrToggle(h.episode, episodes) },
+                    // 历史是跨节目混排,节目名要显示 —— 与「最新」「收藏」「下载」一致
+                    // (鸿蒙侧四段都传,Android 这里和下载段此前漏了)
+                    showPodcastTitle = true,
+                    played = h.played,
+                    onTogglePlayed = { container.historyStore.markPlayed(h.episode.id, !h.played) },
+                    onPlayNext = { PlayerController.playNext(h.episode) },
+                    onEnqueue = { PlayerController.enqueue(h.episode) },
+                    selectionMode = picked.isNotEmpty(),
+                    selected = h.episode.id in picked,
+                    onToggleSelect = {
+                        picked = if (h.episode.id in picked) picked - h.episode.id
+                        else picked + h.episode.id
+                    },
+                    onEnterSelection = { picked = setOf(h.episode.id) }
+                )
+            }
         }
+        EpisodeBatchBar(
+            picked = picked,
+            episodes = episodes,
+            onPicked = { picked = it },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(horizontal = 16.dp)
+                .padding(bottom = LocalGlassBottomPad.current + 4.dp)
+        )
     }
 }
 
