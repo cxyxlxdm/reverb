@@ -457,6 +457,15 @@ struct Index {
          * [MINI_SIDE_MARGIN])、底边离避让区 8vp([MINI_GAP]),列表侧用 `contentEndOffset`
          * 让出 **56 = 条高 48 + 缝 8**,否则末项永远滚不出条子底下。
          * 这一页没有 tab 栏,所以**永不收束**(`collapsed` 用组件默认值 false)。
+         *
+         * ⚠️ **但只改成悬浮还不够**(2026-10-16 用户第二次指出「底部依然有一小段不透明」,
+         * 并确认说的不是胶囊):那块板是这一支的 `padding({ bottom: bottomInset })` 留下的 ——
+         * 避让区那一条被 `backgroundColor` 铺成纯色,列表滚到边就截断,胶囊坐在板上方,
+         * 整页底部读起来就是"内容里嵌了一块不透明的东西"。三个 tab 页没有这一条:
+         * 外壳只垫 `top`(见下面 `.padding({ top: this.topInset })`),底部由 `HdsTabs`
+         * 自己按 `barBottomMargin = bottomInset` 落。所以这里改成同一口径,**inset 进两处**:
+         * 胶囊落点 `bottomInset + MINI_GAP`、列表让位 `bottomInset + 条高 + 缝`。
+         * 只进一处都不成立 —— 只进落点则末行藏进小白条,只进让位量则那条板照旧。
          */
         Stack({ alignContent: Alignment.Bottom }) {
           PodcastDetailPage({
@@ -469,7 +478,7 @@ struct Index {
             listenStats: this.listenStats,
             // 单集行的「正在播放」高亮要读播放态
             player: this.player,
-            bottomPad: this.player.current === null ? 0 : MINI_H + MINI_GAP,
+            bottomPad: this.bottomInset + (this.player.current === null ? 0 : MINI_H + MINI_GAP),
             onBack: () => { this.stack.pop(); },
             onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
           })
@@ -481,13 +490,13 @@ struct Index {
               onExpand: () => { this.stack.pushPathByName('player', null); },
               onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
             })
-              .margin({ bottom: MINI_GAP })
+              .margin({ bottom: this.bottomInset + MINI_GAP })
           }
         }
         .width('100%').height('100%')
       }
       .hideTitleBar(true)
-      .padding({ top: this.topInset, bottom: this.bottomInset })
+      .padding({ top: this.topInset })
       .backgroundColor(this.scheme().background)
     }
   }

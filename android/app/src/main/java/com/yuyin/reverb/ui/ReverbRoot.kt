@@ -12,9 +12,12 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -100,13 +103,11 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
         // 仍在底部保留迷你播放条,不显示 tab。
         composable("podcast/{feed}") { entry ->
             val feed = entry.arguments?.getString("feed").orEmpty()
-            FullScreen {
-                FloatingMini(
-                    onExpand = { rootNav.navigate("player") },
-                    onOpenQueue = { rootNav.navigate("queue") }
-                ) {
-                    PodcastDetailScreen(feedUrl = feed, onBack = { rootNav.popBackStack() })
-                }
+            FloatingMini(
+                onExpand = { rootNav.navigate("player") },
+                onOpenQueue = { rootNav.navigate("queue") }
+            ) {
+                PodcastDetailScreen(feedUrl = feed, onBack = { rootNav.popBackStack() })
             }
         }
         composable("player") {
@@ -119,11 +120,9 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
             }
         }
         composable("queue") {
-            FullScreen {
-                FloatingMini(onExpand = { rootNav.navigate("player") }, onOpenQueue = {}) {
-                    // 已在队列页:入口键不再响应,避免向同一路由重复压栈
-                    QueueScreen(onBack = { rootNav.popBackStack() })
-                }
+            FloatingMini(onExpand = { rootNav.navigate("player") }, onOpenQueue = {}) {
+                // 已在队列页:入口键不再响应,避免向同一路由重复压栈
+                QueueScreen(onBack = { rootNav.popBackStack() })
             }
         }
         composable("settings") {
@@ -529,7 +528,7 @@ private fun MiniPlayerBar(
 }
 
 /**
- * 全屏页(频道详情 / 待播队列)的**悬浮播放条**外壳。
+ * 频道详情 / 待播队列这两页的外壳:**悬浮播放条 + 底部直通屏底**。
  *
  * 为什么从 `Column { 内容 ; MiniPlayerBar }` 改成叠层(2026-10-16,用户指出「频道页的播放条不是悬浮的」):
  * 旧写法播放条自己占一行、底边正好压在 `systemBarsPadding` 的让位上沿 —— 于是胶囊下半截的两个圆角
@@ -537,12 +536,21 @@ private fun MiniPlayerBar(
  * 鸿蒙侧频道页早就是悬浮层(见 `harmony/.../pages/Index.ets` 里 `podcast` 分支那段注释),
  * 这两页是本端漏改的漂移,不是新设计。
  *
- * 三个量必须成套,少一个就回到旧形状:
- * - 条子底边离让位上沿 = [MINI_GAP](与 tab 外壳那道缝同值);
- * - 内容侧让位量 = [MINI_H] + [MINI_GAP],经 [LocalGlassBottomPad] 给下去 ——
- *   不给的话末项永远滚不出条子底下(比旧写法"自己占一行"多让的正好是那道缝);
+ * ⚠️ 但**只改成叠层还不够**(同一日用户第二次指出:「底部依然有一小段不透明」,并确认不是胶囊):
+ * 那一块是 `FullScreen` 留下的 —— 它外层铺满整窗的不透明 `background`、内层 `systemBarsPadding()`,
+ * 于是手势区那 16dp 是一条**纯色板**,列表滚到边就被截断,而胶囊悬浮在这条板上方 8dp,
+ * 读起来就是"内容里嵌了一块板"。三个 tab 页从来没有这一块:外壳只垫状态栏,
+ * 底部由悬浮栏自己按 `navigationBarsPadding` 落(见 [MainShell] 里那段"background 必须在 padding 之前")。
+ * 所以这两页**不再套 `FullScreen`**,背景与状态栏由这里铺,底部让位量按 tab 外壳同一口径拆成两处:
+ *
+ * - 条子底边离**屏底** = 手势区 + [MINI_GAP];
+ * - 内容侧让位量 = 手势区 + [MINI_H] + [MINI_GAP](没在播时只剩手势区那一档,
+ *   否则末行会压在小白条上),经 [LocalGlassBottomPad] 给下去 —— 不给的话末项永远滚不出条子底下;
  * - **永不收束**(`collapsed` / `collapseIntoBar` 都留默认):这两页没有玻璃栏,
  *   没有可落进去的那一行,球槽也不该出现。
+ *
+ * ⚠️ 手势区要**同时**进落点和让位量这两处,只进一处都不成立:只进落点则末行藏在白条下面,
+ * 只进让位量则条子仍坐在板上沿、下面那条板照旧。
  */
 @Composable
 private fun FloatingMini(
@@ -551,14 +559,20 @@ private fun FloatingMini(
     content: @Composable () -> Unit
 ) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
-    val bottomPad = if (current == null) 0.dp else MINI_H + MINI_GAP
+    val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPad = if (current == null) navInset else navInset + MINI_H + MINI_GAP
     CompositionLocalProvider(LocalGlassBottomPad provides bottomPad) {
-        Box(Modifier.fillMaxSize()) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .statusBarsPadding()
+        ) {
             content()
             MiniPlayerBar(
                 onExpand = onExpand,
                 onOpenQueue = onOpenQueue,
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = MINI_GAP)
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navInset + MINI_GAP)
             )
         }
     }
