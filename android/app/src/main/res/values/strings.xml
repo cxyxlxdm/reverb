@@ -208,6 +208,7 @@
     <string name="a11y_prev">上一集</string>
     <string name="a11y_pause">暂停</string>
     <string name="a11y_collapse_player">收起</string>
+    <string name="a11y_expand_player">展开播放条</string>
     <string name="a11y_skip_back">快退 %d 秒</string>
     <string name="a11y_skip_fwd">快进 %d 秒</string>
     <string name="a11y_downloaded">已下载，点击删除</string>

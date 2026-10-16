@@ -55,7 +55,7 @@ export struct LibraryPage {
   /// 只用于各 List 的 contentEndOffset / 宫格的尾部占位行。
   @Prop bottomPad: number = 0;
   /// 滚动量交给外壳,由它决定播放条收不收进底部栏(见 DiscoverPage 同名注释)
-  onScrollDy: (dy: number) => void = () => {};
+  onScrollDy: (dy: number, st: ScrollState) => void = () => {};
   @ObjectLink player: PlayerController;
   /**
    * 本页渲染用到的 store 一律经 `@ObjectLink` 接收(各 store 均已 `@Observed`,
@@ -379,7 +379,7 @@ export struct LibraryPage {
         .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 10, bottom: 20 })
         // Grid 没有 contentEndOffset(List 专属 API):滚动余量靠上面的尾部占位 GridItem
         .scrollBar(BarState.Off)
-        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
         .width('100%').height('100%')
       } else {
         List() {
@@ -399,7 +399,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
-        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
         .width('100%').height('100%')
       }
     }
@@ -452,7 +452,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
-        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
         .width('100%').height('100%')
       }
     }
@@ -490,7 +490,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
-        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
         .width('100%').height('100%')
       }
     }
@@ -576,7 +576,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
-        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
         .width('100%').height('100%')
       }
     }
@@ -613,7 +613,7 @@ export struct LibraryPage {
         }
         .scrollBar(BarState.Off)
         .contentEndOffset(this.bottomPad)
-        .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
         .width('100%').height('100%')
       }
     }

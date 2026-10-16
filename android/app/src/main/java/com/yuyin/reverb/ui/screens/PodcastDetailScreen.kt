@@ -66,6 +66,7 @@ import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.PodcastState
 import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.PlayModeButton
 import com.yuyin.reverb.ui.components.formatListenDuration
 import com.yuyin.reverb.ui.share.ShareCards
@@ -180,7 +181,10 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                     val listTag = "podcast:$channelKey"
                     LazyColumn(
                         Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 24.dp)
+                        // 播放条在这里是**悬浮层**(见 ReverbRoot 的 FloatingMini),末项必须
+                        // 能滚到条子底下,所以让位量由那一层经 LocalGlassBottomPad 给下来 ——
+                        // 与三个 tab 页同一个机制,只是量不同:本页没有玻璃栏,只有条子。
+                        contentPadding = PaddingValues(bottom = 24.dp + LocalGlassBottomPad.current)
                     ) {
                         // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
                         if (s.staleAt != 0L) {

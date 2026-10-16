@@ -258,6 +258,24 @@ export const MORPH_RESP: number = 0.34;
 export const MORPH_DAMP: number = 0.86;
 
 /**
+ * ⚠️ **0.86 是欠阻尼,落点会过冲 ≈0.5%(短暂越过终点再回)** ——
+ * Android 同一条曲线在装机当天就崩了:那边是把分数**乘进 Dp** 再喂 `padding`,
+ * `lift = 60dp × (1−f)` 在 f=1.005 时是 −0.3dp,而 Compose 对负 padding 直接抛
+ * `Padding must be non-negative`(见 TROUBLESHOOTING **H180**,修法是几何出口钳一次)。
+ *
+ * **本端不同形,所以没照搬那条钳位**:这里从不手写"分数 × 长度",
+ * 而是给 `.animation({curve: morphSpring()})` 两个**字面量**让框架自己插值
+ * —— `.height(collapsed ? TAB_BAR_H : 0)`、`.margin({ right: collapsed ? HOME_SLOT_GAP : 0 })`、
+ * `.opacity(collapsed ? 1 : 0)`(见本文件那两处 `.animation({ curve: morphSpring() })`)。
+ * 残余风险只剩一条:**回到 0 的那一支**(展开时高度 56→0)按同一条曲线会瞬间算出负高度,
+ * 而 ArkUI 布局层怎么处理负值没有公开说明。七轮装机没崩过是**经验证据,不是证明** ——
+ * 所以这一条记在 ROADMAP 里作为**未验项**,而不是"已与 Android 对齐"。
+ * 判据(要真机才能跑):在收放途中用 `hilog` 打 `getRectanglePosition` 的高,
+ * 或直接看有没有 `height must be non-negative` 类异常。
+ * **不能按硬规矩 2 反方向类推**("Android 要钳 ⇒ 鸿蒙也要钳"),两端动画值进布局的路径不一样。
+ */
+
+/**
  * 当前 tab 序号在 AppStorage 里的键。
  *
  * 为什么 tab 序号也要走 AppStorage 而不是 @Prop:栏项是 Tabs 用 CustomBuilder 生成的,

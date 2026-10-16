@@ -3,6 +3,8 @@ package com.yuyin.reverb.ui.components
 import android.widget.Toast
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
@@ -55,7 +57,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,10 +70,12 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -820,6 +823,155 @@ fun PlayModeButton(tag: String, modifier: Modifier = Modifier) {
     }
 }
 
+/**
+ * 播放条**展开态**整块高度。
+ *
+ * 鸿蒙参照值是 48vp,这里没有照抄,因为本端的栏高只有 [GLASS_BAR_H]=52dp,
+ * 而旧版通栏播放条实测高 ≈66dp(2dp 进度线 + 8 + 44 封面 + 8)。用户这轮的要求是
+ * **「底部 tab 的高度增大,播放条高度减小」**,所以两态都按本端栏高重新配:
+ * 展开 44(= 6 + 32 封面 + 6),收束 52(= 8 + 36 封面 + 8)。
+ * ⚠️ **两态的纵向 padding 必须由封面反推**(块高 − 封面)/ 2,不能单独调:块高是硬约束
+ * (52 = 栏高,见 [MINI_H_COLLAPSED]),封面一改 padding 不跟着改整块就会漂。
+ */
+val MINI_H = 44.dp
+
+/**
+ * 收束态整块高度 = **栏高** [GLASS_BAR_H]。
+ *
+ * 与鸿蒙同一判据:收束那一行只有一层容器(一颗球 + 一条与栏等高的胶囊),
+ * 播放条自己就是那一行的容器,而不是嵌在栏里面。
+ */
+val MINI_H_COLLAPSED = GLASS_BAR_H
+
+/** 展开态播放条与底部栏之间的缝(鸿蒙实测 26px = 8vp,本端取同一档)。 */
+val MINI_GAP = 8.dp
+
+/**
+ * 播放条距屏幕左右 = **与玻璃栏同一道缝**([GLASS_SIDE_PAD])。
+ *
+ * 这是这轮改动的核心约束之一(用户原话:「宽度与底部 tab 保持一致」)。
+ * 旧版是通栏 `fillMaxWidth()`,压在悬浮胶囊上读起来像两块不相干的板。
+ * 宽度只有一个来源,栏改了播放条跟着改,不会各漂各的 —— 鸿蒙那边是同一对常量
+ * (`BAR_SIDE_MARGIN` / `MINI_SIDE_MARGIN`)承担同一条约束。
+ */
+val MINI_SIDE_PAD = GLASS_SIDE_PAD
+
+/**
+ * 两态的封面边长。**收束比展开大一档**,两档都 ≈ 块高的 70%(鸿蒙是 34/40 配 48/56,同一比例)。
+ *
+ * ⚠️ **这一对在代码里是瞬变,不是逐帧插值** —— [Artwork] 的边长是它**内部**的 `size: Int`,
+ * 父层的属性动画管不到它。要做成真动画得让封面尺寸本身可动画(代价是弹簧途中 Coil
+ * 会按每一帧的新边长重发请求),本轮明知代价选下瞬变:4dp 的跳幅叠在整块位移里读不出形状。
+ * 装机若读得出来,下一步做可动画封面,而不是调这个数。
+ */
+val MINI_COVER_WIDE = 32
+val MINI_COVER_NARROW = 36
+
+/** 播放/暂停、下一集、队列三枚按钮的**图标**边长(鸿蒙装机三档改判后定在 16,本端同档)。 */
+val MINI_SYMBOL = 16.dp
+
+/**
+ * 三枚按钮的**命中框**边长 = 图标 + 四周各 12 = 40(与 [MINI_SYMBOL] 之差的一半是内缩)。
+ *
+ * 图标只有 16dp,而拇指目标是 40dp(玻璃栏那三格也是按这一档给的);
+ * 这三枚挤在标题与胶囊右缘之间,不外扩就会被左右两个大命中目标夹住点不中。
+ * ⚠️ 三枚之间**不留横向缝隙**:40 × 3 = 120dp,再各留 8dp 就把标题区挤没了
+ * (411dp 屏宽、侧缝 2×24、收束态还要扣掉球槽 52+8 与内白 14/8,留给标题只剩约 100dp)。
+ */
+val MINI_HIT = 40.dp
+
+/** 胶囊左内边距:封面左缘对齐页面文字(两态同值,含义不同 —— 收束态它只是头部留白)。 */
+val MINI_PAD_START = 14.dp
+
+/** 胶囊右内边距,**按态两档**:展开 16 / 收束 8(收束态三枚按钮离胶囊右 8dp 装机读着合适)。 */
+val MINI_PAD_END = 16.dp
+val MINI_PAD_END_COLLAPSED = 8.dp
+
+/**
+ * 收束态左端那颗球的**槽宽**(与栏等高那一档,参考片是 56×56 的方槽)。
+ * 盘比槽小 [MINI_BALL_DIAM] 那点余量是留给"呼吸"的,撑得太满会读成"一个洞"而不是"一颗球"。
+ */
+val MINI_BALL_SLOT = MINI_H_COLLAPSED
+
+/** 圆盘直径(槽 52 留上下各 2dp)。 */
+val MINI_BALL_DIAM = 48.dp
+
+/**
+ * 球槽与胶囊之间的**外缝**。
+ *
+ * ⚠️ 只能挂在槽的右边距上、并且**按收束态插值**,不能写成外层 `Row({ space })` 那种统一间距:
+ * 展开态槽宽是 0,统一间距会让整条播放条白右移 8dp,封面左缘就和列表文字对不齐。
+ */
+val MINI_BALL_GAP = 8.dp
+
+/** 盘上图标:玻璃栏的 tab 图标实测 19dp([GlassNavBar] 里那枚 `size(19.dp)`),同档取 20。 */
+val MINI_BALL_SYMBOL = 20.dp
+
+/**
+ * 盘面透明度:中性 `onSurface` 半透明,**不跟强调色**。
+ *
+ * 与鸿蒙第六轮同一个结论:强调色半透明的盘在深色底上泛一层绿,和盘上图标同色之后
+ * 读成"一个实心圆点",参考片那种"整条栏收在这里"的透镜感就没了。
+ * 也不要改成完全不透明 `surface` —— 那等于自己画一块板,正是这一轮要撤掉的"两层容器"形状。
+ */
+const val MINI_BALL_TINT = 0.45f
+
+/**
+ * 滚动累计多少 dp 翻转收束/展开。**与鸿蒙 [MORPH_SLOPE] 同档**(40vp ≈ 手指 13mm)。
+ *
+ * 判据用**累计量**而不是单帧量:惯性滑动里一帧只有 1–8px,按单帧判阈值要么一碰就翻、
+ * 要么永远不翻。每次翻转后清零。
+ */
+val MINI_MORPH_SLOPE = 40.dp
+
+/**
+ * morph 弹簧参数。鸿蒙给的是 response 0.34s / damping 0.86;
+ * Compose 没有 response 这一档,按 `stiffness = (2π / response)²` 换算 ≈ 341
+ * (仓库里已有的先例是 response 0.42 ⇒ 224,同一式子)。
+ * ⚠️ 播放条的几何动画与栏的淡出动画**必须共用这一档**,否则两条曲线不同步会看出"散架"。
+ * ⚠️ **0.86 是欠阻尼:落点会有 ≈0.5% 的过冲,分数会短暂越过 1 和 0。**
+ * 这个量一旦乘进 `padding` / `size` 就是负 Dp,Compose 直接抛
+ * `Padding must be non-negative`(装机即崩,见 H180)⇒ 几何侧一律先 `coerceIn(0f, 1f)` 再用。
+ */
+const val MINI_MORPH_DAMP = 0.86f
+const val MINI_MORPH_STIFFNESS = 341f
+
+/**
+ * 底部迷你播放条 —— **胶囊形态 + 随滚动收进栏那一行**(2026-10-15 向鸿蒙对齐)。
+ *
+ * ## 与旧版的差别
+ *
+ * 旧版是 `fillMaxWidth()` 的通栏 `Surface(surfaceVariant)` + 顶部一条占布局的进度线,
+ * 实际高 ≈66dp,永远坐在栏下方。这一轮按用户要求改成鸿蒙那套:
+ * 椭圆胶囊、左右与栏同一道缝([MINI_SIDE_PAD])、与栏之间 8dp([MINI_GAP])、
+ * 上下滑动时整块收进栏那一行并把栏淡掉、左端露出一颗当前格的小圆球作为展开入口。
+ * **唯一保留本端特色的是底部玻璃栏的跟手光晕/透镜**(不动 [GlassNavBar] 的几何,
+ * 只是给它一个 `collapsed` 去淡出)。
+ *
+ * ## 为什么所有几何都从一个浮点 `f` 派生
+ *
+ * 两态之间要同时动:块高、球槽宽、外缝、右内边距、整块落点、栏的透明度、三项的淡出。
+ * 逐个属性各挂一条动画就有六条曲线要同步;而 `animateFloatAsState(f)` 一条曲线,
+ * 每个量写成 `start + (end - start) * f` 的 Dp 算式,天然同相位。
+ * ⚠️ **封面的边长不在这一套里**(见 [MINI_COVER_WIDE] 那条 ⚠️),它是 `if (collapsed)` 瞬变。
+ *
+ * ## 收束态三个 tab 点不动,是这一形态的必然
+ *
+ * 那一行只剩胶囊与那颗球(栏淡到 0)。鸿蒙那边同一结论,已按"就是设计"结案 ——
+ * 想切格先点球展开。本端的 [GlassNavBar] 即使在 alpha=0 时**仍然消费指针事件**
+ * (手势回调里是门控而不是提前 return),所以点击不会漏到底下列表。
+ *
+ * @param collapsed 是否收束进栏那一行(由外层滚动判据驱动,见 `ReverbRoot.MainShell`)。
+ * @param ballIcon  当前那一格的图标(与栏的 `GlassTabSpec.icon` 同源同一枚);传 null 就不画球槽
+ *                  —— 频道详情/队列那两处全屏页要传 null,它们的播放条不参与收束。
+ * @param onRestore 点球:把播放条展开回栏上方,**不改当前 tab**(盘上是当前那一格,点它不切页)。
+ * @param collapseIntoBar 这一份**是否叠在玻璃栏之上**(只有 tab 外壳是)。为 true 时整块要按
+ *                  展开态往上抬出栏的那条带([GLASS_BAR_H] + [MINI_GAP]);为 false 的是详情/队列
+ *                  那种"播放条自己贴底"的全屏页,抬了就是凭空多出一条 60dp 的空隙。
+ *                  ⚠️ 这一道抬升**必须写在组件内部、由同一条 `f` 派生**:若在 `MainShell` 里
+ *                  按值取一个动画分数传进来,那个 State 会被外壳解包 ⇒ 动画途中**每一帧重排
+ *                  整棵外壳**(三张满屏列表),而外壳里根本没有需要逐帧变的量(硬规矩 6/7)。
+ */
 @Composable
 fun MiniPlayer(
     episode: Episode,
@@ -830,73 +982,175 @@ fun MiniPlayer(
     onToggle: () -> Unit,
     onNext: () -> Unit,
     onExpand: () -> Unit,
-    onOpenQueue: () -> Unit = {}
+    onOpenQueue: () -> Unit = {},
+    collapsed: Boolean = false,
+    ballIcon: ImageVector? = null,
+    onRestore: () -> Unit = {},
+    collapseIntoBar: Boolean = false
 ) {
-    Surface(
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth()
+    val f by animateFloatAsState(
+        targetValue = if (collapsed) 1f else 0f,
+        animationSpec = spring(dampingRatio = MINI_MORPH_DAMP, stiffness = MINI_MORPH_STIFFNESS),
+        label = "miniMorph"
+    )
+    val scheme = MaterialTheme.colorScheme
+    // ⚠️ **几何一律读钳过的 `fc`,不读 `f`**(2026-10-16 装机即崩,见 H180)。
+    // [MINI_MORPH_DAMP]=0.86 是**欠阻尼**,弹簧落到终点会过冲 ≈0.5%(f 短暂 >1 / <0)。
+    // 而下面这些量是**喂给 padding 的 Dp**:`lift = 60dp × (1 - f)`,f=1.005 就是 -0.3dp;
+    // `padding(end = 8dp × f)`,恢复态 f=-0.005 就是 -0.04dp。Compose 对负 padding 直接抛
+    // `IllegalArgumentException: Padding must be non-negative`,而且是**每次收束必崩**
+    // (过冲只有 0.3%,眼睛看不出来,所以现场表现是"一划就闪退、屏上什么都没变")。
+    // 钳在这里而不是逐个量各写一次 coerce:与硬规矩 10 同一条 —— 不变式在出口一次性保证。
+    // 弹簧本身不动:0.5% 的过冲正是那点"呼吸感",看不见但摸得到;要的是别让几何吃下它。
+    val fc = f.coerceIn(0f, 1f)
+    val blockH = MINI_H + (MINI_H_COLLAPSED - MINI_H) * fc
+    // 球槽宽 = (槽 + 外缝) 按收束态插值。展开态归零,但**不能用 if 把球摘掉** ——
+    // 摘掉会让整行内容一次性左移,而封面/文字正按弹簧滑过来,两种运动叠在一起就是"抖"。
+    val slotW = (MINI_BALL_SLOT + MINI_BALL_GAP) * fc
+    val cover = if (collapsed) MINI_COVER_NARROW else MINI_COVER_WIDE
+    val endPad = MINI_PAD_END + (MINI_PAD_END_COLLAPSED - MINI_PAD_END) * fc
+    // 落点:展开态抬到栏上方再留一道缝,收束态落进栏那一条带里(与 [blockH] 同源同一条曲线)。
+    val lift = if (collapseIntoBar) (GLASS_BAR_H + MINI_GAP) * (1f - fc) else 0.dp
+
+    Box(
+        // ⚠️ 这里**没有** `modifier` 形参,是有意的:整块的落点(在叠层里贴哪一边)
+        // 必须由调用方的外层容器决定。曾经给它传过 `align(BottomCenter)`,而中间隔着
+        // `AnimatedVisibility`(它自己包一层 Box)⇒ align 被那层吃掉、整块退化成顶对齐,
+        // `lift` 只是把容器撑高、**播放条从来不落下**(见 H181)。
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = MINI_SIDE_PAD)
+            .padding(bottom = lift)
     ) {
-        Column {
-            LinearProgressIndicator(
-                progress = { progress.coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(2.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = Color.Transparent
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onExpand)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Artwork(episode.artworkUrl, size = 44, corner = 8)
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        episode.title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onBackground,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        episode.podcastTitle,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                if (buffering) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                } else {
-                    IconButton(onClick = onToggle) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (ballIcon != null) {
+                Box(
+                    Modifier
+                        .size(width = slotW, height = blockH)
+                        // 宽 0 时盘不会自动被裁掉,必须显式裁到边界(裁的是矩形,不是圆角)
+                        .clipToBounds()
+                        .padding(end = MINI_BALL_GAP * fc),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        Modifier
+                            .size(MINI_BALL_DIAM)
+                            .clip(CircleShape)
+                            .background(scheme.onSurface.copy(alpha = MINI_BALL_TINT))
+                            .clickable(enabled = collapsed, onClick = onRestore),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Icon(
-                            if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = stringResource(if (isPlaying) R.string.a11y_pause else R.string.a11y_play),
-                            tint = MaterialTheme.colorScheme.primary
+                            ballIcon,
+                            contentDescription = if (collapsed)
+                                stringResource(R.string.a11y_expand_player) else null,
+                            tint = scheme.primary,
+                            modifier = Modifier.size(MINI_BALL_SYMBOL)
                         )
                     }
                 }
-                IconButton(onClick = onNext, enabled = hasNext) {
-                    Icon(
-                        Icons.Rounded.SkipNext,
-                        contentDescription = stringResource(R.string.a11y_next),
-                        tint = if (hasNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                }
-                // 队列入口:位次与 macOS 底部条/鸿蒙迷你条一致 —— 都在最右
-                IconButton(onClick = onOpenQueue) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.QueueMusic,
-                        contentDescription = stringResource(R.string.queue_title),
-                        tint = MaterialTheme.colorScheme.onBackground
-                    )
+            }
+            Box(
+                Modifier
+                    .weight(1f)
+                    .height(blockH)
+                    .clip(CircleShape)
+                    // 不透明实底:收束态底下就是列表内容,半透明会让胶囊和文字一起糊掉
+                    // (鸿蒙那边靠系统材质做到"随背后内容动",本端没有等价物,先按不透明保底)。
+                    .background(scheme.surface),
+                // 内容**垂直居中**在胶囊里(与那颗盘同心)。这一层若按默认的 TopStart 摆,
+                // 收束态 52 高的块里 40 高的内容会顶在上沿、盘却在中间,两者差 6dp 一眼可见。
+                contentAlignment = Alignment.Center
+            ) {
+                // 进度线改成**覆盖层**,压在胶囊上沿,不再占行的高度(显式 align,不吃上面那个居中)。
+                // 旧口径 2 + (8 + 44 + 8) 那 2dp 会把封面居中的位置挤掉,两态 padding 只能不等;
+                // 去掉之后两态都对称,球槽也才放得进栏高那一档。
+                LinearProgressIndicator(
+                    progress = { progress.coerceIn(0f, 1f) },
+                    modifier = Modifier.align(Alignment.TopStart).fillMaxWidth().height(2.dp),
+                    color = scheme.primary,
+                    trackColor = scheme.onSurfaceVariant.copy(alpha = 0.18f)
+                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = MINI_PAD_START, end = endPad),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(
+                        Modifier
+                            .weight(1f)
+                            .clickable(onClick = onExpand),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Artwork(episode.artworkUrl, size = cover, corner = if (collapsed) cover / 2 else 8)
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                episode.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = scheme.onBackground,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                episode.podcastTitle,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = scheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                    // 三枚相邻不留缝(理由见 [MINI_HIT])
+                    Box(
+                        Modifier.size(MINI_HIT).clip(CircleShape).clickable(onClick = onToggle),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (buffering) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                strokeWidth = 2.dp,
+                                color = scheme.primary
+                            )
+                        } else {
+                            Icon(
+                                if (isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                                contentDescription = stringResource(
+                                    if (isPlaying) R.string.a11y_pause else R.string.a11y_play
+                                ),
+                                tint = scheme.primary,
+                                modifier = Modifier.size(MINI_SYMBOL)
+                            )
+                        }
+                    }
+                    Box(
+                        Modifier
+                            .size(MINI_HIT)
+                            .clip(CircleShape)
+                            .clickable(enabled = hasNext, onClick = onNext),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.SkipNext,
+                            contentDescription = stringResource(R.string.a11y_next),
+                            tint = if (hasNext) scheme.primary else scheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            modifier = Modifier.size(MINI_SYMBOL)
+                        )
+                    }
+                    // 队列入口:位次与 macOS 底部条/鸿蒙迷你条一致 —— 都在最右
+                    Box(
+                        Modifier.size(MINI_HIT).clip(CircleShape).clickable(onClick = onOpenQueue),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Rounded.QueueMusic,
+                            contentDescription = stringResource(R.string.queue_title),
+                            tint = scheme.onBackground,
+                            modifier = Modifier.size(MINI_SYMBOL)
+                        )
+                    }
                 }
             }
         }

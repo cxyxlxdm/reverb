@@ -40,7 +40,7 @@ export struct DiscoverPage {
    * 本页有五处(List:继续收听 / 最新 / 分类 / 电台 / …),另加一条横向 Scroll 与一个
    * 对话框内的 List **不挂**:前者不该触发收束,后者压根不在栏上方的内容里。
    */
-  onScrollDy: (dy: number) => void = () => {};
+  onScrollDy: (dy: number, st: ScrollState) => void = () => {};
   /// 见 LibraryPage 同名注释:驱动界面的 store 必须被观察,不能 `this.app.xxx` 直读。
   /// 电台按钮(图标/激活态/准备中)与「继续收听」都依赖它们。
   @ObjectLink settings: SettingsStore;
@@ -804,7 +804,7 @@ export struct DiscoverPage {
     }
     .scrollBar(BarState.Off)
     .contentEndOffset(this.bottomPad)
-    .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+    .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
     .width('100%')
     .layoutWeight(1)
   }
@@ -868,7 +868,7 @@ export struct DiscoverPage {
       }
       .scrollBar(BarState.Off)
       .contentEndOffset(this.bottomPad)
-      .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+      .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
       .width('100%').height('100%')
     }
     .onRefreshing(() => { this.refreshInbox(true); })
@@ -1027,7 +1027,7 @@ export struct DiscoverPage {
           }
           .scrollBar(BarState.Off)
           .contentEndOffset(this.bottomPad)
-          .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+          .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
           .width('100%').height('100%')
         }
       }
@@ -1186,7 +1186,7 @@ export struct DiscoverPage {
           }
           .scrollBar(BarState.Off)
           .contentEndOffset(this.bottomPad)
-          .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+          .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
           .layoutWeight(1)
         }
       } else {
@@ -1219,7 +1219,7 @@ export struct DiscoverPage {
           }
           .scrollBar(BarState.Off)
           .contentEndOffset(this.bottomPad)
-          .onDidScroll((dy: number, _st: ScrollState): void => this.onScrollDy(dy))
+          .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
           .layoutWeight(1)
         }
       }
