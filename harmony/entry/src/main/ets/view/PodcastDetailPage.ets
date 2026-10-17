@@ -8,7 +8,10 @@ import { ListenStatsStore } from '../store/ListenStatsStore';
 import { DownloadManager, DownloadResult } from '../playback/DownloadManager';
 import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, LoadingBox, Artwork, Glyph, Sym } from './Widgets';
-import { EpisodeListItem, PlayModeButton, formatListenDuration, ConfirmDialog, ConfirmSpec } from './Components';
+import {
+  EpisodeListItem, PlayModeButton, formatListenDuration, ConfirmDialog, ConfirmSpec,
+  EpisodeBatchBar, BATCH_AVOID, batchEnqueueAndToast
+} from './Components';
 import { formatCachedAt } from '../util/DateParse';
 import { Log } from '../util/Logger';
 import { Files } from '../util/Files';
@@ -47,6 +50,14 @@ export struct PodcastDetailPage {
   @State descExpanded: boolean = false;
   @State sharing: boolean = false;
   @State pulling: boolean = false;   // 下拉刷新指示器(Refresh 容器)
+  /**
+   * 多选(批量加入待播)的已选集合。**放在页面这一层而不是行里** —— 「全选」要能一次改整列,
+   * 作用域本来就是整列(与追更 / 收藏 / 下载 / 历史四列同一口径)。
+   *
+   * ⚠️ **只走整体替换**(`this.picked = new Set(...)`),不许 `this.picked.add(...)`:
+   * ArkUI V1 对 `@State` 上的 Set 是否观察方法调用没有可靠口径,而赋值一定触发重渲。
+   */
+  @State picked: Set<string> = new Set();
   private loadGeneration: number = 0;
   /**
    * 订阅态与下载态**直接从被观察的 store 读**,不再镜像成本地 @State。
@@ -154,6 +165,8 @@ export struct PodcastDetailPage {
     this.staleAt = 0;
     this.failed = false;
     this.descExpanded = false;
+    // 换频道(seed 切换 / 重新进入)时勾选集合一起清掉:留着会让「已选 N」指向上一档的单集
+    this.picked = new Set<string>();
     if (feedUrl.length === 0) {
       this.loading = false;
       this.failed = true;
@@ -238,6 +251,24 @@ export struct PodcastDetailPage {
     }
   }
 
+  /// 勾选 / 取消一条(整体替换,理由见 `picked` 的注释)。
+  private togglePick(id: string): void {
+    const next = new Set<string>(this.picked);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    this.picked = next;
+  }
+
+  private pickAll(): void {
+    const next = new Set<string>();
+    this.episodes.forEach((e: Episode) => next.add(e.id));
+    this.picked = next;
+  }
+
+  /// 列表末尾的让位量:悬浮播放条那一格(`bottomPad`)+ 选择模式下再多让出浮条那一格。
+  private endOffset(): number {
+    return this.bottomPad + (this.picked.size > 0 ? BATCH_AVOID : 0);
+  }
+
   private async shareChannel(): Promise<void> {
     if (this.sharing) return;
     this.sharing = true;
@@ -256,7 +287,10 @@ export struct PodcastDetailPage {
   }
 
   build() {
-    Stack() {
+    // 浮条落底部 ⇒ 用 Bottom 对齐(与 FeedPage / LibraryPage 各段同一个形状)。
+    // 本页其余三个子节点不受影响:整页 Column 与 ConfirmDialog 都是 100%×100%,
+    // 分享卡片走显式 `position(-2000, 0)`。
+    Stack({ alignContent: Alignment.Bottom }) {
       Column() {
         Row() {
           TopBar({
@@ -335,15 +369,23 @@ export struct PodcastDetailPage {
                   onDeleteDownload: () => { this.askDeleteDownload(e); },
                   // 纯动作,不参与本页渲染,直接用容器单例即可(理由同 DiscoverPage)
                   onPlayNext: () => { this.app.player.playNext(e); },
-                  onEnqueue: () => { this.app.player.enqueue(e); }
+                  onEnqueue: () => { this.app.player.enqueue(e); },
+                  // 长按多选(批量加入待播)。与追更/收藏/下载/历史四列同一套;
+                  // 与 Android 频道详情页同步落地。
+                  showBatch: true,
+                  onEnterSelection: () => { this.picked = new Set<string>([e.id]); },
+                  selectionMode: this.picked.size > 0,
+                  selected: this.picked.has(e.id),
+                  onToggleSelect: () => this.togglePick(e.id)
                 })
               }
-            }, (e: Episode) => e.id)
+              // key 带勾选位:ForEach 在 key 不变时复用行不重建,勾选态就刷不出来(H113)。
+            }, (e: Episode) => `${e.id}|${this.picked.has(e.id) ? 1 : 0}`)
           }
           .scrollBar(BarState.Off)
           .width('100%')
           .height('100%')
-          .contentEndOffset(this.bottomPad)
+          .contentEndOffset(this.endOffset())
         }
         .layoutWeight(1)
         .onRefreshing(() => { this.refresh(); })
@@ -358,6 +400,22 @@ export struct PodcastDetailPage {
       })
         .id('reverb-channel-card')
         .position({ x: -2000, y: 0 })
+
+      // 多选浮条:只在有勾选时组合(与各列"没内容就不摆动作"同一条规矩)。
+      // 让位量与落点成对(见 `BATCH_AVOID` 的注释):这里给落点,`endOffset()` 给列表让位。
+      if (this.picked.size > 0) {
+        EpisodeBatchBar({
+          scheme: this.scheme, fontScale: this.fontScale,
+          picked: this.picked.size, total: this.episodes.length,
+          onSelectAll: () => this.pickAll(),
+          onEnqueue: () => {
+            batchEnqueueAndToast(this.getUIContext(), this.episodes, this.picked);
+            this.picked = new Set<string>();
+          },
+          onExit: () => { this.picked = new Set<string>(); }
+        })
+          .margin({ bottom: this.bottomPad })
+      }
 
       // 删单集下载的二次确认(见 askDeleteDownload)。挂在本页根 Stack 的**最后** ⇒
       // 遮罩能盖住整页(包括顶栏),与 Android AlertDialog 的范围一致。

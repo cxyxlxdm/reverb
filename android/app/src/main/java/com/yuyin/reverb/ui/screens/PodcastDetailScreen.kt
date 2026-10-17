@@ -65,9 +65,11 @@ import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.PodcastState
 import com.yuyin.reverb.ui.components.Artwork
+import com.yuyin.reverb.ui.components.EpisodeBatchBar
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.PlayModeButton
+import com.yuyin.reverb.ui.components.SELECTION_BAR_SLOT
 import com.yuyin.reverb.ui.components.formatListenDuration
 import com.yuyin.reverb.ui.share.ShareCards
 import com.yuyin.reverb.ui.podcastViewModel
@@ -95,7 +97,14 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
     // 删除下载是不可逆操作,点删除图标先弹确认 —— 与「音阁 · 下载」同一颗框、同一句文案。
     // 此前只有下载段有确认,详情页漏了(鸿蒙同样漏,本轮两端一起补)。
     var pendingDelete by remember { mutableStateOf<Episode?>(null) }
+    // 多选(批量加入待播)的已选集合:与追更/收藏/下载/历史同一套,放在页面这一层而不是行里
+    // (行会被 LazyColumn 回收,且「全选」要一次改整列)。空集 = 不在选择模式。
+    // 按 feedUrl remember:从 A 档跳进 B 档时这一列整个换了,勾选集合不能跟着过去。
+    var picked by remember(feedUrl) { mutableStateOf(emptySet<String>()) }
     val state = vm.state
+    // 批量条的「全选」与新增数都按**当前显示的那一份**单集算(与各列表同一口径)。
+    // 单独取出来是因为浮条挂在 Box 里、与 `when (val s = state)` 是兄弟,拿不到分支内的 `s`。
+    val batchEpisodes = (state as? PodcastState.Loaded)?.episodes ?: emptyList()
 
     // 下拉刷新:强制重新拉取最新单集。与发现页同款:加最短可见时长,让刷新
     // 有可感知的过程而非一闪而过(finally 兜底,异常也收起指示器)。
@@ -184,7 +193,11 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                         // 播放条在这里是**悬浮层**(见 ReverbRoot 的 FloatingMini),末项必须
                         // 能滚到条子底下,所以让位量由那一层经 LocalGlassBottomPad 给下来 ——
                         // 与三个 tab 页同一个机制,只是量不同:本页没有玻璃栏,只有条子。
-                        contentPadding = PaddingValues(bottom = 24.dp + LocalGlassBottomPad.current)
+                        // 选择模式里还要再让出批量条那一格(SELECTION_BAR_SLOT),否则末行被压半截。
+                        contentPadding = PaddingValues(
+                            bottom = 24.dp + LocalGlassBottomPad.current +
+                                if (picked.isNotEmpty()) SELECTION_BAR_SLOT else 0.dp
+                        )
                     ) {
                         // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
                         if (s.staleAt != 0L) {
@@ -212,13 +225,22 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                                 onDownload = { DownloadManager.download(ep) },
                                 onDeleteDownload = { pendingDelete = ep },
                                 played = played,
-                                onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                                // 长按菜单里**不给**「标记已播完」(与鸿蒙同口径):这一列是
+                                // 频道的全部单集,绝大多数不在待播队列里,标了也没处看、没处撤。
+                                // 要改已播完状态去「音阁 · 历史」(播过的才会在那一列里)。
+                                // 标题变暗 + 打勾仍按 `played` 显示,只是这一页不提供改的入口。
                                 onPlayNext = { PlayerController.playNext(ep) },
                                 onEnqueue = { PlayerController.enqueue(ep) },
                                 // 详情页行内「加入播放列表」键(对齐鸿蒙):浏览场景一步入队
                                 showQueueAdd = true,
                                 // 封面不加「进频道页」:已经在这档的页面里,再点就是往栈上压一份自己
-                                coverOpensChannel = false
+                                coverOpensChannel = false,
+                                selectionMode = picked.isNotEmpty(),
+                                selected = ep.id in picked,
+                                onToggleSelect = {
+                                    picked = if (ep.id in picked) picked - ep.id else picked + ep.id
+                                },
+                                onEnterSelection = { picked = setOf(ep.id) }
                             )
                         }
                     }
@@ -227,6 +249,18 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
             // 与发现页/收件箱同款的标准容器(跟手箭头 + 灰圆),静止态越界部分
             // 由上面的 clipToBounds 裁掉,不残留
             PullToRefreshContainer(state = pullState, modifier = Modifier.align(Alignment.TopCenter))
+            // 多选浮条:与四个列表同一条、同一落点(底部悬浮)。只在有勾选时组合。
+            // 用外面这份 `batchEpisodes` 而不是 `when` 分支里的 `s`:浮条和 `when` 是 Box 的
+            // 兄弟子节点,`when (val s = state)` 捕获的那个 s 只在各分支体内可见。
+            EpisodeBatchBar(
+                picked = picked,
+                episodes = batchEpisodes,
+                onPicked = { picked = it },
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = LocalGlassBottomPad.current + 4.dp)
+            )
         }
     }
 
