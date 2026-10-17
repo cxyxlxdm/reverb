@@ -188,9 +188,15 @@ class SettingsStore(context: Context) {
          * 变更历史:
          *   1 = 首个版本(2026-08)。含:无后端服务、本地存储项、网络访问地址(发布方 RSS /
          *       官网推荐清单 / 可选的公开检索接口)、网络状态权限与 SSID 说明、权限清单。
+         *   2 = 2026-10(随 1.0.5)。新增网络访问地址(GitHub 公开发布页接口 api.github.com 及其
+         *       资产下载)、新增权限 REQUEST_INSTALL_PACKAGES、同意页多一段「应用内更新」自述。
+         *       ⚠️ 这三样**都只在自分发完整版**:商店渠道那一段是空串、包里也没有那项权限,所以
+         *       商店用户重看的同意页与上一版逐字相同。版本号没做成按渠道不同的常量:自述文档
+         *       (privacy.html)两个渠道都变了,而商店渠道本身正等整体收口(见 ROADMAP),
+         *       为一次性的重问引入两套版本号更容易漂。
          *
          * 改这个数之后**必须重新打包**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
          */
-        const val PRIVACY_VERSION = 1
+        const val PRIVACY_VERSION = 2
     }
 }

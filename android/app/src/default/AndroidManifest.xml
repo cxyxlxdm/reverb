@@ -6,8 +6,17 @@
 
   商店渠道不含本文件 —— 个别市场把录音列为敏感隐私权限、需逐次举证,
   故那个渠道整块去掉了该功能(见 app/build.gradle 的 store flavor 注释)。
+
+  REQUEST_INSTALL_PACKAGES(「安装未知应用」)**同样只属于本文件**:
+  它唯一的消费者是应用内更新(见 src/default/java/.../update/SelfUpdate.kt),
+  而那个功能**不进商店渠道** —— 商店包由市场负责升级,自更新既绕过市场审核,
+  又要为敏感权限逐次举证,对那个渠道的用户是纯亏。
+  所以商店那份合并结果里不出现这一条,验收方式仍是解包 dump 权限清单(硬规矩 1)。
+  注意:声明它不等于授权 —— 真正安装前系统仍会要求用户逐次放行(未放行时应用只把
+  用户送到那一页的开关,见 openInstallPermissionPage)。
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>
