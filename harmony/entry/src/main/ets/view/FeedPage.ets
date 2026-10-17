@@ -6,7 +6,7 @@ import { SubscriptionStore, HistoryStore } from '../store/Stores';
 import { InboxStore } from '../store/InboxStore';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, LoadingBox } from './Widgets';
-import { EpisodeListItem, PlayModeButton, EpisodeBatchBar, BATCH_AVOID, batchEnqueueAndToast } from './Components';
+import { EpisodeListItem, PlayModeButton, EpisodeBatchBar, BATCH_BAR_GAP, BATCH_AVOID, batchEnqueueAndToast } from './Components';
 import { Log } from '../util/Logger';
 
 /**
@@ -162,7 +162,7 @@ export struct FeedPage {
           onEnqueue: () => this.enqueuePicked(),
           onExit: () => { this.picked = new Set<string>(); }
         })
-          .margin({ bottom: this.bottomPad })
+          .margin({ bottom: this.bottomPad + BATCH_BAR_GAP })
       }
     }
     .width('100%').height('100%')

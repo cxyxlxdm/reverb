@@ -35,7 +35,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatListBulleted
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -90,6 +89,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -795,15 +795,17 @@ fun EpisodeListItem(
             }
         }
         if (showQueueAdd && onEnqueue != null && !selectionMode) {
-            // 与鸿蒙同位次(收藏心形之后、下载控件之前);图标用 PlaylistAdd(列表+加号),
-            // 不用 QueueMusic —— 那是「打开队列页」的入口,同形不同义会误导(鸿蒙真机反馈)。
+            // 与鸿蒙同位次(收藏心形之后、下载控件之前)。图标是**手抄鸿蒙那枚** `add_songlist`
+            // (列表 + 音符 + 加号)—— Material 没有这一枚,而直接用 QueueMusic 会和
+            // 「打开队列页」的入口同形不同义(两端的注释里都记着这条真机反馈)。
+            // 见 `res/drawable/ic_queue_add.xml`。
             IconButton(onClick = {
                 onEnqueue()
                 // 入队结果在别页,界面无任何变化,不提示等于没按上
                 Toast.makeText(context, R.string.queue_added, Toast.LENGTH_SHORT).show()
             }) {
                 Icon(
-                    Icons.AutoMirrored.Rounded.PlaylistAdd,
+                    painterResource(R.drawable.ic_queue_add),
                     contentDescription = stringResource(R.string.queue_add),
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )

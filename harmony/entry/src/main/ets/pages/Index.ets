@@ -17,7 +17,7 @@ import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
 import {
   SystemTabItem, barFloating, pickMaterialType, TAB_BAR_H, TAB_KEY, MORPH_KEY, MORPH_SLOPE,
-  MINI_H, MINI_GAP, MINI_SIDE_MARGIN, morphSpring, barReserve
+  MINI_H, MINI_GAP, MINI_SIDE_MARGIN, morphSpring, barReserve, channelMiniBottom
 } from '../view/BottomBar';
 import { hdsMaterial, HdsTabs } from '@kit.UIDesignKit';
 import { LibraryPage } from '../view/LibraryPage';
@@ -455,8 +455,8 @@ struct Index {
          * 旧写法它自己占一行、底边正好贴在避让区上沿 —— 于是胶囊下半截的两个圆角
          * 吃在屏幕边里,读出来就是"底部一块不透明的长方形板",和三个 tab 页上那颗
          * 悬浮椭圆不是同一个东西。现在两页同一口径:左右同那道 23vp 缝(在组件内部的
-         * [MINI_SIDE_MARGIN])、底边离避让区 8vp([MINI_GAP]),列表侧用 `contentEndOffset`
-         * 让出 **56 = 条高 48 + 缝 8**,否则末项永远滚不出条子底下。
+         * [MINI_SIDE_MARGIN])、列表侧用 `contentEndOffset` 让出「落点 + 条高」,
+         * 否则末项永远滚不出条子底下。
          * 这一页没有 tab 栏,所以**永不收束**(`collapsed` 用组件默认值 false)。
          *
          * ⚠️ **但只改成悬浮还不够**(2026-10-16 用户第二次指出「底部依然有一小段不透明」,
@@ -465,8 +465,12 @@ struct Index {
          * 整页底部读起来就是"内容里嵌了一块不透明的东西"。三个 tab 页没有这一条:
          * 外壳只垫 `top`(见下面 `.padding({ top: this.topInset })`),底部由 `HdsTabs`
          * 自己按 `barBottomMargin = bottomInset` 落。所以这里改成同一口径,**inset 进两处**:
-         * 胶囊落点 `bottomInset + MINI_GAP`、列表让位 `bottomInset + 条高 + 缝`。
+         * 胶囊落点、列表让位 = 落点 + 条高。
          * 只进一处都不成立 —— 只进落点则末行藏进小白条,只进让位量则那条板照旧。
+         *
+         * ⚠️ **落点不走 tab 页那式子(`inset + 缝`)**,走 [channelMiniBottom] —— 它把基准
+         * 钳到 Android 那道 16vp。2026-10-17 用户第三次提这一处:量出来 Android 24dp /
+         * 鸿蒙 36vp(占屏 3.06% vs 4.35%),差的全在鸿蒙那道更高的指示器区上。
          */
         Stack({ alignContent: Alignment.Bottom }) {
           PodcastDetailPage({
@@ -479,7 +483,8 @@ struct Index {
             listenStats: this.listenStats,
             // 单集行的「正在播放」高亮要读播放态
             player: this.player,
-            bottomPad: this.bottomInset + (this.player.current === null ? 0 : MINI_H + MINI_GAP),
+            bottomPad: this.player.current === null
+              ? this.bottomInset : this.detailLanding() + MINI_H,
             onBack: () => { this.stack.pop(); },
             onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
           })
@@ -491,7 +496,7 @@ struct Index {
               onExpand: () => { this.stack.pushPathByName('player', null); },
               onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
             })
-              .margin({ bottom: this.bottomInset + MINI_GAP })
+              .margin({ bottom: this.detailLanding() })
           }
         }
         .width('100%').height('100%')
@@ -572,6 +577,14 @@ struct Index {
    */
   private miniBottom(): number {
     return this.collapsed ? this.bottomInset : this.bottomInset + TAB_BAR_H + MINI_GAP;
+  }
+
+  /**
+   * 频道页(没有 tab 栏那一支)悬浮胶囊的落点。见 [channelMiniBottom] 的账 ——
+   * 那一页的落点与列表让位必须同源于此,否则改了落点忘了让位,末行会藏进胶囊底下。
+   */
+  private detailLanding(): number {
+    return channelMiniBottom(this.bottomInset);
   }
 
   /**

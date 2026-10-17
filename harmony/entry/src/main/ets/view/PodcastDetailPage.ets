@@ -10,7 +10,7 @@ import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, LoadingBox, Artwork, Glyph, Sym } from './Widgets';
 import {
   EpisodeListItem, PlayModeButton, formatListenDuration, ConfirmDialog, ConfirmSpec,
-  EpisodeBatchBar, BATCH_AVOID, batchEnqueueAndToast
+  EpisodeBatchBar, BATCH_BAR_GAP, BATCH_AVOID, batchEnqueueAndToast
 } from './Components';
 import { formatCachedAt } from '../util/DateParse';
 import { Log } from '../util/Logger';
@@ -414,7 +414,7 @@ export struct PodcastDetailPage {
           },
           onExit: () => { this.picked = new Set<string>(); }
         })
-          .margin({ bottom: this.bottomPad })
+          .margin({ bottom: this.bottomPad + BATCH_BAR_GAP })
       }
 
       // 删单集下载的二次确认(见 askDeleteDownload)。挂在本页根 Stack 的**最后** ⇒

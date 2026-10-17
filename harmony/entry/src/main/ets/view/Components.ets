@@ -701,14 +701,21 @@ export struct EpisodeListItem {
 export const BATCH_BAR_H = 38;
 
 /**
- * 多选浮条**自己 + 它与底部栏的缝**共占的高度:各列表在选择模式里把它加进
- * 滚动容器的 `contentEndOffset`,否则末行正好被这条带压掉半截。
+ * 多选浮条**自己 + 它与下面那颗(播放条 / 栏)的缝**共占的高度:各列表在选择模式里
+ * 把它加进滚动容器的 `contentEndOffset`,否则末行正好被这条带压掉半截。
+ *
+ * 缝取 **4**,对齐 Android 那侧 `EpisodeBatchBar` 上显式写的 `.padding(bottom = 底栏让位 + 4.dp)`
+ * —— 真机两侧各量过一次:Android 浮条底边到播放条顶边 ≈12px(= 4dp),鸿蒙是 **≈0**
+ * (浮条落点数值上正好等于播放条顶边,两条带贴在一起读不出"两套东西")。
  *
  * ⚠️ 避让量要**同时进两处**才成立:浮条的落点(`bottomPad + BATCH_BAR_GAP` 那条 margin)
  * 和列表的让位(`bottomPad + BATCH_AVOID`)。只进一处 = 要么条压住最后一行,
  * 要么底部多空一截。这条规律在 H184 / H185 各成立过一次,这里是第三次。
+ * (2026-10-17 之前这段注释里写的 `BATCH_BAR_GAP` **压根不存在** —— 注释跑在实现前面,
+ * 落点那五处一直只写了 `bottomPad`,所以缝一直是 0。)
  */
-export const BATCH_AVOID = BATCH_BAR_H + 6;
+export const BATCH_BAR_GAP = 4;
+export const BATCH_AVOID = BATCH_BAR_H + BATCH_BAR_GAP;
 
 /**
  * 多选状态下浮在列表底部的那条操作条(「已选 N · 全选 · 加入待播 · 退出」)。
