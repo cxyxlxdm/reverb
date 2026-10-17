@@ -78,6 +78,7 @@ import com.yuyin.reverb.ui.screens.PodcastDetailScreen
 import com.yuyin.reverb.ui.screens.QueueScreen
 import com.yuyin.reverb.ui.screens.SettingsScreen
 import com.yuyin.reverb.ui.screens.StampsScreen
+import com.yuyin.reverb.update.SelfUpdateHost
 
 /**
  * 外层导航：全屏页面（tab 外壳 / 播放器 / 设置 / 关于 / 开源）互不共享底部栏，
@@ -152,6 +153,10 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
         composable("about") { FullScreen { AboutScreen(onBack = { rootNav.popBackStack() }) } }
         composable("licenses") { FullScreen { LicensesScreen(onBack = { rootNav.popBackStack() }) } }
     }
+    // 应用内更新那一个弹窗(自分发渠道才有内容,商店渠道那份渲染空)。
+    // 挂在最外层而不是某个页面里:它是**跨页面的启动提示**,谁在前台都该看得见,
+    // 而且它只在有状态时才组合出东西(见 SelfUpdateUi),常驻在这里的成本是一次 Flow 订阅。
+    SelfUpdateHost()
     }
 }
 

@@ -16,6 +16,7 @@ import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.ReverbRoot
 import com.yuyin.reverb.ui.screens.PrivacyConsentScreen
 import com.yuyin.reverb.ui.theme.ReverbTheme
+import com.yuyin.reverb.update.SelfUpdate
 
 class MainActivity : ComponentActivity() {
     // 每次收到「打开播放页」意图就自增，ReverbRoot 监听此信号并导航
@@ -84,6 +85,10 @@ class MainActivity : ComponentActivity() {
         if (container.settingsStore.updatesEnabled.value) {
             ReverbApp.scheduleFeedUpdates(this)
         }
+        // 应用内更新:每次进程只检测一次([SelfUpdate.start] 内部挡重)。放在这里而不是
+        // Application.onCreate —— 它要读网络状态判「是不是 Wi-Fi」,与上面两条同一个门。
+        // **商店渠道那份是空实现**,那个包里连这段逻辑都没有(见 src/store/.../SelfUpdate.kt)。
+        SelfUpdate.start(applicationContext, container.httpClient)
     }
 
     // 服务已在运行、Activity 处于 SINGLE_TOP 复用时，新意图走这里

@@ -1,11 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Entradas del consentimiento que cambian por canal. privacy_consent_catalog ahora
-  está en src/main/res/ y se comparte; default solo reemplaza ASR, resaltado palabra
-  por palabra y micrófono. El canal de tienda conserva reemplazos propios y ya no está vacío.
+  Texto que **solo existe en el canal de distribución propia**, de dos tipos:
+  (1) entradas del consentimiento que cambian por canal — privacy_consent_catalog ahora
+      está en src/main/res/ y se comparte; default solo reemplaza ASR, resaltado palabra
+      por palabra, micrófono y actualización dentro de la app (el canal de tienda conserva sus propias variantes);
+  (2) toda la actualización interna (SelfUpdate*). En el canal de tienda se actualiza
+      desde el mercado y su SelfUpdate es un stub vacío que no referencia estas claves,
+      así que tampoco viajan en ese APK — se compruebe desempaquetando los dos paquetes.
 -->
 <resources>
     <string name="privacy_consent_asr">Transcripción de voz sin conexión. Esta versión incluye reconocimiento sin conexión (el componente de código abierto whisper.cpp y su modelo). La conversión del audio de un episodio en texto se realiza <b>por completo en tu dispositivo: el audio nunca se sube, nunca sale del dispositivo y nunca pasa por ningún servidor</b>. Puedes desactivar esta función en Ajustes.</string>
     <string name="set_word_highlight_sub">Ilumina cada palabra mientras se pronuncia. El reconocimiento en el dispositivo obtiene los tiempos por palabra de paso, así que no añade tiempo de transcripción.</string>
     <string name="privacy_consent_mic">Espectro real (opcional). Al activar «Espectro real» en Ajustes, la onda de tinta sigue el volumen real. Requiere acceso al micrófono, que el sistema solicita por separado al activarlo; el audio solo se analiza en el dispositivo — nunca se graba, guarda ni envía — y deja de usarse al desactivar la opción.</string>
+    <string name="privacy_consent_update">Actualizaciones dentro de la app (opcional). Al iniciarse, esta versión consulta una vez la interfaz pública de publicaciones de GitHub (api.github.com) para saber cuál es la última versión. La petición solo incluye la dirección del repositorio público de la propia app y su número de versión actual; nunca una cuenta, un identificador, tus suscripciones o lo que escuchas. Solo descarga cuando esa respuesta trae una versión realmente más nueva, y por defecto únicamente por Wi-Fi; en una red con cargo por datos, primero pide tu permiso. Después se hace cargo el instalador del sistema — la app no instala nada por sí misma — y el permiso «Instalar aplicaciones desconocidas» que hace falta en ese paso lo solicita el sistema solo cuando eliges instalar.</string>
+
+    <string name="update_title">Nueva versión %1$s</string>
+    <string name="update_ask_cellular">No estás en Wi-Fi y esta red se cobra por uso. La actualización ocupa unos %1$s. ¿Descargarla igualmente?</string>
+    <string name="update_downloading">Descargando la actualización %1$d%%</string>
+    <string name="update_ready">Actualización descargada (unos %1$s). ¿Instalarla ahora?</string>
+    <string name="update_failed_title">No se pudo descargar la actualización</string>
+    <string name="update_failed_text">El paquete no se pudo descargar. Revisa la conexión y vuelve a intentarlo, o pulsa Más tarde.</string>
+    <string name="update_action_cellular">Descargar igualmente</string>
+    <string name="update_action_install">Instalar ahora</string>
+    <string name="update_action_later">Más tarde</string>
+    <string name="update_action_retry">Reintentar</string>
 </resources>

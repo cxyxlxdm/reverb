@@ -93,17 +93,20 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                         // (整棵树在 ReverbTheme 内)。
                         //
                         /**
-                         * 正文之后追加三段能力说明:
+                         * 正文之后追加四段能力说明:
                          * 「节目检索」已提升到 src/main/res,两个渠道都渲染;
-                         * 「离线语音转文字」「真实频谱(麦克风)」仍由 default / store source set
-                         * 分渠道覆盖,大陆商店版是空串,所以不渲染(见 H70)。
+                         * 「离线语音转文字」「真实频谱(麦克风)」「应用内更新」仍由 default / store
+                         * source set 分渠道覆盖,大陆商店版是空串,所以不渲染(见 H70)。
                          *
                          * 麦克风这段不能并入共用正文:同意门**两个渠道都出**(见 MainActivity,无渠道条件),
                          * 但只有自分发完整版声明 RECORD_AUDIO。按渠道放字符串才能让可见声明与包内权限一致。
+                         * 应用内更新那段是同一条规律的第二次适用(自 1.0.5):它同时新增了一个外连地址
+                         * (api.github.com)和一项 REQUEST_INSTALL_PACKAGES,而这两样商店版都没有。
                          */
                         listOf(
                             stringResource(R.string.privacy_consent_body),
                             stringResource(R.string.privacy_consent_catalog),
+                            stringResource(R.string.privacy_consent_update),
                             stringResource(R.string.privacy_consent_asr),
                             stringResource(R.string.privacy_consent_mic)
                         ).filter { it.isNotBlank() }.joinToString("\n\n"),

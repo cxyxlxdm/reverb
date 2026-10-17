@@ -1,11 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Entrées du consentement propres au canal. privacy_consent_catalog se trouve
-  désormais dans src/main/res/ et est partagé; default ne remplace que l’ASR,
-  le surlignage mot à mot et le microphone. Le canal boutique garde ses propres variantes.
+  Textes **propres au canal d’auto-distribution**, de deux sortes :
+  (1) entrées du consentement qui varient par canal — privacy_consent_catalog se trouve
+      désormais dans src/main/res/ et est partagé ; default ne remplace que l’ASR, le
+      surlignage mot à mot, le microphone et la mise à jour intégrée (le canal boutique garde ses propres variantes) ;
+  (2) toute la mise à jour intégrée (SelfUpdate*). Le canal boutique est mis à jour par
+      sa marketplace et son SelfUpdate est une coquille vide qui ne référence aucune de
+      ces clés — elles ne voyagent donc pas non plus dans cet APK, vérification par
+      décompression des deux paquets.
+  ⚠️ XML : les apostrophes doivent être échappées en \'.
 -->
 <resources>
     <string name="privacy_consent_asr">Transcription vocale hors ligne. Cette version intègre la reconnaissance hors ligne (le composant open source whisper.cpp et son modèle). La conversion de l\'audio d\'un épisode en texte s\'effectue <b>entièrement sur votre appareil : l\'audio n\'est jamais envoyé, ne quitte jamais l\'appareil et ne transite par aucun serveur</b>. Vous pouvez désactiver cette fonction dans les réglages.</string>
     <string name="set_word_highlight_sub">Surligne chaque mot au fur et à mesure. La reconnaissance sur l\'appareil fournit les temps par mot au passage, sans allonger la transcription.</string>
     <string name="privacy_consent_mic">Spectre réel (facultatif). En activant « Spectre réel » dans les réglages, l\'onde suit le volume réel. Cela nécessite l\'accès au micro, que le système demande séparément au moment de l\'activation ; l\'audio est uniquement analysé sur l\'appareil — jamais enregistré, stocké ni envoyé — et n\'est plus utilisé dès que vous désactivez l\'option.</string>
+    <string name="privacy_consent_update">Mise à jour intégrée (facultative). Au lancement, cette version interroge une fois l\'interface publique des publications GitHub (api.github.com) pour connaître la dernière version. La requête ne contient que l\'adresse du dépôt public de cette application et son numéro de version actuel — jamais de compte, d\'identifiant, d\'abonnement ou d\'écoute. Elle ne télécharge que si cette réponse apporte une version réellement plus récente, et par défaut uniquement en Wi-Fi ; sur un réseau facturé à l\'usage, elle demande d\'abord votre accord. L\'installateur du système prend ensuite le relais — l\'application n\'installe rien elle-même — et la permission « Installer des applications inconnues » nécessaire à cette étape est demandée par le système seulement quand vous choisissez d\'installer.</string>
+
+    <string name="update_title">Nouvelle version %1$s</string>
+    <string name="update_ask_cellular">Vous n\'êtes pas en Wi-Fi et ce réseau est facturé à la consommation. La mise à jour pèse environ %1$s. La télécharger quand même ?</string>
+    <string name="update_downloading">Téléchargement de la mise à jour %1$d%%</string>
+    <string name="update_ready">Mise à jour téléchargée (environ %1$s). L\'installer maintenant ?</string>
+    <string name="update_failed_title">Échec du téléchargement</string>
+    <string name="update_failed_text">Le paquet n\'a pas pu être téléchargé. Vérifiez la connexion et réessayez, ou choisissez Plus tard.</string>
+    <string name="update_action_cellular">Télécharger quand même</string>
+    <string name="update_action_install">Installer</string>
+    <string name="update_action_later">Plus tard</string>
+    <string name="update_action_retry">Réessayer</string>
 </resources>
