@@ -441,9 +441,9 @@ Android 那一条也在真机量过(2026-10-16 09:05,`dist/reverb.apk` 09:00 那
   **代价是"App 退到后台/被挂起时,正在补的那份缓存会停"**,这一条**尚未实跑确认**(列在待验里)。
 - **新增的两个目录不进任何备份**:两端系统备份都是**白名单**(逐文件 include),
   对着 `data_extraction_rules.xml` 与 `backup_config.json` 两份规则文件核过,不是推断。
-- **最终批次(10-16 22:27–23:54)的解包复核在 10-17 复跑过一遍**,数字与上面各段同口径,记在这里以免"改了码没重验包":
-  处理量 —— store apk **165 条目 / 单 dex 6 422 256 B**、default apk **168 条目 / 单 dex 6 436 708 B**、
-  鸿蒙外层 **.app 3 条目** → hap **18 条目**(`modules.abc` 886 600 B / `resources.index` 91 485 B / `libs/` 2 个 `.so`)。
+- **最终批次现在是 10-17 17:07 / 17:09 / 17:10 那三份**(10-16 22:27–23:54 那一批被本轮「频道页接长按多选 + 标记已播完收口」替掉):Android `reverb.apk` 64 983 404 B / `reverb-store.apk` **3 559 571 B**、鸿蒙 `reverb.app` **1 127 253 B** + 符号包 656 295 B。**解包复核在 10-17 于新包上整条复跑**,数字与上面各段同口径,记在这里以免"改了码没重验包":
+  处理量 —— store apk **165 条目 / 单 dex 6 422 628 B / arsc 449 156 B**、default apk **168 条目 / 单 dex 6 436 208 B / arsc 453 728 B**、
+  鸿蒙外层 **.app 3 条目** → hap **18 条目**(`modules.abc` 889 836 B / `resources.index` 91 560 B / `libs/` 2 个 `.so`)。
   版本 —— 两侧 `aapt2`/`module.json`+`pack.info` 都读:Android `6 / 1.0.5`(两渠道同),鸿蒙 `1000005 / "1.0.5"`、
   `debug=false`、`buildMode=release`。权限 —— **先把整份打印出来数过行数**:store **10 行(含 package 头,9 条)**、
   不含 `RECORD_AUDIO`;default **12 行(11 条)**,含 `RECORD_AUDIO` + `MODIFY_AUDIO_SETTINGS`;
@@ -453,7 +453,7 @@ Android 那一条也在真机量过(2026-10-16 09:05,`dist/reverb.apk` 09:00 那
   `.version` 条目),逐条回读后真命中仍是 0 —— 这就是"计数不为 0 先回读"的用处。
   目录接口串(`LC_ALL=C grep -ao` 计次)在三份包里都在 —— Android 两渠道 dex 各 `itunes.apple.com` 4 / `fyyd` 5 / `gpodder` 4,
   鸿蒙 abc 为 4 / 4 / 3。本轮两条功能的新串逐条非 0(`多选` 3 / `加入待播` 4 / `进入频道页` 1,在 Android 两渠道
-  `resources.arsc`(449 080 / 453 652 B)与鸿蒙 `resources.index` 上各读一遍;鸿蒙那份是 3 / 6 / 1,
+  `resources.arsc`(449 156 / 453 728 B)与鸿蒙 `resources.index` 上各读一遍;鸿蒙那份是 3 / 6 / 1,
   差在"加入待播"本端还出现在队列段的其它串里,**这是串表口径不同、不是功能差异**),
   阳性对照 `追更` 5(鸿蒙 6)、阴性对照(现编的假串)**0**。
   明文判据 —— default 的 `assets/seed_podcasts.json`(51 867 B / 144 条 feed URL)`http://` **0**、`https://` 288。
@@ -461,6 +461,7 @@ Android 那一条也在真机量过(2026-10-16 09:05,`dist/reverb.apk` 09:00 那
   `http://cdn.himalaya.com/…xml` —— 它是**不可达封禁清单**里的一条标识(2026-09-03 线下生成,命中即**不请求**),
   不是数据路径;清单按精确 URL 匹配,改 schema 会让这条封禁失效。Android 侧没有同一份清单(dex 命中 0)。
   `debugKey` / `signDebug` 在 abc 与 `resources.index` 均 **0**。
+  ⚠️ **本轮新踩的两条计数口径**:① **「标记已播完」两端不同形** —— Android 那两条带「为」(`标记为已播完` / `标记为未播完`,两渠道 `resources.arsc` 各 1),鸿蒙那两条**没有「为」**(`标记已播完` / `标记未播完`,`resources.index` 各 1),交叉 grep 得到的 0 是**假 0**(第一轮就按 Android 的形态在鸿蒙资源表里搜,差点报成"文案没进包");② **`grep -c` 只有一个输入文件时打印的是裸计数**,配 `awk -F: '{s+=$2}'` 求和会让每个词都报 0(连"必须非 0"的目录接口三串也报 0),本轮一律改 `LC_ALL=C grep -ao … | wc -l`。
 
 ---
 
