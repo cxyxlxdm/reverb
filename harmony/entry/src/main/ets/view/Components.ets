@@ -179,6 +179,9 @@ export struct EpisodeListItem {
   /// 「标记已播完 / 未播完」这一项出现在**能承担撤销的地方**:发现页的搜索结果
   /// (与 Android 一致)和音阁 · 历史。后者是必须的 —— 发现页「继续收听」卡上那个
   /// 「标记已播完」改的就是这张列表的 `played`,不在历史页给回程,那一步就撤不回来。
+  /// **频道详情页两端都不给**:那一列是某档频道的**全部**单集,绝大多数既没播过也不在待播队列里,
+  /// 在这一页标完既看不到、也没处撤(已播完状态只在待播/历史那两页参与显示)。
+  /// Android 此前多给了一项,2026-10-17 按本端口径摘掉 ⇒ 两端长按菜单在频道页一致。
   /// 长按菜单本身**所有单集列表都有**,故不设开关 —— 鸿蒙端此前压根没有长按手势,
   /// 外部反馈的「长按单集不能加入队列」即此。调用方必须接好 onPlayNext / onEnqueue。
   @Prop showPlayedToggle: boolean = false;
@@ -791,7 +794,7 @@ export function enqueuePicked(episodes: Episode[], picked: Set<string>): number 
  * 为什么要单独抽出来:入队结果在「待播」那一页,当前列表看不出任何变化,不提示等于没按上;
  * 而**报的必须是新增数而不是勾选数** —— 全选一列再按一次,勾了 200 条、一条都没新增,
  * 说"已加入 200 集"就是说谎(判据 `PlayerController.enqueueAll` 的返回值)。
- * 四列(追更 / 收藏 / 下载 / 历史)各抄一遍这句话迟早抄歪,所以收在这里。
+ * 五列(追更 / 收藏 / 下载 / 历史 / 频道详情页)各抄一遍这句话迟早抄歪,所以收在这里。
  */
 export function batchEnqueueAndToast(ui: UIContext, episodes: Episode[], picked: Set<string>): void {
   const added = enqueuePicked(episodes, picked);

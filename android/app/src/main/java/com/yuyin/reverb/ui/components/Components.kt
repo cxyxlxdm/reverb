@@ -586,7 +586,10 @@ fun EpisodeListItem(
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     played: Boolean = false,            // 已播完:标题变暗 + 打勾
-    onTogglePlayed: (() -> Unit)? = null, // 长按菜单:标记已播完/未播完
+    /// 长按菜单:标记已播完/未播完。**只在能承担撤销的列表给**(搜索结果、历史)。
+    /// 频道详情页 2026-10-17 起不再传(那一列是某档频道的全部单集,绝大多数不在待播队列里,
+    /// 在这一页标完既看不到也没处撤),与鸿蒙端口径对齐;`played` 仍照常显示。
+    onTogglePlayed: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,     // 长按菜单:下一个播放
     onEnqueue: (() -> Unit)? = null,      // 长按菜单:加入队列;showQueueAdd 时也是行内键的动作
     /// 行内「加入播放列表」键,只在节目详情页开(对齐鸿蒙):浏览选集为主的场景,
@@ -605,7 +608,8 @@ fun EpisodeListItem(
     selected: Boolean = false,
     onToggleSelect: (() -> Unit)? = null,
     /// 长按菜单里那颗「多选」:由调用方进入选择模式并带上被长按的这一集。
-    /// null = 这一列不做批量(发现首屏、搜索结果、频道详情页)。
+    /// null = 这一列不做批量(发现首屏、搜索结果 —— 这两处是**预览与跨源结果**,逐条操作才是原意)。
+    /// 追更 / 收藏 / 下载 / 历史 / **频道详情页**都给(后者 2026-10-17 补,与鸿蒙同步)。
     onEnterSelection: (() -> Unit)? = null
 ) {
     var menuOpen by remember { mutableStateOf(false) }
@@ -917,7 +921,7 @@ fun enqueuePicked(episodes: List<Episode>, picked: Set<String>): Int =
 val SELECTION_BAR_SLOT = 48.dp
 
 /**
- * 四个列表(追更 / 收藏 / 下载 / 历史)共用的那条批量条:把 [SelectionBar] 的三条动作
+ * 各列表(追更 / 收藏 / 下载 / 历史 / **频道详情页**)共用的那条批量条:把 [SelectionBar] 的三条动作
  * (全选 / 加入待播 / 退出)连同**结果提示**一起收在一处。
  *
  * 为什么要有这一层而不是四个页面各写一遍:「加入待播」之后该报几条,判据在
