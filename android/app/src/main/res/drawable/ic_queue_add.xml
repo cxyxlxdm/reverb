@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  「加入待播」行内图标 —— **以鸿蒙那枚 `sys.symbol.add_songlist` 为准**手抄的一份。
+
+  为什么不用 Material 现成的:
+  - `PlaylistAdd`(列表 + 加号)是这一位原来的用图,但它没有音符,读出来是"加进某个列表",
+    不像"加进播放队列";
+  - `QueueMusic`(列表 + 音符)有音符,可是同形不同义 —— 本端「打开队列页」的入口就是它
+    (见 `Components.kt` 的队列按钮、`PlayerScreen.kt`),行内再放一枚会让人以为点它也是进队列页。
+    鸿蒙当年正是因为这条真机反馈才把两枚分开的(见 `harmony/.../view/Widgets.ets` 的 `Sym.queueAdd`)。
+  ⇒ Material 里没有"列表 + 音符 + 加号"这一枚,只能自己画。
+
+  颜色写死黑色只是占位:实际由 `Icon(tint = …)` 整体染色,深浅色与强调色都跟着走。
+  `autoMirrored` 与 `Icons.AutoMirrored.*` 同语义(阿拉伯语等 RTL 下左右翻)。
+
+  **下面每个坐标都是从鸿蒙真机截图上量出来的,不是照着描述摆的。**
+  取法:截 `add_songlist` 那一枚 66×66 px,按 2 px 一格降采样成 33×33 的墨迹点阵,
+  再把格号换算成 viewport 单位(66 px == 24 单位,一格 = 0.727 单位)。于是:
+  - 两道横杠**等长**(点阵里都占第 4~16 格),中心 y = 5.6 / 11.5;
+    第一版抄成了"上长下短",那是 `PlaylistAdd` 的记忆,不是这枚的样子。
+  - 加号中心 (5.6, 17.3),竖画上下各出 2 格多 —— 是**对称**的十字,
+    不是"第三道横杠 + 一根往下戳的竖线"(第一版就是这么画歪的)。
+  - 符干在 x 17.6 上从 y 5.2 直落到 15.8;符尾是从符干**顶端往右上平挑**出去的一片楔形
+    (尖端在 (20.5, 4.7),上缘近乎水平),不是往右下飘的旗,也不是 45° 往上岔开的叉。
+  - 符头是个**斜着的空心环**(长轴逆时针转 30° 朝右上),不是正圆。
+    点阵量到的外接是 6.2 × 5.1,但照这个数画出来在真机上仍偏小 —— 因为量到的外接里
+    含了符干那一段。**最终值是按实机渲染比着调的**(环画到 rx 2.65 / ry 1.95),
+    符尾同理拆成单独一条加粗到 1.7 才像那片楔形。
+    ⇒ 点阵给的是骨架与位置,粗细和大小这两维必须回到渲染上判。
+  描边 1.5 = 点阵里量到的实际墨宽(2 格 ≈ 4 px)。第一版用 2、又用 1.8,都偏重 ——
+  这枚元素密,粗一档横杠就会和符头连成一片。
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:autoMirrored="true">
+
+    <!-- 横杠 ×2 + 加号:同一档圆头描边,合成一条 path 少一次绘制 -->
+    <path
+        android:pathData="M3.6,5.6 L11.3,5.6 M3.6,11.5 L11.3,11.5 M5.6,15.3 L5.6,19.3 M3.6,17.3 L7.6,17.3"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+
+    <!-- 符干:落点比符头中心略高,好让它接进环的右上 -->
+    <path
+        android:pathData="M17.6,5.2 L17.6,16.0"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.5"
+        android:strokeLineCap="round" />
+
+    <!-- 符尾单独一条、描边 1.7:鸿蒙那枚是一片**有厚度的楔形**而不是一根等宽曲线,
+         但 VectorDrawable 一条 path 只有一个 strokeWidth,只能把符尾拆出来加粗一档近似。 -->
+    <path
+        android:pathData="M17.6,7.0 C18.7,5.5 19.6,4.8 20.5,4.7"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="1.7"
+        android:strokeLineCap="round" />
+
+    <!-- 空心符头:先摆正椭圆,再由 group 逆时针转 30° 让长轴朝右上;只描边不填充 -->
+    <group
+        android:rotation="-30"
+        android:pivotX="15.2"
+        android:pivotY="18.1">
+        <path
+            android:pathData="M12.55,18.1 A2.65,1.95 0 1 0 17.85,18.1 A2.65,1.95 0 1 0 12.55,18.1"
+            android:strokeColor="#FF000000"
+            android:strokeWidth="1.5" />
+    </group>
+</vector>

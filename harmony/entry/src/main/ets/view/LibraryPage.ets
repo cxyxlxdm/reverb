@@ -8,7 +8,7 @@ import { DownloadManager } from '../playback/DownloadManager';
 import { NoteStore, EpisodeNote } from '../store/NoteStore';
 import { PlayerController } from '../playback/PlayerController';
 import { ScreenHeader, EmptyHint, Glyph, Sym, Artwork } from './Widgets';
-import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, PlayModeButton, ConfirmDialog, ConfirmSpec, formatTime, EpisodeBatchBar, BATCH_AVOID, batchEnqueueAndToast } from './Components';
+import { PodcastListItem, PodcastGridItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, PlayModeButton, ConfirmDialog, ConfirmSpec, formatTime, EpisodeBatchBar, BATCH_BAR_GAP, BATCH_AVOID, batchEnqueueAndToast } from './Components';
 import { QueueBody } from './QueuePage';
 
 /**
@@ -499,7 +499,7 @@ export struct LibraryPage {
           },
           onExit: () => { this.pickedFav = new Set<string>(); }
         })
-          .margin({ bottom: this.bottomPad })
+          .margin({ bottom: this.bottomPad + BATCH_BAR_GAP })
       }
     }
     .width('100%').height('100%')
@@ -560,7 +560,7 @@ export struct LibraryPage {
           },
           onExit: () => { this.pickedDl = new Set<string>(); }
         })
-          .margin({ bottom: this.bottomPad })
+          .margin({ bottom: this.bottomPad + BATCH_BAR_GAP })
       }
     }
     .width('100%').height('100%')
@@ -695,7 +695,7 @@ export struct LibraryPage {
           },
           onExit: () => { this.pickedHist = new Set<string>(); }
         })
-          .margin({ bottom: this.bottomPad })
+          .margin({ bottom: this.bottomPad + BATCH_BAR_GAP })
       }
     }
     .width('100%').height('100%')

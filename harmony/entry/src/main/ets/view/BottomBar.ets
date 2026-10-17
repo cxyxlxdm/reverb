@@ -321,6 +321,27 @@ export function barReserve(inset: number, playing: boolean): number {
 }
 
 /**
+ * **频道页**那颗悬浮胶囊的落点(距屏底)。这一页没有 tab 栏,所以不走 [barFootprint],
+ * 但也不能直接套 tab 页那式子里的 `inset + MINI_GAP`。
+ *
+ * 真机两侧各量过一次底边到屏底的距离:
+ * - Android 那台 `navInset 16dp + 缝 8 = 24dp` = 66px,占屏高 **3.06%**;
+ * - 本机 `bottomInset 28vp + 缝 8 = 36vp` = 117px,占屏高 **4.35%**。
+ *
+ * 缝两端都是 8,差的全在避让区 —— 鸿蒙这道指示器区比 Android 的导航栏高 12vp,
+ * 于是"同一套式子"在两端不等高。用户口径是「跟 Android 差不多」,而按占屏比例算
+ * Android 那一档正好就是 24vp,所以把**基准钳到 Android 那道 16** 再加同一档缝。
+ *
+ * 为什么钳而不是写死 24:三键导航 / 无指示器的设备 `inset` 是 0,写死会把胶囊抬到
+ * 没必要的高度;而 `inset` 更大的机型(平板、带虚拟键)也不会把缝越垫越高。
+ */
+export const MINI_INSET_CAP: number = 16;
+
+export function channelMiniBottom(inset: number): number {
+  return Math.min(inset, MINI_INSET_CAP) + MINI_GAP;
+}
+
+/**
  * 悬浮栏的样式对象。
  *
  * **每次 build 现算**:`barBottomMargin` 取的是窗口避让区(`bottomInset`),旋转、进出全面屏
