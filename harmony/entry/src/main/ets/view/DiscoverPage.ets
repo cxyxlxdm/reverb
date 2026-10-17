@@ -1216,8 +1216,10 @@ export struct DiscoverPage {
                   isPlaying: this.player.isPlaying,
                   played: this.history.isPlayed(e.id),
                   onPlay: () => this.onPlayEpisode(e, this.searchEpisodes, ''),
-                  showPlayedToggle: true,
-                  onTogglePlayed: () => { this.history.markPlayed(e.id, !this.history.isPlayed(e.id)); },
+                  // 2026-10-17 起不给「标记已播完」(与 Android 同批摘掉):这一列是临时视图,
+                  // 标完不重排、看不出归属变化,而没播过的集在 HistoryStore 里没有条目、
+                  // markPlayed 当场 return ⇒ 大多数结果是**静默空操作**。
+                  // `played` 的显示(标题压暗 + 打勾)保留。口径见 Components.ets 的 showPlayedToggle。
                   // 这两个只是**写**操作,不参与本页渲染,故可直接用容器里的单例;
                   // H26 说的"必须 @ObjectLink"针对的是**渲染读取**,不是这种纯动作。
                   onPlayNext: () => { this.app.player.playNext(e); },

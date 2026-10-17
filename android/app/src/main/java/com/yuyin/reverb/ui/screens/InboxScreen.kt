@@ -109,7 +109,9 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
                         onPlay = { PlayerController.playOrToggle(ep, episodes, TAG_INBOX) },
                         showPodcastTitle = true,
                         played = played,
-                        onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                        // 不给「标记已播完」:这一列的语义是"订阅的最新更新",标完在这里
+                        // 既看不出变化也没处撤 —— 而且这些集大多没有历史条目,markPlayed 对它们是
+                        // **静默空操作**(见 HistoryStore.markPlayed 的入口判断)。规则见 Components.kt。
                         onPlayNext = { PlayerController.playNext(ep) },
                         onEnqueue = { PlayerController.enqueue(ep) },
                         selectionMode = picked.isNotEmpty(),

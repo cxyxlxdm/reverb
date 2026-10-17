@@ -630,18 +630,21 @@ export struct LibraryPage {
                   played: h.played,
                   onPlay: () => this.onPlayEpisode(h.episode, this.historyEpisodes(), ''),
                   /**
-                   * 历史页**必须**给这个开关。发现页「继续收听」卡上的「标记已播完」
-                   * 就是把这里的 `played` 置真 —— 那一横条的数据源正是这份历史列表
-                   * (未播完 + 进度在 10s~95%)。不在这儿给「标记未播完」,那个动作
-                   * 就成了不可撤销的,而 app 里没有撤销机制。
-                   * 进度本身不受影响:恢复后它带着原来的位置重新回到横条。
-                   * (macOS 的单集右键菜单是无条件带这一项的,这里向它对齐。)
+                   * 历史页这一颗**只承担撤销**:已经标成播完的那些条才给菜单项,而且只往回改。
+                   * 正向的「标记为已播完」2026-10-17 起在两端所有单集列表里都不再提供
+                   * (口径见 Components.ets 的 showPlayedToggle)。
+                   * 为什么这一颗不能一起摘:发现页「继续收听」卡上的「标记已播完」就是把这里的
+                   * `played` 置真,而那一横条的数据源正是这份历史列表(未播完 + 进度在 10s~95%);
+                   * 不在这儿给回程,那个动作就成了不可撤销的(app 里没有别的撤销机制,
+                   * 唯一复原办法是重新播一次 —— `record()` 会把 played 复位)。
+                   * 进度本身不受影响:撤销后它带着原来的位置重新回到横条。
                    */
-                  showPlayedToggle: true,
-                  // 读 store 而不是 `!h.played`:闭包里的 `h` 是**生成这一行那一刻**的快照,
-                  // 而快照会过期(见下面键值的注释)。动作要拿当前值,只能回 store 问一次。
-                  // 这里是**一次点击**问一次,不在渲染路径上,`isPlayed` 的整表扫描可以接受。
-                  onTogglePlayed: () => { this.history.markPlayed(h.episode.id, !this.history.isPlayed(h.episode.id)); },
+                  // 门用 `h.played`:ForEach 的键值里带了这一位(见下面注释),所以这一位一变
+                  // 整行就重建,不存在用旧快照决定"给不给这一项"的问题。
+                  showPlayedToggle: h.played,
+                  // 方向固定为"改回未播完",所以不再需要回 store 问当前值
+                  // (此前这里读 `isPlayed` 是为了绕开闭包快照过期,现在双向切换已经不存在)。
+                  onTogglePlayed: () => { this.history.markPlayed(h.episode.id, false); },
                   onPlayNext: () => { this.player.playNext(h.episode); },
                   onEnqueue: () => { this.player.enqueue(h.episode); },
                   showChannelJump: true, onOpenChannel: this.onOpenChannel,

@@ -586,9 +586,28 @@ fun EpisodeListItem(
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     played: Boolean = false,            // 已播完:标题变暗 + 打勾
-    /// 长按菜单:标记已播完/未播完。**只在能承担撤销的列表给**(搜索结果、历史)。
-    /// 频道详情页 2026-10-17 起不再传(那一列是某档频道的全部单集,绝大多数不在待播队列里,
-    /// 在这一页标完既看不到也没处撤),与鸿蒙端口径对齐;`played` 仍照常显示。
+    /**
+     * 长按菜单里的「标记为已播完 / 未播完」。**2026-10-17 起两端统一:正向那一向
+     * (标记为已播完)不在任何单集列表里给**,只有 `音阁 · 历史` 保留**反向的撤销**
+     * (已播完的那些条给「标记为未播完」)。
+     *
+     * 摘掉正向的两条理由:
+     * ① **它多半是个静默空操作**。`HistoryStore.markPlayed` 开头就
+     *    `if (_history.value.none { it.episode.id == episodeId }) return` —— 没播过的集
+     *    没有历史条目,在发现首屏/追更/收藏/下载/搜索结果/频道页按这一项**什么都不会发生**
+     *    (行不会压暗,因为这些列的 `played` 正是从这份历史里读出来的)。
+     * ② 少数**真生效**的(播过、有历史条目的)反馈也只剩标题压暗这一处微弱变化,
+     *    而**这一列没有回程** —— 想撤必须去 `音阁 · 历史` 那一页找同一条。
+     *    一颗"多数时候空转、偶尔生效了还得换页去撤"的动作,留在浏览列里没有意义。
+     *
+     * `played` 的显示(标题压暗 + 打勾)照旧,那一半是有信息的。
+     * 反向那颗必须留在历史列:发现页「继续收听」横条的「标记已播完」改的就是这份 played,
+     * 横条按"未播完"过滤,不在历史页给回程就变成单向操作(唯一复原办法是重新播一次,
+     * `record()` 会把 played 复位)。
+     * 正因为"接了这个回调就只会是反向",下面菜单项的文案是**写死**的 `mark_unplayed`,
+     * 不再按 `played` 换向 —— 换向表达式等于给正向留一条"下一个人顺手接上"的通道。
+     * (横条那张卡用的是 `DiscoverScreen` 里自己的菜单,不受这条影响。)
+     */
     onTogglePlayed: (() -> Unit)? = null,
     onPlayNext: (() -> Unit)? = null,     // 长按菜单:下一个播放
     onEnqueue: (() -> Unit)? = null,      // 长按菜单:加入队列;showQueueAdd 时也是行内键的动作
@@ -824,7 +843,10 @@ fun EpisodeListItem(
                 }
                 if (onTogglePlayed != null) {
                     DropdownMenuItem(
-                        text = { Text(stringResource(if (played) R.string.mark_unplayed else R.string.mark_played)) },
+                        // 文案**写死反向**,不再按 `played` 换向:正向那颗自 2026-10-17 起在两端
+                        // 任何列表都不给(理由见上面 onTogglePlayed 的 KDoc)。留着换向表达式
+                        // 就是留着"下一列顺手接出正向"的通道 —— 换向没了,接错才会在 review 里露出来。
+                        text = { Text(stringResource(R.string.mark_unplayed)) },
                         onClick = { menuOpen = false; onTogglePlayed() }
                     )
                 }

@@ -688,7 +688,9 @@ private fun HomeFeed(continueEntries: List<HistoryEntry>) {
                         onPlay = { PlayerController.playOrToggle(ep, homeEpisodes) },
                         showPodcastTitle = true,
                         played = played,
-                        onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                        // 不给「标记已播完」:首页这一列是"最新更新",没播过的集在这里标完
+                        // 没有任何可见变化(且多数没有历史条目,markPlayed 直接 return)。
+                        // 规则与端口径见 Components.kt 的 onTogglePlayed。
                         onPlayNext = { PlayerController.playNext(ep) },
                         onEnqueue = { PlayerController.enqueue(ep) }
                     )
@@ -971,7 +973,9 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
                             onPlay = { PlayerController.playOrToggle(ep, s.episodes) },
                             showPodcastTitle = true,
                             played = played,
-                            onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                            // 同样不给「标记已播完」(2026-10-17 两端口径统一):搜索结果是一堆
+                            // 不相干的集,标完这一列不重排、行内只把标题压暗,而没播过的集压根
+                            // 没有历史条目可改。已播过的照常显示压暗 + 打勾。
                             onPlayNext = { PlayerController.playNext(ep) },
                             onEnqueue = { PlayerController.enqueue(ep) }
                         )

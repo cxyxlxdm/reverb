@@ -350,7 +350,8 @@ private fun FavoritesSection() {
                     isFavorite = true,
                     onToggleFavorite = { container.favoriteStore.toggle(ep) },
                     played = played,
-                    onTogglePlayed = { container.historyStore.markPlayed(ep.id, !played) },
+                    // 不给「标记已播完」:这一列的语义是"我收藏过",标完在这里既看不出归属变化
+                    // 也没处撤(规则见 Components.kt 的 onTogglePlayed;两端口径 2026-10-17 统一)
                     onPlayNext = { PlayerController.playNext(ep) },
                     onEnqueue = { PlayerController.enqueue(ep) },
                     selectionMode = picked.isNotEmpty(),
@@ -415,7 +416,8 @@ private fun DownloadsSection() {
                     downloadStatus = DownloadStatus.Completed,
                     onDeleteDownload = { pendingDelete = d },
                     played = played,
-                    onTogglePlayed = { container.historyStore.markPlayed(d.episode.id, !played) },
+                    // 不给「标记已播完」:这一列的语义是"本机有这份文件",与播没播完无关
+                    // (规则见 Components.kt 的 onTogglePlayed)
                     onPlayNext = { PlayerController.playNext(d.episode) },
                     onEnqueue = { PlayerController.enqueue(d.episode) },
                     selectionMode = picked.isNotEmpty(),
@@ -489,7 +491,16 @@ private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntr
                     // (鸿蒙侧四段都传,Android 这里和下载段此前漏了)
                     showPodcastTitle = true,
                     played = h.played,
-                    onTogglePlayed = { container.historyStore.markPlayed(h.episode.id, !h.played) },
+                    /**
+                     * 这一列**只承担撤销**:只有已经标成播完的那些条才给菜单项,而且只往回改
+                     * (`false`)。正向的「标记为已播完」2026-10-17 起在两端所有列表里都不给,
+                     * 口径见 Components.kt 的 `onTogglePlayed`。
+                     * 这一颗不能一起摘:发现页「继续收听」横条上那个「标记已播完」改的就是这份
+                     * `played`(横条的过滤条件正是"未播完"),不在这儿给回程,那一步就撤不回来。
+                     */
+                    onTogglePlayed = if (h.played) {
+                        { container.historyStore.markPlayed(h.episode.id, false) }
+                    } else null,
                     onPlayNext = { PlayerController.playNext(h.episode) },
                     onEnqueue = { PlayerController.enqueue(h.episode) },
                     selectionMode = picked.isNotEmpty(),
