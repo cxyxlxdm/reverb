@@ -176,12 +176,17 @@ export struct EpisodeListItem {
   /// —— 长按再快也要"按住等半秒"(时长已可自定,见 `LIST_MENU_LONG_PRESS_MS`),
   /// 而这个按钮把那一整步绕开。慢的**观感**另靠下面的按压态底色缓解。
   @Prop showQueueAdd: boolean = false;
-  /// 「标记已播完 / 未播完」这一项出现在**能承担撤销的地方**:发现页的搜索结果
-  /// (与 Android 一致)和音阁 · 历史。后者是必须的 —— 发现页「继续收听」卡上那个
-  /// 「标记已播完」改的就是这张列表的 `played`,不在历史页给回程,那一步就撤不回来。
-  /// **频道详情页两端都不给**:那一列是某档频道的**全部**单集,绝大多数既没播过也不在待播队列里,
-  /// 在这一页标完既看不到、也没处撤(已播完状态只在待播/历史那两页参与显示)。
-  /// Android 此前多给了一项,2026-10-17 按本端口径摘掉 ⇒ 两端长按菜单在频道页一致。
+  /// 「标记已播完 / 未播完」这一项。**2026-10-17 起两端统一:正向那一向在任何单集列表里都不给**,
+  /// 只有 `音阁 · 历史` 保留**反向的撤销**(已播完的那些条才给「标记为未播完」,见 `LibraryPage`)。
+  /// 摘掉正向的两条理由:
+  /// ① **多半是静默空操作** —— `HistoryStore.markPlayed` 对没有历史条目的集直接 return,
+  ///    而发现首屏/追更/收藏/下载/搜索结果/频道页里的集大多数根本没播过,按了这一项什么都不会发生;
+  /// ② 少数**真生效**的(播过、有历史条目的)反馈只剩标题压暗这一处,而**这一列没有回程** ——
+  ///    想撤必须去 `音阁 · 历史` 找同一条。
+  /// `played` 的显示(标题压暗 + 打勾)照旧。Android 侧同一条规则写在 `Components.kt` 的
+  /// `onTogglePlayed` 上;此前 Android 比本端多给四列(发现首屏/追更/收藏/下载),频道详情页
+  /// 上一轮已摘,本轮连同本端的搜索结果一起收口。
+  /// 接了这颗的**唯一**调用方是 `音阁 · 历史`,所以菜单项文案写死为 `mark_unplayed`。
   /// 长按菜单本身**所有单集列表都有**,故不设开关 —— 鸿蒙端此前压根没有长按手势,
   /// 外部反馈的「长按单集不能加入队列」即此。调用方必须接好 onPlayNext / onEnqueue。
   @Prop showPlayedToggle: boolean = false;
@@ -274,7 +279,10 @@ export struct EpisodeListItem {
           .onClick(() => this.onEnterSelection())
       }
       if (this.showPlayedToggle) {
-        MenuItem({ content: this.played ? L.s('mark_unplayed') : L.s('mark_played') })
+        // 文案**写死反向**,不再按 played 换向:正向那颗自 2026-10-17 起两端任何列表都不给
+        // (理由见上面 showPlayedToggle 的注释)。留着换向表达式就是给"下一列顺手接出正向"留通道。
+        // 发现页「继续收听」那张卡用的是 DiscoverPage 里自己的菜单,不受这条影响。
+        MenuItem({ content: L.s('mark_unplayed') })
           .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
           .onClick(() => this.onTogglePlayed())
       }
