@@ -488,9 +488,10 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 2. 三端各自 `build-release.sh` / `package.sh`;
 3. 按硬规矩 20 做**解包验收 + mtime/SHA 判据**,不是看构建日志;
 4. 界面动过 → 截图整套重拍 → 商店图与官网 `shots/` 是**同源两条出口,两侧都要换**;
-5. 部署官网 → 上传商店 / GitHub Releases。
+5. 部署官网 → 上传商店 / GitHub Releases(**Releases 传的是公开分发仓 `revert-cast`,不是本机 git remote
+   那个私有 `reverb`** —— 传错边,应用内更新就查不到新包,见「仓库的对外边界」与 H203)。
 
-**回滚预案目前没有**,这是已知缺口(`docs/REVIEW-2026-10-18.md` 第 7 条)。
+**回滚预案目前没有**,这是已知缺口(`docs/REVIEW-2026-10-18.md` P0 第 7 条)。
 在有预案之前,发版前至少确认:`dist/` 里留着上一版包,并且知道怎么把应用内更新的版本号降回去。
 
 ## 代码风格
@@ -556,7 +557,7 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 3. **状态汇报用表格,不用散文。** `ROADMAP.md` 平均每行 334 字节,意味着大量单段数千字的叙述 ——
    这类内容三个月后只有作者本人能读懂。
 4. **`CHANGELOG.md` 是内部账本,不是对外文案。** 它含"一条没走""未验过"这类内部措辞,
-   不能直接发给用户;对外版本说明要单独一份(见 `docs/REVIEW-2026-10-18.md` 第 13 条)。
+   不能直接发给用户;对外版本说明要单独一份(见 `docs/REVIEW-2026-10-18.md` P1 第 13 条)。
 5. **不要在任何文档里写"共有 N 条"这类可变量**(硬规矩 4 已有此训)。硬规矩条数、H 条目数、
    文件行数都属于这一类 —— 要写就写"用 `grep -c` 现算"。
 6. **新增文档必须进 `## 文档地图`**,否则等于没写。
@@ -578,7 +579,7 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 | `docs/LOCAL-ASSETS.md` | **本地资产与换机迁移**(哪些东西不在 git 里、新机怎么完整重建) |
 | ~~分发运营物料~~、~~`*/store/`~~ | **不入版本控制**(硬规矩 19)。清单与换机流程见 `docs/LOCAL-ASSETS.md` |
 | `docs/PRIVACY.md` | 隐私政策(与 `reverb/privacy.html` 必须同步) |
-| `docs/REVIEW-2026-10-18.md` | **一次性的项目体检**:规模基线、做对了什么、不足与优先级 TODO。**看"当前处在什么位置"看这份,看"要做什么"看 ROADMAP** |
+| `docs/REVIEW-2026-10-18.md` | **一次性的项目体检**:规模基线、做对了什么、不足与优先级 TODO;含同日**复校记录**(12 处失准的订正,3.4 与文末校准表)。**看"当前处在什么位置"看这份,看"要做什么"看 ROADMAP** ⚠️ 其中"当前值/当前状态"类句子随时会漂,按文中给的命令重跑 |
 | `marketing/README.md` | 宣传物料流水线(改文案 → 重渲染 → 重编码,一条命令) |
 
 **动手之前**:改逐字稿看 `docs/TRANSCRIPT.md`;改渠道相关看 `docs/FEATURES.md` 渠道差异一节 +
@@ -597,9 +598,18 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 
 ## 仓库的对外边界
 
-仓库在 GitHub 上公开(`github.com/cxyxlxdm/reverb`),但**没有 `LICENSE` 文件** ——
-按法律默认这是"保留所有权利",别人不能合法 fork / 修改 / 分发。
-这是已知缺口(`docs/REVIEW-2026-10-18.md` 第 8 条),在它被决定之前:
+⚠️ **先分清两个仓库,这件事上一版本文写错了**(2026-10-18 复校更正。判据是匿名 `curl` 的 HTTP 码,
+不是靠文档互证 —— 同一个判据已记在 `docs/TROUBLESHOOTING.md` H144 的 2026-10-08 补记里):
+
+| 仓库 | 可见性 | 装什么 |
+|---|---|---|
+| `github.com/cxyxlxdm/reverb` = **本机 git remote** | **私有**(匿名 API 404) | 全部源码与文档 —— 就是你在读的这个仓库 |
+| `github.com/cxyxlxdm/revert-cast` | **公开** | 只有 `README.md` + **Releases**(apk 的分发处;1.0.1 / 1.0.2 那两版也放过 dmg,1.0.3 起只传 apk —— macOS 走自分发下载页)。Android 应用内更新查的就是它的 `releases/latest`,**当前 latest 停在 1.0.4** |
+
+**两个都没有 `LICENSE` 文件。** 所以缺口的正确表述不是"公开仓库没证书",而是:
+**对外发出去的东西(安装包 + 那个公开仓)没有任何许可声明** —— 用户装了包,法律上却没被告知能装、能备份、能转发到什么程度。
+这是已知缺口(`docs/REVIEW-2026-10-18.md` P0 第 8 条),在它被决定之前:
 
 - 不要把"开源"当成既定事实写进任何对外文案;
-- 引用代码、给外部人看片段之前,先确认维护者的意图。
+- 引用代码、给外部人看片段之前,先确认维护者的意图(代码仓私有,这层本来就要问);
+- **别把公开仓当备份镜像往里推源码** —— 它的定位是分发页,不是代码出口。
