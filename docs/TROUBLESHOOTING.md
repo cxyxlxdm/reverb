@@ -9937,8 +9937,11 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
 - **修法 / 现状**:**不可回退** —— `tmutil listlocalsnapshots /` 无快照、`tmutil destinationinfo` 显示未配备份目标、
   `rm` 不入废纸篓、`harmony/entry/build/` 里的中间产物早被后续构建覆写。
   两条实际缓解,都记进了 `AGENTS.md`「版本与发版」:
-  ① **身份没丢** —— 那两份的 SHA-256 在 `docs/STORE-OPS.md` 七(10-12 那轮:`reverb.app` `06d78890…`、
-     `reverb-symbol.zip` `f3230cd1…`)与 `harmony/store/上架文案.md` 第三节里,从市场侧取回后能逐字核验是不是在架那份;
+  ① **身份没丢** —— 那两份的 SHA-256 是 `reverb.app` `06d78890…` / `reverb-symbol.zip` `f3230cd1…`,
+     从市场侧取回后能逐字核验是不是在架那份。**但落点只有一处**:完整的 64 位串在**本地** `docs/STORE-OPS.md`
+     七(10-12 那轮 kit 三方一致那段),本文这条是截断前缀;
+     ⚠️ 原本并列为落点的 `harmony/store/上架文案.md` 第三节**已经不是** —— 10-17 那轮把 1.0.5 的三条哈希写进了同一张表,
+     1.0.4 那两串被就地覆写了(这也是"文案表只记当前版"的必然代价)。**换机时 `STORE-OPS.md` 若没带走,这两串就断了。**
   ② **还原能力没丢** —— 符号包当初就是"随包一起传,否则市场侧还原不了崩溃栈"(硬规矩 20),
      所以 1.0.4 的崩溃栈还原在市场侧;而 1.0.5 已在 `dist/` 且即将顶掉它。
   **Android 侧同构那一处侥幸没丢**:`_backup-shots-0920/reverb-huawei-submission-kit/` 里那份 store 包 + mapping

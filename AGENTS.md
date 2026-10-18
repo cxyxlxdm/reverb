@@ -509,7 +509,7 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
   (判据:`unzip -l <kit>.zip` 数得见 `reverb.app` / `reverb-symbol.zip` 两个条目)。
   ⚠️ **10-18 那次清理把在架鸿蒙 1.0.4 那份包与符号的本地唯一副本删了**(在
   `harmony/dist/_backup-shots-1012/reverb-harmony-submission-kit.zip` 内),本地已取不回来,只能回市场侧;
-  **身份没丢** —— 那两份的 SHA-256 记在 `docs/STORE-OPS.md` 七(10-12 那轮)与 `harmony/store/上架文案.md` 第三节,
+  **身份没丢** —— 那两份的 SHA-256 完整串只在本地 `docs/STORE-OPS.md` 七(10-12 那轮;本文不入库,换机必须带走),
   取回后按串核验即可。**教训与判据见 `docs/TROUBLESHOOTING.md` H204:kit zip 不是"素材",按发布物待遇核。**
 - **崩溃栈还原**认的是**"符号包与那次构建同批"**,与工作区 git 里那份 namecache 不是一回事(见 H154 补记)。
 
