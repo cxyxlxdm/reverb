@@ -600,6 +600,7 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 | `docs/HISTORY.md` | 开发历程(顺序与因果,返工写得更详细) |
 | `docs/ROADMAP.md` | 进度、遗留问题、演进方向(**含「没验过的路径」清单**) |
 | `docs/MACOS-GAPS.md` | **macOS 缺口清单**:Android 与鸿蒙已实现、桌面端缺什么(每条带代码落点与成本)+ 口径漂移 + **不该移植的项** + 建议顺序。盘"三端一致性"时先看这份,别重新 grep 一遍 |
+| `docs/research/*.md` | **调研原文 + 顶部提炼的 TODO**(每份 = 提炼结论 + `---` + 照抄原文)。**状态一律是"未开工、等拍板"**,拍板前别按文中的技术方案动手 |
 | `CHANGELOG.md` | 版本变更记录(发版时追加;对外版本说明的上游) |
 | `docs/LOCAL-ASSETS.md` | **本地资产与换机迁移**(哪些东西不在 git 里、新机怎么完整重建) |
 | ~~分发运营物料~~、~~`*/store/`~~ | **不入版本控制**(硬规矩 19)。清单与换机流程见 `docs/LOCAL-ASSETS.md` |
