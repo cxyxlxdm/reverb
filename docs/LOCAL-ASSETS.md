@@ -67,8 +67,8 @@
   `export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk`(AGENTS.md 常用命令一节)
 - **macOS 端**:Swift 工具链即可;`package.sh` 用 codesign ad-hoc 签名,无需证书。
   但**工具链有硬门槛(Xcode 15+ / macOS ≥ 13)**,构建机与开发机可能是两台 —— 见上面第五节第 6 条
-- **真机**:商店渠道验证用 Android 真机 + 鸿蒙真机各一台(序列号见 MIGRATION.txt);
-  `adb install -r` / `hdc install -r` 装包,**装机前先问**(硬规矩 12)
+- **真机**:Android 真机 + 鸿蒙真机各一台(序列号见 MIGRATION.txt);
+  `adb install -r` / `hdc install -r` 装包,**装机代理自办、要卸载才先备份**(硬规矩 12)
 
 ## 五、换机操作清单(按序执行)
 
@@ -79,7 +79,7 @@
 4. 按第四节装环境
 5. 重建可重建产物:`./tools/build-asr.sh`
 6. **三端构建验证**(都过 = 环境完整):
-   - `cd android && ./build-release.sh --store && ./build-release.sh`(解包复核见硬规矩 1)
+   - `cd android && ./build-release.sh`(唯一那份;解包复核见硬规矩 1。合并 flavor 后没有 `--store` 了)
    - `cd harmony && ./build-release.sh`(签名通过 = 第二节材料齐)
    - `cd macos && ./package.sh` —— **要一台 Xcode 15+ 且系统 ≥ macOS 13 的机器**(SwiftPM 工程声明 tools 5.9,
      源码用了 macOS 14 SDK 的双参数 `onChange`);**而且必须是完整 Xcode 而不是只有 Command Line Tools** ——

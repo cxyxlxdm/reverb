@@ -153,7 +153,7 @@ fun ReverbRoot(openPlayerSignal: Int = 0) {
         composable("about") { FullScreen { AboutScreen(onBack = { rootNav.popBackStack() }) } }
         composable("licenses") { FullScreen { LicensesScreen(onBack = { rootNav.popBackStack() }) } }
     }
-    // 应用内更新那一个弹窗(自分发渠道才有内容,商店渠道那份渲染空)。
+    // 应用内更新那一个弹窗(Android 只有一份包,它对所有分发都出;合并前商店那份渲染空)。
     // 挂在最外层而不是某个页面里:它是**跨页面的启动提示**,谁在前台都该看得见,
     // 而且它只在有状态时才组合出东西(见 SelfUpdateUi),常驻在这里的成本是一次 Flow 订阅。
     SelfUpdateHost()

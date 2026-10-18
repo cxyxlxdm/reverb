@@ -4,13 +4,14 @@ import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.TranscribedSegment
 
 /**
- * 本机离线语音识别。**只有默认渠道有实现**(见各 flavor 各自一份的 `AsrFactory`)。
+ * 本机离线语音识别。实现是 `WhisperEngine`,工厂是 `AsrFactory`。
  *
- * 为什么把接口放 `main`、实现放 flavor:R8 能折叠常量删掉 Kotlin 代码,但
- * **删不掉 `.so` 与 assets** —— native 库和模型是构建系统按 source set 打进包的。
- * 所以大陆商店渠道必须靠「那份工厂返回 null + 那个 source set 里没有实现类、没有 jniLibs、
- * 没有模型」来保证**包里真的没有**,而不是靠运行时开关。
- * 验收方式是解包 grep,不是点界面(这条教训见 TROUBLESHOOTING H46 / H54)。
+ * 这两样原先分开放(接口在 `main`、实现按 flavor 各一份),理由是要保证商店那个渠道的包里
+ * **连实现类、`.so` 与模型都不存在** —— R8 能折叠常量删掉 Kotlin 代码,但删不掉 `.so` 与 assets,
+ * native 库和模型是构建系统按 source set 打进包的,所以「包里真的没有」只能靠 source set 隔离,
+ * 而不是运行时开关(那条教训见 H46 / H54,验收方式一直是解包 grep)。
+ * 2026-10-18 两个 flavor 合并成一份包之后这层隔离没有了,接口与实现在同一棵编译树里;
+ * 「降级时包里真的没有」的手段退回 `BuildConfig` 常量 + 把产物移出 `src/main`(见 H205)。
  */
 interface AsrEngine {
 

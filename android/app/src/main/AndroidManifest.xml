@@ -8,9 +8,17 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- 真实频谱所需的 RECORD_AUDIO / MODIFY_AUDIO_SETTINGS **不在这里声明** ——
-         它们只属于 default 渠道,见 src/default/AndroidManifest.xml。
-         商店渠道不含该功能,故其 APK 里不出现录音权限。 -->
+    <!-- 真实频谱(RECORD_AUDIO + MODIFY_AUDIO_SETTINGS)与应用内更新(REQUEST_INSTALL_PACKAGES)
+         原先只声明在 src/default/AndroidManifest.xml,商店那份没有 —— 2026-10-18 两 flavor 合成
+         一份包之后,这三条进了唯一的 manifest(理由与代价见 H205):
+         · RECORD_AUDIO 只服务于播放页那一个默认关闭的视觉效果,Visualizer(session 0) 读的是
+           本机播放输出的混音,平台要求该能力必须持该权限;不采集麦克风、不落盘、不上传。
+         · REQUEST_INSTALL_PACKAGES 唯一的消费者是应用内更新(见 update/SelfUpdate.kt),声明它
+           不等于授权 —— 真正安装前系统仍会逐次要求放行(见 openInstallPermissionPage)。
+         ⚠️ 大陆市场把这两条都列为敏感权限、需逐次举证,提审口径要跟着这份 manifest 走。 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 保存图片到相册:Android 10+ 用 MediaStore 免权限,仅 9 及以下需要写外存 -->
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"

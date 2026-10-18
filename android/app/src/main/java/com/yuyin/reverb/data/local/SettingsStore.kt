@@ -26,9 +26,9 @@ class SettingsStore(context: Context) {
     /**
      * 逐字稿功能开关(默认**开**,与 macOS 一致)。
      *
-     * 它只管**要不要显示播放页第三页**;真正能不能本机识别取决于渠道有没有引擎
-     * (`AsrFactory.HAS_ENGINE`)。大陆商店渠道没有引擎,那边设置页里连这一项都不显示 ——
-     * 于是这个值在那个渠道形同虚设,不影响"有官方稿的集照样出第三页"。
+     * 它只管**要不要显示播放页第三页**;真正能不能本机识别取决于包里有没有引擎
+     * (`AsrFactory.HAS_ENGINE`)。合并前大陆商店那份没有引擎,那个渠道的设置页里连这一项都不显示,
+     * 于是这个值形同虚设,也不影响"有官方稿的集照样出第三页"(见 H205)。
      */
     val transcriptionEnabled = MutableStateFlow(prefs.getBoolean("transcription_enabled", true))
     /**
@@ -37,9 +37,9 @@ class SettingsStore(context: Context) {
      * - 本机识别:whisper 要不要额外算 DTW 词级时间戳 —— 那会**多花约 70% 时间**
      *   (冷机实测 1 小时音频 11 分钟 vs 6.5 分钟)。
      *
-     * 两个渠道都有这个开关,但**含义不同**:大陆商店渠道没有识别引擎,它只影响
-     * 「发布方提供的逐字稿」怎么渲染(那种稿本来就带词级时间,开着不花任何代价);
-     * 完整版则要为此多算一遍。副标题因此按渠道分别写(见 src/default|store/res/values-* 各一份)。
+     * 合并前两个渠道都有这个开关但**含义不同**(商店那份没有识别引擎,它只影响
+     * 「发布方提供的逐字稿」怎么渲染,那种稿本来就带词级时间,开着零代价;完整版要为此多算一遍),
+     * 副标题因此按渠道各写一份。现在只有一份包,副标题留的是完整版那一句(见 H205)。
      */
     val wordHighlight = MutableStateFlow(prefs.getBoolean("word_highlight", true))
     val contextualRadio = MutableStateFlow(prefs.getBoolean("contextual_radio", false)) // 电台模式:false 随机 / true 情境,默认随机
@@ -190,10 +190,12 @@ class SettingsStore(context: Context) {
          *       官网推荐清单 / 可选的公开检索接口)、网络状态权限与 SSID 说明、权限清单。
          *   2 = 2026-10(随 1.0.5)。新增网络访问地址(GitHub 公开发布页接口 api.github.com 及其
          *       资产下载)、新增权限 REQUEST_INSTALL_PACKAGES、同意页多一段「应用内更新」自述。
-         *       ⚠️ 这三样**都只在自分发完整版**:商店渠道那一段是空串、包里也没有那项权限,所以
+         *       ⚠️ 这三样**当时只在自分发完整版**:商店渠道那一段是空串、包里也没有那项权限,所以
          *       商店用户重看的同意页与上一版逐字相同。版本号没做成按渠道不同的常量:自述文档
          *       (privacy.html)两个渠道都变了,而商店渠道本身正等整体收口(见 ROADMAP),
          *       为一次性的重问引入两套版本号更容易漂。
+         *       ⚠️ **2026-10-18 两 flavor 合成一份包**(H205)之后这段前提变了:那三样现在进唯一的包,
+         *       所有用户看到的都是同一份自述。上面的记的是当时为什么只有一个版本号 —— 不改写。
          *
          * 改这个数之后**必须重新打包**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
          */

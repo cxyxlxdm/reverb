@@ -6,14 +6,15 @@
 #   reverb-mapping.txt   R8 混淆映射 —— **务必留档并上传**,否则崩溃栈无法还原
 #
 # 用法:
-#   ./build-release.sh                 默认渠道 → dist/reverb.apk
-#   ./build-release.sh --store         商店渠道 → dist/reverb-store.apk
-#   ./build-release.sh [渠道] --bundle 同时打 AAB(Google Play 需要 AAB)
+#   ./build-release.sh            → dist/reverb.apk
+#   ./build-release.sh --bundle   同时打 AAB(Google Play 需要 AAB)
 #
-# 1.0.1 起两渠道统一包名 com.yuyin.reverb.android(产品决策:鸿蒙端独占
-# com.yuyin.reverb)。两渠道功能仍不同(离线转写/真实频谱/内置种子只在默认渠道,
-# 见 docs/FEATURES.md),APK 仍是两份;同设备上商店删减版可覆盖官网完整版,
-# 这一点已接受 —— 详见 app/build.gradle 注释。
+# **2026-10-18:两个 flavor(`default` / `store`)合并成一份包**,所以本脚本不再有渠道参数,
+# 上面那一个产物名就是全部 —— 大陆商店与 GitHub Releases 传的是**同一个 dist/reverb.apk**
+# (应用内更新按资产名 `reverb.apk` 挑,见 update/SelfUpdate.kt)。合并的取舍、代价与
+# 「商店提审口径要跟着这份 manifest 走」那一层,见 TROUBLESHOOTING H205 与 docs/FEATURES.md。
+#
+# 包名自 1.0.1 起就是 com.yuyin.reverb.android(产品决策:鸿蒙端独占 com.yuyin.reverb)。
 #
 set -euo pipefail
 
@@ -42,34 +43,30 @@ if [ ! -f keystore.properties ]; then
   echo "  该文件与 .jks 都不入版本管理。"
 fi
 
-# 解析渠道参数
-CHANNEL=default
+# 解析参数。合并成一份包之后只剩 --bundle;旧的 --store 会落到「未知参数」分支并退出,
+# 这比静默按另一个渠道构建好。
 BUNDLE=0
 for a in "$@"; do
   case "$a" in
-    --store)  CHANNEL=store ;;
     --bundle) BUNDLE=1 ;;
     *) echo "✗ 未知参数:$a"; exit 1 ;;
   esac
 done
-if [ "$CHANNEL" = "store" ]; then
-  GRADLE_FLAVOR=Store; APP_ID="com.yuyin.reverb.android"; OUT_APK=reverb-store.apk
-else
-  GRADLE_FLAVOR=Default; APP_ID="com.yuyin.reverb.android"; OUT_APK=reverb.apk
-fi
+APP_ID="com.yuyin.reverb.android"
+OUT_APK=reverb.apk
 
-# 默认渠道带离线语音识别,那两样东西**不入版本管理**(一个 57 MB 的模型 + 一个 .so),
+# 离线语音识别的那两样东西**不入版本管理**(一个 57 MB 的模型 + 一个 .so),
 # 由 tools/build-asr.sh 备好。缺了照样能构建成功,只是装上之后转写入口点了没反应 ——
-# 那种"打出来才发现"的包最难查,所以在这里挡住。商店渠道压根不含引擎,不检查。
-# 只有引擎真的启用时才检查 —— HAS_ENGINE 还没跑通时置了 false,
-# 那种情况下默认渠道在任何机器上都该能直接构建,不该被这两个本地产物挡住。
-ASR_ON=$(grep -c 'HAS_ENGINE = true' app/src/default/java/com/yuyin/reverb/playback/asr/AsrFactory.kt || true)
-if [ "$CHANNEL" = "default" ] && [ "$ASR_ON" != "0" ]; then
+# 那种"打出来才发现"的包最难查,所以在这里挡住。
+# 只有引擎真的启用时才检查 —— HAS_ENGINE 是合规降级的备用闸,置成 false 时
+# 任何机器都该能直接构建,不该被这两个本地产物挡住。
+ASR_ON=$(grep -c 'HAS_ENGINE = true' app/src/main/java/com/yuyin/reverb/playback/asr/AsrFactory.kt || true)
+if [ "$ASR_ON" != "0" ]; then
   MISSING=0
-  [ -f app/src/default/jniLibs/arm64-v8a/libreverb_asr.so ] || MISSING=1
-  [ -f app/src/default/assets/whisper-model.bin ] || MISSING=1
+  [ -f app/src/main/jniLibs/arm64-v8a/libreverb_asr.so ] || MISSING=1
+  [ -f app/src/main/assets/whisper-model.bin ] || MISSING=1
   if [ "$MISSING" = "1" ]; then
-    echo "✗ 默认渠道缺少离线识别的产物,先跑一次:"
+    echo "✗ 缺少离线识别的产物,先跑一次:"
     echo "    ./tools/build-asr.sh"
     echo "  (会编译 libreverb_asr.so 并下载 57 MB 的模型;只需跑一次)"
     exit 1
@@ -79,20 +76,19 @@ fi
 VER_NAME=$(sed -n 's/.*versionName "\([^"]*\)".*/\1/p' app/build.gradle | head -1)
 VER_CODE=$(sed -n 's/.*versionCode \([0-9]*\).*/\1/p' app/build.gradle | head -1)
 echo "▸ 余音 Reverb (Android)  versionName=$VER_NAME  versionCode=$VER_CODE"
-echo "  渠道=$CHANNEL  applicationId=$APP_ID"
+echo "  applicationId=$APP_ID"
 
 echo "▸ 构建 release(R8 混淆 + 资源压缩)"
-./gradlew "assemble${GRADLE_FLAVOR}Release" -q
+./gradlew assembleRelease -q
 if [ "$BUNDLE" = "1" ]; then
   echo "▸ 构建 AAB"
-  ./gradlew "bundle${GRADLE_FLAVOR}Release" -q
+  ./gradlew bundleRelease -q
 fi
 
 DIST="$ROOT/dist"
 mkdir -p "$DIST"
-VARIANT_DIR=$(echo "$CHANNEL" | tr 'A-Z' 'a-z')Release
 
-APK=$(find "app/build/outputs/apk/$CHANNEL/release" -name "*.apk" 2>/dev/null | head -1)
+APK=$(find "app/build/outputs/apk/release" -name "*.apk" 2>/dev/null | head -1)
 [ -n "$APK" ] || { echo "✗ 没找到 release APK"; exit 1; }
 
 # 用 apksigner 判定是否真的签了,以及签名者是谁 —— 不靠"有没有 keystore.properties"猜。
@@ -150,21 +146,21 @@ else
   cp "$APK" "$DIST/$OUT_NAME"
 fi
 
-# 校验产物 applicationId 是统一包名。1.0.1 起两渠道同包名,它不再能区分渠道 ——
-# 渠道是否打对要看文件名与构建日志,这里只拦「包名整体错掉」的情形
+# 校验产物包名。合并后只有一份包,这一步只拦「包名整体错掉」的情形
+# (自 1.0.1 起包名不再能区分渠道,因为渠道只有一个了)。
 AAPT=$(ls "$SDK"/build-tools/*/aapt2 2>/dev/null | sort -V | tail -1 || true)
 if [ -n "$AAPT" ]; then
   REAL_ID=$("$AAPT" dump packagename "$DIST/$OUT_NAME" 2>/dev/null || true)
   if [ -n "$REAL_ID" ] && [ "$REAL_ID" != "$APP_ID" ]; then
-    echo "✗ 产物包名是 $REAL_ID,与渠道 $CHANNEL 期望的 $APP_ID 不一致"; exit 1
+    echo "✗ 产物包名是 $REAL_ID,期望 $APP_ID"; exit 1
   fi
   echo "  产物包名校验通过:$REAL_ID"
 fi
 
 # R8 映射:发布后要靠它还原崩溃栈,每个版本都必须留档
-MAP=$(find "app/build/outputs/mapping/${CHANNEL}Release" -name mapping.txt 2>/dev/null | head -1 || true)
+MAP=$(find "app/build/outputs/mapping/release" -name mapping.txt 2>/dev/null | head -1 || true)
 [ -n "$MAP" ] && cp "$MAP" "$DIST/${OUT_APK%.apk}-mapping.txt"
-AAB=$(find "app/build/outputs/bundle/${CHANNEL}Release" -name "*.aab" 2>/dev/null | head -1 || true)
+AAB=$(find "app/build/outputs/bundle/release" -name "*.aab" 2>/dev/null | head -1 || true)
 [ -n "$AAB" ] && cp "$AAB" "$DIST/${OUT_APK%.apk}.aab"
 
 echo

@@ -109,10 +109,11 @@ macOS `AppEnvironment`,都是全局单例,界面直接取用。理由很实际�
 
 ## 四、取源与解析
 
-**取源策略是多层兜底**(当前三个端与两个渠道都有在线目录层):
+**取源策略是多层兜底**(当前三个端都有在线目录层;Android 侧只有一份包,不再有渠道之分,H205):
 Apple iTunes Search / Charts → fyyd.de → gpodder.net → RSS 直连。
-一处不通自动换下一处,最终一律回到发布方自己的 RSS。大陆商店 Android / 鸿蒙仍不打包
-内置 `seed_podcasts.json`,所以首次无网且无缓存时没有精选快照回退。
+一处不通自动换下一处,最终一律回到发布方自己的 RSS。内置 `seed_podcasts.json` 现在随
+**唯一那份** Android 包走(合并 flavor 前商店那份没有),所以 Android 首次无网也有精选快照兜底;
+**鸿蒙包里仍然没有它**,那条回退在鸿蒙上不成立。
 
 **RSS 解析器三端各写一份,但规则对齐**,都要处理真实世界的脏数据:
 
@@ -256,50 +257,62 @@ macOS 端解码**不做秒/毫秒归一** —— 没有一端写秒,归一只会
 
 ---
 
-## 六、渠道隔离:三种工具链,三种做法
+## 六、渠道隔离:一份 Android 包 + 三种工具链的做法
 
 这是整个项目最需要架构层面处理的合规问题。目标不是永久规定商店包「必须没有目录」,
-而是让每次产品决策都能在产物中验证。H70 后商店渠道恢复 `CATALOG`,但仍关闭
-`SPECTRUM` / `LOCAL_ASR`,并且不打包内置种子。
+而是让每次产品决策都能在产物中验证。
 
-### Android:flavor + source set + R8
+**2026-10-18 的一次口径变化(见 H205)**:Android 的 `default` / `store` 两个 flavor 合并成
+**唯一一份包**,大陆商店与 GitHub Releases 传同一个 `dist/reverb.apk`。于是这一节描述的机制
+在 Android 侧从「两份 source set 各装什么」变成「一份包 + 三个可降级的编译期常量」。
+鸿蒙仍是商店单渠道,macOS 仍自分发,那两端的隔离手法不变。
+
+### Android:一份包 + 三个备用闸
 
 ```
-app/src/main/     共享代码与两个渠道共用的目录隐私说明
-app/src/default/  自分发渠道:AsrFactory(返回 WhisperEngine)、jniLibs/*.so、assets/模型、
-                  AndroidManifest 里的 RECORD_AUDIO、ASR / 麦克风相关文案
-app/src/store/    商店渠道:AsrFactory(返回 null)、无 native / 模型 / RECORD_AUDIO、
-                  无本机转写与真实频谱的渠道文案
+app/src/main/     唯一的源码与资源:ASR 工厂(返回 WhisperEngine)、jniLibs/*.so、
+                  assets/模型与内置种子、AndroidManifest 里的 RECORD_AUDIO /
+                  REQUEST_INSTALL_PACKAGES、全套文案
+app/src/{default,store}/   ← 已删除(H205)
 ```
 
-两种机制配合:
+隔离手段只剩一种,而且它的作用也跟着变了:
 
-- **编译期常量 + R8**:`BuildConfig.CATALOG` / `AsrFactory.HAS_ENGINE` 是 `const`,
-  R8 能折叠关闭的代码分支。当前商店渠道的 `CATALOG` 已开启;若合规要求回退,再关闭并验包;
-- **source set**:R8 **删不掉 `.so` 与 assets**,native 库、模型和种子是构建系统按 source set
-  打进包的——所以商店渠道仍靠「那个 source set 里压根没有这些文件」保证不含 ASR 与内置精选。
+- **编译期常量 + R8**:`BuildConfig.CATALOG` / `BuildConfig.SPECTRUM` / `AsrFactory.HAS_ENGINE`
+  三个 `const` 现在都是 `true`(= 功能全开)。它们不再是"渠道差异的实现",而是**合规回退时的
+  一行降级闸**:某条口径要求收回目录、真实频谱或本机转写,把对应常量降到 `false`,R8 会折叠掉整支代码。
+- **⚠️ 这条降级只删代码,不删文件**(硬规矩 3):`.so`、57 MB 模型与内置种子在 `src/main` 里,
+  降到 `false` 之后**包里仍然有它们**。真要做到「包里没有」,得把文件本身移出构建树
+  (`tools/build-asr.sh` 是把它们放进来的那一步)。合并前这件事是靠 store 的 source set 天然保证的,
+  现在那层保护没了 —— 所以降级档必须按下面那套解包 grep 重验一遍。
+- **文案侧**:合并前关于页与部分副标题在 `src/store/res` 里各有一套(资源**覆盖**,不是继承,见 H169);
+  合并时把两边都带进 `src/main/res`,五语各从 353 键变成 367 键。**改资源时数一下键数** ——
+  覆盖语义下漏一个键不会报错,只会静默用另一套。
 
 ### HarmonyOS:没有 DCE,降级必须移出编译树
 
 **ArkTS 没有 DCE。** `Features.CATALOG ? A : B` 的两支都会进包。
 此前为纯 RSS 口径,目录实现整体移到 `harmony/shelved/`;H70 恢复目录时又把 `Sources.ets`
 移回编译树并接回降级链。若合规要求再次降级,不能只把开关设为 `false`,必须重新把目录实现
-移出编译树。这个工具链差异不因当前恢复目录而失效。
+移出编译树。这个工具链差异不因 Android 合并 flavor 而失效 —— **两端"降级"的代价完全不同,别互相类推。**
 
 > 这是一条不能类推的经验:**"编译期开关能删代码"取决于工具链有没有 DCE。**
-> 同样的写法在 Kotlin/R8 下成立,在 ArkTS 下不成立。
+> 同样的写法在 Kotlin/R8 下成立,在 ArkTS 下不成立;而在**任何**一端,它都删不掉 `.so` 与 assets。
 
 ### 验收方式写死在流程里
 
 ```bash
-# Android 商店渠道当前期望(H70):目录 URL 非 0;native / 模型 / 录音权限仍为 0
-unzip -l dist/reverb-store.apk | grep -icE 'lib/|whisper-model'              # 0
-LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder'       # 非 0
-aapt2 dump permissions dist/reverb-store.apk | grep -c RECORD_AUDIO         # 0
-# HarmonyOS 商店包:目录 URL 同样非 0,本机转写与真实频谱产物仍不存在
-# 自分发渠道:whisper 模型与 native 库必须都有
-unzip -l dist/reverb.apk | grep -cE 'whisper-model.bin|libreverb_asr.so'
+# Android 唯一那份,当前期望(H205):四项全非 0
+unzip -l dist/reverb.apk | grep -icE 'lib/|whisper-model'              # 2
+unzip -l dist/reverb.apk | grep -cE 'assets/seed_podcasts\.json'       # 1
+LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder' # 14
+"$SDK/build-tools/<ver>/aapt2" dump permissions dist/reverb.apk | wc -l  # 13(含 RECORD_AUDIO)
+# HarmonyOS 商店包:目录 URL 非 0,本机转写与真实频谱产物仍不存在
 ```
+
+合并那一轮为了证明「合并包 == 在架的 default 包」,用的判据是 `aapt2 dump resources` 两份各 6405 行、
+`0x7f` 条目各 655 个、**整表 diff 为空**,zip 条目名各 173 个、diff 同样为空;并各注入一个负控制
+(拿旧 store 包比 → 262 行差异)证明这两个「0」不是没扫成。
 
 期望值随产品决策翻转,方法论不变:声明加回来也要验,声明删掉也要验;翻转时同步
 `docs/FEATURES.md`。**中文字符串要用 `LC_ALL=C grep -a` 对原始字节搜**——
@@ -325,8 +338,9 @@ startGated()  播放层、系统媒体会话、周期更新任务、电台配置
 
 三端同一结构(Android `MainActivity.startGatedComponents`、
 鸿蒙 `AppContainer.startGated` + `Index` 里的整树门控)。
-**同意门本身不分渠道**,两个渠道都会出——这一点曾在文档里写错,
-而它的直接后果是同意页正文必须把**自分发版独有的麦克风权限**如实说明。
+**同意门本身不分渠道**,Android 那份唯一的包与鸿蒙都会出——这一点曾在文档里写错,
+而它的直接后果是同意页正文必须把**麦克风权限、离线识别与应用内更新**如实说明。
+合并 flavor 后 Android 侧这三件事在两个分发处**恒为存在**,正文不必再按版本分别措辞(见 H205)。
 
 同意状态**存的是「已同意的政策版本号」而不是布尔**:政策有实质性变更时把版本号 +1,
 所有用户会再看一次。
@@ -513,7 +527,7 @@ Compose 的 `consumed.y` **与手指方向反号**(向上划报负值),以及
 
 | | 命令 | 产物 |
 |---|---|---|
-| Android | `android/build-release.sh [--store]` | `dist/reverb.apk`(约 64 MB,含模型)/ `dist/reverb-store.apk`(约 3.9 MB)+ mapping |
+| Android | `android/build-release.sh` | `dist/reverb.apk`(约 65 MB,含模型)+ mapping —— **唯一那份**,同时交大陆应用市场与 GitHub Releases(合并 flavor 前还有 `--store` 出的 3.9 MB 那份,H205) |
 | HarmonyOS | `harmony/build-release.sh` | `dist/reverb.app`(约 952 KB)+ 符号包 |
 | macOS | `macos/package.sh` | dmg |
 
@@ -522,8 +536,9 @@ Compose 的 `consumed.y` **与手指方向反号**(向上划报负值),以及
 - **大产物不入版本管理**:whisper 的 `.so`(1.6 MB)与模型(57 MB)由
   `android/tools/build-asr.sh` 一条命令重建(固定 whisper.cpp commit + 校验模型 sha256);
   `build-release.sh` 在引擎启用时检查它们在不在,缺了直接报错退出。
-- **打包脚本自带校验**:校验产物的 applicationId 与渠道一致(两个渠道的包长得一模一样,
-  搞错会传错包)、校验签名不含 debug key。
+- **打包脚本自带校验**:校验产物的 `applicationId` 与签名者 DN(调试证书直接 exit 1)。
+  合并 flavor 前它还要判"这个包是哪一个渠道"——两个包同名同包名,搞错会传错处;
+  现在只有那一份包,这一层判据随 `--store` 一起退出脚本(`build-release.sh:46` 注释)。
 - **鸿蒙默认清构建缓存**:hvigor 的资源编译任务会命中缓存——换过图标/字符串后照常
   `BUILD SUCCESSFUL`,但包里仍是旧资源(H39)。发布包一年打不了几次,宁可多等 10 秒。
 - **开发期工具与产物分开**:比如 `android/tools/asr-probe/`(主机端探针,把每个 token 的

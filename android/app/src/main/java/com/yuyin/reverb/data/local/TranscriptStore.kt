@@ -20,9 +20,9 @@ import java.io.File
  * 「转写」的状态机与缓存。对应 macOS `Data/TranscriptStore.swift`,状态与缓存格式一一对齐。
  *
  * 两条取稿路径,**先官方稿、后本机识别**:
- * 1. 发布方自己给的逐字稿(RSS `podcast:transcript`)—— 准、快、不耗电,两个渠道都有;
- * 2. 本机离线识别 —— **只有默认渠道有引擎**(见 `playback/asr/AsrFactory`),
- *    大陆商店渠道那份工厂返回 null,于是状态直接落在 `NoEngine`。
+ * 1. 发布方自己给的逐字稿(RSS `podcast:transcript`)—— 准、快、不耗电,所有分发都有;
+ * 2. 本机离线识别 —— 引擎在 `playback/asr/AsrFactory` 里(合并前只有自分发那个 flavor 带,
+ *    商店那份工厂返回 null、状态直接落在 `NoEngine`;现在只有一份包,见 H205)。
  *
  * 缓存:每单集 × 每语言一份 JSON,放 `filesDir/transcripts/`。命中即秒显,不重转。
  * **格式与 macOS 完全一致**(`{localeId, complete, segments:[{text,startMs,endMs,words?}]}`),
@@ -34,10 +34,11 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
 
     /**
      * 界面要显示的状态。比 macOS 多一个 `NoEngine` —— 那端不存在"这个版本没有识别能力"
-     * 这种情况(系统框架总在),Android 的大陆商店渠道则要如实告诉用户。
+     * 这种情况(系统框架总在),而 Android 要有这个状态可如实告诉用户
+     * (合并前商店那份恒落这里;现在只在 `HAS_ENGINE` 被降级、或 `.so` 加载失败时出现)。
      */
     sealed interface State {
-        /** 没有稿,可以开始转写(默认渠道)*/
+        /** 没有稿,可以开始转写(带引擎的那份包)*/
         data object Idle : State
         /** 正在取发布方的官方稿 */
         data object FetchingOfficial : State
@@ -48,7 +49,7 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         data object Running : State
         data object Done : State
         data class Failed(val message: String) : State
-        /** 本渠道不含离线识别引擎,且这一集没有官方稿 */
+        /** 这份包不含可用的离线识别引擎,且这一集没有官方稿 */
         data object NoEngine : State
     }
 
@@ -108,7 +109,7 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
 
     /**
      * 开始取稿/转写。`localPath` 非空表示这一集已下载(纯离线),否则识别前要先下音频。
-     * `engine` 为 null 表示本渠道没有引擎。
+     * `engine` 为 null 表示这一份包里没有可用的引擎(降级档,或 `.so`/模型没打进包)。
      */
     fun start(
         episode: Episode,

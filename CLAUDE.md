@@ -80,6 +80,7 @@ Android 两渠道编译 + 装机、鸿蒙 `assembleHap` + 装机、macOS 整模�
 ## 一句话背景
 
 **余音 · Reverb**:三端(Android / macOS / HarmonyOS)播客客户端,
-**零后端、不接三方 SDK、数据只在本机**。Android 分自分发与大陆商店两个渠道,功能范围不同
-(合规口径决定)。详见 `AGENTS.md` 与 `docs/PRODUCT.md`;
+**零后端、不接三方 SDK、数据只在本机**。Android 只维护一份安装包(2026-10-18 合并了原先自分发与
+大陆商店两个 flavor,见 H205),同一份包既交大陆应用市场也放 GitHub Releases;
+鸿蒙只有商店渠道,macOS 自分发 dmg。端与端的功能差距见 `docs/FEATURES.md`「渠道差异」。
 对项目整体水平的判断见 `docs/REVIEW-2026-10-18.md`。

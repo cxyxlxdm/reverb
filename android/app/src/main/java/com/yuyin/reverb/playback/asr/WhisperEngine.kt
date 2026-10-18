@@ -14,7 +14,8 @@ import okhttp3.Request
 import java.io.File
 
 /**
- * whisper.cpp 的封装。**只在默认渠道存在**(本文件在 `src/default/`)。
+ * whisper.cpp 的封装。**Android 只有一份包,它就在 `src/main`**(合并前这个类只存在于
+ * 自分发渠道那个 source set,见 H205)。
  *
  * 模型随包内置(`assets/whisper-model.bin`,base-q5_1 约 57 MB),首次使用拷到私有目录 ——
  * whisper 要一个真实文件路径,而 assets 里的东西没有路径。拷贝只发生一次。

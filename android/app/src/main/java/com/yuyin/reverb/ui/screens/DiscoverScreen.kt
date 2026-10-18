@@ -165,7 +165,8 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             title = stringResource(R.string.app_name),
             subtitle = stringResource(R.string.slogan),
             action = {
-                // 电台受内容目录开关门控;若合规要求降级为纯 RSS 工具,会随 CATALOG 一起隐藏。
+                // 电台受 `BuildConfig.CATALOG` 门控。原先它是渠道差异(商店那份也开着),
+                // 现在是合规降级的备用闸:若被判定为「内容推荐」需许可证,改这一行为 false 即整块隐藏。
                 if (BuildConfig.CATALOG) {
                 val mode = if (contextualRadio) RadioStation.Mode.CONTEXTUAL else RadioStation.Mode.RANDOM
                 val label = stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
@@ -223,7 +224,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = {
                 keyboard?.hide()
-                // 无内容目录的渠道**不做关键词检索** —— 关键词返回的是节目列表,同样构成动态目录。
+                // 关掉内容目录那一档**不做关键词检索** —— 关键词返回的是节目列表,同样构成动态目录。
                 // 只接受 http(s) 的 RSS 地址;输入别的就提示一句,不发请求。
                 val q = vm.query.trim()
                 if (!BuildConfig.CATALOG && !q.startsWith("http://", true) && !q.startsWith("https://", true)) {
@@ -240,7 +241,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
         )
 
         if (browsing && !BuildConfig.CATALOG) {
-            // 无内容目录的渠道:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
+            // `CATALOG=false` 那一档:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
             // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
             SubscribeStarter(
                 continueEntries = inProgress,

@@ -15,7 +15,8 @@ import kotlin.math.roundToInt
  * 取发布方**自己提供的逐字稿**(RSS `podcast:transcript`),解析成统一的 `TranscribedSegment`。
  *
  * 这条路优先于本机识别:时间轴是发布方给的,准确、免费、瞬间可用,还没有耗电与发热。
- * 大陆商店渠道**只有这一条路**(不含离线识别引擎)。
+ * 合并前它是大陆商店渠道唯一的一条路(那个包不含识别引擎);现在引擎在唯一的包里,
+ * 这一条仍是首选 —— 有官方稿就不必在本机跑十几分钟。
  *
  * 支持三种带时间轴的格式:Podcast Index JSON / WebVTT / SRT。HTML 与纯文本稿不收
  * (没有时间轴,做不了跟播放高亮,见 `RssParser.transcriptRank`)。

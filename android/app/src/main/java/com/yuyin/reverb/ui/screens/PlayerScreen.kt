@@ -102,7 +102,8 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
             android.content.pm.PackageManager.PERMISSION_GRANTED
     }
     // 仅在开启真频谱、已授权且正在播放时采集,其余走程序化墨纹。
-    // BuildConfig.SPECTRUM 为渠道门控:商店渠道不含该功能,恒为 false(见 app/build.gradle)。
+    // BuildConfig.SPECTRUM 是合规降级的备用闸(原先是渠道门控:商店那份恒 false,
+    // 因为那个市场把录音列为敏感权限;2026-10-18 两 flavor 合成一份包,见 H205)。
     val spectrum by rememberSpectrumState(
         active = BuildConfig.SPECTRUM && spectrumEnabled && hasAudioPerm && isPlaying
     )
@@ -146,10 +147,9 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
     val maxValue = if (duration > 0) duration.toFloat() else 1f
 
     /**
-     * 是否有第三页(逐字稿)。两个渠道的规则**用同一个表达式**表达:
-     * - 默认渠道有离线识别引擎(`AsrFactory.HAS_ENGINE`),跟设置开关走 ⇒ 任何一集都能转;
-     * - 大陆商店渠道没有引擎 ⇒ **只有发布方给了逐字稿的那些集才出现第三页**
-     *   (用户定的:没稿就别出空页)。
+     * 是否有第三页(逐字稿)。有引擎就跟设置开关走 ⇒ 任何一集都能转;
+     * 没引擎(合并前商店那份,或以后把 `HAS_ENGINE` 降成 false)则**只有发布方给了逐字稿的那些集
+     * 才出现第三页**(用户定的:没稿就别出空页)。
      */
     val transcriptEnabled by container.settingsStore.transcriptionEnabled.collectAsStateWithLifecycle()
     val showTranscript = (AsrFactory.HAS_ENGINE && transcriptEnabled) || episode.transcriptUrl.isNotBlank()

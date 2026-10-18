@@ -121,7 +121,7 @@ import kotlin.math.roundToInt
  *
  * 未选中是 onSurfaceVariant 的 10% 实底(与鸿蒙 `ChipsRow` 同一配方),选中是强调色实底。
  *
- * 全项目三处 chip 都走这里:音阁分段、发现页分类(仅完整版渠道)、搜索结果的节目/单集分段。
+ * 全项目三处 chip 都走这里:音阁分段、发现页分类(受 `BuildConfig.CATALOG` 门控)、搜索结果的节目/单集分段。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

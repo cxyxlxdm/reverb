@@ -27,20 +27,20 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * 应用内更新(自分发渠道专有)。
+ * 应用内更新。
  *
  * 发布物只有一个:仓库 GitHub Releases 上那份 `reverb.apk`。这里做三件事 ——
  * ① 启动后查一次「最新 release」;② 版本比本机新就下载(仅 Wi-Fi 自动下,计费网络先征求同意);
  * ③ 下载完把文件交给系统安装器。**没有任何自建后端**:这一条与「零后端」约束不冲突,
  * 因为读的是**公开发布页的公开 API**,不带任何标识用户的参数,也不上传任何数据。
  *
- * **为什么这个类在 `src/default` 而不是 `src/main`**
- * 商店渠道(Harmony 同)由应用市场负责更新,自更新在商店合规口径下是被明令避免的形态
- * (绕过市场的版本审核 + `REQUEST_INSTALL_PACKAGES` 属敏感权限、需逐次举证)。
- * 所以本端**两个 flavor 各有一份同名 `SelfUpdate`**:default 这份是真实现,
- * store 那份是空壳 —— 与离线识别引擎 `AsrFactory` 同一个隔离手法(见 H70 与那条硬规矩:
- * `BuildConfig` 常量只能删代码、删不掉资源与权限声明,只有 source set 能做到「包里真的没有」)。
- * 验收方式照旧是解包 grep:default 包里能搜到那条 API 地址,store 包里搜不到。
+ * **它在 `src/main`(2026-10-18 起)**
+ * 原先只有自分发渠道带这个功能:商店那份是同名空壳,权限与文案都不进那个包(见 H70 的隔离手法)。
+ * 两个 flavor 合并成一份包之后没得选了 —— 同一个 APK 既上 GitHub 也上商店,
+ * 所以这份真实现进了 `src/main`,`REQUEST_INSTALL_PACKAGES` 也随之进了唯一的 manifest。
+ * ⚠️ 商店合规口径下「自更新 + 敏感权限」仍是被明令避免的形态(绕过市场的版本审核、
+ * 需逐次举证),这一刀是**合并的代价**,不是它变合规了;真被拒时的处置是把 `start` 调用点摘掉
+ * 并删 manifest 里那一行,验收仍是解包 grep(见 H205)。
  *
  * **为什么"以后再说"必须落盘**
  * 检测点在每次冷启动。若用户点了「以后再说」而不记版本,下次启动同一个弹窗会再来一次,

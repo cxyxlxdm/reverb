@@ -75,12 +75,12 @@ class AppContainer(app: Application) {
     val regionStore = RegionStore(app)
     val settingsStore = SettingsStore(app)
 
-    // 转写:先取发布方自己的逐字稿,取不到才(在有引擎的渠道)本机识别
+    // 转写:先取发布方自己的逐字稿,取不到才在引擎可用时走本机识别(见 asrEngine 那条注释)
     val transcriptFetcher = TranscriptFetcher(httpClient)
     val transcriptStore = TranscriptStore(app, transcriptFetcher)
     /**
-     * 离线识别引擎。**大陆商店渠道恒为 null** —— 那个 flavor 的 `AsrFactory` 是空实现,
-     * 包里连 `.so` 与模型都没有(见 `playback/asr/AsrEngine` 的注释)。
+     * 离线识别引擎。**只有一份包,所以它不带 null 那一支了** —— 合并前商店那个 flavor 的
+     * `AsrFactory` 是空实现,包里连 `.so` 与模型都没有(见 `playback/asr/AsrEngine` 的注释与 H205)。
      * 用 lazy:模型是几十 MB,不能在应用启动时就读进内存,得等用户真的要转写。
      */
     val asrEngine: com.yuyin.reverb.playback.asr.AsrEngine? by lazy { AsrFactory.create(app) }

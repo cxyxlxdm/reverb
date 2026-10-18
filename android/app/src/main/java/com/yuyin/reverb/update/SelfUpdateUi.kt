@@ -14,8 +14,9 @@ import com.yuyin.reverb.R
 import kotlin.math.roundToInt
 
 /**
- * 自更新的唯一一处界面。与 [SelfUpdate] 同属 `src/default`,商店渠道那份是空实现 ——
- * 所以这个渠道里**连这几串文案都不存在**(资源不跟随 `BuildConfig` 常量,见 H70)。
+ * 自更新的唯一一处界面。与 [SelfUpdate] 同在 `src/main`(两 flavor 合并前它在
+ * `src/default`,商店那份空壳的包里连这几串文案都不存在 —— 资源不跟随 `BuildConfig` 常量,
+ * 见 H70;合并之后只有一份包、一套文案,见 H205)。
  *
  * 形态选 `AlertDialog`(与设置页那几条二次确认同款),因为它是**一次决定**:
  * 下 / 不下、装 / 不装,不需要页面、也不需要常驻入口。

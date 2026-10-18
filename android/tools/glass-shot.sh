@@ -145,9 +145,9 @@ wait_foreground() {
 # ⚠️ 部分定制 ROM 上 `adb install` 会在机子上弹「涉及敏感权限 → 继续安装」的门禁,
 # 命令就挂着不回来自作主张地等 —— 首次装机要先在手机上点掉它。
 if [ "${INSTALL:-1}" = 1 ]; then
-  ./gradlew :app:assembleDefaultDebug -q
+  ./gradlew :app:assembleDebug -q
   # debug 变体的 applicationId 带 .debug 后缀(见 app/build.gradle),组件名要写全
-  APK=$(ls app/build/outputs/apk/default/debug/*.apk | head -1)
+  APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
   "$ADB" install -r "$APK" >/dev/null
 fi
 "$ADB" shell am start -n "com.yuyin.reverb.android.debug/com.yuyin.reverb.MainActivity" >/dev/null
