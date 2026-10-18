@@ -495,7 +495,29 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
    (指针真的移过来了),`--jq '.assets[0].digest'` 要等于本地 `shasum -a 256` 那份(上传没换字节)。
 
 **回滚预案目前没有**,这是已知缺口(`docs/REVIEW-2026-10-18.md` P0 第 7 条)。
-在有预案之前,发版前至少确认:`dist/` 里留着上一版包,并且知道怎么把应用内更新的版本号降回去。
+在有预案之前,发版前至少确认:**取得到上一版包** + **知道怎么把应用内更新的版本号降回去**。
+
+⚠️ "上一版包在 `dist/` 里留着"这句**两端都得改写**(2026-10-18 清理备份时逐字节核过,并当场踩掉一份不可再生的东西):
+
+- **Android 自分发完整版**:上一版包本身就在公开分发仓的 release 上,资产自带 sha256,所以"留着"的正确形态是
+  **能取到 + 能证明它是那一版**,不是在 `dist/` 多存一份 65 MB 的旧 apk。核对:
+  `gh api repos/cxyxlxdm/revert-cast/releases/tags/<上一版> --jq '.assets[]|"\(.name) \(.size) \(.digest)"'`
+  与本地那份 `shasum -a 256` 比 —— **digest 相等才叫"外面有一份一样的",字节数相等不算**(同日实测有两个包同为
+  64 958 828 B 而 sha256 不同,见 `docs/TROUBLESHOOTING.md` H154 那轮)。
+- **鸿蒙**:release 的 `.app` 与 `reverb-symbol.zip` 是 `dist/` 里的**同名文件,每次重打直接覆写**,
+  所以"上一版"在本地只可能活在归档里 —— 而归档往往是 **kit zip** 形态,**那份 zip 里就内嵌 `.app` 与符号包**
+  (判据:`unzip -l <kit>.zip` 数得见 `reverb.app` / `reverb-symbol.zip` 两个条目)。
+  ⚠️ **10-18 那次清理把在架鸿蒙 1.0.4 那份包与符号的本地唯一副本删了**(在
+  `harmony/dist/_backup-shots-1012/reverb-harmony-submission-kit.zip` 内),本地已取不回来,只能回市场侧;
+  **身份没丢** —— 那两份的 SHA-256 记在 `docs/STORE-OPS.md` 七(10-12 那轮)与 `harmony/store/上架文案.md` 第三节,
+  取回后按串核验即可。**教训与判据见 `docs/TROUBLESHOOTING.md` H204:kit zip 不是"素材",按发布物待遇核。**
+- **崩溃栈还原**认的是**"符号包与那次构建同批"**,与工作区 git 里那份 namecache 不是一回事(见 H154 补记)。
+
+**清 `*/dist/` 备份时,只有两类东西能删**(其余一律留):
+① 与别处(现役 `dist/` 或公开仓 release)**逐字相同**的副本 —— 判据是 md5/sha256 相等,不是文件名、不是字节数;
+② **从未分发出去**的中间构建(包 + 它的 mapping) —— 判据是那份包体的 sha256 与 release 上任何一个 tag 都不等,
+且它对应的版本号已被后续构建取代。
+**在野版本的 mapping 与它所在的那份 kit zip 要留** —— 鸿蒙的在野包就藏在 kit zip 里,按目录名当素材清掉就是事故(H204)。
 
 ## 代码风格
 
