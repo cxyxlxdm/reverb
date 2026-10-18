@@ -1,8 +1,7 @@
 # 逐字稿 / 语音转文字:三端实现与取舍
 
 播放页横滑第三页显示这一集的文字,跟着播放进度高亮,点一句跳到那一刻;每单集 × 每语言
-一份 JSON 缓存,命中即秒显。三端**功能形状一致、取字方式各不相同** —— 因为可用的系统能力
-和渠道的合规口径不同。
+一份 JSON 缓存,命中即秒显。三端**功能形状一致、取字方式各不相同** —— 因为三端可用的系统能力不同。
 
 本文档记的是**为什么这样分工**,以及**将来要改的时候从哪儿下手**。踩过的具体坑在
 `TROUBLESHOOTING.md`(H46 / H54 / H55 / H56 / H57),不在这里重复。
@@ -40,7 +39,7 @@
   渲染侧找当前句用的是 `lastIndex { $0.startMs <= now }`,**只在单调时才正确**(硬规矩 10)。
   这两条是 2026-10-06 才补齐的(此前桌面端两处都缺,见 `ROADMAP.md` 三-A2)
 
-**功能不做渠道删减** —— macOS 是自分发,不受大陆商店的合规口径约束。
+**macOS 这一端不做功能删减** —— 自分发桌面端,不受应用市场的合规口径约束。
 
 > ⚠️ **上面第一节那条「顺序永远是先官方稿、后本机识别」在 macOS 这一端不成立**:
 > 桌面端没有 `TranscriptFetcher` 的对应物,`Episode` 模型里连 `transcriptUrl` 字段都没有
@@ -48,14 +47,14 @@
 > 跑几分钟本机识别**(发热耗电,而官方稿又准又快)。这是缺口不是取舍,记录与判据见
 > `ROADMAP.md` 三-A2;补上之前,本节那条顺序只对 Android 与鸿蒙成立。
 
-### Android —— 两个渠道两种做法
+### Android —— 一份包,一条备用降级闸
 
-| | 默认渠道 `default`(自分发) | 大陆商店渠道 `store` |
-| --- | --- | --- |
-| 官方逐字稿 | 有 | 有 |
-| 本机识别 | **whisper.cpp + 内置模型** | **完全不含** |
-| 播放页第三页 | 始终可用(跟设置开关) | **仅当该集有官方稿** |
-| APK 体积 | 约 62 MB | 约 3.8 MB |
+| | `reverb.apk`(唯一那份) |
+| --- | --- |
+| 官方逐字稿 | 有 |
+| 本机识别 | **whisper.cpp + 内置模型**(两个分发处都有) |
+| 播放页第三页 | 始终可用(跟设置开关) |
+| APK 体积 | 65,028,676 B(2026-10-18 那份;模型本体 59,707,625 B) |
 
 **为什么 Android 不用系统 ASR**:因为不能依赖。实测一台 Android 16 的 OnePlus(装了 Google 应用):
 
@@ -66,35 +65,38 @@ settings get secure voice_recognition_service             → null
 
 国内无 GMS 的 ROM 更不用指望。所以要么自带引擎,要么这个功能在大多数机器上不存在。
 
-**为什么大陆商店渠道不带引擎**:合规口径下,内置一个几十 MB 的语音识别模型是无谓的风险面;
-而这个渠道本来就有官方稿那条路。用户拍板:**没稿就不出第三页**,不摆一个空页。
+**2026-10-18 之前的写法是「两个渠道两种做法」** —— 商店渠道靠 `app/src/store/` 那套 source set
+把引擎、模型、`.so` 与 `RECORD_AUDIO` 全部隔掉,判据是解包 grep 各归 0。合并 flavor 后这层隔离
+**没有了**,同一份包含本机识别,交去大陆商店的也是这一份(H205)。当时那句用户拍板
+「商店渠道没稿就不出第三页」随之失效:第三页现在始终可用。
 
-**隔离靠 source set,不是运行时开关**。这一点是硬性的:R8 能折叠常量、删掉 Kotlin 代码,
-但**删不掉 `.so` 与 assets** —— native 库和模型是构建系统按 source set 打进包的。所以:
-
-```
-app/src/main/    …/asr/AsrEngine.kt      只有接口
-app/src/main/    …/asr/PcmDecoder.kt     解码(与渠道无关,纯 Kotlin)
-app/src/default/ …/asr/AsrFactory.kt     返回 WhisperEngine,HAS_ENGINE = true
-app/src/default/ …/asr/WhisperEngine.kt  引擎实现
-app/src/default/jniLibs/arm64-v8a/       libreverb_asr.so   ← 不入库
-app/src/default/assets/whisper-model.bin ggml-base-q5_1     ← 不入库
-app/src/store/   …/asr/AsrFactory.kt     返回 null,HAS_ENGINE = false
-```
-
-`AsrFactory.HAS_ENGINE` 是 per-flavor 的 `const val`,**不需要额外的 buildConfigField** ——
-R8 折叠效果一样,而且只有一处真相。
-
-**验收方式是解包 grep,不是点界面**(H46 / H54)。当前结果:
+**降级要动的是文件,不只是常量**。引擎侧现在的物理形状:
 
 ```
-商店渠道:dex 里 whisper / reverb_asr / ggml 各 0 次;无 lib/ 目录;assets 无模型
-默认渠道:dex 有;lib/arm64-v8a/libreverb_asr.so 有;assets 有 57 MB 模型
+app/src/main/ …/asr/AsrEngine.kt      接口
+app/src/main/ …/asr/PcmDecoder.kt     解码(纯 Kotlin)
+app/src/main/ …/asr/AsrFactory.kt     返回 WhisperEngine,HAS_ENGINE = true(:27)
+app/src/main/ …/asr/WhisperEngine.kt  引擎实现
+app/src/main/jniLibs/arm64-v8a/       libreverb_asr.so(1 679 264 B)  ← 不入库
+app/src/main/assets/whisper-model.bin ggml-base-q5_1(59 707 625 B)   ← 不入库
+```
+
+`AsrFactory.HAS_ENGINE` 仍是 `const val`,R8 会折叠引用它的代码分支 —— 但**它不改变打进包的文件**。
+所以把 `HAS_ENGINE` 降到 `false` 只删得掉调用路径,那 57 MB 模型与 `.so` 还在包里
+(硬规矩 3)。真要做到「包里没有」,只能把这些文件从 `src/main` 移出构建树
+(像鸿蒙那样放进 `shelved/`),同时把 `RECORD_AUDIO` 从清单摘掉。
+
+**验收方式仍是解包 grep,不是点界面**(H46 / H54)。当前这份包的实测结果:
+
+```
+dex 里 whisper / reverb_asr / ggml 各有命中;lib/arm64-v8a/libreverb_asr.so 在;assets 有 57 MB 模型
+=> 这份包**具备**本机识别,两个分发处装到的都是它
 ```
 
 **产物不入版本管理**:`.so`(1.6 MB)与模型(57 MB)由 `android/tools/build-asr.sh` 一条命令
 重建(固定 whisper.cpp commit + 校验模型 sha256)。`build-release.sh` 在引擎启用时会检查它们
-在不在,缺了报错退出;引擎关着时不检查,于是任何机器都能直接构建默认渠道。
+在不在,缺了报错退出 —— 合并 flavor 后只有一份包、`HAS_ENGINE` 恒为 `true`,
+所以**这台机器上要出 Android 包就得先跑 `build-asr.sh`**(以前那套「商店包不需要备产物」的余地没了)。
 
 **几个实现上的关键决定**:
 
@@ -133,9 +135,10 @@ R8 折叠效果一样,而且只有一处真相。
   会被压缩偏早(实测第 6 个字 0.75 秒 vs 实际 1.1 秒),之后与无提示词的结果重合。
   只影响词级高亮的位置,句级时间轴不受影响,故接受 —— 提示词是简体输出的唯一保障,不能撤。
 
-  设置项叫「逐字高亮」,**两个渠道都有,但副标题不同**(`src/default|store/res/values-*`):
-  完整版说明"不额外增加转写耗时";大陆商店渠道没有识别引擎,那边这个开关只影响
-  **发布方逐字稿**的渲染,所以副标题说明"需要发布方提供的逐字稿,没有稿的单集用不了"。
+  设置项叫「逐字高亮」,合并 flavor 后**只有一份副标题**(以前 `src/default|store/res/values-*`
+  各一份、说辞不同,是 H169 那类漂移的物理来源)。当前这份说明"不额外增加转写耗时",因为包里就有引擎;
+  **这句和 `HAS_ENGINE` 是绑在一起的** —— 若把降级档启用(没有引擎),这个开关只影响**发布方逐字稿**
+  的渲染,副标题必须跟着改成"需要发布方提供的逐字稿,没有稿的单集用不了",否则文案在说谎。
 
   缓存 key **不含**这个开关 —— 关着转完再打开,那份缓存里没有词级时间,只能整句高亮,
   想要就得重转。这是有意的取舍:把开关塞进 key 会让同一集存两份稿。
@@ -229,7 +232,8 @@ R8 折叠效果一样,而且只有一处真相。
 
 **已据此定型:本端只走官方逐字稿。** 由 `Features.LOCAL_ASR = false` 一处开关控制,连带三件事:
 
-- 播放页第三页**仅当该集有官方稿时才出现**(与 Android 大陆商店渠道同一规则,没稿不出空页);
+- 播放页第三页**仅当该集有官方稿时才出现**(`LOCAL_ASR = false` ⇒ 没有可转的本机识别,不摆空页;
+  Android 合并 flavor 前那家商店渠道同此规则,现在那份包有引擎、已不再适用);
 - 设置里不显示「逐字稿」总开关 —— 没有可开关的本机识别,摆一个开了也不变的开关只会让人困惑;
 - 「逐字高亮」**保留**:官方的 JSON 稿一词一条、自带词级时间,那个效果是真的。
 
@@ -297,6 +301,6 @@ R8 折叠效果一样,而且只有一处真相。
 ### 一件要先定的事
 
 隐私同意正文现在写着「不接入任何第三方 SDK」。自带 whisper/sherpa 是**本地库**
-(不联网、不采集、音频不出设备),严格说不是 SDK,但这是对外披露文案,而且**两渠道共用一份**。
-Android 默认渠道带引擎发版前就要定;鸿蒙若也切到三方引擎,同一段文案要再过一遍。
-官网隐私政策页需同步。
+(不联网、不采集、音频不出设备),严格说不是 SDK,但这是对外披露文案,而 Android **只有一份包**,
+这一句在两个分发处都会被读到(H205)—— 以前「只有自分发那份带引擎,所以只有那份要披露」的余地没了。
+鸿蒙若也切到三方引擎,同一段文案要再过一遍。官网隐私政策页需同步。

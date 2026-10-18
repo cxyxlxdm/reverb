@@ -23,11 +23,14 @@
 
 1. **零后端。** 没有服务器、没有账号、没有云同步、**没有任何上传数据的代码路径**。
 2. **不接任何第三方 SDK。** 系统能力不算三方。分享一律走系统分享。
-3. **合规是设计输入。** 隐私同意门与渠道功能隔离在架构层面体现,不是界面上加判断。
-4. **包里有 / 没有,都必须可验证。** 声明某渠道包含或不含某功能,验收方式是**解包 grep**。
+3. **合规是设计输入。** 隐私同意门与功能隔离在架构层面体现,不是界面上加判断。
+4. **包里有 / 没有,都必须可验证。** 声明某份包包含或不含某功能,验收方式是**解包 grep**。
 
-Android 有**两个渠道**(`default` 自分发 / `store` 大陆商店),功能范围不同;
-鸿蒙只有商店渠道;macOS 自分发。差异见 `docs/FEATURES.md`「渠道差异」。
+Android **只维护一份包**(2026-10-18 把 `default` / `store` 两个 flavor 合并,见
+`docs/TROUBLESHOOTING.md` H205):`android/dist/reverb.apk` 同时上传华为等大陆商店与
+GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三个编译期常量当**备用闸**
+(`BuildConfig.CATALOG` / `BuildConfig.SPECTRUM` / `AsrFactory.HAS_ENGINE`),一行降到
+`false` 就是那条降级档。鸿蒙只有商店渠道;macOS 自分发。口径见 `docs/FEATURES.md`「渠道差异」。
 
 ---
 
@@ -55,12 +58,15 @@ export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home
 写成裸 `aapt2 … | grep -c` 时命令**根本没跑**,`grep -c` 对着空 stdin 报 **0** ——
 这正是 H156 那次"两个渠道都被读成没有录音权限"的成因。期望 0 的判据先看命令自己的退出码。
 
-**一分钟自检**(本机唯一能跑的产品级验证,2026-10-18 实测 exit 0):
+**一分钟自检**(本机唯一能跑的产品级验证,2026-10-18 合并 flavor 后实测 exit 0):
 
 ```bash
 cd android && export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home \
-  && ./gradlew :app:compileDefaultReleaseKotlin :app:compileStoreReleaseKotlin -q; echo "exit=$?"
+  && ./gradlew :app:compileReleaseKotlin -q; echo "exit=$?"
 ```
+
+合并前这一条是 `compileDefaultReleaseKotlin` + `compileStoreReleaseKotlin` 两个任务;
+现在只有一份 release,任务名不再有渠道前缀。
 
 ## 常用命令
 
@@ -68,16 +74,19 @@ cd android && export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home \
 
 ```bash
 cd android
-./build-release.sh                 # 自分发渠道  → dist/reverb.apk(≈64 MB,含语音模型)
-./build-release.sh --store         # 大陆商店渠道 → dist/reverb-store.apk(≈3.9 MB)
+./build-release.sh                 # 唯一那份 → dist/reverb.apk(≈65 MB,含语音模型)
+./build-release.sh --bundle          # 同上,出 .aab(H205 之后没有渠道参数了;--store 会当未知参数退出)
 # 只想过编译(快):
-./gradlew :app:compileDefaultReleaseKotlin :app:compileStoreReleaseKotlin -q
+./gradlew :app:compileReleaseKotlin -q
 # 备齐离线识别的两样产物(不入版本管理,缺了打包会报错退出):
 ./tools/build-asr.sh [--force]
 # 主机端探针:用与 JNI 同参数跑 whisper,打印每个 token 的时刻
 ./tools/asr-probe/run.sh [音频文件]
-adb install -r dist/reverb-store.apk
+adb install -r dist/reverb.apk
 ```
+
+⚠️ **`./build-release.sh` 会 `rm -f` 掉 `dist/reverb.apk` 与它的 mapping 再重打** —— 在架那份的
+mapping **本地只此一份**,重打前先归档(H204 踩过的同类事故,H205 又写了一遍)。
 
 ### HarmonyOS
 
@@ -186,12 +195,18 @@ bash tools/selftest-verify.sh      # 手搭假 bundle 跑正向 + 把八类失�
 ### 1. 包里有 / 没有,以解包 grep 为准
 
 ```bash
-# Android 大陆商店渠道当前期望(H70):目录接口非 0;native / 模型与录音权限仍为 0
-unzip -l dist/reverb-store.apk | grep -icE 'lib/|whisper-model'              # 0
-LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder'       # 非 0
-aapt2 dump permissions dist/reverb-store.apk | grep -c RECORD_AUDIO         # 0
+# Android 唯一那份,当前期望(H205):功能全开,所以四项都非 0
+unzip -l dist/reverb.apk | grep -icE 'lib/|whisper-model'              # 非 0(2)
+unzip -l dist/reverb.apk | grep -cE 'assets/seed_podcasts\.json'       # 非 0(1)
+LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder' # 非 0(14)
+"$SDK/build-tools/<ver>/aapt2" dump permissions dist/reverb.apk | grep -cE 'RECORD_AUDIO|REQUEST_INSTALL_PACKAGES'   # 非 0(2)
 # HarmonyOS 商店包当前同样应能 grep 到目录接口 URL(非 0)
 ```
+
+合并前这一节写的是 store 渠道的「native / 模型 / 录音权限应为 0」,那组期望随 H205 一起翻转。
+所以更要跑的是**降级档那一侧**:把 `CATALOG` / `SPECTRUM` / `HAS_ENGINE` 降到 `false` 出的包,
+上面四项要按降级口径重新数一遍 —— 现在它是**一条命令改常量的事,不再是两份 source set**,
+更容易改完不验。
 
 这里的方法论是「声明加回来也要验、声明删掉也要验」,不是把某组期望值永久写死。
 产品决策翻转时,grep 的期望值也会翻转(见 H70),并且必须同步 `docs/FEATURES.md`。
@@ -212,8 +227,11 @@ Kotlin/R8 会折叠常量并删掉整支;**ArkTS 没有 DCE**,`Features.X ? A : 
 
 ### 3. R8 删不掉 `.so` 与 assets
 
-native 库与模型是构建系统按 source set 打进包的。渠道要「没有」它们,
-只能靠那个 source set 里压根没有这些文件(`app/src/default/jniLibs`、`app/src/default/assets`)。
+native 库与模型是构建系统按 source set 打进包的,R8 只折叠代码分支。合并 flavor 之后这两样
+都在 `app/src/main/`(`jniLibs/arm64-v8a/libreverb_asr.so`、`assets/whisper-model.bin`、
+`assets/seed_podcasts.json`),所以**把 `AsrFactory.HAS_ENGINE` 降到 `false` 并不会让那 57 MB 从包里消失** ——
+它只是让界面与调用路径不再用它。真要做到「包里没有」,只能把文件本身移出构建树
+(`tools/build-asr.sh` 负责放进来,`.gitignore` 已遮住)。
 
 ### 4. 修完 bug 或性能问题,必须更新 `docs/TROUBLESHOOTING.md`
 
@@ -227,7 +245,7 @@ native 库与模型是构建系统按 source set 打进包的。渠道要「没�
 
 | 位置 | 说明 |
 |---|---|
-| **App 内关于页**(`about_p_features` / `about_p_philosophy`) | 会被逐字读到;Android 需按渠道分别写 |
+| **App 内关于页**(`about_p_features` / `about_p_philosophy`) | 会被逐字读到;Android 合并成一份包后只有一套(合并前是两套,见 H205) |
 | 设置项标题与副标题 | 副标题常含「为什么/代价」,行为一改就不成立 |
 | `docs/PRODUCT.md` + `docs/FEATURES.md` | 同一件事的叙述版与矩阵版,**两份都要改** |
 | `docs/PRIVACY.md` + `reverb/privacy.html` + 同意页正文 | 涉及权限/网络/数据用途时 |
@@ -394,7 +412,7 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 
 | 端 | 发布物 | 判据 |
 |---|---|---|
-| Android | `android/dist/reverb.apk`(自分发)/ `reverb-store.apk`(大陆商店) | `./build-release.sh [--store]`;脚本里已用 `apksigner` 读证书 DN,**是调试证书就 exit 1**(不是"verify 通过"就算数)。版本再对 `CHANGELOG.md`:`aapt2 dump badging` —— 注意 **aapt2 不在开发机 PATH**(H156),用 `$SDK/build-tools/<ver>/aapt2` 全路径,且"命令没跑成"和"版本不对"要按退出码分开读 |
+| Android | `android/dist/reverb.apk`(**唯一那份**,大陆商店与 GitHub Releases 传同一个文件) | `./build-release.sh`;脚本里已用 `apksigner` 读证书 DN,**是调试证书就 exit 1**(不是"verify 通过"就算数)。版本再对 `CHANGELOG.md`:`aapt2 dump badging` —— 注意 **aapt2 不在开发机 PATH**(H156),用 `$SDK/build-tools/<ver>/aapt2` 全路径,且"命令没跑成"和"版本不对"要按退出码分开读。⚠️ 重打前按 H204/H205 归档在架那份的 mapping |
 | HarmonyOS | `harmony/dist/reverb.app` **+ `reverb-symbol.zip`**(符号包一并传,否则市场侧还原不了崩溃栈) | `build-release.sh` 末尾那条 `debugKey` 断言(命中即 exit 1);`reverb-unsigned.app` **只是备查,别传** |
 | macOS | `macos/dist/余音-Reverb-<版本>-universal.dmg`(架构标记由 `EXPECTED` 推导,不是写死) | `./package.sh` 的架构硬断言(缺一个架构就不出 dmg);**`…-1.0.2-arm64.dmg` 那种单架构历史包不能顶替** —— Intel Mac 装 arm64 没有退路 |
 
@@ -431,8 +449,8 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 | `ui/screens/` | 各页面 | 界面改动 → 截图整套重拍(硬规矩 20) |
 | `ui/components/` | 复用组件(`Components.kt` 1 444 行,已偏大) | 加通用控件 |
 | `ui/share/` | 剪藏与足迹海报 | 分享图 |
-| `update/` | WorkManager 订阅巡检 + 新集通知 | 后台刷新 |
-| `app/src/{default,store}/` | **渠道差异的物理边界** | 见 `docs/FEATURES.md`「渠道差异」 |
+| `update/` | WorkManager 订阅巡检 + 新集通知 + 应用内更新(`SelfUpdate`,合并后商店那份也带,见 H205) | 后台刷新、更新检查 |
+| ~~`app/src/{default,store}/`~~ | **已删除**(2026-10-18 合并 flavor,H205) | 渠道差异不再由 source set 承载;要降级改 `src/main` 里那三个常量 |
 | `android/tools/` | `build-asr.sh` · `asr-probe/` · `glass-shot.sh` · `play-button-check.sh` | ASR 产物、探针、截图 |
 
 ### HarmonyOS(`harmony/entry/src/main/ets/`)
@@ -456,7 +474,7 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 | 路径 | 职责 |
 |---|---|
 | `shared/guide/` | 引导音频 + 脚本(`make-guide.sh`),分发到各端 |
-| `shared/seed/` | 种子清单(只有自分发渠道打包) |
+| `shared/seed/` | 种子清单(规范副本;`sync.sh` 分发到 Android + macOS,**不含鸿蒙**,理由写在脚本头) |
 | `site/reverb/` | 官网 + 隐私页;`shots/` **不入库**,部署时手工上传 |
 | `marketing/<版本>/` | 宣传物料(宣传片 / 封面 / 配乐),流水线见 `marketing/README.md` |
 
@@ -466,7 +484,7 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 
 | 端 | 文件 | 字段 | 1.0.5 的值 |
 |---|---|---|---|
-| Android | `android/app/build.gradle:20-21` | `versionCode` / `versionName` | `6` / `1.0.5` |
+| Android | `android/app/build.gradle:38-39` | `versionCode` / `versionName` | `6` / `1.0.5` |
 | 鸿蒙 | `harmony/AppScope/app.json5:5-6` | `versionCode` / `versionName` | `1000005` / `1.0.5` |
 | macOS | `macos/Info.plist:29-32` | `CFBundleShortVersionString` / `CFBundleVersion` | `1.0.4` / `2` |
 
@@ -481,6 +499,12 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 桌面端零改动,所以 `Info.plist` 停在 1.0.4 并在 `CHANGELOG` 里写明。
 **但只要这一轮动了 macOS 源码,就必须同步改** —— 否则用户看到的版本号与代码不符,
 而"三端共用一套版本节奏"这句承诺就没有任何东西在守。
+
+⚠️ **合并 flavor 那一轮(10-18)故意把版本停在 `6` / `1.0.5` 没升** —— 那是为了拿合并包与在架的
+default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `dist/reverb.apk` 与 GitHub Releases
+上那个 1.0.5 字节不同**(资源侧等价、签名与构建时间不同)。
+所以 **1.0.6 起必须先 `7` / `1.0.6` 再出包** —— 否则同一 tag 下资产同名 `reverb.apk` 会互相顶掉,
+而应用内更新按名字挑(H203)。
 
 ### 发版顺序(固定)
 
@@ -499,11 +523,14 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 
 ⚠️ "上一版包在 `dist/` 里留着"这句**两端都得改写**(2026-10-18 清理备份时逐字节核过,并当场踩掉一份不可再生的东西):
 
-- **Android 自分发完整版**:上一版包本身就在公开分发仓的 release 上,资产自带 sha256,所以"留着"的正确形态是
-  **能取到 + 能证明它是那一版**,不是在 `dist/` 多存一份 65 MB 的旧 apk。核对:
+- **Android(合并后只有那一份 apk)**:自分发那一侧的上一版包本身就在公开分发仓的 release 上,资产自带 sha256,
+  所以"留着"的正确形态是**能取到 + 能证明它是那一版**,不是在 `dist/` 多存一份 65 MB 的旧 apk。核对:
   `gh api repos/cxyxlxdm/revert-cast/releases/tags/<上一版> --jq '.assets[]|"\(.name) \(.size) \(.digest)"'`
   与本地那份 `shasum -a 256` 比 —— **digest 相等才叫"外面有一份一样的",字节数相等不算**(同日实测有两个包同为
   64 958 828 B 而 sha256 不同,见 `docs/TROUBLESHOOTING.md` H154 那轮)。
+  ⚠️ **但大陆商店那一侧的上一版只能回市场侧取** —— 公开仓上那个 apk 是**自分发口径**构建的,
+  与交给商店的那份不是同一个文件(合并前是两个 flavor,合并后是同一份包但**分发处各存一份历史**)。
+  而**它的 mapping 本地只此一份**,`build-release.sh` 重打时会 `rm -f` 顶掉(H205 的坑 3,已归档)。
 - **鸿蒙**:release 的 `.app` 与 `reverb-symbol.zip` 是 `dist/` 里的**同名文件,每次重打直接覆写**,
   所以"上一版"在本地只可能活在归档里 —— 而归档往往是 **kit zip** 形态,**那份 zip 里就内嵌 `.app` 与符号包**
   (判据:`unzip -l <kit>.zip` 数得见 `reverb.app` / `reverb-symbol.zip` 两个条目)。
@@ -538,7 +565,7 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 ## 工作节奏
 
 - **完成一段任务就提交**,不要攒一大坨。提交信息按上面的要求写。
-- **改完能编译的要编译一遍**;改了产物要重打包并解包核对(尤其渠道相关)。
+- **改完能编译的要编译一遍**;改了产物要重打包并解包核对(尤其动那三个降级常量的时候)。
 - **发版时先更新 `CHANGELOG.md`** —— 它是对外版本说明的上游(硬规矩 19)。
 - 报告结果要如实:失败就贴输出,跳过的步骤要说明。
   这个项目的文档里刻意保留了「已知问题」「没验过的路径」——同样的诚实标准适用于对话。
@@ -554,9 +581,9 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 
 | 改了什么 | 最小自证 | 不够的 |
 |---|---|---|
-| Android 任意 Kotlin | 两渠道 `compileDefaultReleaseKotlin` + `compileStoreReleaseKotlin` exit 0 | 只编一个渠道 |
+| Android 任意 Kotlin | `./gradlew :app:compileReleaseKotlin -q` exit 0(合并 flavor 后只有一份 release,H205) | 只跑 debug 变体 |
 | Android 界面 / 播放 / 缓存 | 上面 + **装机跑一遍**对应路径 | 只看编译通过 |
-| 渠道裁剪相关 | 上面 + **解包 grep**(硬规矩 1) | 只改代码不验包 |
+| 降级档相关(动 `CATALOG` / `SPECTRUM` / `HAS_ENGINE`) | 上面 + **解包 grep**(硬规矩 1)。**合并前这一行写的是「渠道裁剪相关」——渠道没了,但这条自证更严了:降级现在只是一行常量,改完不验包就没人拦得住** | 只改代码不验包 |
 | 鸿蒙任意 `.ets` | `assembleHap` BUILD SUCCESSFUL | 只跑 IDE 预览 |
 | 鸿蒙界面 / 播放 | 上面 + **debug hap 装机** | 只编译 |
 | 新增 native 类型包 | 上面 + `ohpm install` | 漏了报 `arkts-no-any-unknown`(H61) |
@@ -594,7 +621,7 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 | `README.md` | 入口与索引 |
 | `docs/PRODUCT.md` | 功能介绍(叙述,面向使用者/评审) |
 | `docs/FEATURES.md` | 功能清单(矩阵,**精确对照以这份为准**) |
-| `docs/ARCHITECTURE.md` | 核心技术实现(分层、播放、持久化、渠道隔离、native、性能规律) |
+| `docs/ARCHITECTURE.md` | 核心技术实现(分层、播放、持久化、渠道与降级闸、native、性能规律) |
 | `docs/TRANSCRIPT.md` | 逐字稿专篇(三端取字方式与取舍,含鸿蒙换引擎的迁移路径) |
 | `docs/TROUBLESHOOTING.md` | **踩坑记录**:现象/根因/修法/可复用的规律 |
 | `docs/HISTORY.md` | 开发历程(顺序与因果,返工写得更详细) |
@@ -608,8 +635,8 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 | `docs/REVIEW-2026-10-18.md` | **一次性的项目体检**:规模基线、做对了什么、不足与优先级 TODO;含同日**复校记录**(12 处失准的订正,3.4 与文末校准表)。**看"当前处在什么位置"看这份,看"要做什么"看 ROADMAP** ⚠️ 其中"当前值/当前状态"类句子随时会漂,按文中给的命令重跑 |
 | `marketing/README.md` | 宣传物料流水线(改文案 → 重渲染 → 重编码,一条命令) |
 
-**动手之前**:改逐字稿看 `docs/TRANSCRIPT.md`;改渠道相关看 `docs/FEATURES.md` 渠道差异一节 +
-`docs/ARCHITECTURE.md` 第六节;不确定某个坑踩过没有,先 grep 一遍 `docs/TROUBLESHOOTING.md`。
+**动手之前**:改逐字稿看 `docs/TRANSCRIPT.md`;改渠道口径 / 那三个降级常量看 `docs/FEATURES.md`
+渠道差异一节 + `docs/ARCHITECTURE.md` 第六节;不确定某个坑踩过没有,先 grep 一遍 `docs/TROUBLESHOOTING.md`。
 
 ## 会话记忆
 

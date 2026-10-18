@@ -237,8 +237,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 .verticalScroll(rememberScrollState())
         ) {
             SectionLabel(stringResource(R.string.sec_content))
-            // 「地区」只作用于分类榜单、关键词检索与电台的取材范围 —— 这三者在无内容目录的
-            // 渠道里都不存在,留着就是个改了也没反应的死设置。
+            // 「地区」只作用于分类榜单、关键词检索与电台的取材范围 —— 这三者都受
+            // `BuildConfig.CATALOG` 门控,把它降到 false 时留着就是个改了也没反应的死设置。
             if (BuildConfig.CATALOG) {
                 SettingRow(
                     stringResource(R.string.set_region),
@@ -246,7 +246,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 ) { dlg = Dlg.REGION }
             }
             SettingRow(stringResource(R.string.set_footprint), stringResource(R.string.set_footprint_sub)) { onOpenFootprint() }
-            // 电台本身就是「内容推荐」,无内容目录的渠道已整体去掉,设置项自然也不该留
+            // 电台本身就是「内容推荐」,它与 `CATALOG` 同进同出,设置项自然也跟着这个门
             if (BuildConfig.CATALOG) {
                 SettingRow(
                     stringResource(R.string.set_radio_mode),
@@ -263,9 +263,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 trailing = { ColorSwatch(accentColor(accentIndex)) }
             ) { dlg = Dlg.ACCENT }
             SettingRow(stringResource(R.string.set_language), value = langLabels[LANG_TAGS.indexOf(language).coerceAtLeast(0)]) { dlg = Dlg.LANGUAGE }
-            // 真实频谱仅默认渠道提供。商店渠道 BuildConfig.SPECTRUM=false:
-            // 该市场把录音列为敏感隐私权限、需逐次举证,而这只是一个视觉效果,
-            // 故那个渠道既不声明权限也不显示本开关(见 app/build.gradle 的 flavor 注释)。
+            // 真实频谱由 `BuildConfig.SPECTRUM` 门控。原先它是渠道差异(商店那份为 false,
+            // 那个市场把录音列为敏感隐私权限、需逐次举证,而这只一个视觉效果,故整块去掉);
+            // 2026-10-18 两 flavor 合成一份包后它是**合规降级的备用闸**,权限声明在 main 的 manifest 里。
             if (BuildConfig.SPECTRUM) {
                 SettingSwitch(stringResource(R.string.set_spectrum), stringResource(R.string.set_spectrum_sub), checked = spectrumEnabled) { on ->
                     if (on) {
@@ -290,9 +290,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             SettingSwitch(stringResource(R.string.set_wifi_only), stringResource(R.string.set_wifi_only_sub), checked = !allowCellular) {
                 settings.setAllowCellularDownload(!it)
             }
-            // 逐字稿开关只在**有离线识别引擎的渠道**显示。大陆商店渠道没有引擎
-            // (`AsrFactory.HAS_ENGINE=false`,包里连模型都没有),那边这个开关无意义 ——
-            // 而"发布方给了稿的集照样出第三页"不受它管,所以不显示也不会少功能。
+            // 逐字稿开关跟着「包里有没有引擎」走(`AsrFactory.HAS_ENGINE`)。合并前商店那份
+            // 是 false,那个开关在那边无意义 —— 而"发布方给了稿的集照样出第三页"不受它管,
+            // 所以不显示也不会少功能。
             if (AsrFactory.HAS_ENGINE) {
                 SettingSwitch(
                     stringResource(R.string.set_transcription),
@@ -300,9 +300,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                     checked = transcriptionEnabled
                 ) { on -> settings.setTranscriptionEnabled(on) }
             }
-            // 逐字高亮**两个渠道都给**,但副标题按渠道分别写:
-            // 完整版说明"不额外增加转写耗时",国内版说明"依赖发布方的逐字稿且要带逐字时间"
-            // (见 src/default|store/res/values-* 下的 set_word_highlight_sub)。
+            // 逐字高亮的副标题原先两个渠道各写一份(完整版说"不额外增加转写耗时",国内版说
+            // "依赖发布方的逐字稿且要带逐字时间")。现在只有一份包、一份文案,留的是完整版那句(见 H205)。
             SettingSwitch(
                 stringResource(R.string.set_word_highlight),
                 stringResource(R.string.set_word_highlight_sub),

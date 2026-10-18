@@ -22,9 +22,10 @@
 
 > 为什么不用需要 Key 的目录（如 PodcastIndex）或自建代理服务？——Key 会带来配置负担且易被限流，自建服务会引入托管成本、维护与单点故障，均与「零成本、无限制、打开即用」相悖。上述全部源都是公开、免鉴权的，无需任何后端。
 
-> **上表当前适用于三个端与两个渠道。** 大陆商店渠道与鸿蒙端已恢复在线分类榜、
-> 节目 + 单集关键词检索、随机 / 情境电台;但仍不打包内置 `seed_podcasts.json`,
-> 首次内容依赖在线榜单。若合规要求按纯 RSS 工具口径降级,再移除目录实现(见 H70)。
+> **上表当前适用于三个端。** Android 只有一份安装包(2026-10-18 合并了原先的两个 flavor,见 H205),
+> 它同时交大陆应用市场与 GitHub Releases;鸿蒙端只有商店渠道。两端都已具备在线分类榜、
+> 节目 + 单集关键词检索、随机 / 情境电台。内置 `seed_podcasts.json` 只随 Android 那份包与 macOS 走,
+> **鸿蒙包里仍没有它**,首启内容靠在线榜单。若合规要求按纯 RSS 工具口径降级,再移除目录实现(见 H70)。
 > 见 `docs/FEATURES.md`「渠道差异」。
 
 ### 关于 getpodcast.xyz
@@ -64,7 +65,7 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 - `android/` — Android 版(Kotlin / Jetpack Compose)
 - `harmony/` — HarmonyOS 版(ArkTS / ArkUI)
 - `macos/` — macOS 版(Swift / SwiftUI)
-- `docs/PRODUCT.md` — **功能介绍**(面向使用者与评审:每个功能是什么、怎么用、三端与两渠道有何不同)
+- `docs/PRODUCT.md` — **功能介绍**(面向使用者与评审:每个功能是什么、怎么用、三端之间有何不同)
 - `docs/FEATURES.md` — **功能清单**(开发用矩阵,逐项标注平台差异;需要精确对照时以这份为准)
 - `docs/ARCHITECTURE.md` — **核心技术实现**(分层、播放链路、持久化、渠道隔离、native 模块、性能规律)
 - `docs/HISTORY.md` — **开发历程**(顺序与因果,以及哪里返了工)
@@ -94,8 +95,8 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 cd android
 export JAVA_HOME=$(/usr/libexec/java_home -v 17)   # 本机返回空,见下方说明
 ./tools/build-asr.sh                # 备齐离线识别的 .so 与模型(不入版本管理,缺了打包会报错)
-./build-release.sh                  # 自分发渠道  → dist/reverb.apk(≈64 MB,含语音模型)
-./build-release.sh --store          # 大陆商店渠道 → dist/reverb-store.apk(≈3.9 MB)
+./build-release.sh                  # 唯一那份 → dist/reverb.apk(约 65 MB,含语音模型;同时交大陆应用市场与 GitHub Releases)
+                                    # 2026-10-18 合并 flavor 后没有 `--store` 了(见 H205)
 ./gradlew :app:assembleDebug        # 只要一个能装的 debug 包
 ```
 

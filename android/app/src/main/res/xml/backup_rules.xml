@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- H84:系统级备份白名单(Android 11 及以下读本文件,12+ 读 data_extraction_rules.xml)。
      一旦声明 include,未列出的一律不进备份——音频 downloads/、逐字稿 transcripts/、
-     feed/popular/inbox 缓存、logs/、default 渠道的 57MB whisper 模型全靠这一点排除,
+     feed/popular/inbox 缓存、logs/、随包的 57MB whisper 模型全靠这一点排除,
      否则会撑爆单应用 25MB 云备份配额。口径与手动备份(BackupManager)一致:
      只备可重建用户状态;恢复是文件级覆盖,不是手动备份那种分项合并。 -->
 <full-backup-content>

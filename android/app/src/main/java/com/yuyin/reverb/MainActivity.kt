@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
         }
         // 应用内更新:每次进程只检测一次([SelfUpdate.start] 内部挡重)。放在这里而不是
         // Application.onCreate —— 它要读网络状态判「是不是 Wi-Fi」,与上面两条同一个门。
-        // **商店渠道那份是空实现**,那个包里连这段逻辑都没有(见 src/store/.../SelfUpdate.kt)。
+        // 合并前商店那份是空实现,现在只有一份包、这一条对所有分发都生效(见 SelfUpdate.kt 与 H205)。
         SelfUpdate.start(applicationContext, container.httpClient)
     }
 

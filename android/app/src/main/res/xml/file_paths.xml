@@ -3,9 +3,9 @@
     <!-- 分享图片存放于 cacheDir/shares/,仅此子目录对外可读 -->
     <cache-path name="shares" path="shares/" />
     <!-- 应用内更新下载的安装包落在 cacheDir/update/,交给系统安装器时按这一条授权。
-         只有 default 渠道会往这里写东西(见 src/default/.../update/SelfUpdate.kt),
-         商店渠道压根没有那段代码,这条路径在那个包里是死配置。
-         **不为它另抄一份 flavor 专属的 file_paths**:两处副本迟早漏掉 shares/ 那一条,
-         代价比"商店包里多一条无人可读的路径"大得多。 -->
+         原先只为 default 渠道写这一条,并特意**不另抄一份 flavor 专属的 file_paths**
+         (两处副本迟早漏掉 shares/ 那一条,代价比"商店包里多一条无人可读的路径"大得多);
+         2026-10-18 两个 flavor 合成一份包后,这个理由本身消失了,但结构保留 ——
+         见 H205。 -->
     <cache-path name="update" path="update/" />
 </paths>

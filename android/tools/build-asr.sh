@@ -1,9 +1,9 @@
 #!/bin/bash
 #
-# 备好**默认渠道**离线语音识别所需的两样东西(都不入版本管理):
+# 备齐**离线语音识别**所需的两样东西(都不入版本管理):
 #
-#   app/src/default/jniLibs/arm64-v8a/libreverb_asr.so   whisper.cpp + JNI 胶水
-#   app/src/default/assets/whisper-model.bin             ggml-base-q5_1(约 57 MB)
+#   app/src/main/jniLibs/arm64-v8a/libreverb_asr.so   whisper.cpp + JNI 胶水
+#   app/src/main/assets/whisper-model.bin             ggml-base-q5_1(约 57 MB)
 #
 # 用法:
 #   ./tools/build-asr.sh          备齐(已存在且校验通过则跳过)
@@ -11,8 +11,9 @@
 #
 # 为什么不把产物提交进仓库:一个 57 MB 的模型 + 一个二进制 .so,放进 git 会让仓库和
 # 每次打包的体量都难看,而它们完全可以由这个脚本一条命令重建。
-# **大陆商店渠道不需要跑这个脚本** —— 那个渠道压根不含引擎(见 playback/asr/AsrEngine)。
-# build-release.sh 打默认渠道时会检查这两样在不在,缺了直接报错退出。
+# 2026-10-18 之前这两样放在 src/default/(只有自分发渠道带引擎);两个 flavor 合并成
+# 一份包后挪进 src/main/,于是**任何一次发布构建都要先跑本脚本**,build-release.sh
+# 会检查它们在不在,缺了直接报错退出(见 H205)。
 #
 # 为什么固定 commit:whisper.cpp 的 API 与 ggml 后端改得很勤,浮动跟主线会某天突然编不过
 # 或行为变了。要升级就改下面这行,然后**重新在真机上量一遍速度**(见 TROUBLESHOOTING)。
@@ -35,8 +36,8 @@ SDK_ROOT="${ANDROID_HOME:-$HOME/Library/Android/sdk}"
 FORCE=0
 [ "${1:-}" = "--force" ] && FORCE=1
 
-SO_OUT="$ROOT/app/src/default/jniLibs/arm64-v8a/libreverb_asr.so"
-MODEL_OUT="$ROOT/app/src/default/assets/whisper-model.bin"
+SO_OUT="$ROOT/app/src/main/jniLibs/arm64-v8a/libreverb_asr.so"
+MODEL_OUT="$ROOT/app/src/main/assets/whisper-model.bin"
 
 # ── 1. 模型 ──
 mkdir -p "$(dirname "$MODEL_OUT")"
@@ -94,4 +95,4 @@ echo "✓ $SO_OUT  ($(du -h "$SO_OUT" | cut -f1))"
 echo "✓ $MODEL_OUT ($(du -h "$MODEL_OUT" | cut -f1))"
 echo
 echo "  只有 arm64-v8a:armeabi-v7a 的机器跑不动这个模型,给了也是让人干等。"
-echo "  默认渠道的 APK 因此会从约 4 MB 涨到约 65 MB;商店渠道不受影响。"
+echo "  带上这两样之后那份包会从约 4 MB 涨到约 65 MB(合并后只有一份包,不再有两体积的对比)。"

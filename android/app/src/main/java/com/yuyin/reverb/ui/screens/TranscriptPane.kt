@@ -133,7 +133,8 @@ fun TranscriptPane(
                 onAction = start
             )
 
-            // 本渠道没有识别引擎,且这一集发布方也没给稿 —— 如实说,不给一个点了没用的按钮
+            // 这个包没有识别引擎(HAS_ENGINE 被降成 false,或引擎加载失败),且这一集发布方也没给稿
+            // —— 如实说,不给一个点了没用的按钮
             is TranscriptStore.State.NoEngine -> Hint(
                 icon = Icons.Rounded.Notes,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,

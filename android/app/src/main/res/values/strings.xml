@@ -394,4 +394,26 @@
     <string name="transcript_prompt_official">这一集发布方提供了逐字稿</string>
     <string name="transcript_show">查看逐字稿</string>
     <string name="set_word_highlight">逐字高亮</string>
+
+    <!-- ↓↓ 这两组串合并自原 src/default/res(2026-10-18 两个 flavor 合成一份包,见 H205):
+         ① 隐私同意页里随能力写的三条说明(离线识别 / 真实频谱 / 应用内更新),
+         ② 应用内更新 SelfUpdate* 的全套弹窗文案。
+         原先它们在自分发渠道的 source set 里,商店渠道另有一份同名覆盖;现在只有一份包、一份文案。
+         ⚠️ 正文由同意页用 stringResource 取**纯文本**渲染:`**` 会原样上屏、`<b>` 会被 aapt
+         收成样式跨度后再摊平(不掉字形也不加粗)⇒ 强调只能靠措辞与标点。 -->
+    <string name="privacy_consent_asr">离线语音转文字。本版本内置离线语音识别(开源组件 whisper.cpp 与随包的识别模型),把单集音频转成文字,全程在本机完成 —— 音频不上传、不出设备,也不经过任何服务器。该功能可在设置里关闭。</string>
+    <string name="set_word_highlight_sub">跟读时逐字点亮。本机识别顺带就能算出逐字时间,不额外增加转写耗时</string>
+    <string name="privacy_consent_mic">真实频谱（可选）。在设置里开启「真实频谱」后，封面的水墨声波会跟随实际音量起伏。这需要麦克风权限，系统会在你开启时单独征求同意；音频只在本机做频谱计算：不录制、不保存、不外发，关掉这个开关即不再使用。</string>
+    <string name="privacy_consent_update">应用内更新（可选）。本版本启动时会向 GitHub 的公开发布页接口（api.github.com）问一次「最新版是哪个」：请求只包含本应用自己的公开仓库地址与当前版本号，不含账号、任何标识符、订阅列表或收听内容。只有那次的回答里确实有更新版本时才会下载安装包，且默认只在 Wi-Fi 下自动下载，网络按流量计费时会先征求你的同意。下载完由系统安装器接手，本应用不自行安装；这一步需要的「安装未知应用」权限，系统会在你选择安装时单独征求同意。</string>
+
+    <string name="update_title">发现新版本 %1$s</string>
+    <string name="update_ask_cellular">当前不是 Wi-Fi（按流量计费的网络），安装包约 %1$s。要用它下载吗？</string>
+    <string name="update_downloading">正在下载新版本 %1$d%%</string>
+    <string name="update_ready">新版本已下载完成（约 %1$s），现在安装？</string>
+    <string name="update_failed_title">更新下载失败</string>
+    <string name="update_failed_text">安装包没有下载成功。检查网络后重试，也可以选「以后再说」。</string>
+    <string name="update_action_cellular">用当前网络下载</string>
+    <string name="update_action_install">立即安装</string>
+    <string name="update_action_later">以后再说</string>
+    <string name="update_action_retry">重试</string>
 </resources>

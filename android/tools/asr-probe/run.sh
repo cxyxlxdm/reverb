@@ -23,7 +23,7 @@ cd "$(dirname "$0")"
 ROOT="$(cd ../.. && pwd)"
 
 AUDIO="${1:-$ROOT/../shared/guide/guide_intro.m4a}"
-MODEL="$ROOT/app/src/default/assets/whisper-model.bin"
+MODEL="$ROOT/app/src/main/assets/whisper-model.bin"
 WH="$ROOT/asr-native/whisper.cpp"
 BUILD=/tmp/wh-host
 

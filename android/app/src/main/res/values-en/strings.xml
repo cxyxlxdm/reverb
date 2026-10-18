@@ -378,4 +378,26 @@
     <string name="transcript_prompt_official">The publisher provides a transcript for this episode</string>
     <string name="transcript_show">Show transcript</string>
     <string name="set_word_highlight">Word-by-word highlight</string>
+
+    <!-- ↓↓ 这两组串合并自原 src/default/res(2026-10-18 两个 flavor 合成一份包,见 H205):
+         ① 隐私同意页里随能力写的三条说明(离线识别 / 真实频谱 / 应用内更新),
+         ② 应用内更新 SelfUpdate* 的全套弹窗文案。
+         原先它们在自分发渠道的 source set 里,商店渠道另有一份同名覆盖;现在只有一份包、一份文案。
+         ⚠️ 正文由同意页用 stringResource 取**纯文本**渲染:`**` 会原样上屏、`<b>` 会被 aapt
+         收成样式跨度后再摊平(不掉字形也不加粗)⇒ 强调只能靠措辞与标点。 -->
+    <string name="privacy_consent_asr">Offline speech-to-text. This build bundles offline speech recognition (the open-source whisper.cpp plus a bundled model). Turning an episode\'s audio into text happens <b>entirely on your device — the audio is never uploaded, never leaves the device, and never passes through any server</b>. You can turn this off in Settings.</string>
+    <string name="set_word_highlight_sub">Light up each word as it is spoken. On-device recognition produces word timings along the way, so this costs no extra transcription time.</string>
+    <string name="privacy_consent_mic">Real spectrum (optional). Turning on "Real spectrum" in Settings makes the ink wave follow the actual loudness. That needs microphone access, which the system asks for separately when you enable it; the audio is only analysed on device — never recorded, stored or sent anywhere — and is no longer used once you turn the switch off.</string>
+    <string name="privacy_consent_update">In-app updates (optional). On launch this build asks GitHub\'s public releases endpoint (api.github.com) which version is the latest. The request carries only this app\'s own public repository address and its current version number — never an account, an identifier, your subscriptions or what you listen to. It downloads only when that answer really has a newer version, and by default only over Wi-Fi; on a metered network it asks first and starts if you agree. The system installer then takes over — this app never installs anything itself — and the "Install unknown apps" permission that step needs is requested by the system only when you choose to install.</string>
+
+    <string name="update_title">New version %1$s</string>
+    <string name="update_ask_cellular">You are not on Wi-Fi — this network is billed by usage. The update is about %1$s. Download it anyway?</string>
+    <string name="update_downloading">Downloading the update %1$d%%</string>
+    <string name="update_ready">Update downloaded (about %1$s). Install it now?</string>
+    <string name="update_failed_title">Update download failed</string>
+    <string name="update_failed_text">The package could not be downloaded. Check your connection and retry, or choose Later.</string>
+    <string name="update_action_cellular">Download anyway</string>
+    <string name="update_action_install">Install now</string>
+    <string name="update_action_later">Later</string>
+    <string name="update_action_retry">Retry</string>
 </resources>

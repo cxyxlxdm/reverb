@@ -378,4 +378,26 @@
     <string name="transcript_prompt_official">El editor ofrece una transcripción de este episodio</string>
     <string name="transcript_show">Ver transcripción</string>
     <string name="set_word_highlight">Resaltado palabra por palabra</string>
+
+    <!-- ↓↓ 这两组串合并自原 src/default/res(2026-10-18 两个 flavor 合成一份包,见 H205):
+         ① 隐私同意页里随能力写的三条说明(离线识别 / 真实频谱 / 应用内更新),
+         ② 应用内更新 SelfUpdate* 的全套弹窗文案。
+         原先它们在自分发渠道的 source set 里,商店渠道另有一份同名覆盖;现在只有一份包、一份文案。
+         ⚠️ 正文由同意页用 stringResource 取**纯文本**渲染:`**` 会原样上屏、`<b>` 会被 aapt
+         收成样式跨度后再摊平(不掉字形也不加粗)⇒ 强调只能靠措辞与标点。 -->
+    <string name="privacy_consent_asr">Transcripción de voz sin conexión. Esta versión incluye reconocimiento sin conexión (el componente de código abierto whisper.cpp y su modelo). La conversión del audio de un episodio en texto se realiza <b>por completo en tu dispositivo: el audio nunca se sube, nunca sale del dispositivo y nunca pasa por ningún servidor</b>. Puedes desactivar esta función en Ajustes.</string>
+    <string name="set_word_highlight_sub">Ilumina cada palabra mientras se pronuncia. El reconocimiento en el dispositivo obtiene los tiempos por palabra de paso, así que no añade tiempo de transcripción.</string>
+    <string name="privacy_consent_mic">Espectro real (opcional). Al activar «Espectro real» en Ajustes, la onda de tinta sigue el volumen real. Requiere acceso al micrófono, que el sistema solicita por separado al activarlo; el audio solo se analiza en el dispositivo — nunca se graba, guarda ni envía — y deja de usarse al desactivar la opción.</string>
+    <string name="privacy_consent_update">Actualizaciones dentro de la app (opcional). Al iniciarse, esta versión consulta una vez la interfaz pública de publicaciones de GitHub (api.github.com) para saber cuál es la última versión. La petición solo incluye la dirección del repositorio público de la propia app y su número de versión actual; nunca una cuenta, un identificador, tus suscripciones o lo que escuchas. Solo descarga cuando esa respuesta trae una versión realmente más nueva, y por defecto únicamente por Wi-Fi; en una red con cargo por datos, primero pide tu permiso. Después se hace cargo el instalador del sistema — la app no instala nada por sí misma — y el permiso «Instalar aplicaciones desconocidas» que hace falta en ese paso lo solicita el sistema solo cuando eliges instalar.</string>
+
+    <string name="update_title">Nueva versión %1$s</string>
+    <string name="update_ask_cellular">No estás en Wi-Fi y esta red se cobra por uso. La actualización ocupa unos %1$s. ¿Descargarla igualmente?</string>
+    <string name="update_downloading">Descargando la actualización %1$d%%</string>
+    <string name="update_ready">Actualización descargada (unos %1$s). ¿Instalarla ahora?</string>
+    <string name="update_failed_title">No se pudo descargar la actualización</string>
+    <string name="update_failed_text">El paquete no se pudo descargar. Revisa la conexión y vuelve a intentarlo, o pulsa Más tarde.</string>
+    <string name="update_action_cellular">Descargar igualmente</string>
+    <string name="update_action_install">Instalar ahora</string>
+    <string name="update_action_later">Más tarde</string>
+    <string name="update_action_retry">Reintentar</string>
 </resources>
