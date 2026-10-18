@@ -490,6 +490,9 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 4. 界面动过 → 截图整套重拍 → 商店图与官网 `shots/` 是**同源两条出口,两侧都要换**;
 5. 部署官网 → 上传商店 / GitHub Releases(**Releases 传的是公开分发仓 `revert-cast`,不是本机 git remote
    那个私有 `reverb`** —— 传错边,应用内更新就查不到新包,见「仓库的对外边界」与 H203)。
+   资产名沿用 `reverb.apk`(应用侧按名字挑,不是取 `assets[0]`);
+   **传完必查两条**:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq .tag_name` 要等于新版本号
+   (指针真的移过来了),`--jq '.assets[0].digest'` 要等于本地 `shasum -a 256` 那份(上传没换字节)。
 
 **回滚预案目前没有**,这是已知缺口(`docs/REVIEW-2026-10-18.md` P0 第 7 条)。
 在有预案之前,发版前至少确认:`dist/` 里留着上一版包,并且知道怎么把应用内更新的版本号降回去。
@@ -604,7 +607,7 @@ grep -nA1 CFBundleShortVersionString macos/Info.plist
 | 仓库 | 可见性 | 装什么 |
 |---|---|---|
 | `github.com/cxyxlxdm/reverb` = **本机 git remote** | **私有**(匿名 API 404) | 全部源码与文档 —— 就是你在读的这个仓库 |
-| `github.com/cxyxlxdm/revert-cast` | **公开** | 只有 `README.md` + **Releases**(apk 的分发处;1.0.1 / 1.0.2 那两版也放过 dmg,1.0.3 起只传 apk —— macOS 走自分发下载页)。Android 应用内更新查的就是它的 `releases/latest`,**当前 latest 停在 1.0.4** |
+| `github.com/cxyxlxdm/revert-cast` | **公开** | 只有 `README.md` + **Releases**(apk 的分发处;1.0.1 / 1.0.2 那两版也放过 dmg,1.0.3 起只传 apk —— macOS 走自分发下载页)。Android 应用内更新查的就是它的 `releases/latest` —— **latest 是哪版别抄文档,现算**:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq .tag_name` |
 
 **两个都没有 `LICENSE` 文件。** 所以缺口的正确表述不是"公开仓库没证书",而是:
 **对外发出去的东西(安装包 + 那个公开仓)没有任何许可声明** —— 用户装了包,法律上却没被告知能装、能备份、能转发到什么程度。
