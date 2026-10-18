@@ -31,6 +31,37 @@ Android 有**两个渠道**(`default` 自分发 / `store` 大陆商店),功能�
 
 ---
 
+## 环境准备
+
+**新机器、新会话,先确认这四件事** —— 它们都不在 PATH 里,也不是 `./gradlew` 会替你找的。
+
+| 需要什么 | 本机实际位置 | 怎么验 |
+|---|---|---|
+| JDK 17 | `/Users/liang/.java/jdk-17.0.12+7/Contents/Home` | `"$JAVA_HOME/bin/java" -version` → 17.x |
+| Android SDK | `android/local.properties` 的 `sdk.dir` | `ls "$SDK/platform-tools/adb"` |
+| DevEco SDK | `/Applications/DevEco-Studio.app/Contents/sdk` | `ls $DEVECO_SDK_HOME/default/openharmony/toolchains/hdc` |
+| Chrome(仅宣传片流水线) | `/Applications/Google Chrome.app` | `--headless=new` 能起 |
+
+⚠️ **JDK 17 不在 `/usr/libexec/java_home` 的注册表里。** `java_home -v 17` 返回空,
+所以 `README.md` 那条 `export JAVA_HOME=$(/usr/libexec/java_home -v 17)` 在本机会**静默设成空值**,
+随后 Gradle 报"找不到 Java"—— 看起来像没装 JDK,其实是装了两套都没注册。必须写绝对路径:
+
+```bash
+export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home
+```
+
+⚠️ **`aapt2` 不在 PATH**(只有 `adb` 在)。要读包信息就写全路径:
+`"$SDK/build-tools/<ver>/aapt2" dump badging …`。
+写成裸 `aapt2 … | grep -c` 时命令**根本没跑**,`grep -c` 对着空 stdin 报 **0** ——
+这正是 H156 那次"两个渠道都被读成没有录音权限"的成因。期望 0 的判据先看命令自己的退出码。
+
+**一分钟自检**(本机唯一能跑的产品级验证,2026-10-18 实测 exit 0):
+
+```bash
+cd android && export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home \
+  && ./gradlew :app:compileDefaultReleaseKotlin :app:compileStoreReleaseKotlin -q; echo "exit=$?"
+```
+
 ## 常用命令
 
 ### Android
@@ -385,6 +416,83 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 
 ---
 
+## 仓库地图
+
+只列"改这个功能该去哪"。三端同名概念尽量同名,便于对照着改。
+
+### Android(`android/app/src/main/java/com/yuyin/reverb/`)
+
+| 目录 | 职责 | 典型任务 |
+|---|---|---|
+| `data/model/` | `Podcast` / `Episode` / `FeedResult` | 加字段 —— 注意与另两端的备份格式互通 |
+| `data/remote/` | `ITunesSource` · `AppleChartsSource` · `FyydSource` · `GpodderSource` · `RssParser` · `OpmlSupport` · `TranscriptFetcher` · `PodcastRepository`(编排 / 降级) | 换源、调降级顺序 |
+| `data/local/` | 每个功能域一个 JSON store:`SubscriptionStore` / `HistoryStore` / `InboxStore` / `ListenStatsStore` / `TranscriptStore` / `BackupManager` … | 加持久化字段(要动 `CACHE_VERSION`,硬规矩 11) |
+| `playback/` | `PlaybackService`(MediaSessionService)· `PlayerController`(门面 / StateFlow)· `playback/asr/` | 播放链路、选源次序(下载 → 缓存 → 流式) |
+| `ui/screens/` | 各页面 | 界面改动 → 截图整套重拍(硬规矩 20) |
+| `ui/components/` | 复用组件(`Components.kt` 1 444 行,已偏大) | 加通用控件 |
+| `ui/share/` | 剪藏与足迹海报 | 分享图 |
+| `update/` | WorkManager 订阅巡检 + 新集通知 | 后台刷新 |
+| `app/src/{default,store}/` | **渠道差异的物理边界** | 见 `docs/FEATURES.md`「渠道差异」 |
+| `android/tools/` | `build-asr.sh` · `asr-probe/` · `glass-shot.sh` · `play-button-check.sh` | ASR 产物、探针、截图 |
+
+### HarmonyOS(`harmony/entry/src/main/ets/`)
+
+| 目录 | 职责 |
+|---|---|
+| `view/` | 21 个页面与组件(`DiscoverPage` 1 416 行、`Components` 1 438 行) |
+| `store/` | 21 个 JSON store,与 Android `data/local/` 一一对应;`JsonFile` / `JsonTask` 是底座 |
+| `net/` | 9 个:`Sources` / `PodcastRepository` / `RssParser` / `FeedTask`(`@Concurrent`)/ `Http` … |
+| `playback/` | 8 个:`PlayerController`(1 555 行)/ `PlaybackClock`(高频时钟,硬规矩 7) |
+| `update/` · `backup/` · `theme/` · `util/` · `model/` | 对应 Android 同名职责 |
+| `harmony/shelved/` | **移出编译树**的代码 —— ArkTS 没有 DCE,只能这么"真的没有"(硬规矩 2) |
+
+### macOS(`macos/Sources/Reverb/`)
+
+`AppEnvironment` · `ReverbApp` · `RootView` · `Data/` · `Playback/` · `UI/`。
+缺口清单见 `docs/MACOS-GAPS.md` —— **盘三端一致性先看这份,别重新 grep 一遍。**
+
+### 其它
+
+| 路径 | 职责 |
+|---|---|
+| `shared/guide/` | 引导音频 + 脚本(`make-guide.sh`),分发到各端 |
+| `shared/seed/` | 种子清单(只有自分发渠道打包) |
+| `site/reverb/` | 官网 + 隐私页;`shots/` **不入库**,部署时手工上传 |
+| `marketing/<版本>/` | 宣传物料(宣传片 / 封面 / 配乐),流水线见 `marketing/README.md` |
+
+## 版本与发版
+
+### 版本号一共三处,没有单一来源
+
+| 端 | 文件 | 字段 | 1.0.5 的值 |
+|---|---|---|---|
+| Android | `android/app/build.gradle:20-21` | `versionCode` / `versionName` | `6` / `1.0.5` |
+| 鸿蒙 | `harmony/AppScope/app.json5:5-6` | `versionCode` / `versionName` | `1000005` / `1.0.5` |
+| macOS | `macos/Info.plist:29-32` | `CFBundleShortVersionString` / `CFBundleVersion` | `1.0.4` / `2` |
+
+**三处必须手改,漏一处不会有任何东西报错。** 改完用这条核:
+
+```bash
+grep -nE 'versionCode|versionName' android/app/build.gradle harmony/AppScope/app.json5
+grep -nA1 CFBundleShortVersionString macos/Info.plist
+```
+
+⚠️ **macOS 落后一版是常态,不是遗漏。** 1.0.5 那轮用户拍的端范围是 Android + 鸿蒙,
+桌面端零改动,所以 `Info.plist` 停在 1.0.4 并在 `CHANGELOG` 里写明。
+**但只要这一轮动了 macOS 源码,就必须同步改** —— 否则用户看到的版本号与代码不符,
+而"三端共用一套版本节奏"这句承诺就没有任何东西在守。
+
+### 发版顺序(固定)
+
+1. **先定 `CHANGELOG.md`** —— 它是对外文案的唯一上游(硬规矩 19);
+2. 三端各自 `build-release.sh` / `package.sh`;
+3. 按硬规矩 20 做**解包验收 + mtime/SHA 判据**,不是看构建日志;
+4. 界面动过 → 截图整套重拍 → 商店图与官网 `shots/` 是**同源两条出口,两侧都要换**;
+5. 部署官网 → 上传商店 / GitHub Releases。
+
+**回滚预案目前没有**,这是已知缺口(`docs/REVIEW-2026-10-18.md` 第 7 条)。
+在有预案之前,发版前至少确认:`dist/` 里留着上一版包,并且知道怎么把应用内更新的版本号降回去。
+
 ## 代码风格
 
 看几个现有文件就能感受到,这里的风格与常见项目不同,请沿用:
@@ -411,6 +519,48 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 
 ---
 
+## 验证:没有自动化测试,所以怎么自证
+
+**现状说清楚:本仓库没有单元测试、没有 UI 测试、没有 CI。** 唯一的自动化是
+`macos/tools/selftest-verify.sh` —— 它验的是打包断言脚本本身,不是产品。
+
+所以"改完了"这个结论只能靠下面这张表挣出来,而且**必须按端说,不能互相顶替**:
+
+| 改了什么 | 最小自证 | 不够的 |
+|---|---|---|
+| Android 任意 Kotlin | 两渠道 `compileDefaultReleaseKotlin` + `compileStoreReleaseKotlin` exit 0 | 只编一个渠道 |
+| Android 界面 / 播放 / 缓存 | 上面 + **装机跑一遍**对应路径 | 只看编译通过 |
+| 渠道裁剪相关 | 上面 + **解包 grep**(硬规矩 1) | 只改代码不验包 |
+| 鸿蒙任意 `.ets` | `assembleHap` BUILD SUCCESSFUL | 只跑 IDE 预览 |
+| 鸿蒙界面 / 播放 | 上面 + **debug hap 装机** | 只编译 |
+| 新增 native 类型包 | 上面 + `ohpm install` | 漏了报 `arkts-no-any-unknown`(H61) |
+| macOS 任意 Swift | **整模块 typecheck,改前改后都必须是 0 错误** | "改前改后都是同样 4 条"**证明不了**其余文件被检查过(H128) |
+| 文档 | 数字与条数用 `grep -c` 现算 | 凭印象写"18 条" |
+
+**三条附加规矩:**
+
+1. **"编过了"不等于"验过了"。** 涉及行为的改动,报告里要写清跑到哪一步、哪一步没跑。
+2. **规则类改动(缓存淘汰 / 时间轴 / 备份格式)必须留一条真机判据。**
+   1.0.5 的缓存那批就是反面样本:代码与注释齐备,断网实跑一条没走。
+3. **阳性对照。** 断言"这里没问题"时,先往里面注入一个已知错误,确认它**会**报出来 ——
+   否则那个"没问题"不成立(硬规矩 1 与 H128 指向的是同一件事)。
+
+## 文档写作规矩
+
+文档是本仓库最大的资产,也是目前最大的负债(17 份 / 1.68 MB)。下面几条是为了不让它继续膨胀:
+
+1. **一条知识只写一次,其它地方写编号。** 例如"缓存 300 MB 淘汰"只写在 `FEATURES.md`,
+   代码注释里写 `见 docs/FEATURES.md 缓存一节`,不要复制一段。
+2. **单个 `.md` 不超过 100 KB。** 超了就拆,原位置留一行指针。
+   现在 `TROUBLESHOOTING.md`(880 KB)与 `ROADMAP.md`(335 KB)已超,是待拆项。
+3. **状态汇报用表格,不用散文。** `ROADMAP.md` 平均每行 334 字节,意味着大量单段数千字的叙述 ——
+   这类内容三个月后只有作者本人能读懂。
+4. **`CHANGELOG.md` 是内部账本,不是对外文案。** 它含"一条没走""未验过"这类内部措辞,
+   不能直接发给用户;对外版本说明要单独一份(见 `docs/REVIEW-2026-10-18.md` 第 13 条)。
+5. **不要在任何文档里写"共有 N 条"这类可变量**(硬规矩 4 已有此训)。硬规矩条数、H 条目数、
+   文件行数都属于这一类 —— 要写就写"用 `grep -c` 现算"。
+6. **新增文档必须进 `## 文档地图`**,否则等于没写。
+
 ## 文档地图
 
 | 文档 | 内容 |
@@ -428,15 +578,28 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 | `docs/LOCAL-ASSETS.md` | **本地资产与换机迁移**(哪些东西不在 git 里、新机怎么完整重建) |
 | ~~分发运营物料~~、~~`*/store/`~~ | **不入版本控制**(硬规矩 19)。清单与换机流程见 `docs/LOCAL-ASSETS.md` |
 | `docs/PRIVACY.md` | 隐私政策(与 `reverb/privacy.html` 必须同步) |
+| `docs/REVIEW-2026-10-18.md` | **一次性的项目体检**:规模基线、做对了什么、不足与优先级 TODO。**看"当前处在什么位置"看这份,看"要做什么"看 ROADMAP** |
+| `marketing/README.md` | 宣传物料流水线(改文案 → 重渲染 → 重编码,一条命令) |
 
 **动手之前**:改逐字稿看 `docs/TRANSCRIPT.md`;改渠道相关看 `docs/FEATURES.md` 渠道差异一节 +
 `docs/ARCHITECTURE.md` 第六节;不确定某个坑踩过没有,先 grep 一遍 `docs/TROUBLESHOOTING.md`。
 
-## 共享记忆
+## 会话记忆
 
-会话开始时读取：
+`~/.agent-memory/…` 那套路径**在本机不存在**(2026-10-18 核过),原先指向它的两行已废弃。现在的落点:
 
-- 全局偏好：`~/.agent-memory/global/MEMORY.md`
-- 本项目记忆：`~/.agent-memory/projects/source-cast/MEMORY.md`
+- **项目级**:`<repo>/.workbuddy-ai/memory/MEMORY.md`(长期约定)+ `YYYY-MM-DD.md`(当日工作日志,只追加)
+- **全局偏好**:由工具层在会话开始时自动注入,不需要在这里列路径,也不要手改
 
-`projects/` 是 Claude Code 原生记忆的只读镜像，勿直接编辑（会被 sync 覆盖）。
+**写什么**:跨会话仍然成立的事实 —— 用户定死的边界(如"macOS 出包在另一台机器")、
+新确立的约定、踩过且已修完的坑的结论。
+**不写什么**:临时路径、一次性搜索结果、当天就能从代码里读出来的东西。
+
+## 仓库的对外边界
+
+仓库在 GitHub 上公开(`github.com/cxyxlxdm/reverb`),但**没有 `LICENSE` 文件** ——
+按法律默认这是"保留所有权利",别人不能合法 fork / 修改 / 分发。
+这是已知缺口(`docs/REVIEW-2026-10-18.md` 第 8 条),在它被决定之前:
+
+- 不要把"开源"当成既定事实写进任何对外文案;
+- 引用代码、给外部人看片段之前,先确认维护者的意图。

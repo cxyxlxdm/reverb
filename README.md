@@ -79,7 +79,7 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 > **不入版本控制**,只留在本地(硬规矩 19)。
 > 清单与换机流程见 `docs/LOCAL-ASSETS.md`;渠道合规口径见 `docs/FEATURES.md`「渠道差异」
 > 与 H70。
-- `AGENTS.md` — **在本仓库工作的约定**(构建命令、18 条硬规矩、代码与提交风格);`CLAUDE.md` 是指向它的薄指针
+- `AGENTS.md` — **在本仓库工作的约定**(环境准备、构建命令、硬规矩、版本与发版、验证方式、代码与提交风格);`CLAUDE.md` 是指向它的薄指针
 
 > `docs/PRODUCT.md` 与 `docs/FEATURES.md` 是同一件事的两种粒度:前者叙述、后者矩阵。
 > 功能有变动时**两份都要改** —— 这个项目已经因为"功能改了自述没改"栽过一轮(见 `docs/HISTORY.md` 阶段七)。
@@ -92,12 +92,17 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 
 ```bash
 cd android
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)   # 本机返回空,见下方说明
 ./tools/build-asr.sh                # 备齐离线识别的 .so 与模型(不入版本管理,缺了打包会报错)
 ./build-release.sh                  # 自分发渠道  → dist/reverb.apk(≈64 MB,含语音模型)
 ./build-release.sh --store          # 大陆商店渠道 → dist/reverb-store.apk(≈3.9 MB)
 ./gradlew :app:assembleDebug        # 只要一个能装的 debug 包
 ```
+
+> ⚠️ **本机的 JDK 17 没有注册进 `java_home`**(`java_home -v 17` 返回空,上面那条会静默设成空值,
+> Gradle 随后报"找不到 Java")。改用绝对路径:
+> `export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home`。
+> 环境清单与一分钟自检见 `AGENTS.md`「环境准备」。
 
 **HarmonyOS** —— DevEco Studio 的 SDK 与 hvigor
 
@@ -114,7 +119,7 @@ cd macos
 ./package.sh                        # swift build → 组装 .app → ad-hoc 签名 → 打 dmg
 ```
 
-产物：`macos/build/余音-Reverb.dmg`
+产物:`macos/dist/余音-Reverb-<版本>-universal.dmg`(架构标记由脚本推导;`macos/build/` 里只是中间产物)
 
 ## 配置项
 - Android：minSdk 26 / targetSdk 34 / compileSdk 34
