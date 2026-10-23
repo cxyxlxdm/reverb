@@ -12,8 +12,11 @@ App 包里写死的 URL 依赖这个路径,不能改(见下方「目录结构不
                         由发布原图缩放而来(scale=407:900),生成口径见
                         AGENTS.md「截图」一节。收听时长与听觉足迹两张**不上官网**
                         (含个人收听数据)。本目录不入版本管理(.gitignore)。
-                        ⚠ 01-discover 摄于 2026-09-10 的旧版界面,已过期:
-                        部署官网前必须重拍(见 docs/ROADMAP.md 的截图记录)。
+                        ⚠ 本文件自己也会被部署到 https://cxyxl.cn/reverb/README.txt
+                        (2026-10-23 实测服务器上那份就是它),所以这里**不要写口令、路径细节
+                        与登记主体信息**;它同时是一份公开页面。
+                        那 4 张已于 2026-10-17 整套重拍、10-18 部署并三方 SHA 核过
+                        (原「01-discover 摄于 09-10 旧界面待重拍」这条已过期,记录见 docs/STORE-OPS.md 七)。
 
   站点地址示例:
     https://cxyxl.cn/reverb/
@@ -27,13 +30,14 @@ App 包里写死的 URL 依赖这个路径,不能改(见下方「目录结构不
     Android → android/dist/store/*.png(8 张,1272×2659,裁掉状态栏,命名同名同序)
   两处都已被 .gitignore 忽略,重拍口径见 AGENTS.md「截图」一节。
 
-【其他发布物料】
+【其他发布物料】(以下是 1.0.2 时期写的**历史清单**;Android 已于 2026-10-18 合并成唯一
+  一份包 android/dist/reverb.apk,当前版本号与物料位置一律看本地 docs/STORE-OPS.md 十二,
+  版本号只认控制台 —— 本文件是公开页,不写可变数字)
   应用图标   harmony/store/appicon-216.png(备用 512 / 1024)
   安装包     harmony/dist/reverb.app          ← 跑 harmony/build-release.sh 生成
   符号文件   harmony/dist/reverb-symbol.zip
   文案       harmony/store/发布文案.txt(本地文件,不入版本控制,硬规矩 19)
   包名       com.yuyin.reverb
-  版本       versionCode 1000002 / versionName 1.0.2
 
 【重要:目录结构不要改】
     App 里的这两个 URL 是**写死在安装包里**的,挪一次就得重新打包提交:
