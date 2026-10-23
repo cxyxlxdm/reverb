@@ -31,6 +31,13 @@ MIGRATION.txt
 # 发布运营手册(分发平台流程/物料口径,仅本机可见)
 docs/STORE-OPS.md
 
+# 上面三份本地-only 文件的**带日期备份副本**同样不能入库(2026-10-23 补:
+# 改 STORE-OPS 前按「不可再生文件先做时间戳备份」动手,结果那份 .bak 处于未忽略状态,
+# `git add -A` 就会把整份运营手册复制进版本库 —— 正是硬规矩 19 要防的形态)
+docs/STORE-OPS.md.bak-*
+BEIAN.md.bak-*
+MIGRATION.txt.bak-*
+
 # 编码代理的工作目录:会话记忆、渲染帧、临时截图。
 # 宣传片渲染一次就是 150 MB 的 jpg 序列,`git add -A` 会把它整个吞进来。
 .workbuddy-ai/

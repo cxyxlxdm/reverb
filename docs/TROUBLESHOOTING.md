@@ -10066,3 +10066,51 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
      资源分发)都要在合并那一刀同时改,否则失败点在十分钟后 —— 本仓库这五处全中。
   4. **重打之前先按 H204 的判据问一遍"现役这份是不是在野版本"**:`dist/` 里 apk 可以靠公开分发仓
      的 digest 复现,**mapping 不能**。任何一次"顺手重打"都要先把不可再生的那半挪进带时间戳的备份目录。
+
+---
+
+### H206 复扫报了九个「0 命中」,而真值是十七个:参数没被拆词,命令拿一整串路径当文件名去 open
+
+- **现象**(2026-10-23,合并 flavor 后做过期口径复扫):九个判据词(`build-release.sh --store`、
+  `compileDefaultReleaseKotlin`、`compileStoreReleaseKotlin`、`src/store`、`src/default`、
+  「唯一历史副本」「没有 git remote」等)跑完**全部 `files=0 hits=0`**,输出形态与"现役文档已清零"完全一样。
+  真值:同一批文件里 `compileDefaultReleaseKotlin` **17 处**、`src/store` **29 处**、`src/default` **12 处**。
+
+- **根因**:**这一条与 H156、H202 都不同源。** 那两条分别是「工具不在 PATH 所以命令没跑」和
+  「判据选错层(AXML 是 UTF-16)所以扫不到」,这次是**shell 的传参形态**:
+  命令写成 `grep -acE "$w" $FILES`,而本机交互 shell 是 **zsh —— zsh 默认不对未加引号的变量做词分割**
+  (bash 会)。于是 `$FILES` 那 109 个路径**原样成为一个参数**,grep 把它当成一个超长文件名去 open:
+  `grep: AGENTS.md CHANGELOG.md CLAUDE.md : No such file or directory`(逐字复现见下),
+  而这条命令末尾带着 `2>/dev/null` ⇒ 唯一的失败信号被消音,stdout 恒空,`grep -c` 对着空输入数 **0**。
+  **九个词跑了九遍,一遍都没打开过文件。**
+
+- **修法**:
+  1. 文件清单**落文件,再用 stdin 交给 xargs**:`git ls-files … > /tmp/f.txt` 然后
+     `< /tmp/f.txt xargs grep -acE "$w"`。注意 **BSD xargs 没有 `-a` 选项**
+     (`xargs -a file …` 直接 usage 报错),只能走 `< file | xargs` 这个形态。
+  2. **复扫第一条命令是阳性对照,不是补救**:本次两条对照是 `build-release.sh` **44** 处、
+     「合并 flavor」 **37** 处 —— 只要对照为 0 就说明根本没扫成,后面的 0 全部作废。
+  3. 去掉验收命令里的 `2>/dev/null`(要抑制噪声就 `> /tmp/x.log 2>&1`,并在报告里带上那个文件的字节数)。
+  4. 按 `zero-hit-must-prove-scan` 先打印**处理量**再报命中:本次 109 个文件 / md+sh+gradle **1 818 882 B**,
+     `.kt` 另 **812 965 B** 单独一轮。
+
+- **逐字复现**(三个路径就够):
+  ```bash
+  FILES="AGENTS.md CHANGELOG.md CLAUDE.md "
+  bash -c 'grep -acE "README|AGENTS" '"$FILES"' >/dev/null; grep -acE "AGENTS" $FILES 2>/dev/null'   # 有命中
+  zsh  -c 'grep -acE "AGENTS" $FILES 2>/dev/null'      # ⇒ 0(同一条命令、同一个变量、同一个仓库)
+  zsh  -c 'grep -acE "AGENTS" $FILES'                  # ⇒ grep: No such file or directory(真相在这)
+  ```
+
+- **教训与可复用的规律**:
+  1. **「工具不存在」和「没命中」同形是 H156 教的;「参数没拆开」是第三种同形来源。**
+     三者都表现为空 stdout,所以判据不能只写"命令退出码",还要有**处理量与非零对照**。
+  2. **一次性验收命令写进 `/tmp/x.sh` 用 `bash` 跑,不要直接贴进 zsh。**
+     同一份脚本 `bash script.sh` 语义正确、粘进交互 shell 语义改变 —— 这类差异不报错,只改结论。
+     词分割之外还有 `$(…)` 里换行、`**` 全局等 zsh 独有行为,同一条教训。
+  3. **这次的假 0 差点被提交成结论**:复扫的目的正是要分辨"真残留"与"带『合并前』限定语的历史叙述"
+     (17 处 `compileDefaultReleaseKotlin` 里 5 处在 AGENTS/CHANGELOG/REVIEW/ROADMAP,均为历史口径、按规矩保留原文)。
+     如果直接读那九个 0,就会写下"现役文档已无 flavor 旧口径"并据此结案 —— **而逐条回读后确实有该改口的,
+     它们全在不入库那两份里**(`docs/STORE-OPS.md` 的「上架材料的当前位置」表把 `reverb-store.apk` 列为发布物、
+     `android/store/上架文案.txt` §三 整张两渠道差异表:照前者传就传成合并前那份没有 ASR 的包,见硬规矩 20。
+     两处 10-23 已各自加补记改口)。**扫错的命令最危险的地方不是报错,是它看起来像跑过。**
