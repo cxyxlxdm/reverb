@@ -257,7 +257,8 @@ native 库与模型是构建系统按 source set 打进包的,R8 只折叠代码
 | **App 内关于页**(`about_p_features` / `about_p_philosophy`) | 会被逐字读到;Android 合并成一份包后只有一套(合并前是两套,见 H205) |
 | 设置项标题与副标题 | 副标题常含「为什么/代价」,行为一改就不成立 |
 | `docs/PRODUCT.md` + `docs/FEATURES.md` | 同一件事的叙述版与矩阵版,**两份都要改** |
-| `docs/PRIVACY.md` + `reverb/privacy.html` + 同意页正文 | 涉及权限/网络/数据用途时 |
+| `docs/PRIVACY.md` + `site/reverb/privacy.html` + 同意页正文 | 涉及权限/网络/数据用途时 |
+| **官网首页正文**(`site/reverb/index.html` 的 figcaption、能力清单、「获取」那一节) | 口径翻转最容易漏在这里:文案里是**人话**不是标识符(合并后残留的「完整版」就是这么留下的,见 H207)。硬规矩 20 那条只管到 `shots/` 张数与 `alt`,管不到句子本身 |
 
 **五个语种一起改**:简中 / 繁中 / 英 / 法 / 西。
 **但三端的「五套」形态不一样,别按一个数去找文件**:Android 与鸿蒙是**每个语种一套**
