@@ -217,6 +217,15 @@ LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder' # 非 0(1
 所以期望 0 的判据**必须先看那条命令自己的退出码和处理量**(权限清单打印出来数过行数再谈 0),
 同理适用于任何"命令不存在 ≠ 没命中"的工具(现象与排查顺序记在 `docs/TROUBLESHOOTING.md` H156)。
 
+⚠️ **同一种「空 stdout」还有第三个来源:参数根本没被拆成多个文件名。**
+本会话的 shell 是 **zsh,而 zsh 不对未加引号的变量做词分割**(bash 会)——
+所以 `grep -ac "$w" $FILES` 会把一百多个路径当成**一个**超长文件名去 open,错误写进 stderr,
+再被 `2>/dev/null` 吃掉 ⇒ 整批复扫报 **0**,看起来正好是「已清零」
+(2026-10-23 踩过:九个词全 0,真值是 17 / 29 / 12 处)。三条固定动作:
+①清单落文件、走 `< /tmp/list.txt xargs grep`(**BSD xargs 没有 `-a` 选项**);
+②报任何 0 之前先跑一条**必然非 0 的阳性对照**;③一次性复扫写成 `/tmp/x.sh` 用 `bash` 跑,别贴进交互 shell。
+逐字复现与第三种同形来源记在 H206。
+
 **中文字符串必须用 `LC_ALL=C grep -a` 搜原始字节** —— `resources.arsc` / `resources.index`
 里的中文不是 ASCII,`strings` 看不见,曾因此差点得出错误结论。
 
