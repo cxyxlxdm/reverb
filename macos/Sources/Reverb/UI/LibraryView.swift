@@ -24,6 +24,9 @@ struct LibraryView: View {
     @State private var pendingDelete: Episode?
     @State private var pendingNoteDelete: EpisodeNote?
     @State private var showListenStats = false
+    /// 历史清空的二次确认。与 Android `LibraryScreen.kt` 那条路径同口径:
+    /// 清掉的是收听记录与续播位置,桌面没有别的入口能补回来(见 docs/MACOS-GAPS.md M1)。
+    @State private var confirmClearHistory = false
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin, maximum: Metrics.cardMax),
@@ -101,6 +104,14 @@ struct LibraryView: View {
         } message: {
             Text(noteDeleteMessage)
         }
+        // 清空历史:正文照抄 Android `confirm_clear_history`。这里清掉的是收听记录与
+        // 续播位置 —— 桌面没有第二条路径能把它们补回来(见 docs/MACOS-GAPS.md M1)。
+        .confirmationDialog("清空播放历史?", isPresented: $confirmClearHistory, titleVisibility: .visible) {
+            Button("清空", role: .destructive) { env.history.clear() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将清空全部收听记录与续播位置。")
+        }
         .sheet(isPresented: $showListenStats) {
             ListenStatsView()
                 .environmentObject(env.listenStats)
@@ -131,7 +142,7 @@ struct LibraryView: View {
             }
             if segment == .history && !env.history.history.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
-                    Button(role: .destructive) { env.history.clear() } label: {
+                    Button(role: .destructive) { confirmClearHistory = true } label: {
                         Label("清空", systemImage: "trash")
                     }
                     .help("清空播放历史")

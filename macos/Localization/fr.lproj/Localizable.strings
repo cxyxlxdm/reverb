@@ -61,6 +61,8 @@
 "取消" = "Annuler";
 "清空" = "Vider";
 "清空播放历史" = "Vider l'historique";
+"清空播放历史?" = "Vider l'historique de lecture ?";
+"将清空全部收听记录与续播位置。" = "Tout l'historique d'écoute et les positions de reprise seront effacés.";
 
 /* Player */
 "没有正在播放的内容" = "Aucune lecture en cours";
@@ -180,6 +182,8 @@
 "播放队列" = "File d'attente";
 "播放队列为空" = "File d'attente vide";
 "清空播放队列" = "Vider la file";
+"清空播放队列?" = "Vider la file de lecture ?";
+"将清空待播队列中的全部单集，无法恢复。" = "Tous les épisodes de la file seront supprimés, sans possibilité d'annulation.";
 "下一个播放" = "Lire ensuite";
 "加入队列" = "Ajouter à la file";
 "标记为已播完" = "Marquer comme lu";
