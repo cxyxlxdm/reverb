@@ -10172,6 +10172,12 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
   → 新机 Apple Silicon / macOS 27.0.1 / 用户 `cxyxl`;用户指令是「全面 review 有没有信息遗漏,
   全局跑一遍构建、签名、出包」):
 
+  > ⚠️ **本条有两个时刻,读的时候别混。** 上午那次 = "迁移完成后跑三端",产出下面那张表和根因 ①~⑧;
+  > **下午那次 = "本人开始装完整 Xcode + 代理做了 `.hvigor` 清空重建实验"之后**,产出三条新的、
+  > 以及把上午两条判错的地方翻面(`brew 没装` 是错的、`本仓库不用 PIL` 也差点写错)。
+  > 下午的内容**不另起编号**,它就在修法 3 的 ①②③、修法 4 和教训 9~11 里 ——
+  > 标题那句「八条」仍然只指上午那八个根因,别拿它当本条的总数。
+
 | 端 | 结果 | 实测数字 |
 |---|---|---|
 | Android | ✅ 全绿 | 编译门 exit 0 → `build-release.sh` exit 0 → `dist/reverb.apk` **65 028 676 B**(sha256 `d276eb604f03…`,10-24 10:28)→ 解包审计**处理量** dex=1 个 / 6 487 612 B、zip **171 条目**、aapt2 权限 **13 行**;六项期望**全 PASS**,含 `RECORD_AUDIO=1` / `REQUEST_INSTALL_PACKAGES=1` |
@@ -10257,10 +10263,31 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
      并更正 `java_home` 那句;`docs/LOCAL-ASSETS.md` §四 整节重写、§五 第 6 条 macOS 重判。
   2. Skill 脚本的空数组改成守卫式展开 `${OVERRIDES[@]+"${OVERRIDES[@]}"}`(落点
      `~/.qoder/skills/android-channel-package-audit/SKILL.md`),并把"bash 3.2 在 macOS 上仍是 /bin/bash"写进陷阱清单。
-  3. **待维护者四条,代理不代做**:① 装完整 Xcode(≈15 GB)才有 macOS 的出包与 typecheck 差分;
-     ② debug 签名段的绝对路径(签名材料一律本人维护,见硬规矩 12 末段与 H123 教训 ⑦);
-     ③ 清不清 `harmony/.hvigor/`(可再生,但里面那串口令密文归本人判);
-     ④ **⑧ 那 14 条本机路径怎么办** —— 三条路都有代价,代理不替它选:
+  3. **待维护者四条(10-24 上午写的)到下午的状态各不相同,逐条如实记 —— 其中一条的性质变了**:
+     **① 完整 Xcode:本人已装,但没换来验收。** `xcode-select -p` 已指向 `/Applications/Xcode.app`
+     (Xcode 27.1 / 27A9275),`SwiftUIMacros` 宏插件从 0 份变 5 份(含 `MacOSX.platform`),`xcbuild`
+     也在(**落点不是** `Developer/usr/bin/`,是 `Contents/SharedFrameworks/SwiftBuild.framework/Versions/A/Support/xcbuild`)。
+     **但 `sudo xcodebuild -license accept` 没跑,于是 developer dir 的 shim 全线拒答**:
+     `xcrun` / `swift` / `swiftc` / `clang` / `/usr/bin/python3` / **`/usr/bin/git`** 六个入口
+     只回同一句许可提示 —— 连原本"本机唯一能跑的 macOS 验收"也一起废了:
+     `bash macos/tools/selftest-verify.sh` 现在 **exit 1、`clang x86_64 失败`**(10-24 下午实测)。
+     ⇒ 所以"装完 Xcode 就能出包"这句**还不能写**;同意许可后要依次验 selftest(期望 `pass=9 fail=0`)、
+     `swift build -c release`、`./package.sh` 的架构硬断言,三条都过才撤"本机出不了 macOS 包"。
+     期间要提交就用真二进制 `/Library/Developer/CommandLineTools/usr/bin/git`(2.54.0,与 Xcode 那份同版本),
+     **本轮文档提交就是这么走的,但它是 workaround 不是方案**。
+     **② debug 签名段的绝对路径:没动(签名材料一律本人维护,见硬规矩 12 末段与 H123 教训 ⑦),但它不是静态残留。**
+     实测新机 `~/.ohos/config/` 里 `default_harmony_uW2…=.{cer,csr,p12,p7b}` **文件名逐字同名**、字节数与旧机一致
+     ⇒ 缺的只是 `/Users/liang` 这个前缀。**而且是活源头**:把 `.hvigor` 清空后重跑一次 debug 构建,
+     新缓存的 report 与 build.log 里 `/Users/liang` 又出现 **5 次** —— 就是 `build-profile.json5:48/51/53`
+     那三行被构建原样打进去的。不修,旧机路径会一直在新缓存里再生;修了,`SignHap 00303107` 才消失、
+     硬规矩 12 授权的 debug 装机验证才走得通(release 段用相对路径,所以出包不受影响 —— **这就是"只验 release 看不出这条断了"**)。
+     **③ `harmony/.hvigor/`:做了清空重建实验,结论推翻了一半的直觉。** 搬来的那份 31 文件 / 14 MB /
+     21 个 mtime 早于 10-24,`keyPassword` ×5 + `storePassword` ×5 + 密文前缀 `0000001B` ×10(2 个文件),
+     `/Users/liang` **22 968 次**;清空后跑一次全量构建(31 tasks executed / 0 up-to-date)⇒ 新缓存 12 文件 / 704 KB,
+     键名只剩 `cache/task-cache.json` 一处(密文 ×2),`outputs/sync/output.json` **不再回来**(它是 DevEco sync 写的,hvigor CLI 不产)。
+     ⇒ **"清了就干净"不成立**(那份必然随构建再生),真正的规则是**迁移时不带缓存**(第三节),清理只是把
+     旧机的 22 968 条路径和 8 处副本送走。**这条自己还踩出一个新坑,见下面教训 9。**
+     **④ ⑧ 那 14 条本机路径怎么办** —— 三条路都有代价,代理不替它选:
      **(a) 只改未来**:`tools/build-asr.sh` 的 CMake 加 `-ffile-prefix-map=<构建目录>=/`
      (或 Release 下 `-DNDEBUG` 把带 `__FILE__` 的断言整支摘掉)⇒ 下次重建的 `.so` 干净,
      **但在架那份 1.0.5 改不掉**;**(b) 连当下一起改**:重传 Releases 资产(动分发,要点头)
@@ -10268,9 +10295,17 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
      **(c) 判为可接受**:用户名与目录不含凭据,与 H63 那类"口令进历史"不同级 ⇒ 明确写一句"接受",
      登记进 `docs/LOCAL-ASSETS.md`,让它别再当意外出现。**三条之外还有一条零成本动作**:
      把 `/Users/` 加进解包判据词(见下面教训 8),这样无论选哪条,下次换机都会立刻报出来。
-  4. **新机缺件如实登记**:`ffmpeg` 与 `gh` 都不在 PATH(`gh` 的登录在 keyring,不随目录走)⇒
-     发版顺序第 5 步那两条 `gh api` 必查项、以及"上一版包的 digest 核验"**在这台机器上跑不了**;
-     `hdc` / `aapt2` / `apksigner` 不在 PATH(全路径可用);两台真机当天未连接。
+  4. **新机缺件如实登记,并在补齐后翻面(10-24 下午做了这一步)**:上午的读数是 `ffmpeg` 与 `gh`
+     都不在 PATH,当时的推断是"brew 也没装"。**两条都不成立**:`/opt/homebrew/bin/brew` 在(Homebrew 7.0.10),
+     缺的只是两个 formula;`brew install gh ffmpeg` 之后现数 `brew list --formula | grep -cE '^(gh|ffmpeg)$'` = **2**
+     (`gh 2.103.2` / `ffmpeg 9.0.2`)。⇒ 教训是**"缺件"要先问缺的是包还是包管理器**,否则文档会写出一条
+     让下一个人去重装 Homebrew 的假缺口。
+     **补装后仍未消的三条,现在这样记**:① `gh auth status` = `The token in default is invalid` ——
+     命令在、凭据不在,发版顺序第 5 步那两条 `gh api` 判据**照样跑不了**,而 `gh auth login` 是交互式的,代理代做不了;
+     ② **Python 的两个库缺**:`pillow`(截图流水线,`android/tools/glass-shot.sh:192,217` +
+     `harmony/tools/glass-shot.sh:43`)与 `numpy`(`marketing/src/score.py:15` 的配乐),
+     装它们的命令现在也被许可挡着(`python3` 是 shim);③ `hdc` / `aapt2` / `apksigner` 不在 PATH(全路径可用)、
+     两台真机当天未连接 —— 这两条不变。
 
 - **教训与可复用的规律**:
   1. **「绝对路径写进文档」的代价只在换机后暴露,而且一次暴露一批。** 本轮 `/Users/liang` 残留
@@ -10312,3 +10347,21 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
      后者与脱敏那次用的词表同源,该并进 `git-history-wordlist-scrub` 那张共享表而不是另起一张 ——
      **同一族词在两张表里各写一遍,就是 H207 那个"词表漏词"的重演方式。**
      已把这一条写进 Android 解包 Skill 的陷阱清单(落点 `~/.qoder/skills/android-channel-package-audit/SKILL.md`)。
+  9. **给"为 X 写的忽略规则"改名归档,等于把规则关掉。** 这条是 ③ 实验当场踩的:把 `harmony/.hvigor/`
+     挪成 `harmony/.hvigor.preMig-20261024/` 想留着比对,**结果 14 MB、内含 10 处口令密文串的目录直接出现在
+     `git status` 的未跟踪列表里** —— 规则写的是 `.hvigor/`(根 `.gitignore:8`)和 `/.hvigor`
+     (`harmony/.gitignore:8`),**两条都只认这一个名字,加后缀就不认**。
+     ⇒ 判据固定成一句:**任何改名/移动"被忽略的东西"之后,立刻 `git check-ignore -v <新路径>`**;
+     它不给命中,就先把东西挪出仓库,别指望"反正它属于缓存"。
+     这条与 H63 是同一族(那次是缓存**没改名**也进了 43 个历史提交):保护来自规则命中,不来自"这东西看起来是缓存"。
+  10. **"装了工具"与"工具能用"之间还有一道许可门,而它挡的是整个 shim 层。** Xcode 装完、`xcode-select` 一切,
+     `/usr/bin` 下那些"看着是系统命令"的入口(`git` / `clang` / `swift` / `python3` / `xcrun`)就全体换成一许可提示 ——
+     **被挡的名单里最意外的是 `git`**,症状是"仓库好像坏了",而真相是"这台机器的 git 是别人的转发器"。
+     ⇒ 换机/装工具的验收要**逐条跑一条最小的真实命令**(`git status`、`python3 -c 'print(1)'`)而不是只看
+     `command -v` 有没有输出;**`command -v` 能找到 ≠ 能跑**。临时绕法是调真二进制(`/Library/Developer/CommandLineTools/usr/bin/git`),
+     但它只该用在"等许可期间把文档提交掉"这一件事上。
+  11. **glob 过滤是"空 stdout ≠ 没命中"的第四种同形来源**(同族:工具不在 PATH H156、UTF-16 H202、zsh 不分词 H206)。
+     `grep -rl 'import PIL' --include='*.py' .` 报 **0**,而本仓库真有 3 处 `from PIL import Image` ——
+     它们写在 **shell 脚本的 heredoc** 里(`android/tools/glass-shot.sh:192,217`、`harmony/tools/glass-shot.sh:43`)。
+     如果目标只是"某串在不在仓库里",**先不带 `--include` 全量跑一次,数出候选,再按文件类型分** ——
+     反过来做(先按类型收窄再宣布 0)就是把过滤当成了证据。差点据这个假 0 写下"本仓库不用 PIL,不算缺件"。

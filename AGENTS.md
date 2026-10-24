@@ -36,7 +36,7 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 
 ## 环境准备
 
-**新机器、新会话,先确认这四件事** —— 它们都不在 PATH 里,也不是 `./gradlew` 会替你找的。
+**新机器、新会话,先确认下面这几件事** —— 它们都不在 PATH 里,也不是 `./gradlew` 会替你找的。
 
 | 需要什么 | 本机实际位置 | 怎么验 |
 |---|---|---|
@@ -44,6 +44,17 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 | Android SDK | `android/local.properties` 的 `sdk.dir` = `/Users/cxyxl/Library/Android/sdk` | `ls "$SDK/platform-tools/adb"` |
 | DevEco SDK | `/Applications/DevEco-Studio.app/Contents/sdk` | `ls $DEVECO_SDK_HOME/default/openharmony/toolchains/hdc` |
 | Chrome(仅宣传片流水线) | `/Applications/Google Chrome.app` | `--headless=new` 能起 |
+| **developer dir 的许可**(macOS 工具链**和 `/usr/bin/git`**都走它的 shim) | Xcode 27.1 已装(10-24),`xcode-select -p` 指向它;CLT 也还在 | `xcrun --show-sdk-path` 给得出路径才算通。**回一句 "You have not agreed to the Xcode license" 就是没通** —— 那时 `git` / `clang` / `swift` / `python3` 会一起失效,`command -v` 却仍然能找到它们(见 H208 教训 10) |
+
+⚠️ **上面那条许可检查是 10-24 下午新加的,起因是一次看起来"仓库坏了"的假象。** 本人装完 Xcode 之后
+`/usr/bin/git` 开始只回许可提示,而它是这台机器**唯一的 git**(brew 没装 git)——
+症状是"git 不能用",真相是"这台机器的 git 是 Xcode 的转发器"。
+**期间的绕法**:`/Library/Developer/CommandLineTools/usr/bin/git`(实测 2.54.0,与 Xcode 那份同版本),本轮文档提交就走的它;
+**别把这条写进脚本** —— 同意许可后 `/usr/bin/git` 自然恢复,写进脚本就变成第二个"文档里的绝对路径"。
+
+⚠️ **另两件缺件登记在 `docs/LOCAL-ASSETS.md` §四,不挡出包但挡流水线**:
+`pillow`(`android/tools/glass-shot.sh` 与 `harmony/tools/glass-shot.sh` 的 heredoc 里 `from PIL import Image`)、
+`numpy`(`marketing/src/score.py`)。`python3 -m pip install --user pillow numpy` 现在也跑不了 —— 被上面那条许可挡着。
 
 ⚠️ **本机没有 JDK 17 —— 但不需要它。** 2026-10-24 换机(旧机 `MacBookPro11,4` / macOS 12 / 用户 `liang`
 → 新机 Apple Silicon / macOS 27 / 用户 `cxyxl`)之后,原先写死在本文与 `README.md`、`CLAUDE.md` 里的
@@ -136,6 +147,21 @@ bash tools/selftest-verify.sh      # 手搭假 bundle 跑正向 + 把八类失�
 > **本机现在唯一能跑的 macOS 验收 = `bash macos/tools/selftest-verify.sh`**(2026-10-24 实测 `pass=9 fail=0`)。
 > **所以「原先那句『本机最强验收 = 整模块 typecheck 差分』在新机上不成立**,要它就得先装完整 Xcode;
 > 装不装由维护者决定(≈15 GB + Apple ID;这台机器装得动,旧机装不动正是当初定死「另一台机器出包」的原因)。
+>
+> ⚠️ **2026-10-24 下午:上面那句"装不装由维护者决定"有了答案 —— 已装,但结论还没翻面。**
+> `xcode-select -p` 已指向 `/Applications/Xcode.app/Contents/Developer`(Xcode 27.1 / 27A9275),
+> 那条「只剩 CLT 缺 `SwiftUIMacros`」的拦路**消失了**(宏插件 5 份,含 `MacOSX.platform`;`xcbuild` 也在,
+> 但落点是 `Contents/SharedFrameworks/SwiftBuild.framework/Versions/A/Support/xcbuild`,不是 `Developer/usr/bin/`)。
+> **换上来的是一条更靠前的**:Xcode 许可还没同意(`sudo xcodebuild -license accept` 没跑),
+> 而 developer dir 的 **shim 层全体拒答** —— `xcrun` / `swift` / `swiftc` / `clang` / `/usr/bin/python3` /
+> **`/usr/bin/git`** 只回同一句许可提示。所以**连上面那句"唯一能跑的验收 = `selftest-verify.sh`"也不成立**:
+> 同日下午实测 `exit 1`、`clang x86_64 失败`(它只要 CLT 自带工具,而那些工具现在在许可后面)。
+> ⇒ **这台机器目前 macOS 侧是零验收可跑**,不是"只剩 selftest"。同意许可后要依次重验三条
+> —— `bash macos/tools/selftest-verify.sh`(期望 `pass=9 fail=0`)→ `swift build -c release` → `./package.sh`;
+> **三条都过才有资格把「本机出不了 macOS 包」从本文撤掉**,一条没过就照原文写着。
+> 期间**要提交**可以用真二进制绕开:`/Library/Developer/CommandLineTools/usr/bin/git`(实测 2.54.0)——
+> 它是症状的 workaround,不是长期方案,别写进脚本。逐条见 H208 修法 3-① 与教训 9~11。
+>
 > ⚠️ **差分到不了 0 的实测数字**:38 个文件一起 typecheck ⇒ exit 1,**4 条错误全落在 `RootView.swift:15/16`
 > 那一条宏错误上**(H128 那条"第一个含错文件之后不再有意义地继续"在这里正好挡住,所以"其余文件被检查过"证明不了)。
 > 顺带记一次**无效对照**:按"是否用到宏"把 38 个文件拆两组分别 typecheck,两组都报

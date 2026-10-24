@@ -79,7 +79,7 @@
 | Android 签名 | `keystore.properties` 121 B / `app/reverb-release.jks` 4 408 B | ✅ 在 |
 | 鸿蒙 release 签名 | `harmony/signature/` 9 个文件 / 40 KB;`material/` 五个叶子目录 `fd/0 fd/1 fd/2 ac ce` **各 1 个文件**(多一个就 00303121) | ✅ 在,且 release 出包实测通过 |
 | 鸿蒙 debug 签名材料 | `~/.ohos/config/` 13 个条目 / 60 KB,含 `default_harmony_uW2…=.p12`(1 128 B / 09-29) | ⚠️ **材料在、路径断了**(见上面那一行的 10-24 补记) |
-| `build-profile.json5` | 3 012 B,`/Users/liang` 残留 **3 处**(全在 default 段) | ⚠️ 待本人处置 |
+| `build-profile.json5` | 3 012 B,`/Users/liang` 残留 **3 处**(全在 default 段:48 行 `certpath` / 51 行 `profile` / 53 行 `storeFile`) | ⚠️ **待本人处置,但这一条不是静态的**:10-24 实测新机 `~/.ohos/config/` 里那三个文件名**逐字同名**(`default_harmony_uW2…=.{cer,csr,p12,p7b}`,2 914 / 514 / 1 128 / 4 812 B,mtime 全在 09-29)⇒ 缺的只是路径前缀。**而且它是活源头**:清空 `.hvigor` 后重跑一次 debug 构建,新缓存的 report + build.log 里又出现 `/Users/liang` ×5 —— 就是这三行被构建原样打进去的。不修,旧机路径就一直在新缓存里再生;修了,debug hap 才签得出来(现在 `SignHap 00303107`,release 段用相对路径所以不受影响 —— 硬规矩 12 授权的装机验证走不了 debug 包就是这么来的)。**签名段属签名配置,代理不代改**(LOCAL-ASSETS 第二节那一行写的"不代填、不代改、不代回滚"同样覆盖路径行),要改是本人一条 `sed` + 先 `cp -p` 备份 |
 | 分发登记材料 | `docs/BEIAN.md` 20 964 B | ✅ 在 |
 | 发布文案与分发平台图标 | `android/store/` 3 个文件 / `harmony/store/` 1 个 | ✅ 在 |
 | 发布截图与 kit | `*/dist/store/` 各 8 张;`*/dist/store-masters/` 8 与 9 张;两份 kit **目录与 zip 都在**(4 条路径) | ✅ 在 |
@@ -89,7 +89,8 @@
 | 与工程分处的快照 | `~/Documents/cast-backup-20260925/` **502 个文件 / 约 58 MB**;`cast-full/.git` 在、`.bundle` **2 个**、`STORE-OPS-20261018.md` 69 803 B | ✅ 全在(唯一副本那一档没断) |
 | 工具层记忆与 Skill | `~/.qoder/projects/**-Users-cxyxl-Documents-cast**/memory/` 7 个文件 / 80 KB、`~/.qoder/memory/` 10 / 56 KB、`~/.qoder/skills/` 4 / 56 KB | ✅ 在,但**键名跟着机器变了**:旧 `-Users-liang-Documents-cast` 目录**不存在** ⇒ 记忆是改名搬过来的。**换机后这条必须现算**,否则"有记忆"与"会话能读到记忆"是两件事 |
 | 可重建产物 | `jniLibs/arm64-v8a/libreverb_asr.so` 1 679 264 B、`assets/whisper-model.bin` 59 707 625 B | ✅ 在(`tools/build-asr.sh` 重建过) |
-| 构建缓存 | `harmony/.hvigor/` 31 个文件,**21 个 mtime 早于 10-24**(最老 09-25);其中 `outputs/sync/output.json`(09-29)含 `keyPassword`/`storePassword` 的 DevEco 密文串 | ❌ **违反第三节"永不拷贝"**:口令密文在新机多一份副本 —— 归本人判(可再生,但它是 H63 同族) |
+| 构建缓存 | **10-24 下午做了一次清空重建实验,数字如下。** 搬过来的那份:`harmony/.hvigor/` 31 个文件 / **14 MB**,**21 个 mtime 早于 10-24**(最老 09-25);`keyPassword` ×5 + `storePassword` ×5 + DevEco 密文前缀 `0000001B` ×10,分落 2 个文件(`cache/task-cache.json` 与 `outputs/sync/output.json`);**`/Users/liang` 出现 22 968 次**。清空后重跑一次 debug 构建(31 tasks executed / 0 up-to-date,是真·全量)→ 新缓存 12 个文件 / 704 KB,键名命中只剩 `cache/task-cache.json` 一处(密文 ×2),`sync/output.json` **不再回来**(它是 DevEco sync 写的,hvigor CLI 不产) | ⚠️ **一半是卫生、一半是活源头**:清掉能少 8 处键名副本 + 那 22 968 条旧机路径,但 `task-cache.json` 那份**每次构建都会再生**,所以"清了就好了"不成立(归本人判,可再生,但它是 H63 同族)。**旧缓存没有删,但已挪出仓库** → `~/Documents/cast-hvigor-preMig-20261024/`(31 个文件 / 14 MB)—— 原因见下面那行:第一次归档在仓库内、加后缀改名,**把忽略规则改失效了** —— 删它一条 `rm -rf` 的事,留着是因为里面还有 10-17 的构建遥测可比对。见第三节同一行 |
+| ⚠️ **旧缓存的归档落点(10-24 下午定的,含一个当场踩到的坑)** | 第一次归档成 `harmony/.hvigor.preMig-20261024/`,**结果它出现在 `git status` 的未跟踪列表里** —— 忽略规则写的是 `.hvigor/`(根 `.gitignore:8`,全层级)与 `/.hvigor`(`harmony/.gitignore:8`),**两条都只认这个名字**,加后缀改名等于把 H63 那层保护关掉:14 MB、内含 10 处 DevEco 密文串的目录就摆在"顺手 `git add -A` 会带走"的位置上。现已挪出仓库 → **`~/Documents/cast-hvigor-preMig-20261024/`(31 个文件 / 14 MB)** | ⚠️ **可删,归本人判**(内容与上面那行同:纯缓存,重跑构建自动再生)。**要复用的规律是那条判据**:给"为 X 写的忽略规则"做任何改名归档之前,先 `git check-ignore -v <新路径>` —— 它不给命中,就别怪规则没生效。仓库根另有一个 09-27 的空 `.hvigor/` 目录(0 个文件),不是本轮产物,没动 |
 | **对外产物里的本机路径**(不属于第二节任何一档,是解包时顺带照出来的) | `unzip -p android/dist/reverb.apk 'lib/*/libreverb_asr.so' \| LC_ALL=C strings -a \| grep -c '/Users/'` = **14**;`_backup-1.0.5-published-1018/reverb.apk` 同读数 ⇒ **已经随包分发出去了**。串是 whisper.cpp / ggml 编译时烙进二进制的**构建机源路径**,而且写的是 `/Users/liang/Documents/Workspace/source/cast/…` —— **连旧机的仓库落点都不是**(旧机是 `/Users/liang/Documents/cast`),`.so` 本身 mtime 08-24 | ⚠️ **待拍板**,三条路与代价在 H208 根因 ⑧ + 修法 3-④。判"要不要管"按**硬规矩 15**那条问法:不是"算不算机密",是"公开它能不能反查到一个具体的人"。**已固化的零成本动作**:`/Users/` 进了解包判据词(见 Skill 陷阱清单),下次换机重建 `.so` 会立刻变红而不是又藏一轮 |
 
 **盘点结论**:第二节**没有丢东西**(签名、kit、快照、唯一副本、记忆五档逐项到位);
@@ -98,12 +99,26 @@
 另有**一条与换机无关、却被同一次解包照出来的对外产物痕迹**(上面最后那行 `.so` 里的构建机路径),
 它不属于"缺件",属于"从没登记过的东西第一次被看见"。取证过程见 `docs/TROUBLESHOOTING.md` H208。
 
+> **10-24 下午补记 —— 上面那三条"遗漏"处理完之后的状态,以及一条新发现的、比它们都急的东西。**
+> ① `gh` / `ffmpeg` **已补装**(见第四节;顺带订正:本节原判定里"brew 没装"是错的,缺的只是 formula);
+> ② `.hvigor` 旧缓存**做了清空重建实验**(结论见上面表里那两行),缓存本身**挪出仓库放在
+> `~/Documents/cast-hvigor-preMig-20261024/`** —— 中途还踩出一个新坑:加后缀改名会让 `.hvigor/`
+> 那条忽略规则失效,14 MB 带口令键名的目录直接进 `git status` 未跟踪列表,判据见同一行;
+> 结论从"清掉就干净了"改成"清的收益是 8 处键名副本 + 22 968 条旧机路径,而 `task-cache.json` 那份每次构建都会再生";
+> ③ 鸿蒙 debug 签名段那三行**仍未动**(签名配置代理不代改),但性质升级了:
+> 它不是静态残留,**每跑一次构建就往新缓存再撒一份旧机路径**(实测 ×5)。
+> ④ **新发现的不在原三条里**:本人装 Xcode 之后,`xcode-select` 已切到 Xcode 而许可未同意,
+> 于是 `/usr/bin/git` 连带 `xcrun`/`swift`/`clang`/`python3` **在本机全部不可用** ——
+> 这条如果不登记,下一个会话会以为"仓库坏了"而不是"许可没同意"。
+> ⑤ 另两条缺件登记进第四节:**Pillow**(截图流水线,三处 heredoc import)与 **numpy**(宣传片配乐),
+> 都要等 python3 能用之后再装。
+
 ## 三、可重建 —— 不用拷,新机按说明重建
 
 | 资产 | 重建方式 |
 |---|---|
 | whisper native 库 + 模型 | `cd android && ./tools/build-asr.sh`(固定 commit + sha256 校验;`build-release.sh` 出那份唯一发布包前会检查在不在)。⚠️ **「可重建」不等于「重建出来字节相同」**:CMake 会把**构建机的绝对源路径**烙进 `.so`(`__FILE__`),换目录/换机器重打 ⇒ `.so` 变、**整包 SHA 跟着变**,而功能一模一样(认包只能靠 mtime + SHA,见 H208 根因 ⑧;现役在架那份里烙的是旧机更早的一个工作区路径) |
-| 构建缓存 | `.gradle`、`build`、`.cxx`、`.hvigor`、`oh_modules` —— 删了自动再生,永不拷贝。⚠️ **「永不拷贝」在换机时是硬要求而不只是省空间**:`harmony/.hvigor/` 的 sync/cache 内嵌整份签名配置(含口令),把它拷到新机等于在别处多撒一份口令副本 —— 这正是 H63 让它进了 43 个历史提交的那条路(AGENTS.md 硬规矩 14) |
+| 构建缓存 | `.gradle`、`build`、`.cxx`、`.hvigor`、`oh_modules` —— 删了自动再生,永不拷贝。⚠️ **「永不拷贝」在换机时是硬要求而不只是省空间**:`harmony/.hvigor/` 的 sync/cache 内嵌整份签名配置(含口令),把它拷到新机等于在别处多撒一份口令副本 —— 这正是 H63 让它进了 43 个历史提交的那条路(AGENTS.md 硬规矩 14)。**10-24 把这句话的代价量化了**:搬过来的 `.hvigor` 让新机多出 10 处 DevEco 密文串与 22 968 条旧机绝对路径,清空重建后只剩 `cache/task-cache.json` 里那一份(×2 串),**它随每次构建必然再生**;所以正确的规则是**迁移时不带它**,而不是"事后清" |
 | `android/local.properties` | 打开 Android Studio 自动生成(只含 sdk.dir)。别把本机那份拷过去 —— 里面是本机路径 |
 | `harmony/build-profile.json5` | `cp build-profile.template.json5 build-profile.json5` 后填签名段(签名材料来自第二节) |
 | 打包产物 | `android/build-release.sh`、`harmony/build-release.sh`、`macos/package.sh`(Android 合并 flavor 后没有 `--store` 了,H205) |
@@ -115,11 +130,36 @@
 > 下面每条都带 10-24 的实测来源;旧机那些"286 MB / 装在 /usr/local/share"的读数已作废,
 > 但仍留在第五节的换机清单里当历史。全部结论的取证过程见 `docs/TROUBLESHOOTING.md` H208。
 
-- **通用**:git、python3(`/usr/bin/python3`)、adb(`$SDK/platform-tools/adb`)新机都有;
-  **`ffmpeg` 新机没有**(10-24 `command -v ffmpeg` 空)—— 截图后处理与官网图、宣传片编码那条流水线要它,
-  用之前先装。**`gh` 新机也没有** ⇒ 发版顺序第 5 步的两条必查项
-  (`gh api repos/cxyxlxdm/revert-cast/releases/latest`)和"取到上一版包的 digest"**在这台机器上跑不了**,
-  装完还要 `gh auth login`(旧机实测登录在 keyring,不随目录拷贝走)
+- **通用**:git、python3(`/usr/bin/python3`)、adb(`$SDK/platform-tools/adb`)新机都有。
+  ⚠️ **但这一行的前半句 10-24 下午起有条件了** —— 见下面「Xcode」那条:`/usr/bin/git` 与 `/usr/bin/python3`
+  都是 developer dir 的 shim,dir 一切到 Xcode 而许可未同意时**它们全体报错**,git 的替代路径写在那条里。
+  **`ffmpeg` 与 `gh` 已在本机补齐**(10-24 下午 `brew install` 后现数:`brew list --formula | grep -cE '^(gh|ffmpeg)$'` = **2**;
+  `gh 2.103.2` / `ffmpeg 9.0.2`)。**原先那句「新机没有」是当时的真读数,不是笔误** ——
+  它同时把 `brew` 本身误写成"没装":实测 `/opt/homebrew/bin/brew` 在且 Homebrew 7.0.10,
+  缺的只是这两个 formula。取证顺序应当是**先 `command -v brew` 再谈装不装**,否则会把"缺包"写成"缺包管理器"。
+  **`gh` 装了不等于能用**:`gh auth status` 报 `The token in default is invalid` ⇒ 旧机那份凭据没跟着搬过来
+  (旧机实测登录在 keyring),要 `gh auth login` 重来一次才能跑发版顺序第 5 步那两条 `gh api` 判据。
+  **Python 图像/数值库两个都缺**:① **Pillow** —— 用的地方是 `android/tools/glass-shot.sh:192,217` 与
+  `harmony/tools/glass-shot.sh:43`(`from PIL import Image`,截图流水线的裁剪段),缺它截图导不出来;
+  ② **numpy** —— `marketing/src/score.py:15`,宣传片配乐(`marketing/README.md:51`)。**这两个都不是仓库内的 `.py` 里 import 出来的**:
+  PIL 那三处藏在 shell 的 heredoc 里,所以 `grep -rl 'import PIL' --include='*.py'` 报 **0**,
+  差点被我当成"本仓库不用 PIL"(`--include` 的 glob 过滤是"空 stdout ≠ 没命中"家族里的**第四种同形来源**,记在 H208 教训)。
+  **两个都归"python3 能用之后一条命令"类**:`python3 -m pip install --user pillow numpy`
+  —— 现在跑它只会拿到那句许可提示,所以**这条不在代理能验的范围内**,别按"已装"写。
+- **macOS 端 / Xcode**:10-24 本人正在装完整 Xcode,**已经落地但许可没同意**
+  (`xcode-select -p` = `/Applications/Xcode.app/Contents/Developer`,`xcodebuild -version` = Xcode 27.1 / 27A9275)。
+  这一件事同时改动两条口径:
+  ① **旧拦路消失了**:`SwiftUIMacros` 宏插件在 Xcode 里有 5 份(含 `MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib`),
+  而 CLT 那份仍是 0 —— 「本机出不了包是因为 CLT 缺 SwiftUI 宏插件」这条(H208 的 macOS 根因)**只剩前半句成立**;
+  universal 出包要的 `xcbuild` 也在了,但**落点不是** `Developer/usr/bin/xcbuild`,而是
+  `Xcode.app/Contents/SharedFrameworks/SwiftBuild.framework/Versions/A/Support/xcbuild`(1 处命中)。
+  ② **新的拦路是许可**:`sudo xcodebuild -license` 没跑之前,`xcrun` / `swift` / `swiftc` / `clang` /
+  `/usr/bin/python3` / **`/usr/bin/git`** 全部只回一句许可提示 —— 包括本文件与 AGENTS.md 里所有
+  `xcrun --show-sdk-path` 形态的命令。**当前唯一能提交的办法**是直接调真二进制
+  `/Library/Developer/CommandLineTools/usr/bin/git`(实测 2.54.0 Apple Git-157,与 Xcode 那份同版本)。
+  ⚠️ **「装完 Xcode 就能出包」这句现在还不能写进结论**:同意许可之后必须真跑一遍
+  `cd macos && ./package.sh` 才算数(它的架构硬断言与解包验收才是判据),那之前 macOS 侧仍然只有
+  `bash macos/tools/selftest-verify.sh` 是实测过的。
 - **Android 端**:**只有 Temurin 21,没有 JDK 17** —— 这不影响出包:项目钉的是
   `VERSION_17` / `jvmTarget '17'`(**language level**),不是 JDK 17 这个运行时。
   10-24 用 21 全绿:编译门 exit 0、`build-release.sh` exit 0、解包审计 6 项全 PASS。
@@ -139,6 +179,24 @@
   出 universal 还额外要完整 Xcode(`xcbuild` 不随 CLT 分发)。
   **本机唯一能跑的 macOS 验收 = `bash macos/tools/selftest-verify.sh`**(10-24 实测 `pass=9 fail=0`)
   —— 见上面第五节第 6 条与 AGENTS.md「macOS」一节的 10-24 改口块
+
+  ⚠️ **上面这两句在 10-24 下午同时过期一半**(本人开始装完整 Xcode 之后现测的)。
+  `xcode-select -p` 已切到 `/Applications/Xcode.app/Contents/Developer`(Xcode 27.1 / 27A9275),
+  于是:
+  ① **「CLT 缺 `SwiftUIMacros`」这个拦路没了** —— 宏插件在 Xcode 里有 5 份,含
+  `MacOSX.platform/Developer/usr/lib/swift/host/plugins/libSwiftUIMacros.dylib`;`xcbuild` 也在,
+  但落点是 `Contents/SharedFrameworks/SwiftBuild.framework/Versions/A/Support/xcbuild`,不是 `Developer/usr/bin/`。
+  ② **换上了一个更靠前的拦路:Xcode 许可未同意。** 它挡的是 developer dir 的所有 shim,
+  实测受影响:`xcrun` / `swift` / `swiftc` / `clang` / `/usr/bin/python3` / **`/usr/bin/git`**
+  —— 连那句"本机唯一能跑的验收"也跑不了了:
+  `bash macos/tools/selftest-verify.sh` 现在 **exit 1、`clang x86_64 失败`**(它只要 CLT 自带工具,
+  而那些工具现在全在许可后面)。**所以这一轮之后,macOS 侧在本机是零验收可跑**,不是"只剩 selftest"。
+  ③ **`sudo xcodebuild -license accept` 之后必须重跑判定**,不能直接按"装好了"写结论:
+  要依次验 `selftest-verify.sh`(期望 `pass=9 fail=0`)、`swift build -c release`、
+  以及 `./package.sh` 的架构硬断言与解包验收 —— 三条各自跑过才能把「本机出不了 macOS 包」这句撤掉。
+  ④ 许可没同意期间**提交仍然做得动**,判据是绕开 shim 用真二进制:
+  `/Library/Developer/CommandLineTools/usr/bin/git`(实测 2.54.0 Apple Git-157,Xcode 那份同版本同尺寸)。
+  本轮文档提交就是这么走的。**别把这条当长期方案** —— 它是症状的 workaround,同意许可后 `/usr/bin/git` 自然恢复。
 - **真机**:Android 真机 + 鸿蒙真机各一台(序列号见 MIGRATION.txt);10-24 迁移当天**两台都没连上**
   (`adb devices` 的 "List of devices attached" 为空、`hdc list targets` 给 `[Empty]`),
   所以装机冒烟(第五节第 7 条)那次没跑成。
@@ -156,7 +214,14 @@
   **`aapt2` / `apksigner` 在新机同样不会在 PATH 里**(只有 `adb` 在),照 H156 用全路径并读退出码
 - **认证与账号**:`origin` 走 SSH ⇒ `~/.ssh/` 里那几把私钥(`github_key` 等)必须带走或在新机重签;
   10-24 新机 `github_key` 在、`git ls-remote` 通(16 条分支 / 2 个标签 / 0 条未推送)。
+  ⚠️ **同日下午装了 Xcode 之后 `/usr/bin/git` 被许可挡住**,那句"通"要改成"**用 CLT 那份 git 才通**"
+  (`/Library/Developer/CommandLineTools/usr/bin/git`,原因见上面 macOS 那条 ②④)—— SSH 私钥本身没问题,
+  被挡的是 git 这个入口。
   `gh` 的登录 10-23 实测存在 keyring 里,**不随目录拷贝走**,新机要装 `gh` 再 `gh auth login` 重来一次(10-24 两条都没做)。
+  **10-24 下午:装的那一半做了(`brew install gh`,gh 2.103.2),`gh auth login` 那一半仍没做** ——
+  `gh auth status` 现报 `The token in default is invalid`(搬过来的旧凭据已失效)。
+  ⇒ **发版顺序第 5 步那两条必查项(`releases/latest` 的 tag 与 `assets[0].digest`)现在仍跑不了**:
+  命令在、凭据不在。这一条只有本人能做(login 是交互式的,还要选 token 来源)。
   华为开发者账号 / 应用市场后台 / cxyxl.cn 部署凭据的落点见本节末尾那句(只在 MIGRATION.txt 与 BEIAN.md)
 - **⚠️ 迁移会把口令副本再生一次**:`harmony/.hvigor/` 按第二节"永不拷贝"排除了,这正确;
   但**新机第一次 `build-release.sh` 会重新生成它,里面同样内嵌整份签名配置(含口令)**。
@@ -170,8 +235,10 @@
    `git log --branches --not --remotes --oneline | wc -l` = 0(本地 0 条未推送)。**它只给代码与历史**,
    第二节那些 gitignore 的东西一件都不带。
    ② 拷工程目录(含 `.git`)—— 会把第二节一起带走,代价是**必须先排除缓存**:
-   `android/app/build`(实测 1.3 GB)、`android/.gradle`(21 MB)、`harmony/.hvigor`(15 MB,**里面内嵌签名口令**)、
+   `android/app/build`(实测 1.3 GB)、`android/.gradle`(21 MB)、`harmony/.hvigor`(10-24 实测 14 MB / 31 个文件,**里面内嵌签名口令:10 处 DevEco 密文串 + 22 968 条旧机绝对路径**),
    `harmony/entry/.cxx`(2.4 MB)、`*/oh_modules`、`harmony/build`(2.8 MB)、`macos/.build`、`android/local.properties`。
+   ⚠️ **到新机后如果要把旧缓存留着比对,别在仓库内给它加后缀改名** —— 忽略规则只认 `.hvigor` 这个名字,
+   改名等于把那层保护关掉(10-24 踩过,判据与现象在第二节"归档落点"那行)。要留就挪出仓库。
    到新机第一件事:再落一份异地副本(远端或第二块盘),别把"唯一副本"这件事重演一遍
 2. **拷第二节全部资产**。口令类文件(jks/p12/keystore.properties)单独打包、加密传输,
    不要与代码包走同一渠道(流程见 MIGRATION.txt)。
