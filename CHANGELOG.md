@@ -89,6 +89,19 @@
 > **商店与 Releases 侧不动**:重打只是"新机能出包 + 在新机把签名链路走通"的取证,**不改变 10-23 那条口径**
 > (现有变更随 1.0.6 提交),也**没有去顶替 Releases 上那份 1.0.5**(顶不顶替归维护者拍)。
 > 逐条读数与八条只有换机才会露面的东西记在 `docs/TROUBLESHOOTING.md` **H208**;新机缺件清单见 `docs/LOCAL-ASSETS.md` 二-A。
+>
+> **⚠️ 同日 10-24 下午补记(只翻上面两条的状态,不改版本与端范围)**:
+> ① **Xcode 已在装,但许可未同意 ⇒ macOS 侧本机零条验收可跑** —— 上面那句「唯一能跑的
+> `tools/selftest-verify.sh`」现在也跑不了(`exit 1`,失败在 `clang -arch x86_64`),
+> 因为 `sudo xcodebuild -license accept` 之前 `/usr/bin/` 那层 developer-dir shim 全家只回许可提示,
+> `git` / `clang` / `swift` / `xcrun` / `python3` 一起不可用(`command -v` 仍能找到,是假象)。
+> **所以「装了 Xcode」≠「能出包」,结论要等三条按顺序重验才撤**:selftest → `swift build -c release` → `./package.sh`。
+> ② 新机缺件少两项: `gh 2.103.2` / `ffmpeg 9.0.2` 已补(`brew list --formula` 现数 2/2),
+> 但 **`gh auth status` 报 token invalid** —— 登录归本人,所以发版第 5 步(传 Releases + 两条 `gh api` 核对)
+> 在这一台**目前走不通**;`pillow` / `numpy` 也缺,而 `pip install --user` 现在正被 ① 挡住。
+> ③ 鸿蒙 `build-profile.json5` 的 **debug 签名段三行仍指旧机绝对路径**,而且实测是**活源头**:清空 `.hvigor` 后
+> 重跑 debug 构建,新缓存里又出现 `/Users/liang` ×5 —— 不修则每次构建再撒一次,而**只验 release 看不出这条断了**。
+> 签名段属签名配置,代理不代改。逐条读数与三条新教训见 H208 修法 3 与教训 9~11。
 
 ### 新增
 
