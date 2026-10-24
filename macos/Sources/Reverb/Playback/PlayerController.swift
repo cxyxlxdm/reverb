@@ -18,6 +18,12 @@ enum PlayMode: Int, CaseIterable {
     /// 日志里用的名字,与 Android / 鸿蒙**同一串**:装机判据是同一条 grep
     /// (`playMode tag='…' -> SHUFFLE`、`playQueue … mode=REPEAT_ONE`),换端不该改词。
     /// 不是给用户看的字(那三个走 Localizable.strings)。
+    ///
+    /// ⚠️ **但"同一条 grep"这句在 macOS 只对运行时日志成立,对包内的 release 二进制不成立**(2026-10-24 实测,见 H209):
+    /// Swift 的 `-O` 把 **9~15 字节**的字面量拆成两条 `movabsq` 立即数存进 `__text`,整词不连续 ——
+    /// `SEQUENTIAL`(10B)与 `REPEAT_ONE`(9B)在这个平台上**永远 grep 不到**,只有 `SHUFFLE`(7B)能整词命中。
+    /// 所以 `macos/verify-bundle.sh` 的词表按长度分了档(`lit8` / `lit16` / `sym`),
+    /// 别把移动端那批词原样抄过来当 macOS 的出包判据 —— 那会造出一批恒 0 的假判据。
     var logName: String {
         switch self {
         case .sequential: return "SEQUENTIAL"

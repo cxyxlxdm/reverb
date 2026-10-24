@@ -44,17 +44,20 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 | Android SDK | `android/local.properties` 的 `sdk.dir` = `/Users/cxyxl/Library/Android/sdk` | `ls "$SDK/platform-tools/adb"` |
 | DevEco SDK | `/Applications/DevEco-Studio.app/Contents/sdk` | `ls $DEVECO_SDK_HOME/default/openharmony/toolchains/hdc` |
 | Chrome(仅宣传片流水线) | `/Applications/Google Chrome.app` | `--headless=new` 能起 |
-| **developer dir 的许可**(macOS 工具链**和 `/usr/bin/git`**都走它的 shim) | Xcode 27.1 已装(10-24),`xcode-select -p` 指向它;CLT 也还在 | `xcrun --show-sdk-path` 给得出路径才算通。**回一句 "You have not agreed to the Xcode license" 就是没通** —— 10-24 实测它 **exit 69**,这个退出码可以直接当脚本里的闸门;那时 `git` / `clang` / `swift` / `python3` 会一起失效,`command -v` 却仍然能找到它们(见 H208 教训 10) |
+| **developer dir 的许可**(macOS 工具链**和 `/usr/bin/git`**都走它的 shim) | Xcode 27.1 已装(10-24),`xcode-select -p` 指向它;CLT 也还在 | `xcrun --show-sdk-path` 给得出路径才算通。**回一句 "You have not agreed to the Xcode license" 就是没通** —— 10-24 实测它 **exit 69**,这个退出码可以直接当脚本里的闸门;那时 `git` / `clang` / `swift` / `python3` 会一起失效,`command -v` 却仍然能找到它们(见 H208 教训 10)。**`macos/tools/selftest-verify.sh` 现在自带这条门**(取不到 SDK 就打印"这是环境门不是断言失败"并 exit 69);它的阳性对照不用等真坏 —— `DEVELOPER_DIR=/tmp/不存在 bash macos/tools/selftest-verify.sh` 必须给出那句话和 69 |
 
 ⚠️ **上面那条许可检查是 10-24 下午新加的,起因是一次看起来"仓库坏了"的假象。** 本人装完 Xcode 之后
 `/usr/bin/git` 开始只回许可提示,而它是这台机器**唯一的 git**(brew 没装 git)——
 症状是"git 不能用",真相是"这台机器的 git 是 Xcode 的转发器"。
 **期间的绕法**:`/Library/Developer/CommandLineTools/usr/bin/git`(实测 2.54.0,与 Xcode 那份同版本),本轮文档提交就走的它;
 **别把这条写进脚本** —— 同意许可后 `/usr/bin/git` 自然恢复,写进脚本就变成第二个"文档里的绝对路径"。
+**(10-24 傍晚 `xcodebuild -license accept` 跑过,`/usr/bin/git` 与 `xcrun --show-sdk-path` 实测都恢复;
+上面那句绕法只在当天下午那几个小时里有用,留着是为了记症状。)**
 
 ⚠️ **另两件缺件登记在 `docs/LOCAL-ASSETS.md` §四,不挡出包但挡流水线**:
 `pillow`(`android/tools/glass-shot.sh` 与 `harmony/tools/glass-shot.sh` 的 heredoc 里 `from PIL import Image`)、
-`numpy`(`marketing/src/score.py`)。`python3 -m pip install --user pillow numpy` 现在也跑不了 —— 被上面那条许可挡着。
+`numpy`(`marketing/src/score.py`)。**这两样到现在也没装**;10-24 下午它们连装都装不了(`python3` 被许可挡着),
+傍晚许可同意之后 `python3` 已恢复(`python3 -m pip install --user pillow numpy` 现在跑得动),**缺件本身没变**。
 
 ⚠️ **本机没有 JDK 17 —— 但不需要它。** 2026-10-24 换机(旧机 `MacBookPro11,4` / macOS 12 / 用户 `liang`
 → 新机 Apple Silicon / macOS 27 / 用户 `cxyxl`)之后,原先写死在本文与 `README.md`、`CLAUDE.md` 里的
@@ -128,14 +131,32 @@ hdc install -r entry/build/default/outputs/default/entry-default-signed.hap
 
 ```bash
 cd macos
-# ↓↓ 这两条在「构建机」上跑(本机跑不了,原因见下面 ⚠️ 块)↓↓
+# ↓↓ 这三条在本机都跑过了(2026-10-24 傍晚,许可同意后逐条 exit 0)↓↓
 swift build -c release             # 只编译
 ./package.sh                       # universal 编译 → .app → ad-hoc 签名 → 解包验收(断言)→ dmg 进 dist/
-# ↓↓ 这条在「本机」就能跑:验收脚本的自检(只要 CLT 自带工具)↓↓
-bash tools/selftest-verify.sh      # 手搭假 bundle 跑正向 + 把八类失败形状逐个弄坏,期望 pass=9 fail=0
+bash tools/selftest-verify.sh      # 验收脚本的自检:手搭假 bundle 跑正向 + 把每类失败形状逐个弄坏
+                                   # (通过条数由脚本最后一行自己打印,别抄进任何文档 —— 加一道变异它就变)
 ```
 
+> ⚠️ **2026-10-24 傍晚:上面这三条本机全绿了,「本机出不了 macOS 包」这句话到此作废。**
+> `sudo xcodebuild -license accept` 跑过之后,shim 层恢复,三条按序重验的结果:
+> ① `tools/selftest-verify.sh` exit 0;② `swift build -c release` exit 0(`Build complete! 15.46 秒`);
+> ③ `./package.sh` exit 0 ⇒ `macos/dist/余音-Reverb-1.0.4-universal.dmg` **4 161 690 B** @10-24 13:39:05(`ls -lT` 现读),
+> (13:39 这份是改完 `PlayerController.swift` 那条 H209 注释后**按硬规矩 20 重打**的 —— 动了 `Sources/` 就不能拿 13:28 那份说"包比码新";
+> 首跑全绿那份是 13:28:50 / 4 161 692 B。现在 `-newer` 判据对 `macos/Sources` + `Localization` + `Info.plist` + `Package.swift`
+> 是 **0 命中**;只有 `verify-bundle.sh` 与它的自检脚本比包晚 —— 那两条不进包,不触发重打)
+> 包内二进制 9 604 048 B、`lipo -archs` = `x86_64 arm64`、4 套 `.lproj`、`codesign --verify` 过(adhoc)、
+> `LSMinimumSystemVersion 13.0`。**这台机器现在就是自己的构建机** —— 旧机那四层(见下面历史块)与
+> 「CLT 缺 `SwiftUIMacros`」「许可没同意」两层拦路全部消失。
+> ③ 第一次跑是 **exit 1**,报的 9 条「判据词 0 命中 —— 这批改动没进包」**是判据错了,不是包缺东西**:
+> 那 9 个词全是 9~15 字节的字符串字面量,而 Swift 的 `-O` 把这一档的字面量编成**两条 `movabsq` 立即数**
+> (头 8 字节一条、余下字节一条),整词在二进制里不连续 ⇒ 整词 grep 恒 0。逐层排除与那两条指令的十六进制在 **H209**。
+> **⚠️ 撤掉的只有"出包"这一层。** 这一轮**一帧都没跑过**:界面与自动续播那四项运行验收仍然没做
+> (清单在 `docs/ROADMAP.md` 三-A),而「macOS 的运行验收固定在另一台机器」是用户 2026-09-29 定的边界 ——
+> **这条边界现在要不要改,由维护者拍,别替它决定。**
+>
 > ⚠️ **2026-10-24 换机:下面这一整块的四层封死理由已作废,但「本机出不了包」这个结论暂时还在。**
+> (▶ 从这一行往下的两块是 10-24 上午与下午的过程记录,两层拦路后来都在傍晚消失 —— **现状只看上面那块**,别把这里的"只剩一条"当今天。)
 > 新机是 Apple Silicon + macOS 27,旧机那四条(tools-version 5.9 门 / SDK 13.1 天花板 /
 > 系统低于 13 起不来产物 / `NavigationStack` 符号缺失)**一次全部消失** —— Swift 6.4、SDK 27,
 > 产物能在这台跑。现在只剩**一条**拦路:**这台仍只装了 Command Line Tools,而 CLT 里没有
@@ -159,6 +180,9 @@ bash tools/selftest-verify.sh      # 手搭假 bundle 跑正向 + 把八类失�
 > ⇒ **这台机器目前 macOS 侧是零验收可跑**,不是"只剩 selftest"。同意许可后要依次重验三条
 > —— `bash macos/tools/selftest-verify.sh`(期望 `pass=9 fail=0`)→ `swift build -c release` → `./package.sh`;
 > **三条都过才有资格把「本机出不了 macOS 包」从本文撤掉**,一条没过就照原文写着。
+> **▶ 这三条同日傍晚全跑过了(① exit 0 / ② exit 0 / ③ 第一次 exit 1 = 判据的错,修完 exit 0),
+> 结论已按上面那块改写;`pass=9` 也随自检新增的三道配置变异一起漂了 —— 以脚本自己打印的数为准。**
+> 这一段留原文是为了记"当时确实零条可跑",读的时候别当现状。
 > 期间**要提交**可以用真二进制绕开:`/Library/Developer/CommandLineTools/usr/bin/git`(实测 2.54.0)——
 > 它是症状的 workaround,不是长期方案,别写进脚本。逐条见 H208 修法 3-① 与教训 9~11。
 >
@@ -168,7 +192,9 @@ bash tools/selftest-verify.sh      # 手搭假 bundle 跑正向 + 把八类失�
 > `cannot find 'Fmt' in scope` 这类跨文件符号 —— **拆组切断了模块内依赖,那两组的读数不能用**。
 > 下面原文按历史记录保留,读的时候把「本机」换成「那台旧机」。逐条来源见 H208。
 >
-> ⚠️ **这两条命令不在本机跑。本机的角色已由用户定死(2026-09-29):开发 Android / 鸿蒙 / 文档,
+> ⚠️ **【历史:下面这一段整块说的是那台旧机,10-24 新机已逐层作废 —— 见本节最上面那块。
+> 现在仍然成立的那半句是「运行验收固定在另一台机器」,它归维护者拍,不在这轮的三条门里。】**
+> 这两条命令不在本机跑。本机的角色已由用户定死(2026-09-29):开发 Android / 鸿蒙 / 文档,
 > 加上对 macOS「读代码、改代码、做类型检查」;macOS 的出包与运行验收固定在另一台机器上。**
 > 别再在这台上重试,也别为了让它们跑起来去改源码 —— 下面四层是实测,不是"没装好":
 > ① `macos/Package.swift` 是 `swift-tools-version:5.9`,而本机 SwiftPM 报 installed version 5.7.1
@@ -214,23 +240,24 @@ bash tools/selftest-verify.sh      # 手搭假 bundle 跑正向 + 把八类失�
 > 各自都得被报出来,否则那个 0 不成立。
 > **并且这只证明类型没变多,证明不了界面与行为**(一帧都没跑起来)。
 >
-> **在构建机上出包 = 一条命令**:`cd macos && ./package.sh`。它做
+> **出包 = 一条命令**:`cd macos && ./package.sh`(2026-10-24 傍晚起在本机跑通,见上面那块)。它做
 > **universal 编译**(`--arch arm64 --arch x86_64`)→ **架构硬断言**(少一个架构就 exit 1,不出 dmg)→
 > 组装 .app → ad-hoc 签名 → **解包验收** → dmg 落进 `macos/dist/`,文件名带版本与架构(由架构列表推导)。
 > 验收段是独立的 **`macos/verify-bundle.sh`**(2026-10-06 起,**每条判据都判成败、不过就退出 1**,
-> 不再是"打印给人看"):处理量 → 架构**集合相等**(缺一个 ✗,多一个也 ✗)→ 11 个判据词任一为 0 即 ✗ →
+> 不再是"打印给人看"):处理量 → 架构**集合相等**(缺一个 ✗,多一个也 ✗)→ 判据词任一为 0 即 ✗ →
 > 语言**集合相等** + 每套 `.strings` 的 `plutil -lint` → `Info.plist` 三键(认 `plutil` 的**退出码**,
 > 不是"取到的字符串非空")→ `codesign --verify`。最后打印未覆盖范围。
 > 为什么默认两个架构:`swift build` 不带 `--arch` 时**只跟随构建机芯片**,1.0.2 那个包就是这么变成
 > arm64 单架构的,而 arm64-only 二进制在 Intel Mac 上没有退路(Rosetta 只翻译 x86→arm 一个方向)。
-> 验收段里「期望非 0」的那几个词是播放模式与批注的判据,已拿 1.0.2 旧包实测为全 0(负控制成立,
-> 批注那三个词是 2026-10-01 重跑同一份归档包验的),所以它报非 0 才算数;
+> ⚠️ **判据词表带类别前缀,挑词之前先看字节数**(`lit8:` ≤8 字节字面量 / `lit16:` ≥16 字节字面量 /
+> `sym:` 标识符):Swift 的 `-O` 把 **9~15 字节**的字面量拆进两条 `movabsq` 立即数,整词 grep 恒 0,
+> 那种词**在这端的 release 包里不能当判据**(2026-10-24 第一次真跑就栽在这里,逐条见 **H209**)。
+> 每个词都单独拿 1.0.2 旧包验过负控制(全部 0),所以它报非 0 才算数;
+> **而"负控制成立"不等于"判据成立"** —— 一个在任何 release 包里都是 0 的词,负控制永远通过、正向永远不通过。
 > 架构断言同样拿那个 arm64-only 二进制空跑验过:**期望两个架构时报 `✗ 缺 x86_64` 并退出 1,只期望 arm64 时通过**。
-> **本机唯一还能跑的一步 = `bash macos/tools/selftest-verify.sh`** —— 它只要 CLT 自带的
-> clang / lipo / codesign / plutil(2026-10-06 实测可跑):手搭一个假 bundle 跑正向,再把八类失败形状
-> 逐个弄坏,证明上面那些断言**各自都有牙齿**(本机结果 `pass=9 fail=0`;写变异时确实抓出三条写错的断言,见 H136)。
-> **仍未跑过的**是「真的产出一个 universal 包」那一步(本机没有 xcbuild,见 ⑥)。出完还要实跑那四项界面与
-> 自动续播验收,清单在 `docs/ROADMAP.md` 三-A。
+> `bash macos/tools/selftest-verify.sh` 是断言脚本自己的自检(假 bundle 正向 + 每类失败形状各一道变异,
+> 含 2026-10-24 新加的三道「词表写错」配置变异),写变异时确实抓出过几条写错的断言,见 H136。
+> **仍未跑过的**是产物**跑起来**那部分:界面四项与自动续播验收一帧没做,清单在 `docs/ROADMAP.md` 三-A。
 
 ### 发布物料(截图/商店图/上传用图标)
 

@@ -83,6 +83,7 @@
 > **按文件大小感觉会读成"没变"**,这正是清备份时"字节数相等不算相同"那条判据的同一件事。
 > 验收:Android 解包审计 6 项全 PASS 且两条拧反的阳性对照都报 FAIL(断言有牙齿);
 > 鸿蒙 `.app` 解包核对同样过了;两端产物对全部源码的 `-newer` 判据 **0 命中**(硬规矩 20)。
+> ▶ **上面那句「macOS 这一轮出不了包」到傍晚作废**,读数按上午保留,结果见文末「10-24 傍晚补记」。
 > **macOS 这一轮出不了包** —— 拦路换了性质:旧机那四层(版本门 / SDK 天花板 / 起不来产物 / `NavigationStack` 符号)
 > 在新机一次全部消失,现在只剩**一台只装 Command Line Tools 的机器没有 SwiftUI 宏插件**(`@State` 展不开);
 > universal 仍要完整 Xcode。端范围没变、`macos/Info.plist` 照旧 1.0.4。
@@ -91,6 +92,7 @@
 > 逐条读数与八条只有换机才会露面的东西记在 `docs/TROUBLESHOOTING.md` **H208**;新机缺件清单见 `docs/LOCAL-ASSETS.md` 二-A。
 >
 > **⚠️ 同日 10-24 下午补记(只翻上面两条的状态,不改版本与端范围)**:
+> ▶ **下面 ① 到傍晚又被翻了一次**(② 的 `pillow`/`numpy` 也被解开一半),原文按当时读数保留,读数看「10-24 傍晚补记」。
 > ① **Xcode 已在装,但许可未同意 ⇒ macOS 侧本机零条验收可跑** —— 上面那句「唯一能跑的
 > `tools/selftest-verify.sh`」现在也跑不了(`exit 1`,失败在 `clang -arch x86_64`),
 > 因为 `sudo xcodebuild -license accept` 之前 `/usr/bin/` 那层 developer-dir shim 全家只回许可提示,
@@ -102,6 +104,31 @@
 > ③ 鸿蒙 `build-profile.json5` 的 **debug 签名段三行仍指旧机绝对路径**,而且实测是**活源头**:清空 `.hvigor` 后
 > 重跑 debug 构建,新缓存里又出现 `/Users/liang` ×5 —— 不修则每次构建再撒一次,而**只验 release 看不出这条断了**。
 > 签名段属签名配置,代理不代改。逐条读数与三条新教训见 H208 修法 3 与教训 9~11。
+>
+> **⚠️ 同日 10-24 傍晚补记(许可同意后把 ① 与上午「出不了包」那句翻掉;版本与端范围照旧不动)**:
+> 本人跑过 `sudo xcodebuild -license accept` 之后实测 `xcrun --show-sdk-path` exit 0、`/usr/bin/git` 恢复正常,
+> ① 里那条「用 CLT 真二进制绕开」的临时办法随之作废。按 ① 承诺的顺序重验三条:
+> ① `bash macos/tools/selftest-verify.sh` **exit 0**;② `swift build -c release` **exit 0**;
+> ③ `./package.sh` **第一次 exit 1** —— 报的 9 条「判据词 0 命中、这批改动没进包」**是判据自己的错,不是包缺东西**:
+> Swift 的 `-O` 把 **9~15 字节**的字符串字面量编成**两条 `movabsq` 立即数**(头 8 字节一条、余下字节一条),
+> 整词在 release 二进制里根本不连续 ⇒ 整词 `grep -a` 恒 0。把词表按 `lit8` / `lit16` / `sym` 三类重挑、
+> 每条配上字节数守卫(词放错档直接报「配置错」而不是「没进包」)之后 **exit 0**:
+> `macos/dist/余音-Reverb-1.0.4-universal.dmg` **4 161 690 B** @13:39:05(首跑那份 13:28:50 / 4 161 692 B),包内二进制 9 604 048 B、
+> `lipo -archs` = `x86_64 arm64`、4 套 `.lproj`、ad-hoc 签名 `codesign --verify` 过。
+> 逐层排除(旧 `.build` 缓存 / 脚本 bug / UTF-16 / 源码过期 / dead-strip)与那两条指令的十六进制都在 **H209**。
+> **这一轮 macOS 改的东西一共三处**:`macos/verify-bundle.sh`(判据词表按长度分三档 + 每档配字节数守卫)、
+> `macos/tools/selftest-verify.sh`(给那三条配置断各造一道变异),以及
+> `PlayerController.swift` 里 `logName` 上方一条注释(那里原话「装机判据是同一条 grep」只对运行日志成立,
+> 对 macOS 的 release 二进制里 `SEQUENTIAL` / `REPEAT_ONE` 这两个词不成立,已就地注明)——
+> **注释不改产物语义,所以 `Info.plist` 照旧 1.0.4**;但因为动了 `Sources/`,傍晚按硬规矩 20 重打了一次,
+> 现在 `dist/` 那份比**会进包的那些文件**都晚(`macos/Sources` + `Localization` + `Info.plist` + `Package.swift` 的 `-newer` 判据 0 命中;
+> 之后只动了 `verify-bundle.sh` 与它的自检脚本两条工具,它们不进包 ⇒ 不触发第三次重打)。
+> 而**这份 dmg 是"新机能出包"的取证,没有分发出去**,不改变上面「商店与 Releases 侧不动」那条口径。
+> **⚠️ 作废的范围只到"出包 + 解包验收"这一层**:产物在这台**一帧都没跑过**,界面与自动续播那几项运行验收
+> 仍没做(清单在 `docs/ROADMAP.md` 三-A);而「macOS 的运行验收固定在另一台机器」是 2026-09-29 定死的边界,
+> **这条要不要跟着改归维护者拍**。② 里 `pillow` / `numpy` 那条:挡它的许可门已通,
+> `python3 -m pip install --user pillow numpy` 现在跑得动,但**两样仍未装**,别按"已装"写。
+> **仍然挡着的只剩 ② 的 `gh auth login`**(发版第 5 步,归本人)与 ③ 的鸿蒙签名段(签名材料,代理不代改)。
 
 ### 新增
 
