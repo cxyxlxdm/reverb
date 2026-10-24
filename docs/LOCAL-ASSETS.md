@@ -145,7 +145,8 @@
   PIL 那三处藏在 shell 的 heredoc 里,所以 `grep -rl 'import PIL' --include='*.py'` 报 **0**,
   差点被我当成"本仓库不用 PIL"(`--include` 的 glob 过滤是"空 stdout ≠ 没命中"家族里的**第四种同形来源**,记在 H208 教训)。
   **两个都归"python3 能用之后一条命令"类**:`python3 -m pip install --user pillow numpy`
-  —— 现在跑它只会拿到那句许可提示,所以**这条不在代理能验的范围内**,别按"已装"写。
+  —— 10-24 下午跑它只会拿到那句许可提示,所以**当时不在代理能验的范围内**,别按"已装"写。
+  **傍晚许可同意之后 `python3` 已恢复,这条命令能跑了,但两样都还没装**(等要跑截图/配乐流水线时再装)。
 - **macOS 端 / Xcode**:10-24 本人正在装完整 Xcode,**已经落地但许可没同意**
   (`xcode-select -p` = `/Applications/Xcode.app/Contents/Developer`,`xcodebuild -version` = Xcode 27.1 / 27A9275)。
   这一件事同时改动两条口径:
@@ -177,7 +178,8 @@
   全是这一处的下游**(宏未找到 220 + `'self' is immutable` 116 + `cannot find '$xxx' in scope` 等 50)
   (6 行 `@State` 最小复现在本机同样报同一条 ⇒ **不是源码问题**)。
   出 universal 还额外要完整 Xcode(`xcbuild` 不随 CLT 分发)。
-  **本机唯一能跑的 macOS 验收 = `bash macos/tools/selftest-verify.sh`**(10-24 实测 `pass=9 fail=0`)
+  **本机唯一能跑的 macOS 验收 = `bash macos/tools/selftest-verify.sh`**(10-24 实测 `pass=9 fail=0`;
+  **这个数已漂** —— 傍晚新增三道配置变异后条数变了,一律以脚本末行自己打印的为准)
   —— 见上面第五节第 6 条与 AGENTS.md「macOS」一节的 10-24 改口块
 
   ⚠️ **上面这两句在 10-24 下午同时过期一半**(本人开始装完整 Xcode 之后现测的)。
@@ -194,9 +196,17 @@
   ③ **`sudo xcodebuild -license accept` 之后必须重跑判定**,不能直接按"装好了"写结论:
   要依次验 `selftest-verify.sh`(期望 `pass=9 fail=0`)、`swift build -c release`、
   以及 `./package.sh` 的架构硬断言与解包验收 —— 三条各自跑过才能把「本机出不了 macOS 包」这句撤掉。
+  **▶ 10-24 傍晚这三条按序跑过了:① exit 0(新增三道配置变异后由脚本自己打印通过条数,`pass=9` 那句已漂)
+  ② exit 0(`Build complete! 15.46 秒`)③ 第一次 **exit 1**,报的 9 条「判据词 0 命中」是**判据自己的错**
+  —— Swift 的 `-O` 把 9~15 字节的字符串字面量拆进两条 `movabsq` 立即数,整词 grep 恒 0;改完词表之后
+  **exit 0**,`dist/余音-Reverb-1.0.4-universal.dmg` **4 161 690 B** @13:39:05(包内 9 604 048 B、
+  `x86_64 arm64` 两架构、4 套 `.lproj`、adhoc 签名验过)。逐条排除过程与教训见 **H209**。
+  ⇒ **「本机出不了 macOS 包」这句在本文件与 AGENTS.md 里作废了;作废的范围只到"出包 + 解包验收",
+  产物一帧没跑过,运行与界面验收仍然没做。**
   ④ 许可没同意期间**提交仍然做得动**,判据是绕开 shim 用真二进制:
   `/Library/Developer/CommandLineTools/usr/bin/git`(实测 2.54.0 Apple Git-157,Xcode 那份同版本同尺寸)。
   本轮文档提交就是这么走的。**别把这条当长期方案** —— 它是症状的 workaround,同意许可后 `/usr/bin/git` 自然恢复。
+  **(傍晚已 accept,`/usr/bin/git` 与 `xcrun --show-sdk-path` 实测都恢复正常,现在用系统那个 git 就行。)**
 - **真机**:Android 真机 + 鸿蒙真机各一台(序列号见 MIGRATION.txt);10-24 迁移当天**两台都没连上**
   (`adb devices` 的 "List of devices attached" 为空、`hdc list targets` 给 `[Empty]`),
   所以装机冒烟(第五节第 7 条)那次没跑成。
