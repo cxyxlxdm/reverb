@@ -230,14 +230,18 @@
   缺的只是这两个 formula。取证顺序应当是**先 `command -v brew` 再谈装不装**,否则会把"缺包"写成"缺包管理器"。
   **`gh` 装了不等于能用**:`gh auth status` 报 `The token in default is invalid` ⇒ 旧机那份凭据没跟着搬过来
   (旧机实测登录在 keyring),要 `gh auth login` 重来一次才能跑发版顺序第 5 步那两条 `gh api` 判据。
-  **Python 图像/数值库两个都缺**:① **Pillow** —— 用的地方是 `android/tools/glass-shot.sh:192,217` 与
+  **Python 图像/数值库两个原先都缺,10-24 晚间已装**:① **Pillow** —— 用的地方是 `android/tools/glass-shot.sh:192,217` 与
   `harmony/tools/glass-shot.sh:43`(`from PIL import Image`,截图流水线的裁剪段),缺它截图导不出来;
   ② **numpy** —— `marketing/src/score.py:15`,宣传片配乐(`marketing/README.md:51`)。**这两个都不是仓库内的 `.py` 里 import 出来的**:
   PIL 那三处藏在 shell 的 heredoc 里,所以 `grep -rl 'import PIL' --include='*.py'` 报 **0**,
   差点被我当成"本仓库不用 PIL"(`--include` 的 glob 过滤是"空 stdout ≠ 没命中"家族里的**第四种同形来源**,记在 H208 教训)。
   **两个都归"python3 能用之后一条命令"类**:`python3 -m pip install --user pillow numpy`
   —— 10-24 下午跑它只会拿到那句许可提示,所以**当时不在代理能验的范围内**,别按"已装"写。
-  **傍晚许可同意之后 `python3` 已恢复,这条命令能跑了,但两样都还没装**(等要跑截图/配乐流水线时再装)。
+  傍晚许可同意之后 `python3` 恢复了,但**当时代码里那句"两样都还没装"仍然成立**,不是笔误。
+  ▶ **10-24 晚间这条已翻面**:装机验收那一轮顺手补装,实测 `python3 -c "import PIL,numpy"` **exit 0**,
+  版本 **PIL 11.3.0 / numpy 2.0.2**(`--user` 装进当前解释器的用户目录)。
+  ⚠️ **换机要重装的仍是这两条** —— 它们在用户目录、不在仓库,git 带不过去;
+  复验判据就是上面那条 import 命令的**退出码**,不是 `pip list | grep`(那条是"命令没跑成"家族的老同形来源)。
 - **macOS 端 / Xcode**:10-24 本人正在装完整 Xcode,**已经落地但许可没同意**
   (`xcode-select -p` = `/Applications/Xcode.app/Contents/Developer`,`xcodebuild -version` = Xcode 27.1 / 27A9275)。
   这一件事同时改动两条口径:
