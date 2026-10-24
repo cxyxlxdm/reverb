@@ -10287,6 +10287,19 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
      新缓存的 report 与 build.log 里 `/Users/liang` 又出现 **5 次** —— 就是 `build-profile.json5:48/51/53`
      那三行被构建原样打进去的。不修,旧机路径会一直在新缓存里再生;修了,`SignHap 00303107` 才消失、
      硬规矩 12 授权的 debug 装机验证才走得通(release 段用相对路径,所以出包不受影响 —— **这就是"只验 release 看不出这条断了"**)。
+     **▶ 10-24 傍晚 17:06 这条由本人处置完了(在设备上重注册了 debug 签名),上面那句"没动"到此为止。**
+     代理没有代改任何签名材料 —— 做的是**装出来验**而不是读配置文字:`build-profile.json5` 现 3 012 B / mtime 17:06,
+     debug 段三条(`signingConfigs` 的 `certpath`/`storefile`/`profile`)已是新机绝对路径,`/Users/liang` 命中 **0**
+     (阳性对照:`/Users/cxyxl` 命中 **3**,证明这条 grep 真的在这份文件上跑过);
+     `$HV assembleHap -p buildMode=debug` 的 `SignHap` 任务 **592 ms 执行**、BUILD SUCCESSFUL,
+     产物 `entry-default-signed.hap` **4 292 069 B** @17:10 = 未签名那份 + **89 551 B**。
+     **⚠️ 这里差点误判成"没签名":`unzip -l <hap> | grep -c sig` 恒 0** —— HAP 的签名是**追加在 zip 之后的数据块**,
+     不是目录条目,按"解包看有没有 sig 条目"读必然假 0(同族第五个来源:前四个见教训 11)。
+     可复用的判据两条:①签名存在性认 **`SignHap` 任务跑没跑 + 签名字节增量**,不认 `unzip -l`;
+     ②发布签名材料**没被这次重注册碰到** —— `harmony/signature/` 今日 0 个文件被改(mtime 仍是 09-29 19:51),
+     release 段仍是相对路径 + `keyAlias` `yuyin`。**这正是 H123 那条风险要盯的点**:自动签名向导会顺手覆写 release 段。
+     另:重注册让 `~/.ohos/config/material/` **变了性** —— 它从"IDE 自用那套"变成**新 debug 口令的唯一解密材料**,
+     与 `harmony/signature/material` 同待遇(唯一副本档);逐条登记在 `docs/LOCAL-ASSETS.md` §二,不在此重复。
      **③ `harmony/.hvigor/`:做了清空重建实验,结论推翻了一半的直觉。** 搬来的那份 31 文件 / 14 MB /
      21 个 mtime 早于 10-24,`keyPassword` ×5 + `storePassword` ×5 + 密文前缀 `0000001B` ×10(2 个文件),
      `/Users/liang` **22 968 次**;清空后跑一次全量构建(31 tasks executed / 0 up-to-date)⇒ 新缓存 12 文件 / 704 KB,
@@ -10348,6 +10361,9 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
      逐项给存在性 + 字节数**(本轮那份盘点:签名类全在、`signature/material/` 五个叶子目录各 1 文件、
      `~/.ohos/config` 13 条目、kit 与截图两套齐全、`cast-backup-20260925` 502 条目 / 约 58 MB、
      项目记忆已随新键名 `-Users-cxyxl-Documents-cast` 落地),而不是"三端都能 build"。
+     ▶ **傍晚这一条自己涨了两半**:`gh` / `ffmpeg` 已补、debug hap 17:06 实测签得出来(修法 3-② 那段);
+     而**同一把尺子当天又量出六条从没登记的落点** —— 因为上面这句"逐项给存在性"的遍历单位是**表里那些路径**,
+     表外的东西它天生扫不到,见下面教训 13。
   7. **写进文档的"数字"要带单位的来源。** 本轮顺手改掉一处:§二 说 `.workbuddy-ai/memory/` 「402 MB 会随拷贝走」——
      实测 `.workbuddy-ai/` **整目录** 402 MB / 1 769 文件,而 `memory/` 本身**只有 1 个文件 / 28 305 B**。
      数字对不上不是笔误,是**把父目录当成了子目录**;这类错位会让下次迁移少带一整档(它同时是「唯一副本」类资产)。
@@ -10379,6 +10395,24 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
      它们写在 **shell 脚本的 heredoc** 里(`android/tools/glass-shot.sh:192,217`、`harmony/tools/glass-shot.sh:43`)。
      如果目标只是"某串在不在仓库里",**先不带 `--include` 全量跑一次,数出候选,再按文件类型分** ——
      反过来做(先按类型收窄再宣布 0)就是把过滤当成了证据。差点据这个假 0 写下"本仓库不用 PIL,不算缺件"。
+  12. **"空 stdout ≠ 没命中"还有第五个同形来源:签名不在 zip 的目录条目里。**
+     `unzip -l entry-default-signed.hap | grep -c sig` 给 **0**,而那份包确实是签好名的(`SignHap` 跑过、比未签名那份大 89 551 B)。
+     HAP/APK 的签名块是**追加在 zip 之后的数据**,`unzip -l` 看不见它 ——
+     所以"解包数条目"这类判据**天生不适用于签名存在性**,要换成构建任务 + 字节增量,或 `apksigner verify` / `hdc` 装上去看返回。
+     这条和上面四个同形来源(H156 工具不在 PATH、H202 UTF-16、H206 zsh 不分词、教训 11 的 glob)是同一个病:
+     **判据词没命中时,先证明扫描本身跑过、且它跑在对的东西上。**
+  13. **盘"漏了什么"时,遍历单位决定了什么会被漏 —— 登记表遍历和反扫互补,缺一不可。**
+     10-24 上午那次资产盘点的遍历单位是 `docs/LOCAL-ASSETS.md` §二那张表里的路径,
+     于是它的结论"§二没有丢东西"**结构上不可能发现"没写进表的东西"**:傍晚换遍历单位(拿**材料名**在家目录反扫)
+     当场出 6 条漏档,其中两条是**不可再生**级别 —— `~/Downloads/LANDrop/reverb-migrate-secrets-20260920.tar.gz`
+     里两把私钥的**唯一异地复本**,和 `~/Documents/reverb-signing-recovery-20260929/`(旧密文 + 旧 material 的**唯一成对副本**)。
+     反扫那条命令与它的三条诚实边界(`maxdepth 3` 抓不到 4 层深的 `shots/` PNG、`~/.ohos` 不在扫描根里、
+     所以根名单要写全 `~/Documents ~/Downloads ~/Desktop ~/.ohos ~/.ssh ~/.qoder`)记在 `docs/LOCAL-ASSETS.md` §二 傍晚补记。
+     ⇒ **可复用的规律**:"按表核对"和"按材料反扫"回答的是两个问题 —— 前者答"表里的东西还在吗",
+     后者答"有没有东西没进表"。**只跑前者就宣布"没遗漏"是把遍历单位当成了结论。**
+     顺带被这次反扫照出来的一条比漏档更值钱的:整节资产在这台机器上**没有第二份拷贝**
+     (`tmutil destinationinfo` = `No destinations configured`、外接只有一块 17.2 MB 磁盘映像、单卷 460 Gi)——
+     它不是"漏登记",是"登记得越全、单点越完整"。**补的是第二块盘,不是再加一行表。**
 
 ### H209 macOS 的 universal 包第一次在本机跑通,验收却报「9 个判据词 0 命中 —— 这批改动没进包」;真相是 Swift 的 `-O` 把 9~15 字节的字面量拆进了两条机器码立即数
 
