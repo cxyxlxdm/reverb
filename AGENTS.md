@@ -56,8 +56,10 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 
 ⚠️ **另两件缺件登记在 `docs/LOCAL-ASSETS.md` §四,不挡出包但挡流水线**:
 `pillow`(`android/tools/glass-shot.sh` 与 `harmony/tools/glass-shot.sh` 的 heredoc 里 `from PIL import Image`)、
-`numpy`(`marketing/src/score.py`)。**这两样到现在也没装**;10-24 下午它们连装都装不了(`python3` 被许可挡着),
-傍晚许可同意之后 `python3` 已恢复(`python3 -m pip install --user pillow numpy` 现在跑得动),**缺件本身没变**。
+`numpy`(`marketing/src/score.py`)。**这两样 10-24 晚间已装**(本机装机验收那一轮顺手补的,
+`python3 -c "import PIL,numpy"` 实测 exit 0 ⇒ **PIL 11.3.0 / numpy 2.0.2**,`--user` 装进当前解释器的用户目录)。
+时间线记一下免得有人再去找它们:10-24 下午它们连装都装不了(`python3` 在 Xcode 许可后面),傍晚许可同意后
+`python3` 恢复,但**缺件本身当时仍未变**。
 
 ⚠️ **本机没有 JDK 17 —— 但不需要它。** 2026-10-24 换机(旧机 `MacBookPro11,4` / macOS 12 / 用户 `liang`
 → 新机 Apple Silicon / macOS 27 / 用户 `cxyxl`)之后,原先写死在本文与 `README.md`、`CLAUDE.md` 里的
