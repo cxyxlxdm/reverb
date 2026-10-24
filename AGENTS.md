@@ -44,7 +44,7 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 | Android SDK | `android/local.properties` 的 `sdk.dir` = `/Users/cxyxl/Library/Android/sdk` | `ls "$SDK/platform-tools/adb"` |
 | DevEco SDK | `/Applications/DevEco-Studio.app/Contents/sdk` | `ls $DEVECO_SDK_HOME/default/openharmony/toolchains/hdc` |
 | Chrome(仅宣传片流水线) | `/Applications/Google Chrome.app` | `--headless=new` 能起 |
-| **developer dir 的许可**(macOS 工具链**和 `/usr/bin/git`**都走它的 shim) | Xcode 27.1 已装(10-24),`xcode-select -p` 指向它;CLT 也还在 | `xcrun --show-sdk-path` 给得出路径才算通。**回一句 "You have not agreed to the Xcode license" 就是没通** —— 那时 `git` / `clang` / `swift` / `python3` 会一起失效,`command -v` 却仍然能找到它们(见 H208 教训 10) |
+| **developer dir 的许可**(macOS 工具链**和 `/usr/bin/git`**都走它的 shim) | Xcode 27.1 已装(10-24),`xcode-select -p` 指向它;CLT 也还在 | `xcrun --show-sdk-path` 给得出路径才算通。**回一句 "You have not agreed to the Xcode license" 就是没通** —— 10-24 实测它 **exit 69**,这个退出码可以直接当脚本里的闸门;那时 `git` / `clang` / `swift` / `python3` 会一起失效,`command -v` 却仍然能找到它们(见 H208 教训 10) |
 
 ⚠️ **上面那条许可检查是 10-24 下午新加的,起因是一次看起来"仓库坏了"的假象。** 本人装完 Xcode 之后
 `/usr/bin/git` 开始只回许可提示,而它是这台机器**唯一的 git**(brew 没装 git)——
