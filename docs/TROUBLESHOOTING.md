@@ -10366,6 +10366,8 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
      ⇒ 换机/装工具的验收要**逐条跑一条最小的真实命令**(`git status`、`python3 -c 'print(1)'`)而不是只看
      `command -v` 有没有输出;**`command -v` 能找到 ≠ 能跑**。临时绕法是调真二进制(`/Library/Developer/CommandLineTools/usr/bin/git`),
      但它只该用在"等许可期间把文档提交掉"这一件事上。
+     补一条可机读的判据:**`xcrun --show-sdk-path` 在被挡时 exit 69 + 那句提示,通了才给 SDK 路径** ——
+     比"看输出里有没有 license 字样"稳,可以直接当脚本闸门。
   11. **glob 过滤是"空 stdout ≠ 没命中"的第四种同形来源**(同族:工具不在 PATH H156、UTF-16 H202、zsh 不分词 H206)。
      `grep -rl 'import PIL' --include='*.py' .` 报 **0**,而本仓库真有 3 处 `from PIL import Image` ——
      它们写在 **shell 脚本的 heredoc** 里(`android/tools/glass-shot.sh:192,217`、`harmony/tools/glass-shot.sh:43`)。
