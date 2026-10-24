@@ -40,28 +40,36 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 
 | 需要什么 | 本机实际位置 | 怎么验 |
 |---|---|---|
-| JDK 17 | `/Users/liang/.java/jdk-17.0.12+7/Contents/Home` | `"$JAVA_HOME/bin/java" -version` → 17.x |
-| Android SDK | `android/local.properties` 的 `sdk.dir` | `ls "$SDK/platform-tools/adb"` |
+| JDK(编译用) | `/Users/cxyxl/Library/Java/JavaVirtualMachines/jdk-21.0.12.1+1.jdk/Contents/Home`(Temurin 21;`java_home -V` **认得**它) | `"$JAVA_HOME/bin/java" -version` → 21.x |
+| Android SDK | `android/local.properties` 的 `sdk.dir` = `/Users/cxyxl/Library/Android/sdk` | `ls "$SDK/platform-tools/adb"` |
 | DevEco SDK | `/Applications/DevEco-Studio.app/Contents/sdk` | `ls $DEVECO_SDK_HOME/default/openharmony/toolchains/hdc` |
 | Chrome(仅宣传片流水线) | `/Applications/Google Chrome.app` | `--headless=new` 能起 |
 
-⚠️ **JDK 17 不在 `/usr/libexec/java_home` 的注册表里。** `java_home -v 17` 返回空,
-所以 `README.md` 那条 `export JAVA_HOME=$(/usr/libexec/java_home -v 17)` 在本机会**静默设成空值**,
-随后 Gradle 报"找不到 Java"—— 看起来像没装 JDK,其实是装了两套都没注册。必须写绝对路径:
+⚠️ **本机没有 JDK 17 —— 但不需要它。** 2026-10-24 换机(旧机 `MacBookPro11,4` / macOS 12 / 用户 `liang`
+→ 新机 Apple Silicon / macOS 27 / 用户 `cxyxl`)之后,原先写死在本文与 `README.md`、`CLAUDE.md` 里的
+`/Users/liang/.java/jdk-17.0.12+7/Contents/Home` **整条路径不存在**。项目要的是 **language level 17**
+(`build.gradle` 的 `sourceCompatibility/targetCompatibility = VERSION_17` + `jvmTarget = '17'`),
+不是 JDK 17 这个运行时 —— 实测用 Temurin 21 出包全绿:编译门 exit 0、`build-release.sh` exit 0、
+解包审计 6/6 PASS(AGP 8.5.2 / Gradle wrapper 8.7 / Kotlin 1.9.24 都跑在 21 上)。逐条来源见 H208。
 
-```bash
-export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home
-```
+⚠️ **`java_home -v 17` 在这台机器上会给你另一个版本(10-24 实测)。** 它**忽略版本参数**、
+直接返回当前注册的最新 JVM(Temurin 21)并 **exit 0**;`-v 99` 给的是同一个串。
+所以 `README.md` 那条 `export JAVA_HOME=$(/usr/libexec/java_home -v 17)` 在本机**不再**像旧机那样
+静默设成空值 —— 它静默设成 21。症状从"看起来像没装 JDK"变成"要 17 拿到 21 而且退出码是 0":
+本仓库恰好只要求 language level 17,所以这条命令目前能用,但**它给的不是它要的**,别把它当版本校验用。
+**结论:要绝对路径,并且用 `java_home -V`(大写,列出全部)或 `"$JAVA_HOME/bin/java" -version` 来认版本 ——
+`-v <版本>` 在只装了一套 JVM 的机器上没有判别力。**
 
 ⚠️ **`aapt2` 不在 PATH**(只有 `adb` 在)。要读包信息就写全路径:
 `"$SDK/build-tools/<ver>/aapt2" dump badging …`。
 写成裸 `aapt2 … | grep -c` 时命令**根本没跑**,`grep -c` 对着空 stdin 报 **0** ——
 这正是 H156 那次"两个渠道都被读成没有录音权限"的成因。期望 0 的判据先看命令自己的退出码。
 
-**一分钟自检**(本机唯一能跑的产品级验证,2026-10-18 合并 flavor 后实测 exit 0):
+**一分钟自检**(本机唯一能跑的产品级验证,2026-10-18 合并 flavor 后实测 exit 0;
+2026-10-24 换机后用 Temurin 21 重跑,仍 exit 0):
 
 ```bash
-cd android && export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home \
+cd android && export JAVA_HOME=/Users/cxyxl/Library/Java/JavaVirtualMachines/jdk-21.0.12.1+1.jdk/Contents/Home \
   && ./gradlew :app:compileReleaseKotlin -q; echo "exit=$?"
 ```
 
@@ -116,6 +124,24 @@ swift build -c release             # 只编译
 bash tools/selftest-verify.sh      # 手搭假 bundle 跑正向 + 把八类失败形状逐个弄坏,期望 pass=9 fail=0
 ```
 
+> ⚠️ **2026-10-24 换机:下面这一整块的四层封死理由已作废,但「本机出不了包」这个结论暂时还在。**
+> 新机是 Apple Silicon + macOS 27,旧机那四条(tools-version 5.9 门 / SDK 13.1 天花板 /
+> 系统低于 13 起不来产物 / `NavigationStack` 符号缺失)**一次全部消失** —— Swift 6.4、SDK 27,
+> 产物能在这台跑。现在只剩**一条**拦路:**这台仍只装了 Command Line Tools,而 CLT 里没有
+> SwiftUI 的宏插件**(`…/usr/lib/swift/host/plugins` 只有 `libObservationMacros` / `libSwiftMacros`,
+> `find … -iname '*SwiftUIMacros*'` = **0**),于是 `@State` 展不开,连
+> `swiftc -typecheck` 都过不去 —— 用一个 6 行的 `@State` 最小文件同样报
+> `external macro implementation type 'SwiftUIMacros.StateMacro' could not be found`,
+> 所以**这不是源码问题**。universal 那条照旧要完整 Xcode(`xcbuild` 只随它分发)。
+> **本机现在唯一能跑的 macOS 验收 = `bash macos/tools/selftest-verify.sh`**(2026-10-24 实测 `pass=9 fail=0`)。
+> **所以「原先那句『本机最强验收 = 整模块 typecheck 差分』在新机上不成立**,要它就得先装完整 Xcode;
+> 装不装由维护者决定(≈15 GB + Apple ID;这台机器装得动,旧机装不动正是当初定死「另一台机器出包」的原因)。
+> ⚠️ **差分到不了 0 的实测数字**:38 个文件一起 typecheck ⇒ exit 1,**4 条错误全落在 `RootView.swift:15/16`
+> 那一条宏错误上**(H128 那条"第一个含错文件之后不再有意义地继续"在这里正好挡住,所以"其余文件被检查过"证明不了)。
+> 顺带记一次**无效对照**:按"是否用到宏"把 38 个文件拆两组分别 typecheck,两组都报
+> `cannot find 'Fmt' in scope` 这类跨文件符号 —— **拆组切断了模块内依赖,那两组的读数不能用**。
+> 下面原文按历史记录保留,读的时候把「本机」换成「那台旧机」。逐条来源见 H208。
+>
 > ⚠️ **这两条命令不在本机跑。本机的角色已由用户定死(2026-09-29):开发 Android / 鸿蒙 / 文档,
 > 加上对 macOS「读代码、改代码、做类型检查」;macOS 的出包与运行验收固定在另一台机器上。**
 > 别再在这台上重试,也别为了让它们跑起来去改源码 —— 下面四层是实测,不是"没装好":

@@ -89,21 +89,26 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 
 完整命令（含渠道解包核对、ASR 产物）见 `AGENTS.md`「常用命令」。
 
-**Android** —— JDK 17 + Android SDK（platform 34, build-tools 34）
+**Android** —— JDK（language level 17）+ Android SDK（platform 34, build-tools 34）
 
 ```bash
 cd android
-export JAVA_HOME=$(/usr/libexec/java_home -v 17)   # 本机返回空,见下方说明
+export JAVA_HOME=/Users/cxyxl/Library/Java/JavaVirtualMachines/jdk-21.0.12.1+1.jdk/Contents/Home   # 绝对路径,原因见下方说明
 ./tools/build-asr.sh                # 备齐离线识别的 .so 与模型(不入版本管理,缺了打包会报错)
 ./build-release.sh                  # 唯一那份 → dist/reverb.apk(约 65 MB,含语音模型;同时交大陆应用市场与 GitHub Releases)
                                     # 2026-10-18 合并 flavor 后没有 `--store` 了(见 H205)
 ./gradlew :app:assembleDebug        # 只要一个能装的 debug 包
 ```
 
-> ⚠️ **本机的 JDK 17 没有注册进 `java_home`**(`java_home -v 17` 返回空,上面那条会静默设成空值,
-> Gradle 随后报"找不到 Java")。改用绝对路径:
-> `export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home`。
-> 环境清单与一分钟自检见 `AGENTS.md`「环境准备」。
+> ⚠️ **别用 `$(/usr/libexec/java_home -v 17)` 要 JDK**（10-24 在新机实测：它**忽略版本参数**，
+> 返回当前注册的最新 JVM 并 exit 0 —— `-v 99` 给的是同一个串，所以它既不是"找到 17"也不是"没找到"）。
+> 旧机（macOS 12 / 用户 `liang`）上它返回空，症状是"Gradle 报找不到 Java"；新机（Apple Silicon / 用户 `cxyxl`）
+> 上它静默给 21，症状变成"要 17 拿到 21 而且退出码是 0"。**两次都不是版本校验。**
+> 本机只有 Temurin 21，而项目要的是 **language level 17**（`build.gradle` 里钉的
+> `VERSION_17` / `jvmTarget '17'`）而不是 JDK 17 这个运行时，用它出包实测全绿
+> （编译门 + `build-release.sh` + 解包审计 6/6 PASS，见 `docs/TROUBLESHOOTING.md` H208）。
+> 认版本用 `java_home -V`（大写，列出全部）或 `"$JAVA_HOME/bin/java" -version`。
+> 换机器时上面那串绝对路径必变 —— 环境清单与一分钟自检见 `AGENTS.md`「环境准备」。
 
 **HarmonyOS** —— DevEco Studio 的 SDK 与 hvigor
 

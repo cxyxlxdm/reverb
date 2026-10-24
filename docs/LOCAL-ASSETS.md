@@ -43,7 +43,14 @@
 | **鸿蒙 release 签名** | `harmony/signature/`(`reverb.p12` 私钥、`.cer`、`.p7b`、`.csr`)+ `harmony/build-profile.json5` | release 签名口令**只**以加密串的形式存在于 build-profile 里;模板 `build-profile.template.json5` 在库中,新机可 `cp` 后填,但 p12 无法再生。⚠️ **build-profile.json5 会被 DevEco 的「自动生成签名」整段覆盖**(2026-09-26 就覆盖过一次,加密口令随之丢失,见 H123)—— 配好 release 段之后要**立刻连 material 一起备份一份**,别把它当"改坏了能重填"的普通配置 |
 | **鸿蒙 release 口令的解密材料** | `harmony/signature/material/`(拷 `signature/` 时**必须连它一起拷**) | build-profile 里那串 `0000001B…` 是 DevEco 的**加密串**(AES-128-GCM),工作密钥由**与被签 keystore 同目录**的 `material/` 推出来:`fd` 三个 16 字节分量 XOR ⊕ 内置常量 → pbkdf2 以 `ac` 为 salt → rootKey → 解 `ce`(入口 `hvigor-ohos-plugin` 的 `getKeyStorePwd` → `DecipherUtil.decryptPwd(storeFile/..)`)。少了它 `SignHap` 报 `ENOENT …/signature/material`(00308018);**material 被换掉而密文没换**则报 `Signature material verification failed … unable to authenticate data`(00303242,authTag 不过)。**实测 material 是每个目录一套随机密钥**(与 `~/.ohos/config/material/` 逐文件比 sha256,五项全不同)⇒ 既不能从别处的 material 拼出来,也不会随重装 DevEco 复原。**留着加密口令、丢了 material = 口令作废**:2026-09-20 与 09-25 那两份口令备份就只拷了 build-profile 与 `signature/reverb.*`、没拷 `signature/material/`(全过程见 H123 第二轮)。**教训:密文与密钥是两件独立资产,必须同处、同批备份**。⚠️ 还有一条同样致命:**material 还原时只能整目录替换,不能与旧文件并排** —— hvigor 要求 `fd/0`、`fd/1`、`fd/2`、`ac`、`ce` **每个叶子目录恰好 1 个文件**,多一个就报 `00303121 Signing material error`(点名到 `material/fd/0`),而目录看起来完全正常。2026-09-29 出 1.0.3 市场包时就卡在这一步(全过程见 H123 第三轮);判定"密文与 material 是否同源"的可复现方法也在那条里(调 DevEco 的 `DecipherUtil.decryptPwd` 并配一份已知能签成的配置做对照)。本机现存的三套 material:`harmony/signature/material`(随签名走)、`~/.ohos/config/material`(自动签名)、`~/Library/Application Support/Huawei/DevEcoStudio26.0/options/data2/material`(IDE 自用) |
 | **鸿蒙 release 签名的非机密参数**(填签名时照着核) | 本行;材料本身在 `harmony/signature/` | keyAlias = **`yuyin`**;三段材料用**相对路径** `./signature/reverb.{p12,p7b,cer}`(hvigor 按工程根归一化,换机器仍成立);profile 绑 `com.yuyin.reverb`、`"type":"release"` + `"app-distribution-type":"app_gallery"`、有效期至 2029-08。**这几项的用途是照着核对、不是照抄恢复**:签名材料一律由本人维护,代理不代填、不代改、不代回滚(H123 教训 ⑦)—— 2026-09-29 曾把这段整段回滚成 08-15 的旧密文,而旧 material 已被覆盖且全盘无副本,结果 release 报 00303242、debug 段因 storeFile 指向已被轮换掉的 .p12 报 00303107,两条路径一起失效,最终由本人重做签名材料才出包。代理只做只读校验:`build-release.sh` 里的三条前置卡口会核这三项并格,不合格直接退出。 |
-| **鸿蒙调试签名** | `~/.ohos/config/default_*.{p12,cer,p7b}`(在用户目录,**不在工程目录** → 换机不会随工程拷过来) | 真机 `hdc install` 的唯一路:release 的 `.p7b` 是 `"type":"release"` + `"app-distribution-type":"app_gallery"`,不绑设备也不允许侧装。这目录没了,`assembleHap -p product=default` 会停在 `SignHap` 报 `Invalid storeFile value`。恢复:DevEco → File → Project Structure → Signing Configs → 勾「Automatically generate signature」并登录开发者账号,由它重新生成三个文件并回写 build-profile 的 default 段。**注意它绑 bundleName**:生成时工程用的是哪个包名,这套签名就只认那个包名 —— 为装机测试临时改过包名的话,改回来之后 `SignHap` 会报 `00303074 bundleName … does not match … SigningConfigs`,再点一次 Fix 重新生成即可。⚠️ **但「release 那套不受影响」这句原先写错了,现已更正**:自动签名弹窗里勾了 release 配置(或对 release 配置点 Fix)时,它会把 build-profile 的 **release 段一起改写**成新生成的 `~/.ohos/config/release_*` —— 那套是 `"type":"debug"` 且绑着临时测试包名,**既不能装机也不能提交市场**,而段里原来的加密口令被就地覆盖、找不回来(实测与全过程见 H123) |
+| **鸿蒙调试签名** | `~/.ohos/config/default_*.{p12,cer,p7b}`(在用户目录,**不在工程目录** → 换机不会随工程拷过来) | 真机 `hdc install` 的唯一路:release 的 `.p7b` 是 `"type":"release"` + `"app-distribution-type":"app_gallery"`,不绑设备也不允许侧装。这目录没了,`assembleHap -p product=default` 会停在 `SignHap` 报 `Invalid storeFile value`。恢复:DevEco → File → Project Structure → Signing Configs → 勾「Automatically generate signature」并登录开发者账号,由它重新生成三个文件并回写 build-profile 的 default 段。**注意它绑 bundleName**:生成时工程用的是哪个包名,这套签名就只认那个包名 —— 为装机测试临时改过包名的话,改回来之后 `SignHap` 会报 `00303074 bundleName … does not match … SigningConfigs`,再点一次 Fix 重新生成即可。⚠️ **但「release 那套不受影响」这句原先写错了,现已更正**:自动签名弹窗里勾了 release 配置(或对 release 配置点 Fix)时,它会把 build-profile 的 **release 段一起改写**成新生成的 `~/.ohos/config/release_*` —— 那套是 `"type":"debug"` 且绑着临时测试包名,**既不能装机也不能提交市场**,而段里原来的加密口令被就地覆盖、找不回来(实测与全过程见 H123)。
+  ⚠️ **2026-10-24 换机实测:这一档"随不随工程走"不是重点,`build-profile.json5` 里那条绝对路径才是。**
+  新机 `~/.ohos/config/` **带着旧机那 13 个条目过来了**(同名 `default_harmony_uW2…=.p12` 在,09-29 那份 / 1 128 B),
+  但 default 段里写的仍是 `/Users/liang/.ohos/config/…` ⇒ `assembleHap -p product=default` 停在
+  `SignHap` **`00303107 Invalid storeFile value`**、BUILD FAILED、exit 255。
+  **release 段用相对路径 `./signature/reverb.*` 所以照常出包** —— 也就是说:
+  **换机后只验 release 会完全看不出这条断了,而它断的是"装真机调试"这条路。**
+  差的可能只是路径前缀(材料在同名目录里),但**签名段一律由本人维护,代理不代改** —— 判据与理由见上面「非机密参数」那一行与 H123 教训 ⑦ |
 | **分发登记材料** | `docs/BEIAN.md`(被根 .gitignore 点名忽略) | 主体真名、分发平台证书标识、证书指纹、备案号;发布提交平台时照着填。口径与理由见 `docs/HISTORY.md` 阶段五 |
 | **发布文案与 分发平台图标** | `harmony/store/`、`android/store/`(2026-09-20 起不入库) | 发布文案两语种版 + appicon-216/512/1024;改文案五语种同步的规矩不变(AGENTS.md 硬规矩 5) |
 | **发布截图与 发布物料包** | `harmony/dist/store/`、`android/dist/store/`(1080×1920 终图)、原生分辨率中间图 `*/dist/store-masters/`、两套 kit 目录(`harmony/dist/reverb-harmony-submission-kit/`、`android/dist/reverb-store-submission-kit/`)及同名 kit zip | 截图可用真机重拍(可重建但代价大,需两台真机+深色模式流程);**至少把截图与 kit zip 拷走**,免去下次发布全套重拍 |
@@ -51,16 +58,51 @@
 | **在野版本的崩溃栈还原材料** | 本次发布物在 `*/dist/` 根;**上一版只在别处** —— Android 完整版在公开分发仓的 release(资产自带 sha256),鸿蒙在分发平台侧。本地额外只留 `android/dist/_backup-1.0.4-preRebuild-1015/reverb-mapping.txt`(42 376 254 B,公开仓 tag 1.0.4 那份包的 R8 mapping;同字节的 apk 已删,外面那份逐字相同) | ⚠️ **2026-10-18 清 `*/dist/` 备份时,把在架鸿蒙 1.0.4 的 `.app` + `reverb-symbol.zip` 的本地唯一副本删了** —— 它藏在 `harmony/dist/_backup-shots-1012/reverb-harmony-submission-kit.zip` 里(**kit zip 内嵌发布物,不是素材**)。那两份的 SHA-256 **完整的串只剩本地 `docs/STORE-OPS.md` 七**(10-12 那轮 kit 那段)—— 原本并列为落点的 `harmony/store/上架文案.md` 第三节已被 1.0.5 的哈希覆写,**这一串随 `STORE-OPS.md` 一起走,而它不入库 ⇒ 换机没带走就断了**。从平台侧取回后按串核验即可。**换机时这一档只能回平台侧取,别指望本地有** —— 判据与教训见 H204。**另存一份在 `~/Documents/cast-backup-20260925/STORE-OPS-20261018.md`**(10-18 那一刻的快照;同样不入库,但与工程目录分处两地)—— ⚠️ **它不随工作区自动更新**,要用时先核:`md5 -q docs/STORE-OPS.md ~/Documents/cast-backup-20260925/STORE-OPS-*.md` 两个串相等才算数,不等就以工作区那份为准并重拷 |
 | **历史迁移包** | 根目录 `MIGRATION.txt` | 上次迁移的打包/加密流程与机型细节;`reverb-migrate-secrets-*.tar.gz` 类密钥分包如仍存在,即签名材料的另一份拷贝 |
 | **与工程分处的本地快照(只剩一份)** | `~/Documents/cast-backup-20260925/`(瘦身前 226 MB → 10-23 实测 **59 MB**:cast-full 48 MB + 两个 bundle + 两份处置清单 + STORE-OPS 快照)。另一份 `cast-backup-20261012/` **已经不存在了** —— 10-18 整目录移进废纸篓,10-23 实测工程侧目录与 `~/.Trash/` 两处都查不到(`ls -d` 均报 No such file),即**已清空、不可再取** | 2026-10-18 做过逐条哈希取证并瘦身,**只用 mv 进废纸篓、没有 rm**;清单与每条证据(含"取回命令")在 `cast-backup-20260925/snapshot-trim-20261018-deleted-manifest.txt`。留下来的都是**别处没有的**:`cast-full/.git` 与两个 bundle 是 **filter-repo 之前历史的唯一副本**(代价:里面带着 H63 那条已泄露口令,取舍题归维护者)、1.0.2 两份 kit zip(**store apk + R8 mapping 的本机唯一落点**,工作区副本已随 10-18 清 dist 删除)、`STORE-OPS-20261018.md`(在架鸿蒙 1.0.4 身份串的异地副本)。**判"一份备份能不能删"只有两条合法判据:与别处哈希逐字相同(sha 相等,字节数相等不算)、或该构建从未分发** —— 旧版本截图不属于任一条,别按"看起来过期"清掉。⚠️ **Documents 不在 iCloud 同步范围**(`brctl status` → `Client zone not found`)⇒ 清空废纸篓就是终点,不可撤 —— **这句已在 10-23 兑现过一次**(20261012 那份就是这么没的) |
-| **工具层的项目记忆与 Skill**(10-23 新登记,原清单漏了这一档) | `~/.qoder/projects/-Users-liang-Documents-cast/memory/`(实测 72 KB,含 `MEMORY.md` 索引与 6 条 project 记忆)、`~/.qoder/memory/`(52 KB,跨项目偏好)、`~/.qoder/skills/`(56 KB,含本仓库专用的 `android-channel-package-audit` 与 `zero-hit-must-prove-scan`) | **这三处都不在工程目录里,"全量拷贝项目目录"带不走**。里面写的是"签名材料只读、装机自办但卸载先备份、macOS 出包固定在另一台机器、release mapping 本地只此一份"这类**边界与前提**,丢了不会报错,只会让下一个会话重新踩一遍。AGENTS.md「会话记忆」一节说的 `<repo>/.workbuddy-ai/memory/` 在工程内(402 MB,会随拷贝走),**与这三处不是同一套,两边都要带** |
+| **工具层的项目记忆与 Skill**(10-23 新登记,原清单漏了这一档) | `~/.qoder/projects/-Users-liang-Documents-cast/memory/`(实测 72 KB,含 `MEMORY.md` 索引与 6 条 project 记忆)、`~/.qoder/memory/`(52 KB,跨项目偏好)、`~/.qoder/skills/`(56 KB,含本仓库专用的 `android-channel-package-audit` 与 `zero-hit-must-prove-scan`) | **这三处都不在工程目录里,"全量拷贝项目目录"带不走**。里面写的是"签名材料只读、装机自办但卸载先备份、macOS 出包固定在另一台机器、release mapping 本地只此一份"这类**边界与前提**,丢了不会报错,只会让下一个会话重新踩一遍。AGENTS.md「会话记忆」一节说的 `<repo>/.workbuddy-ai/memory/` 在工程内,**与这三处不是同一套,两边都要带**。
+  ⚠️ **10-24 换机时核过这一档的单位**:原先这里写的是「`.workbuddy-ai/memory/` 402 MB,会随拷贝走」,
+  **把父目录当成了子目录** —— 实测 `.workbuddy-ai/` 整目录 402 MB / 1 769 个文件,
+  而 `memory/` 本身只有 **1 个文件 / 28 305 B**。剩下 1 768 个文件全在
+  `promo/`(164 MB / 921 个)、`promo2/`(152 MB / 820 个)、`footage/`(75 MB / 7 个)、`capture/`(12 MB / 20 个),
+  **是宣传片素材,不是记忆** —— 它能随工程目录一起拷,但**属于"可重建但代价大"那一档**
+  (渲染流水线见 `marketing/README.md`),别把它记成"不可重建资产"而漏登记真正的记忆目录 |
 
 > 设备序列号、分发平台/开发者账号、cxyxl.cn 服务器的部署凭据等**只存在于本地**
 > (MIGRATION.txt 与分发登记材料),不写进本文档 —— 仓库可能公开。
+
+### 二-A、2026-10-24 换机后的逐项盘点(存在性 + 处理量,现算)
+
+判据:**先给条目数与字节数,再说"在不在"**;口令只数键名、不打印值。取数脚本是一次性的
+(`/tmp/asset_inv.sh`,按 H206 写成文件用 bash 跑),下面是它的全部读数。
+
+| 第二节那一档 | 新机读数 | 判定 |
+|---|---|---|
+| Android 签名 | `keystore.properties` 121 B / `app/reverb-release.jks` 4 408 B | ✅ 在 |
+| 鸿蒙 release 签名 | `harmony/signature/` 9 个文件 / 40 KB;`material/` 五个叶子目录 `fd/0 fd/1 fd/2 ac ce` **各 1 个文件**(多一个就 00303121) | ✅ 在,且 release 出包实测通过 |
+| 鸿蒙 debug 签名材料 | `~/.ohos/config/` 13 个条目 / 60 KB,含 `default_harmony_uW2…=.p12`(1 128 B / 09-29) | ⚠️ **材料在、路径断了**(见上面那一行的 10-24 补记) |
+| `build-profile.json5` | 3 012 B,`/Users/liang` 残留 **3 处**(全在 default 段) | ⚠️ 待本人处置 |
+| 分发登记材料 | `docs/BEIAN.md` 20 964 B | ✅ 在 |
+| 发布文案与分发平台图标 | `android/store/` 3 个文件 / `harmony/store/` 1 个 | ✅ 在 |
+| 发布截图与 kit | `*/dist/store/` 各 8 张;`*/dist/store-masters/` 8 与 9 张;两份 kit **目录与 zip 都在**(4 条路径) | ✅ 在 |
+| 官网图 | `site/reverb/shots/` **4 个文件** / 168 KB | ✅ 在(张数与 `index.html` 的 `shots/` 引用一致,硬规矩 20) |
+| 在野版本崩溃栈还原材料 | `android/dist/_backup-1.0.4-preRebuild-1015/` **1 个文件 / 41 384 KB** | ✅ 在;**这一轮另加了 `android/dist/_backup-1.0.5-mergedRebuild-1018-oldMachine/`(apk + mapping + SHA256.txt)** —— 因为 `build-release.sh` 会 `rm -f` 顶掉 mapping(H204/H205) |
+| 历史迁移包 | 工程根 `MIGRATION.txt` 13 727 B | ✅ 在 |
+| 与工程分处的快照 | `~/Documents/cast-backup-20260925/` **502 个文件 / 约 58 MB**;`cast-full/.git` 在、`.bundle` **2 个**、`STORE-OPS-20261018.md` 69 803 B | ✅ 全在(唯一副本那一档没断) |
+| 工具层记忆与 Skill | `~/.qoder/projects/**-Users-cxyxl-Documents-cast**/memory/` 7 个文件 / 80 KB、`~/.qoder/memory/` 10 / 56 KB、`~/.qoder/skills/` 4 / 56 KB | ✅ 在,但**键名跟着机器变了**:旧 `-Users-liang-Documents-cast` 目录**不存在** ⇒ 记忆是改名搬过来的。**换机后这条必须现算**,否则"有记忆"与"会话能读到记忆"是两件事 |
+| 可重建产物 | `jniLibs/arm64-v8a/libreverb_asr.so` 1 679 264 B、`assets/whisper-model.bin` 59 707 625 B | ✅ 在(`tools/build-asr.sh` 重建过) |
+| 构建缓存 | `harmony/.hvigor/` 31 个文件,**21 个 mtime 早于 10-24**(最老 09-25);其中 `outputs/sync/output.json`(09-29)含 `keyPassword`/`storePassword` 的 DevEco 密文串 | ❌ **违反第三节"永不拷贝"**:口令密文在新机多一份副本 —— 归本人判(可再生,但它是 H63 同族) |
+| **对外产物里的本机路径**(不属于第二节任何一档,是解包时顺带照出来的) | `unzip -p android/dist/reverb.apk 'lib/*/libreverb_asr.so' \| LC_ALL=C strings -a \| grep -c '/Users/'` = **14**;`_backup-1.0.5-published-1018/reverb.apk` 同读数 ⇒ **已经随包分发出去了**。串是 whisper.cpp / ggml 编译时烙进二进制的**构建机源路径**,而且写的是 `/Users/liang/Documents/Workspace/source/cast/…` —— **连旧机的仓库落点都不是**(旧机是 `/Users/liang/Documents/cast`),`.so` 本身 mtime 08-24 | ⚠️ **待拍板**,三条路与代价在 H208 根因 ⑧ + 修法 3-④。判"要不要管"按**硬规矩 15**那条问法:不是"算不算机密",是"公开它能不能反查到一个具体的人"。**已固化的零成本动作**:`/Users/` 进了解包判据词(见 Skill 陷阱清单),下次换机重建 `.so` 会立刻变红而不是又藏一轮 |
+
+**盘点结论**:第二节**没有丢东西**(签名、kit、快照、唯一副本、记忆五档逐项到位);
+真正的遗漏是**三条"在新机上不成立"的环境前提** —— `gh` 与 `ffmpeg` 没装、
+鸿蒙 debug 签名路径断、`.hvigor` 旧缓存连口令密文一起搬了过来。
+另有**一条与换机无关、却被同一次解包照出来的对外产物痕迹**(上面最后那行 `.so` 里的构建机路径),
+它不属于"缺件",属于"从没登记过的东西第一次被看见"。取证过程见 `docs/TROUBLESHOOTING.md` H208。
 
 ## 三、可重建 —— 不用拷,新机按说明重建
 
 | 资产 | 重建方式 |
 |---|---|
-| whisper native 库 + 模型 | `cd android && ./tools/build-asr.sh`(固定 commit + sha256 校验;`build-release.sh` 出那份唯一发布包前会检查在不在) |
+| whisper native 库 + 模型 | `cd android && ./tools/build-asr.sh`(固定 commit + sha256 校验;`build-release.sh` 出那份唯一发布包前会检查在不在)。⚠️ **「可重建」不等于「重建出来字节相同」**:CMake 会把**构建机的绝对源路径**烙进 `.so`(`__FILE__`),换目录/换机器重打 ⇒ `.so` 变、**整包 SHA 跟着变**,而功能一模一样(认包只能靠 mtime + SHA,见 H208 根因 ⑧;现役在架那份里烙的是旧机更早的一个工作区路径) |
 | 构建缓存 | `.gradle`、`build`、`.cxx`、`.hvigor`、`oh_modules` —— 删了自动再生,永不拷贝。⚠️ **「永不拷贝」在换机时是硬要求而不只是省空间**:`harmony/.hvigor/` 的 sync/cache 内嵌整份签名配置(含口令),把它拷到新机等于在别处多撒一份口令副本 —— 这正是 H63 让它进了 43 个历史提交的那条路(AGENTS.md 硬规矩 14) |
 | `android/local.properties` | 打开 Android Studio 自动生成(只含 sdk.dir)。别把本机那份拷过去 —— 里面是本机路径 |
 | `harmony/build-profile.json5` | `cp build-profile.template.json5 build-profile.json5` 后填签名段(签名材料来自第二节) |
@@ -68,23 +110,58 @@
 
 ## 四、新机环境依赖
 
-- **通用**:git、python3、ffmpeg(截图后处理与官网图)、adb(Android platform-tools)
-- **Android 端**:JDK(Android Studio 自带)、Android SDK;`./gradlew` wrapper 已在库中
+> ⚠️ **2026-10-24 整机迁移**(旧 `MacBookPro11,4` / macOS 12.7.6 / 用户 `liang`
+> → 新机 Apple Silicon / macOS 27.0.1 / 用户 `cxyxl`)之后,本节**逐项在新机重测过**。
+> 下面每条都带 10-24 的实测来源;旧机那些"286 MB / 装在 /usr/local/share"的读数已作废,
+> 但仍留在第五节的换机清单里当历史。全部结论的取证过程见 `docs/TROUBLESHOOTING.md` H208。
+
+- **通用**:git、python3(`/usr/bin/python3`)、adb(`$SDK/platform-tools/adb`)新机都有;
+  **`ffmpeg` 新机没有**(10-24 `command -v ffmpeg` 空)—— 截图后处理与官网图、宣传片编码那条流水线要它,
+  用之前先装。**`gh` 新机也没有** ⇒ 发版顺序第 5 步的两条必查项
+  (`gh api repos/cxyxlxdm/revert-cast/releases/latest`)和"取到上一版包的 digest"**在这台机器上跑不了**,
+  装完还要 `gh auth login`(旧机实测登录在 keyring,不随目录拷贝走)
+- **Android 端**:**只有 Temurin 21,没有 JDK 17** —— 这不影响出包:项目钉的是
+  `VERSION_17` / `jvmTarget '17'`(**language level**),不是 JDK 17 这个运行时。
+  10-24 用 21 全绿:编译门 exit 0、`build-release.sh` exit 0、解包审计 6 项全 PASS。
+  Android SDK 在 `/Users/cxyxl/Library/Android/sdk`(`platforms` 有 android-34 与 37.0,
+  `build-tools` 有 34.0.0 与 36.0.0);`./gradlew` wrapper 已在库中
 - **鸿蒙端**:DevEco Studio(内含 SDK、`hvigorw`、`ohpm`、`hdc`);
-  `export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk`(AGENTS.md 常用命令一节)
-- **macOS 端**:Swift 工具链即可;`package.sh` 用 codesign ad-hoc 签名,无需证书。
-  但**工具链有硬门槛(Xcode 15+ / macOS ≥ 13)**,构建机与开发机可能是两台 —— 见上面第五节第 6 条
-- **真机**:Android 真机 + 鸿蒙真机各一台(序列号见 MIGRATION.txt);
+  `export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk`(AGENTS.md 常用命令一节)。
+  **`hdc` 不在 PATH**(10-24 实测),全路径 `$DEVECO_SDK_HOME/default/openharmony/toolchains/hdc` 存在
+- **macOS 端**:新机是 Apple Silicon + macOS 27,**旧机那四层门槛(系统上限 / SDK 13.1 /
+  LaunchServices 拒 -10825 / `NavigationStack` 符号缺失)全部作废**。
+  但**新机仍然出不了 macOS 包,拦点换了一层**:本机只有 Command Line Tools
+  (`xcode-select -p` = `/Library/Developer/CommandLineTools`),Swift 6.4 能用,
+  而 **CLT 不带 `SwiftUIMacros` 宏插件**(`find "$(xcode-select -p)/usr/lib/swift" -name 'SwiftUIMacros*'` = 0),
+  于是 `@State` 展不开、`swift build` 在 `RootView.swift` 直接崩 —— 日志 2 239 行里 **386 条 error,
+  全是这一处的下游**(宏未找到 220 + `'self' is immutable` 116 + `cannot find '$xxx' in scope` 等 50)
+  (6 行 `@State` 最小复现在本机同样报同一条 ⇒ **不是源码问题**)。
+  出 universal 还额外要完整 Xcode(`xcbuild` 不随 CLT 分发)。
+  **本机唯一能跑的 macOS 验收 = `bash macos/tools/selftest-verify.sh`**(10-24 实测 `pass=9 fail=0`)
+  —— 见上面第五节第 6 条与 AGENTS.md「macOS」一节的 10-24 改口块
+- **真机**:Android 真机 + 鸿蒙真机各一台(序列号见 MIGRATION.txt);10-24 迁移当天**两台都没连上**
+  (`adb devices` 的 "List of devices attached" 为空、`hdc list targets` 给 `[Empty]`),
+  所以装机冒烟(第五节第 7 条)那次没跑成。
+  ⚠️ 迁移后第一次 `adb devices` 报的是 **`failed to start daemon`**(带过来的旧 socket 让客户端连不上 5037),
+  **这不是没装 adb** —— `adb kill-server` 之后 daemon 正常起、空列表才是"真没接设备"。
   `adb install -r` / `hdc install -r` 装包,**装机代理自办、要卸载才先备份**(硬规矩 12)
-- **路径是写死在文档里的**:`JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home`(10-23 实测 286 MB,
-  且**不在 `/usr/libexec/java_home` 的注册表里**)、`android/local.properties` 的
-  `sdk.dir=/usr/local/share/android-commandlinetools`、`DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/…`。
-  新机用户名或安装位置一变,这三串就要同步改(AGENTS.md「环境准备」+ 本文 + 各处构建命令),
-  否则复现的是"看起来像没装 JDK"那个症状而不是真的缺工具。
+- **路径是写死在文档里的**,新机三串落点:
+  `JAVA_HOME=/Users/cxyxl/Library/Java/JavaVirtualMachines/jdk-21.0.12.1+1.jdk/Contents/Home`、
+  `android/local.properties` 的 `sdk.dir=/Users/cxyxl/Library/Android/sdk`(该文件 gitignore,新机要自己写)、
+  `DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk`。
+  新机用户名或安装位置一变,这三串就要同步改(AGENTS.md「环境准备」+ `README.md` + `CLAUDE.md` + 本文 + 各处构建命令)。
+  ⚠️ **别拿 `/usr/libexec/java_home -v 17` 当版本校验**:10-24 实测它**忽略版本参数**、
+  返回当前注册的最新 JVM 并 exit 0(`-v 99` 给同一个串)。旧机上它返回空 ⇒ 症状是"看起来像没装 JDK";
+  新机上它静默给 21 ⇒ 症状是"要 17 拿到 21 而退出码是 0"。**两次都不是判据**,认版本用 `java_home -V`。
   **`aapt2` / `apksigner` 在新机同样不会在 PATH 里**(只有 `adb` 在),照 H156 用全路径并读退出码
 - **认证与账号**:`origin` 走 SSH ⇒ `~/.ssh/` 里那几把私钥(`github_key` 等)必须带走或在新机重签;
-  `gh` 的登录 10-23 实测存在 keyring 里,**不随目录拷贝走**,新机要 `gh auth login` 重来一次。
+  10-24 新机 `github_key` 在、`git ls-remote` 通(16 条分支 / 2 个标签 / 0 条未推送)。
+  `gh` 的登录 10-23 实测存在 keyring 里,**不随目录拷贝走**,新机要装 `gh` 再 `gh auth login` 重来一次(10-24 两条都没做)。
   华为开发者账号 / 应用市场后台 / cxyxl.cn 部署凭据的落点见本节末尾那句(只在 MIGRATION.txt 与 BEIAN.md)
+- **⚠️ 迁移会把口令副本再生一次**:`harmony/.hvigor/` 按第二节"永不拷贝"排除了,这正确;
+  但**新机第一次 `build-release.sh` 会重新生成它,里面同样内嵌整份签名配置(含口令)**。
+  所以"排除缓存"这件事在迁移后要**持续**成立,不是只在拷贝那一刻成立 —— 硬规矩 14 的忽略规则
+  写成全层级 `.hvigor/` 正是为了这个(见 H208)
 
 ## 五、换机操作清单(按序执行)
 
@@ -107,9 +184,21 @@
 6. **三端构建验证**(都过 = 环境完整):
    - `cd android && ./build-release.sh`(唯一那份;解包复核见硬规矩 1。合并 flavor 后没有 `--store` 了)
    - `cd harmony && ./build-release.sh`(签名通过 = 第二节材料齐)
-   - `cd macos && ./package.sh` —— **要一台 Xcode 15+ 且系统 ≥ macOS 13 的机器**(SwiftPM 工程声明 tools 5.9,
-     源码用了 macOS 14 SDK 的双参数 `onChange`);**而且必须是完整 Xcode 而不是只有 Command Line Tools** ——
-     脚本默认出 universal(`--arch arm64 --arch x86_64`),那条走 xcbuild,CLT 里没有;CLT 的 SwiftPM
-     还缺 `PackageDescription.swiftmodule`,连 manifest 都编不动。**系统低于 13 的机器连产物都跑不起来**,
-     这类机器只能承担 macOS 的「读代码 + 整模块 typecheck 差分」。逐层实测见 AGENTS.md「macOS」一节与 H124 补记
+   - `cd macos && ./package.sh` —— **必须是一台装了完整 Xcode 的机器**(10-24 在新机上重新判过,
+     结论比旧机那一版**更严**,不是"换了台机器就通了"):
+     **只有 Command Line Tools 的机器连 `swift build` 都过不去** —— CLT 不带 `SwiftUIMacros` 宏插件,
+     `@State` 展不开(`find "$(xcode-select -p)/usr/lib/swift" -name 'SwiftUIMacros*'` = 0;
+     6 行 `@State` 最小复现同样报这一条,所以**跟源码无关**);出 universal 的 `--arch arm64 --arch x86_64`
+     走 `xcbuild`,而 `xcbuild` 只随完整 Xcode 分发。
+     **CLT 机器连原本准备的退路(整模块 `swiftc -typecheck` 差分)也没有了** —— 38 个文件一起 typecheck
+     实测 exit 1,4 条错误**全部**是 `RootView.swift` 的宏展开那一条,所以基线根本到不了 0
+     (H128 那条"第一个含错文件之后不再有意义地继续"在这里正好挡住:剩下的文件是否被检查**证明不了**)。
+     ⚠️ 顺带记一次**无效对照**:把 38 个文件按"是否用到宏"拆两组分别 typecheck,两组都报错但报的是
+     `cannot find 'Fmt' in scope` 这类跨文件符号 —— **拆组切断了模块内的依赖,那两组的读数不能用**。
+     所以这类机器对 macOS 只剩"读代码 / 改代码"这一项能力。
+     ⚠️ 旧机那四层门槛(SwiftPM 5.7.1 / 系统上限 12.7.6 / SDK 13.1 / `LSMinimumSystemVersion` 拒启动)
+     在新机上**逐条都不成立也不再相关**;下面这几句是给历史记录留的,读的时候把"本机"换成"那台旧机":
+     脚本默认出 universal,CLT 的 SwiftPM 还缺 `PackageDescription.swiftmodule` 连 manifest 都编不动,
+     系统低于 13 的机器连产物都跑不起来 —— 逐层实测见 AGENTS.md「macOS」一节(含 10-24 改口块)与 H124 补记,
+     新机的四条实测见 H208
 7. 装真机冒烟:订阅一档、播一集、看逐字稿;截图管线试拍一张(AGENTS.md「截图」)

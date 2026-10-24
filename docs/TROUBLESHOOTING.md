@@ -10163,3 +10163,152 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
   3. **判断"某个词是不是渠道词汇"要看它的对照物。**「完整版」之所以是渠道词,
      因为它的对立面是「商店版/精简版」;今天两份包已经合成一份 ⇒ 它的对照物不存在了,
      这句话就没有主语。删掉前缀比"改成别的说法"更稳:**不新造断言**。
+
+---
+
+### H208 换机后按「构建 → 签名 → 出包」全局跑一遍:双端包全绿,而 macOS 卡在一层全新的门槛上;顺带挖出八条只有换机才会露面的东西
+
+- **现象**(2026-10-24,整机迁移:旧 `MacBookPro11,4` / macOS 12.7.6 / 用户 `liang`
+  → 新机 Apple Silicon / macOS 27.0.1 / 用户 `cxyxl`;用户指令是「全面 review 有没有信息遗漏,
+  全局跑一遍构建、签名、出包」):
+
+| 端 | 结果 | 实测数字 |
+|---|---|---|
+| Android | ✅ 全绿 | 编译门 exit 0 → `build-release.sh` exit 0 → `dist/reverb.apk` **65 028 676 B**(sha256 `d276eb604f03…`,10-24 10:28)→ 解包审计**处理量** dex=1 个 / 6 487 612 B、zip **171 条目**、aapt2 权限 **13 行**;六项期望**全 PASS**,含 `RECORD_AUDIO=1` / `REQUEST_INSTALL_PACKAGES=1` |
+| 鸿蒙 | ✅ 全绿 | `build-release.sh` exit 0(7 s 849 ms)→ `dist/reverb.app`(`0bb9b1c0ff98…`)+ `reverb-symbol.zip`(`cca79b7b0ca6…`);解包 `entry-default.hap` 2 527 936 B、**18 files / 2 524 KB**,判据词 `itunes 4 / fyyd 14 / gpodder 13`、无 `debugKey` |
+| macOS | ❌ 出不了包 | `swift build` 失败(日志 2 239 行),**根因只有一条**:`RootView.swift:15:24: error: external macro implementation type 'SwiftUIMacros.StateMacro' could not be found for macro 'State()'; plugin for module 'SwiftUIMacros' not found` |
+
+  三端之外另抓到**八条只在换机这一轮才露面的东西**(①–⑥ 是路径与口径失真,⑦ 属工具层,
+  ⑧ 是同一次解包里顺带照出来的**对外产物痕迹**),逐条见下面根因。两台真机当天都没连
+  (`adb devices` 空、`hdc list targets` = `[Empty]`),所以第五节第 7 条装机冒烟没跑。
+
+- **根因**:八件事,每件都有单独的证据,放在一起才是"换机"这个场景的形状。
+
+  **① 文档钉死的 JDK 路径不存在 —— 而项目本来也不需要 JDK 17。**
+  `build.gradle` 钉的是 `sourceCompatibility/targetCompatibility = VERSION_17` + `jvmTarget = '17'`,
+  那是 **language level(编译器输出的目标级别)**,不是"必须存在一个 17 运行时"。
+  新机只有 Temurin 21,AGP 8.5.2 / Gradle wrapper 8.7 / Kotlin 1.9.24 全部跑在 21 上并出包成功 ——
+  **旧文档把这两件事写成了一件事**,所以换机的"必修项"里凭空多了一条根本不存在的依赖。
+
+  **② `/usr/libexec/java_home -v 17` 在新机忽略版本参数。**
+  它返回注册表里**最新的** JVM(21)且 **exit 0**;`-v 99` 拿到的是同一个串。
+  ⇒ 同一句 `export JAVA_HOME=$(java_home -v 17)` 在两台机器上是**两种假读数**:
+  旧机空串(症状"Gradle 说找不到 Java,看起来像没装 JDK"),新机静默给 21(症状"要 17 拿到 21,退出码还是 0")。
+
+  **③ macOS 的门槛换了一层,结论暂时没换。**
+  旧机那四层(SwiftPM tools-version 门 / 系统 12.7.6 ⇒ SDK 天花板 13.1 / LaunchServices `-10825` 拒启动 /
+  `NavigationStack` 符号缺失 dyld SIGABRT)在新机**一次全部消失** —— Swift 6.4、SDK 27、产物能起。
+  新机只剩**一条**:`xcode-select -p` = `/Library/Developer/CommandLineTools`,而 **CLT 不带 SwiftUI 宏插件**
+  (`find "$(xcode-select -p)/usr/lib/swift" -iname '*SwiftUIMacros*'` = **0**,同目录只有
+  `libObservationMacros` / `libSwiftMacros`),于是每个 `@State` 都展不开。
+  **`swift build` 日志 2 239 行里的 386 条 error 全是这一处的下游**:宏未找到 **220** 条 +
+  `cannot assign to property: 'self' is immutable` **116** 条 + 其余 50 条
+  (`cannot find '$xxx' in scope` 这类"属性包装器没生成"的形态)。
+  **用一个 6 行的 `@State` 最小文件在同一台机器报同一条错 ⇒ 源码无罪**,这是本轮最有价值的一次差分。
+  整模块(38 个文件一起)`swiftc -typecheck`:exit 1,**4 条错误全落在 `RootView.swift:15/16` 那一条宏错误上**
+  —— 所以 AGENTS.md 原先准备的退路「本机最强验收 = 整模块 typecheck 差分」在这台**也到不了 0**。
+  universal 那条照旧要完整 Xcode(`xcbuild` 只随它分发)。
+
+  **④ gitignore 里那份 `harmony/build-profile.json5` 的 debug 段还写着旧机绝对路径。**
+  跑 debug hap:`SignHap` 报 `00303107 Configuration Error / Invalid storeFile value …
+  /Users/liang/.ohos/config/default_harmony_uW2…=.p12`,BUILD FAILED,**exit 255**。
+  而**新机 `~/.ohos/config/` 里同名三件套是在的**(09-29 那份,1 128 B)—— 缺的只是路径前缀。
+  release 段用**相对路径** `./signature/reverb.{cer,p12,p7b}`(hvigor 按工程根归一化)所以不受影响:
+  这正是"**上架包出得来、装机用的 debug 包出不来**"的分工 —— 换机后如果只验 release,这条会一直藏到下次装机。
+
+  **⑤ 缓存"永不拷贝"这条被迁移违反了,而且**就算没违反它也会自己再生**。
+  `harmony/.hvigor/` 31 个文件里 **21 个 mtime 早于 10-24**(最老 09-25),其中
+  `outputs/sync/output.json`(09-29)**内嵌 `keyPassword` / `storePassword` 的 DevEco 密文串**(`0000001B…`)
+  ⇒ 口令密文在新机多了第二份副本(H63 同族)。**即便排除拷贝,新机第一次构建也会生成同样的文件** ——
+  所以判据不能写成"拷没拷",要看忽略规则**是否长期成立**(硬规矩 14 要求写成全层级 `.hvigor/`)。
+
+  **⑥ 第一次构建会改一个 tracked 文件。**
+  `harmony/entry/obfuscation-namecache.json` 被 release 构建整份重写(5 530 增 / 5 489 删)。
+  入库那份是 **1.0.5 在架构建实际用的混淆名单**(`000598a`),它与崩溃栈还原是一对 ——
+  所以正确顺序是**先归档生成物、再还原 HEAD**:`git checkout --` 之后 `git status --porcelain` = 0。
+
+  **⑦(工具层)Skill 内联的 `audit_apk.sh` 在新机第一步就崩。**
+  macOS 自带 **bash 3.2** 在 `set -u` 下展开**空数组**会报 `unbound variable`
+  (`for o in "${OVERRIDES[@]}"`),于是正向路径根本跑不起来 —— 症状长在"脚本"上,极易被读成"包有问题"。
+
+  **⑧ 解包验收这次照出了反方向的东西:在架 APK 里带着**一台旧机器的绝对路径**。**
+  判据(对现役包与归档里那份"已发布"包各跑一次,两条读数相同):
+
+  ```bash
+  unzip -p android/dist/reverb.apk 'lib/arm64-v8a/libreverb_asr.so' \
+    | LC_ALL=C strings -a | grep '/Users/liang' | sort -u | wc -l      # = 14(唯一串)
+  ```
+
+  内容是 whisper.cpp / ggml 编译时被 `__FILE__` 烙进二进制的**源文件路径**
+  (`/Users/liang/Documents/Workspace/source/cast/android/asr-native/whisper.cpp/ggml/src/ggml-*.c` 这类)。
+  三点要紧,任何一点单独看都像"无所谓":
+  ①**这些串已经随包分发出去了** —— 现役 `dist/reverb.apk` 与 `dist/_backup-1.0.5-published-1018/reverb.apk`
+  (GitHub Releases 那份的上游)各有 10 处命中,`.so` 在 APK 里未压缩存储,所以任何人对发布包跑一次 `strings` 就看得见;
+  ②串里的目录**连旧机的仓库落点都不是**(旧机是 `/Users/liang/Documents/cast`)⇒ 这份 `.so` 比"旧机"更老,
+  是更早一次在另一个工作区构建的产物,**从来没有被任何文档登记过**;
+  ③它归**硬规矩 15** 那条问法管 —— 不问"算不算机密",问**"公开它以后能不能反查到一个具体的人"**:
+  用户名 + 一人可辨的工作区布局,与 H68 那次"指纹可对、登记主体真名不可对"是同一条线上的下游。
+  **换机让它从"历史痕迹"变成"活的分叉"**:`tools/build-asr.sh` 在新机重建 `.so` 会烙进 `/Users/cxyxl/…`,
+  那 1.6 MB 的字节随之改变 ⇒ **整包 SHA 跟着变**,与本轮"同版本号同字节数而 SHA 不同"是同一类事实的另一半。
+
+- **修法**:
+  1. **文档逐处改口,历史段落保留原文并写明"把『本机』换成『那台旧机』"**:`AGENTS.md` 环境准备表 +
+     一分钟自检 + macOS 一节的 10-24 块;`CLAUDE.md` 第一步;`README.md` Android 段直接写绝对路径、
+     并更正 `java_home` 那句;`docs/LOCAL-ASSETS.md` §四 整节重写、§五 第 6 条 macOS 重判。
+  2. Skill 脚本的空数组改成守卫式展开 `${OVERRIDES[@]+"${OVERRIDES[@]}"}`(落点
+     `~/.qoder/skills/android-channel-package-audit/SKILL.md`),并把"bash 3.2 在 macOS 上仍是 /bin/bash"写进陷阱清单。
+  3. **待维护者四条,代理不代做**:① 装完整 Xcode(≈15 GB)才有 macOS 的出包与 typecheck 差分;
+     ② debug 签名段的绝对路径(签名材料一律本人维护,见硬规矩 12 末段与 H123 教训 ⑦);
+     ③ 清不清 `harmony/.hvigor/`(可再生,但里面那串口令密文归本人判);
+     ④ **⑧ 那 14 条本机路径怎么办** —— 三条路都有代价,代理不替它选:
+     **(a) 只改未来**:`tools/build-asr.sh` 的 CMake 加 `-ffile-prefix-map=<构建目录>=/`
+     (或 Release 下 `-DNDEBUG` 把带 `__FILE__` 的断言整支摘掉)⇒ 下次重建的 `.so` 干净,
+     **但在架那份 1.0.5 改不掉**;**(b) 连当下一起改**:重传 Releases 资产(动分发,要点头)
+     且商店侧要再走一次提审,代价是"1.0.6 提前变成一次重出包";
+     **(c) 判为可接受**:用户名与目录不含凭据,与 H63 那类"口令进历史"不同级 ⇒ 明确写一句"接受",
+     登记进 `docs/LOCAL-ASSETS.md`,让它别再当意外出现。**三条之外还有一条零成本动作**:
+     把 `/Users/` 加进解包判据词(见下面教训 8),这样无论选哪条,下次换机都会立刻报出来。
+  4. **新机缺件如实登记**:`ffmpeg` 与 `gh` 都不在 PATH(`gh` 的登录在 keyring,不随目录走)⇒
+     发版顺序第 5 步那两条 `gh api` 必查项、以及"上一版包的 digest 核验"**在这台机器上跑不了**;
+     `hdc` / `aapt2` / `apksigner` 不在 PATH(全路径可用);两台真机当天未连接。
+
+- **教训与可复用的规律**:
+  1. **「绝对路径写进文档」的代价只在换机后暴露,而且一次暴露一批。** 本轮 `/Users/liang` 残留
+     **入库 12 处**(AGENTS 1 / REVIEW 3 / ROADMAP 4 / TROUBLESHOOTING 4)+ **不入库另有 3 份**
+     (`build-profile.json5` 3 处、`STORE-OPS.md` 7 处、`marketing/src/drive.py` 1 处)。
+     **改口后再扫一遍是 17 处 / 5 个文件**(AGENTS 1 / LOCAL-ASSETS 2 / REVIEW 3 / ROADMAP 5 /
+     TROUBLESHOOTING 6)—— 涨了 5 处不是没清干净:**历史记录按规矩留原文,而补记本身也要点名那串旧路径**;
+     逐条核过 17 处**全在「历史记录」这一类**,现役可复现命令零裸残留(REVIEW 那段自检块里旧命令上方
+     就地写了新机落点)。**这两个数都会漂,别抄 —— 现算。**
+     固定动作:`git ls-files | xargs grep -c '/Users/<旧用户>'` 与 ignored 文件各跑一遍,**先报处理量**(文件数 + 行数),
+     再逐处分诊「历史记录要留原文」/「现役可复现命令必须改」。
+     ⚠️ 这条计数**必须用 bash 脚本文件跑**:交互 shell 是 zsh,不做词分割,`grep -c … $FILES` 会把整串路径
+     当成一个文件名 —— 于是 12 处会读成 0(同族见 **H206**)。
+  2. **"退出码 0"不是版本判据。** `java_home -v <N>` 在只装了一套 JVM 的机器上**没有判别力**:
+     它既可能给空串也可能给最新的那套,而两者都 exit 0。这与 **H128 / H156 / H206 是同一族**——
+     **空输出、0、缺失的工具,在输出上长得一模一样**。要版本就用给读数的命令(`java_home -V`、`"$JAVA_HOME/bin/java" -version`)。
+  3. **换了工具链要重跑"最小复现",别拿旧结论解释新失败。** 本轮如果照抄旧 AGENTS 那句
+     "这两条命令不在本机跑",就会把 SwiftUIMacros 缺插件误读成"源码要降级 / 又一层系统门槛"。
+     **6 行文件花 30 秒,判掉整条源码** —— 这是本次全局跑里性价比最高的一步。
+  4. **拆组对照可能是无效对照。** 把 38 个文件按"是否用到宏"切两组分别 typecheck,两组都报错,
+     但报的是 `cannot find 'Fmt' in scope` 这类**跨文件符号** —— 切组本身切断了模块内依赖,那两组读数不能用。
+     有效的是"整模块一起跑 + 看错误落在哪几行"。**先问这个实验是否保住了被切的那条边,再读它的读数。**
+  5. **一次构建会同时改 tracked 文件、并撒一份口令副本。** 换机后第一件事不是构建,
+     是**先给 tracked 的构建副产物做带时间戳的归档**,构建后核 `git status --porcelain` = 0,
+     再 `find harmony/.hvigor -type f ! -newermt <今天> | wc -l` 数一遍"带过来的旧缓存"。
+  6. **「出包全绿」不等于「环境完整」。** 两端发布包都出来了,装机用的 debug hap 却签不出来,
+     `gh` / `ffmpeg` 却缺 —— 这三样都不挡出包。**判"环境完整"要按 `docs/LOCAL-ASSETS.md` 第二/四节
+     逐项给存在性 + 字节数**(本轮那份盘点:签名类全在、`signature/material/` 五个叶子目录各 1 文件、
+     `~/.ohos/config` 13 条目、kit 与截图两套齐全、`cast-backup-20260925` 502 条目 / 约 58 MB、
+     项目记忆已随新键名 `-Users-cxyxl-Documents-cast` 落地),而不是"三端都能 build"。
+  7. **写进文档的"数字"要带单位的来源。** 本轮顺手改掉一处:§二 说 `.workbuddy-ai/memory/` 「402 MB 会随拷贝走」——
+     实测 `.workbuddy-ai/` **整目录** 402 MB / 1 769 文件,而 `memory/` 本身**只有 1 个文件 / 28 305 B**。
+     数字对不上不是笔误,是**把父目录当成了子目录**;这类错位会让下次迁移少带一整档(它同时是「唯一副本」类资产)。
+     逐目录拆解与"那 1 768 个文件其实是宣传片素材"写在 `docs/LOCAL-ASSETS.md` §二 的 10-24 补记里,不在此重复。
+  8. **解包验收的期望表只有"该有的",没有"不该有的"。** 硬规矩 1 的这把尺子一直被朝外用
+     ——「某功能在不在包里」;⑧ 是它第一次**朝内量**,量出来的是**构建机自己的路径**。
+     ⇒ 判据词表要分两栏:一栏是**功能存在性**(模型 / `.so` / 权限 / 目录接口串),
+     一栏是**本机痕迹**(`/Users/`、`/home/`、旧用户名、构建工作区路径)。
+     后者与脱敏那次用的词表同源,该并进 `git-history-wordlist-scrub` 那张共享表而不是另起一张 ——
+     **同一族词在两张表里各写一遍,就是 H207 那个"词表漏词"的重演方式。**
+     已把这一条写进 Android 解包 Skill 的陷阱清单(落点 `~/.qoder/skills/android-channel-package-audit/SKILL.md`)。
