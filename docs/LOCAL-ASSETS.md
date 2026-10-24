@@ -41,7 +41,13 @@
 |---|---|---|
 | **Android 签名** | `android/keystore.properties` + `android/app/reverb-release.jks` | 口令四项 + 私钥。丢了 = Android 端(尤其商店渠道)永远无法以同一身份更新。**同理:签名不可更换** —— 同包名换签名会让已装用户无法覆盖升级,唯一一次换签发生在 1.0.0 未到达用户的窗口(见 H82 前提) |
 | **鸿蒙 release 签名** | `harmony/signature/`(`reverb.p12` 私钥、`.cer`、`.p7b`、`.csr`)+ `harmony/build-profile.json5` | release 签名口令**只**以加密串的形式存在于 build-profile 里;模板 `build-profile.template.json5` 在库中,新机可 `cp` 后填,但 p12 无法再生。⚠️ **build-profile.json5 会被 DevEco 的「自动生成签名」整段覆盖**(2026-09-26 就覆盖过一次,加密口令随之丢失,见 H123)—— 配好 release 段之后要**立刻连 material 一起备份一份**,别把它当"改坏了能重填"的普通配置 |
-| **鸿蒙 release 口令的解密材料** | `harmony/signature/material/`(拷 `signature/` 时**必须连它一起拷**) | build-profile 里那串 `0000001B…` 是 DevEco 的**加密串**(AES-128-GCM),工作密钥由**与被签 keystore 同目录**的 `material/` 推出来:`fd` 三个 16 字节分量 XOR ⊕ 内置常量 → pbkdf2 以 `ac` 为 salt → rootKey → 解 `ce`(入口 `hvigor-ohos-plugin` 的 `getKeyStorePwd` → `DecipherUtil.decryptPwd(storeFile/..)`)。少了它 `SignHap` 报 `ENOENT …/signature/material`(00308018);**material 被换掉而密文没换**则报 `Signature material verification failed … unable to authenticate data`(00303242,authTag 不过)。**实测 material 是每个目录一套随机密钥**(与 `~/.ohos/config/material/` 逐文件比 sha256,五项全不同)⇒ 既不能从别处的 material 拼出来,也不会随重装 DevEco 复原。**留着加密口令、丢了 material = 口令作废**:2026-09-20 与 09-25 那两份口令备份就只拷了 build-profile 与 `signature/reverb.*`、没拷 `signature/material/`(全过程见 H123 第二轮)。**教训:密文与密钥是两件独立资产,必须同处、同批备份**。⚠️ 还有一条同样致命:**material 还原时只能整目录替换,不能与旧文件并排** —— hvigor 要求 `fd/0`、`fd/1`、`fd/2`、`ac`、`ce` **每个叶子目录恰好 1 个文件**,多一个就报 `00303121 Signing material error`(点名到 `material/fd/0`),而目录看起来完全正常。2026-09-29 出 1.0.3 市场包时就卡在这一步(全过程见 H123 第三轮);判定"密文与 material 是否同源"的可复现方法也在那条里(调 DevEco 的 `DecipherUtil.decryptPwd` 并配一份已知能签成的配置做对照)。本机现存的三套 material:`harmony/signature/material`(随签名走)、`~/.ohos/config/material`(自动签名)、`~/Library/Application Support/Huawei/DevEcoStudio26.0/options/data2/material`(IDE 自用) |
+| **鸿蒙 release 口令的解密材料** | `harmony/signature/material/`(拷 `signature/` 时**必须连它一起拷**) | build-profile 里那串 `0000001B…` 是 DevEco 的**加密串**(AES-128-GCM),工作密钥由**与被签 keystore 同目录**的 `material/` 推出来:`fd` 三个 16 字节分量 XOR ⊕ 内置常量 → pbkdf2 以 `ac` 为 salt → rootKey → 解 `ce`(入口 `hvigor-ohos-plugin` 的 `getKeyStorePwd` → `DecipherUtil.decryptPwd(storeFile/..)`)。少了它 `SignHap` 报 `ENOENT …/signature/material`(00308018);**material 被换掉而密文没换**则报 `Signature material verification failed … unable to authenticate data`(00303242,authTag 不过)。**实测 material 是每个目录一套随机密钥**(与 `~/.ohos/config/material/` 逐文件比 sha256,五项全不同)⇒ 既不能从别处的 material 拼出来,也不会随重装 DevEco 复原。**留着加密口令、丢了 material = 口令作废**:2026-09-20 与 09-25 那两份口令备份就只拷了 build-profile 与 `signature/reverb.*`、没拷 `signature/material/`(全过程见 H123 第二轮)。**教训:密文与密钥是两件独立资产,必须同处、同批备份**。⚠️ 还有一条同样致命:**material 还原时只能整目录替换,不能与旧文件并排** —— hvigor 要求 `fd/0`、`fd/1`、`fd/2`、`ac`、`ce` **每个叶子目录恰好 1 个文件**,多一个就报 `00303121 Signing material error`(点名到 `material/fd/0`),而目录看起来完全正常。2026-09-29 出 1.0.3 市场包时就卡在这一步(全过程见 H123 第三轮);判定"密文与 material 是否同源"的可复现方法也在那条里(调 DevEco 的 `DecipherUtil.decryptPwd` 并配一份已知能签成的配置做对照)。本机现存的三套 material:`harmony/signature/material`(随签名走)、`~/.ohos/config/material`(自动签名)、`~/Library/Application Support/Huawei/DevEcoStudio26.0/options/data2/material`(IDE 自用)
+  **▶ 10-24 傍晚这条要改两处读数**(现数,不是推测):
+  "三套"实际是**四处落点** —— 加上 `~/Downloads/LANDrop/signature/material/`(见下面新增那一行,它与现役那套叶子同名同串);
+  而**第三套的形状根本不合格**:IDE 那套 `fd/0 fd/1 fd/2 ac ce` **每叶 2 个文件**(实测),
+  所以它**任何时候都不能当还原源** —— hvigor 要的是每叶恰好 1 个,整目录替换过去直接 `00303121`。
+  另:`~/.ohos/config/material` 原先记成"自动签名/IDE 自用"这一档,
+  **17:06 重注册 debug 签名之后它升级成活依赖** —— 新 debug 口令的密文只有它能解,丢了就是 `SignHap` 失败 |
 | **鸿蒙 release 签名的非机密参数**(填签名时照着核) | 本行;材料本身在 `harmony/signature/` | keyAlias = **`yuyin`**;三段材料用**相对路径** `./signature/reverb.{p12,p7b,cer}`(hvigor 按工程根归一化,换机器仍成立);profile 绑 `com.yuyin.reverb`、`"type":"release"` + `"app-distribution-type":"app_gallery"`、有效期至 2029-08。**这几项的用途是照着核对、不是照抄恢复**:签名材料一律由本人维护,代理不代填、不代改、不代回滚(H123 教训 ⑦)—— 2026-09-29 曾把这段整段回滚成 08-15 的旧密文,而旧 material 已被覆盖且全盘无副本,结果 release 报 00303242、debug 段因 storeFile 指向已被轮换掉的 .p12 报 00303107,两条路径一起失效,最终由本人重做签名材料才出包。代理只做只读校验:`build-release.sh` 里的三条前置卡口会核这三项并格,不合格直接退出。 |
 | **鸿蒙调试签名** | `~/.ohos/config/default_*.{p12,cer,p7b}`(在用户目录,**不在工程目录** → 换机不会随工程拷过来) | 真机 `hdc install` 的唯一路:release 的 `.p7b` 是 `"type":"release"` + `"app-distribution-type":"app_gallery"`,不绑设备也不允许侧装。这目录没了,`assembleHap -p product=default` 会停在 `SignHap` 报 `Invalid storeFile value`。恢复:DevEco → File → Project Structure → Signing Configs → 勾「Automatically generate signature」并登录开发者账号,由它重新生成三个文件并回写 build-profile 的 default 段。**注意它绑 bundleName**:生成时工程用的是哪个包名,这套签名就只认那个包名 —— 为装机测试临时改过包名的话,改回来之后 `SignHap` 会报 `00303074 bundleName … does not match … SigningConfigs`,再点一次 Fix 重新生成即可。⚠️ **但「release 那套不受影响」这句原先写错了,现已更正**:自动签名弹窗里勾了 release 配置(或对 release 配置点 Fix)时,它会把 build-profile 的 **release 段一起改写**成新生成的 `~/.ohos/config/release_*` —— 那套是 `"type":"debug"` 且绑着临时测试包名,**既不能装机也不能提交市场**,而段里原来的加密口令被就地覆盖、找不回来(实测与全过程见 H123)。
   ⚠️ **2026-10-24 换机实测:这一档"随不随工程走"不是重点,`build-profile.json5` 里那条绝对路径才是。**
@@ -50,13 +56,48 @@
   `SignHap` **`00303107 Invalid storeFile value`**、BUILD FAILED、exit 255。
   **release 段用相对路径 `./signature/reverb.*` 所以照常出包** —— 也就是说:
   **换机后只验 release 会完全看不出这条断了,而它断的是"装真机调试"这条路。**
-  差的可能只是路径前缀(材料在同名目录里),但**签名段一律由本人维护,代理不代改** —— 判据与理由见上面「非机密参数」那一行与 H123 教训 ⑦ |
+  差的可能只是路径前缀(材料在同名目录里),但**签名段一律由本人维护,代理不代改** —— 判据与理由见上面「非机密参数」那一行与 H123 教训 ⑦
+  **▶ 10-24 17:06 本人重注册了 debug 签名,这一条改口:路径断了 → 已通,且实测签得出来。**
+  `build-profile.json5` 的 default 段现在指向**新机绝对路径** `~/.ohos/config/default_harmony_nMkNVRv…=.{cer,p7b,p12}`
+  (四个文件 mtime 全在 17:06),文里 `/Users/liang` 残留 **0 处**(阳性对照:同一命令数 `/Users/cxyxl` = **3 处**)。
+  判据不是"配置看着对了":`hvigorw assembleHap -p product=default -p buildMode=debug` 实测
+  `:entry:default@SignHap` **真的执行**(592 ms)、BUILD SUCCESSFUL,
+  `entry-default-signed.hap` **4 292 069 B @17:10** 比同批 unsigned 那份 **多 89 551 B** ——
+  那 89 551 B 就是签名块。**注意符号包不往 zip 条目里写**,所以「`unzip -l` 出来的条目里 grep `sig`」恒 0,
+  用那条判"签没签"会读成假阴性(同族见 H156 / H206 / H208 教训)。**装机那条路(硬规矩 12 的 debug 包)到此解锁。**
+  ⚠️ **但这次重注册让一档依赖变了性**:`~/.ohos/config/material/`(09-26 那套)**现在是 debug 段新口令的解密材料**,
+  不再是"IDE 自用"那一档 —— 它没了,今天这份能签出包的配置就解不开口令,症状又是 `SignHap` 失败。
+  同目录里另外两套**已无任何配置引用**(`default_harmony_uW2…=` 09-29 那份、`release_harmony_uW2…=` 09-26 那份,后者是 H123 事故的产物),
+  **但"没人引用"不是删它们的判据** —— 要删先按第三节那条:确认没有任何 build-profile/备份密文需要它解,再挪出仓库,别原地 `rm` |
 | **分发登记材料** | `docs/BEIAN.md`(被根 .gitignore 点名忽略) | 主体真名、分发平台证书标识、证书指纹、备案号;发布提交平台时照着填。口径与理由见 `docs/HISTORY.md` 阶段五 |
 | **发布文案与 分发平台图标** | `harmony/store/`、`android/store/`(2026-09-20 起不入库) | 发布文案两语种版 + appicon-216/512/1024;改文案五语种同步的规矩不变(AGENTS.md 硬规矩 5) |
 | **发布截图与 发布物料包** | `harmony/dist/store/`、`android/dist/store/`(1080×1920 终图)、原生分辨率中间图 `*/dist/store-masters/`、两套 kit 目录(`harmony/dist/reverb-harmony-submission-kit/`、`android/dist/reverb-store-submission-kit/`)及同名 kit zip | 截图可用真机重拍(可重建但代价大,需两台真机+深色模式流程);**至少把截图与 kit zip 拷走**,免去下次发布全套重拍 |
 | **官网图** | `site/reverb/shots/`(4 张) | 由发布原图缩放而来,拷了原图可不拷;随 dist 一起拷最省心 |
 | **在野版本的崩溃栈还原材料** | 本次发布物在 `*/dist/` 根;**上一版只在别处** —— Android 完整版在公开分发仓的 release(资产自带 sha256),鸿蒙在分发平台侧。本地额外只留 `android/dist/_backup-1.0.4-preRebuild-1015/reverb-mapping.txt`(42 376 254 B,公开仓 tag 1.0.4 那份包的 R8 mapping;同字节的 apk 已删,外面那份逐字相同) | ⚠️ **2026-10-18 清 `*/dist/` 备份时,把在架鸿蒙 1.0.4 的 `.app` + `reverb-symbol.zip` 的本地唯一副本删了** —— 它藏在 `harmony/dist/_backup-shots-1012/reverb-harmony-submission-kit.zip` 里(**kit zip 内嵌发布物,不是素材**)。那两份的 SHA-256 **完整的串只剩本地 `docs/STORE-OPS.md` 七**(10-12 那轮 kit 那段)—— 原本并列为落点的 `harmony/store/上架文案.md` 第三节已被 1.0.5 的哈希覆写,**这一串随 `STORE-OPS.md` 一起走,而它不入库 ⇒ 换机没带走就断了**。从平台侧取回后按串核验即可。**换机时这一档只能回平台侧取,别指望本地有** —— 判据与教训见 H204。**另存一份在 `~/Documents/cast-backup-20260925/STORE-OPS-20261018.md`**(10-18 那一刻的快照;同样不入库,但与工程目录分处两地)—— ⚠️ **它不随工作区自动更新**,要用时先核:`md5 -q docs/STORE-OPS.md ~/Documents/cast-backup-20260925/STORE-OPS-*.md` 两个串相等才算数,不等就以工作区那份为准并重拷 |
-| **历史迁移包** | 根目录 `MIGRATION.txt` | 上次迁移的打包/加密流程与机型细节;`reverb-migrate-secrets-*.tar.gz` 类密钥分包如仍存在,即签名材料的另一份拷贝 |
+| **历史迁移包** | 根目录 `MIGRATION.txt` | 上次迁移的打包/加密流程与机型细节;`reverb-migrate-secrets-*.tar.gz` 类密钥分包如仍存在,即签名材料的另一份拷贝
+  ⚠️ **10-24 傍晚现查:这句条件句现在有落点了,而且落点很危险** —— 两包都在 **`~/Downloads/LANDrop/`**:
+  `reverb-migrate-secrets-20260920.tar.gz` **24 543 B / 8 个条目**,里面是
+  `android/app/reverb-release.jks` + `android/keystore.properties` + `harmony/signature/reverb.{p12,cer,p7b,csr}` +
+  `harmony/build-profile.json5` + `docs/BEIAN.md`;另一包 `reverb-migrate-20260920.tar.gz` 101 183 006 B 是同日代码全量。
+  ⇒ **这是 Android 私钥与鸿蒙 release 私钥在工程之外唯一的一份异地复本**,而 `~/Downloads` 是"随手清"的地方
+  (同目录还堆着 339 MB 手机传来的照片视频)。**它同时是"半个备份"**:包里那份 `build-profile.json5` 的口令密文
+  **没有配套 material**(H123 那个已知缺陷在同一次打包里犯了两次),所以它能救私钥、救不了口令。
+  **建议处置归本人**:要么挪进 `cast-backup-20260925/` 那种有登记的归档位、要么按本节"密文与密钥同批备份"补一份 material ——
+  代理不代移动签名材料,也不代删 |
+| **旧密文与旧 material 的成对副本** | `~/Documents/reverb-signing-recovery-20260929/`(10-24 傍晚才发现,**原清单整条漏登记**) | 里面是 09-29 09:35 那次签名重做**之前**的 `build-profile.json5.before-20260929-093558`(3 231 B)+ `signature-material.before-20260929-093558/`(五个叶子目录各 1 个文件,文件名与现役 `harmony/signature/material/` **逐不同** ⇒ 另一套随机工作密钥)。
+  **它的价值恰恰在"成对"**:本地唯一一份能让那串旧密文重新解得开的东西 —— 三套现役 material 都解不了它。
+  与上一条同待遇:**不可再生,但也不能被当成"还原 source"往现役目录里拷**(拷进去就是 `00303121`,见上面 material 那一行的"整目录替换"训) |
+| **release 签名材料的散装整份副本**(10-24 傍晚新登记,**位置本身就是风险**) | `~/Downloads/LANDrop/signature/` —— `reverb.{p12,cer,p7b,csr}` 4 个文件 + `material/`(五个叶子各 1 个文件,mtime 09-29 19:51) | 逐文件 sha256 与现役 `harmony/signature/` **同串**,`material/` 的五个叶子**文件名也与现役那套逐字相同**
+  ⇒ 它是本地唯一一份「**私钥 + 配套 material 成对**」的副本,正是 H123 那两轮事故里"密文还在但 material 没了"那种死局的解药形状。
+  ⚠️ **但它躺在下载目录里**(同目录还有 339 MB 手机传来的照片视频),而 `p12` 是私钥本体、`material` 是它的解密材料 ——
+  **一次"清理下载"就把两样一起删掉**。处置归本人:要么挪进有登记的归档位、要么给它一条 `.gitignore` 之外的独立备份;
+  **代理不代移动、不代删除任何签名材料**(硬规矩 12 末段)。也**别把它当还原源往回拷** —— 两份同串,拷了等于没动 |
+| **对外长文唯一副本**(10-24 傍晚新登记) | `~/Documents/reverb-article.md`(18 354 B,10-18 22:24) | 「余音 · Reverb:一个不联网也能活着的播客客户端」—— 对外介绍长文,是硬规矩 19 那档「不入库的运营物料」,但**原先没登记**。
+  仓库内 `find -name 'reverb-article*'` = **0 个** ⇒ 只此一份。改口径时它与 `CHANGELOG.md`(内部账本)、`docs/PRODUCT.md` 是三个不同受众的版本,别互相顶替 |
+| **早期版本的原始截图(重拍要装回旧版 App)** | `~/Documents/web/reverb/shots/` 里 8 月那批 **11 个 `.png` / 该目录共 24 MB**(10-24 傍晚新登记) | 第二节原先只登记了 `site/reverb/shots/`(仓库内 4 张)与 `*/dist/store{,-masters}/`(1.0.5 那批 8 张),**漏了 1.0.2 时代这批原始 PNG**。
+  它们不是"可重建":要重拍得把旧版 App 装回两台真机(旧包只在公开分发仓与商店侧,界面与数据都已变)。
+  ⚠️ 同目录的 `index.html` 与仓库那份 **md5 逐字相同**(`4ed9a1d9…`)⇒ 那一档**不是**独有资产,`~/Documents/web/` 整体只是部署工作副本,**独有部分只有 `shots/` 里这批 PNG**。
+  另有 `~/Documents/web-deploy-backups/`(15 个 `*.pre-deploy`,567 KB)—— 那是历次部署前的线上快照,**回得来(服务器上还有一份),按"可重建"排** |
 | **与工程分处的本地快照(只剩一份)** | `~/Documents/cast-backup-20260925/`(瘦身前 226 MB → 10-23 实测 **59 MB**:cast-full 48 MB + 两个 bundle + 两份处置清单 + STORE-OPS 快照)。另一份 `cast-backup-20261012/` **已经不存在了** —— 10-18 整目录移进废纸篓,10-23 实测工程侧目录与 `~/.Trash/` 两处都查不到(`ls -d` 均报 No such file),即**已清空、不可再取** | 2026-10-18 做过逐条哈希取证并瘦身,**只用 mv 进废纸篓、没有 rm**;清单与每条证据(含"取回命令")在 `cast-backup-20260925/snapshot-trim-20261018-deleted-manifest.txt`。留下来的都是**别处没有的**:`cast-full/.git` 与两个 bundle 是 **filter-repo 之前历史的唯一副本**(代价:里面带着 H63 那条已泄露口令,取舍题归维护者)、1.0.2 两份 kit zip(**store apk + R8 mapping 的本机唯一落点**,工作区副本已随 10-18 清 dist 删除)、`STORE-OPS-20261018.md`(在架鸿蒙 1.0.4 身份串的异地副本)。**判"一份备份能不能删"只有两条合法判据:与别处哈希逐字相同(sha 相等,字节数相等不算)、或该构建从未分发** —— 旧版本截图不属于任一条,别按"看起来过期"清掉。⚠️ **Documents 不在 iCloud 同步范围**(`brctl status` → `Client zone not found`)⇒ 清空废纸篓就是终点,不可撤 —— **这句已在 10-23 兑现过一次**(20261012 那份就是这么没的) |
 | **工具层的项目记忆与 Skill**(10-23 新登记,原清单漏了这一档) | `~/.qoder/projects/-Users-liang-Documents-cast/memory/`(实测 72 KB,含 `MEMORY.md` 索引与 6 条 project 记忆)、`~/.qoder/memory/`(52 KB,跨项目偏好)、`~/.qoder/skills/`(56 KB,含本仓库专用的 `android-channel-package-audit` 与 `zero-hit-must-prove-scan`) | **这三处都不在工程目录里,"全量拷贝项目目录"带不走**。里面写的是"签名材料只读、装机自办但卸载先备份、macOS 出包固定在另一台机器、release mapping 本地只此一份"这类**边界与前提**,丢了不会报错,只会让下一个会话重新踩一遍。AGENTS.md「会话记忆」一节说的 `<repo>/.workbuddy-ai/memory/` 在工程内,**与这三处不是同一套,两边都要带**。
   ⚠️ **10-24 换机时核过这一档的单位**:原先这里写的是「`.workbuddy-ai/memory/` 402 MB,会随拷贝走」,
@@ -78,8 +119,8 @@
 |---|---|---|
 | Android 签名 | `keystore.properties` 121 B / `app/reverb-release.jks` 4 408 B | ✅ 在 |
 | 鸿蒙 release 签名 | `harmony/signature/` 9 个文件 / 40 KB;`material/` 五个叶子目录 `fd/0 fd/1 fd/2 ac ce` **各 1 个文件**(多一个就 00303121) | ✅ 在,且 release 出包实测通过 |
-| 鸿蒙 debug 签名材料 | `~/.ohos/config/` 13 个条目 / 60 KB,含 `default_harmony_uW2…=.p12`(1 128 B / 09-29) | ⚠️ **材料在、路径断了**(见上面那一行的 10-24 补记) |
-| `build-profile.json5` | 3 012 B,`/Users/liang` 残留 **3 处**(全在 default 段:48 行 `certpath` / 51 行 `profile` / 53 行 `storeFile`) | ⚠️ **待本人处置,但这一条不是静态的**:10-24 实测新机 `~/.ohos/config/` 里那三个文件名**逐字同名**(`default_harmony_uW2…=.{cer,csr,p12,p7b}`,2 914 / 514 / 1 128 / 4 812 B,mtime 全在 09-29)⇒ 缺的只是路径前缀。**而且它是活源头**:清空 `.hvigor` 后重跑一次 debug 构建,新缓存的 report + build.log 里又出现 `/Users/liang` ×5 —— 就是这三行被构建原样打进去的。不修,旧机路径就一直在新缓存里再生;修了,debug hap 才签得出来(现在 `SignHap 00303107`,release 段用相对路径所以不受影响 —— 硬规矩 12 授权的装机验证走不了 debug 包就是这么来的)。**签名段属签名配置,代理不代改**(LOCAL-ASSETS 第二节那一行写的"不代填、不代改、不代回滚"同样覆盖路径行),要改是本人一条 `sed` + 先 `cp -p` 备份 |
+| 鸿蒙 debug 签名材料 | `~/.ohos/config/` **13 个条目**,分三套:`default_harmony_nMkNVRv…=` **4 个 / mtime 10-24 17:06**(本人重注册的那套)、`default_harmony_uW2…=` 4 个 / 09-29(孤儿)、`release_harmony_uW2…=` 4 个 / 09-26(H123 事故产物,孤儿),外加 `material/` | ✅ **在,而且实测能用**:`build-profile.json5` 引用了 17:06 那套的三个文件、三条 `OK`;`assembleHap -p product=default -p buildMode=debug` 的 `SignHap` 真跑、signed hap **4 292 069 B**(比 unsigned 多 89 551 B)。上面那一行的「材料在、路径断了」**已作废** |
+| `build-profile.json5` | 3 012 B / mtime **10-24 17:06**,`/Users/liang` 残留 **0 处**(阳性对照:同命令数 `/Users/cxyxl` = **3 处**,全在 default 段的 `certpath` / `profile` / `storeFile` 三行) | ✅ **这一条不再是待处置项**:本人把 default 段重注册到新机绝对路径了。release 段仍是相对路径 `./signature/reverb.*` + `keyAlias=yuyin`,**没被自动签名弹窗顺手动过**(那正是 H123 记着的风险,所以这一句要每次核)。**残留的只有一件事**:default 段用的是**绝对路径**,下次换机同样会断 —— 判据见上面「10-24 17:06」那段 |
 | 分发登记材料 | `docs/BEIAN.md` 20 964 B | ✅ 在 |
 | 发布文案与分发平台图标 | `android/store/` 3 个文件 / `harmony/store/` 1 个 | ✅ 在 |
 | 发布截图与 kit | `*/dist/store/` 各 8 张;`*/dist/store-masters/` 8 与 9 张;两份 kit **目录与 zip 都在**(4 条路径) | ✅ 在 |
@@ -96,8 +137,55 @@
 **盘点结论**:第二节**没有丢东西**(签名、kit、快照、唯一副本、记忆五档逐项到位);
 真正的遗漏是**三条"在新机上不成立"的环境前提** —— `gh` 与 `ffmpeg` 没装、
 鸿蒙 debug 签名路径断、`.hvigor` 旧缓存连口令密文一起搬了过来。
+(**当天傍晚这三条里 `gh`/`ffmpeg` 已补装、debug 签名已由本人重注册并实测签得出包,`.hvigor` 做了清空重建实验 —— 逐条见下面两段补记与第四节,别把这句当今天。**)
 另有**一条与换机无关、却被同一次解包照出来的对外产物痕迹**(上面最后那行 `.so` 里的构建机路径),
 它不属于"缺件",属于"从没登记过的东西第一次被看见"。取证过程见 `docs/TROUBLESHOOTING.md` H208。
+
+> **10-24 傍晚第二次盘点 —— 上面那句「第二节没有丢东西」仍然成立,但「没有遗漏」不成立。**
+> 换机带过来的东西一件没缺(逐条现数见上表);漏的是**登记表本身的六条**,外加一条比漏登记更急的。
+>
+> **漏档六条**(共同成因见再下面那段):
+> ① **`~/Downloads/LANDrop/reverb-migrate-secrets-20260920.tar.gz`(24 543 B / 8 条)** ——
+> Android 与鸿蒙两把**私钥在工程外唯一的一份异地复本**,原先只用条件句「如仍存在」提了一句、没写落点;
+> ② **`~/Downloads/LANDrop/signature/`(5 个文件 + `material/`,mtime 09-29 19:51)** ——
+> 这是这一轮最意外的一条:**一整套散装 release 签名材料**,四份 `reverb.{p12,cer,p7b,csr}` 与现役
+> `harmony/signature/` **sha256 逐文件同串**(`cd93f4b0…` / `6db503a3…` / `e9ce5c40…` / `c78c02f9…`),
+> 而且 `material/` 五个叶子的**文件名也与现役那套逐字相同** ⇒ 它是本地唯一一份「**私钥 + 配套 material 成对**」的副本,
+> 也就是 H123 那两轮"密文还在但 material 没了"的事故里**真正能救回来的那种形状**。
+> **但它躺在 Downloads** —— 一个"清一下下载目录"就会带走的地方,而且里面是私钥本体。
+> ⚠️ 别因为它是副本就把它当还原源往回拷:两份同串 ⇒ 拷了等于没变;要动的是**位置**,不是内容(归本人)。
+> ③ **`~/Documents/reverb-signing-recovery-20260929/`** —— 旧密文 + 旧 material 的**唯一成对副本**,整条没登记
+> (它和 ② 是**不同**的两套:②的 material 与现役同名,③的那套叶子文件名与现役全不同 ⇒ 只能解 ③ 里那份 build-profile 的密文);
+> ④ **`~/Documents/web/reverb/shots/` 里 1.0.2 那批 11 个 PNG(该目录 24 MB)** —— 「重拍要装回旧版 App」这一档从没登记过;
+> ⑤ **`~/Documents/reverb-article.md`(18 354 B / 10-18 22:24)** —— 对外长文(「不联网也能活着的播客客户端」)的唯一副本,
+> 仓库内同名文件 **0 个**;按硬规矩 19 它本来就不该入库,但"不入库"≠"不登记",它现在就是没登记的那一档;
+> ⑥ **`~/.ohos/config/material/` 变了性** —— 它原先被写成"IDE 自用那套",而 17:06 重注册 debug 签名之后,
+> **它成了新 debug 口令的唯一解密材料**,和 `signature/material` 同待遇。
+> ⇒ **这六条现在都补进了第二节。** 它们为什么扫不出来:10-24 上午那次盘点的遍历单位是**第二节那张表里的路径**,
+> 所以"没写进表的东西"永远不可能被那次盘点发现。补做的动作是**反着扫**(拿材料名去家目录找,而不是拿目录名去表里找):
+> `find ~/Documents ~/Downloads ~/Desktop -maxdepth 3 \( -iname '*reverb*' -o -iname '*.p12' -o -iname '*.jks' -o -iname '*material*' \)`
+> **实测读数:16 个命中**,①②③④⑤ 五条全在里面(`web/reverb`、`LANDrop/signature`、`reverb-article.md` 都是命中项)。
+> ⚠️ **但这条命令有它的边界,别当万能扫**:④ 命中的是 `web/reverb` 这一层,`shots/` 里那 11 个 PNG 在 maxdepth 4,
+> 要 `cd` 进去数才看得见;⑥ 那种绑在工具链目录上的**根本不在这三个根里** —— 它要靠 `~/.ohos` 进根列表。
+> 所以正确的形状是**两遍互补**:遍历表 = 保证登记过的都在,反扫 = 保证没登记的被看见,
+> 而反扫的根列表要显式含 `~/Documents ~/Downloads ~/Desktop ~/.ohos ~/.ssh ~/.qoder`(少一个根就少一类漏项)。见 H208 傍晚补记。
+>
+> **顺带核掉的一条虚警**:`docs/STORE-OPS.md` 与异地快照 `STORE-OPS-20261018.md` 的 **md5 不等**
+> (`cbc16f8…` ≠ `2f1649e…`,工作区那份 78 782 B 比快照 69 803 B 大),按第二节那条判据本来要判"快照过期";
+> 但**真正不可再生的那部分两副本都在** —— 把两文件里的 64 位十六进制串取集合做差,**双向都空**(各 7 条、去重 7 条),
+> 差的只是 10-18 之后新加的散文。⇒ **在架鸿蒙 1.0.4 的身份串没断**,快照仍当异地副本用,只是别再指望它覆盖新写的段落。
+>
+> **⚠️ 一条不属于"漏登记"、但才是真风险的:整节资产没有第二份拷贝。**
+> 现数:`tmutil destinationinfo` → **`No destinations configured`**(这台机器从没配过 Time Machine 目标)、
+> `diskutil list external` 只有一块 17.2 MB 的**磁盘映像**(`/Volumes/余音 Reverb` 是本次那个 dmg 的挂载点,不是备份盘)、
+> `df -h /` 只有一块 460 Gi 系统盘 ⇒ **签名私钥、口令密文与 material、kit、`cast-backup-20260925` 那份
+> filter-repo 之前历史的唯一副本,此刻全在同一块物理盘上**;而 `~/Documents` 不在 iCloud 同步范围(本节第五节第 2 条那句已登记过)。
+> 上一条"10-18 那次清空废纸篓当场毁掉一份在架鸿蒙包"就是这块盘的单向性兑现过一次的样子。
+> **要补的是第二块盘或一份加密异地,不是再往表里加一行** —— 这是本人的一条待拍板(与 #207「旧历史留还是清」是同一道题的两半)。
+>
+> **git 侧同一条读数**:判据是 `git log --branches --not --remotes --oneline | wc -l`,**要现跑别抄**。
+> 10-24 傍晚现数 = **6**(H208 与 H209 那批文档提交还没推)⇒ 第五节第 1 条那句「判据 = 0」当时**不成立**,
+> 那几条知识在推送之前也只在这块盘上有一份。分支数本地 16 / 远端 16 这条仍相等。
 
 > **10-24 下午补记 —— 上面那三条"遗漏"处理完之后的状态,以及一条新发现的、比它们都急的东西。**
 > ① `gh` / `ffmpeg` **已补装**(见第四节;顺带订正:本节原判定里"brew 没装"是错的,缺的只是 formula);
@@ -107,6 +195,9 @@
 > 结论从"清掉就干净了"改成"清的收益是 8 处键名副本 + 22 968 条旧机路径,而 `task-cache.json` 那份每次构建都会再生";
 > ③ 鸿蒙 debug 签名段那三行**仍未动**(签名配置代理不代改),但性质升级了:
 > 它不是静态残留,**每跑一次构建就往新缓存再撒一份旧机路径**(实测 ×5)。
+> **▶ 10-24 17:06 这一条被本人处置掉了**:重注册 debug 签名后 default 段指向新机路径,`/Users/liang` 归 0,
+> debug hap 实测签得出来(判据与那 89 551 B 的读法见上面第二节「鸿蒙调试签名」那一行的傍晚补记)。
+> 上面那句"每跑一次构建再撒一份"随之停止兑现 —— 它当时的读数是真的,只是前提(那三行没改)已经不在了。
 > ④ **新发现的不在原三条里**:本人装 Xcode 之后,`xcode-select` 已切到 Xcode 而许可未同意,
 > 于是 `/usr/bin/git` 连带 `xcrun`/`swift`/`clang`/`python3` **在本机全部不可用** ——
 > 这条如果不登记,下一个会话会以为"仓库坏了"而不是"许可没同意"。
@@ -255,6 +346,13 @@
    ⚠️ 10-23 补一句:**"全量拷贝工程目录"这一条腿覆盖不到第二节里那三处目录外资产** ——
    `~/.ohos/config/`(鸿蒙 debug 签名)、`~/Documents/cast-backup-20260925/`(filter-repo 之前历史的唯一副本)、
    `~/.qoder/`(项目记忆 / 全局偏好 / 两个本仓库专用 Skill)。它们要各自单独拷。
+   **▶ 10-24 傍晚这条从三处改成六处**(第二节新增那几行的落点全都不在"工程目录"这条腿上,也不在原先三处里):
+   另加 **`~/Downloads/LANDrop/`**(09-20 两份迁移分包 + 一整套散装 release 签名材料,含 `material/`)、
+   **`~/Documents/reverb-signing-recovery-20260929/`**(旧密文与旧 material 的成对副本)、
+   **`~/Documents/web/reverb/shots/`**(1.0.2 那批 11 个原始 PNG)。
+   **换机时的正确问法不是"我拷了哪几个目录",而是"第二块盘上有没有这些"** ——
+   这一轮实测 `tmutil destinationinfo` = `No destinations configured`,即**这台机器一份异地副本都没有**,
+   而 `~/Documents` 又不在 iCloud 同步范围。
 3. `cp harmony/build-profile.template.json5 harmony/build-profile.json5`,填入签名段
 4. 按第四节装环境
 5. 重建可重建产物:`./tools/build-asr.sh`

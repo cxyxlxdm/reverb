@@ -128,6 +128,18 @@
 > 仍没做(清单在 `docs/ROADMAP.md` 三-A);而「macOS 的运行验收固定在另一台机器」是 2026-09-29 定死的边界,
 > **这条要不要跟着改归维护者拍**。② 里 `pillow` / `numpy` 那条:挡它的许可门已通,
 > `python3 -m pip install --user pillow numpy` 现在跑得动,但**两样仍未装**,别按"已装"写。
+> ▶ **③(鸿蒙 debug 签名段)同日 17:06 由本人处置完 —— 在新设备上重注册了 debug 签名,代理没代改任何签名材料。**
+> 验法是**装出来验**而不是读配置:`assembleHap -p buildMode=debug` 的 `SignHap` 592 ms 执行 / BUILD SUCCESSFUL,
+> `entry-default-signed.hap` **4 292 069 B** = 未签名那份 + 89 551 B;`build-profile.json5` 里 `/Users/liang` 归 0
+> (阳性对照 `/Users/cxyxl` = 3)⇒ **硬规矩 12 那条 debug 装机验证在本机重新可跑**,
+> 上面"每跑一次构建再撒一份旧机路径"随之停止兑现。
+> **发布签名材料这次没被碰**(`harmony/signature/` 当日 0 个文件被改,release 段仍相对路径 + `keyAlias=yuyin`)——
+> 但 DevEco 自动签名会重写整段(H123),所以每次重注册后这条复验是必做项。
+> 读数细节(含 `unzip -l <hap> | grep -c sig` 恒 0 那个假阴性)见 H208 修法 3-② 傍晚补记。
+> ▶ **同日傍晚又做一次资产盘点:`docs/LOCAL-ASSETS.md` §二 补了六条从没登记过的落点**,
+> 其中两条不可再生级(两把私钥在工程外唯一异地复本、旧密文 + 旧 material 唯一成对副本),
+> **外加一条比漏登记更急的实测结论:整节资产在这台机器上没有第二份拷贝**(`tmutil` 无目标、单卷 460 Gi)。
+> 逐条读数、反扫命令与它的边界都在 §二 傍晚补记,不在此复述。
 > **仍然挡着的只剩 ② 的 `gh auth login`**(发版第 5 步,归本人)与 ③ 的鸿蒙签名段(签名材料,代理不代改)。
 
 ### 新增
