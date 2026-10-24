@@ -20,8 +20,10 @@
 
 按顺序做三件,不要跳:
 
-1. **环境**(30 秒):`export JAVA_HOME=/Users/liang/.java/jdk-17.0.12+7/Contents/Home`。
-   注意 `java_home -v 17` 在本机返回空,`README.md` 那条写法会静默失败。细节见 `AGENTS.md`「环境准备」。
+1. **环境**(30 秒):`export JAVA_HOME=/Users/cxyxl/Library/Java/JavaVirtualMachines/jdk-21.0.12.1+1.jdk/Contents/Home`
+   (2026-10-24 换机后的落点;项目要的是 language level 17,不是 JDK 17 运行时 —— 用 21 出包实测全绿)。
+   注意 `java_home -v 17` 在本机**忽略版本参数、静默返回最新 JVM(21)并 exit 0**,所以它给不出版本校验。
+   细节见 `AGENTS.md`「环境准备」。
 2. **现在到哪一步了**:`docs/ROADMAP.md` 里当前版本对应的"门"次,
    以及 `CHANGELOG.md` 最新一节开头那段验收状态 —— 它会明确写"哪些路径还没验过"。
 3. **上次做到哪**:`.workbuddy-ai/memory/` 里最近一份 `YYYY-MM-DD.md`。
