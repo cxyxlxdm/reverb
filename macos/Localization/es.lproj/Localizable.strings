@@ -61,6 +61,8 @@
 "取消" = "Cancelar";
 "清空" = "Vaciar";
 "清空播放历史" = "Borrar historial";
+"清空播放历史?" = "¿Borrar el historial de reproducción?";
+"将清空全部收听记录与续播位置。" = "Se borrarán todos los registros de escucha y las posiciones de reanudación.";
 
 /* Player */
 "没有正在播放的内容" = "No hay nada en reproducción";
@@ -180,6 +182,8 @@
 "播放队列" = "Cola";
 "播放队列为空" = "La cola está vacía";
 "清空播放队列" = "Vaciar la cola";
+"清空播放队列?" = "¿Vaciar la cola de reproducción?";
+"将清空待播队列中的全部单集，无法恢复。" = "Se vaciarán todos los episodios de la cola y no se podrá deshacer.";
 "下一个播放" = "Reproducir a continuación";
 "加入队列" = "Añadir a la cola";
 "标记为已播完" = "Marcar como reproducido";

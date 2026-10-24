@@ -61,6 +61,8 @@
 "取消" = "Cancel";
 "清空" = "Clear";
 "清空播放历史" = "Clear play history";
+"清空播放历史?" = "Clear play history?";
+"将清空全部收听记录与续播位置。" = "This clears all listening records and resume positions.";
 
 /* Player */
 "没有正在播放的内容" = "Nothing playing";
@@ -180,6 +182,8 @@
 "播放队列" = "Queue";
 "播放队列为空" = "Queue is empty";
 "清空播放队列" = "Clear queue";
+"清空播放队列?" = "Clear the queue?";
+"将清空待播队列中的全部单集，无法恢复。" = "This clears every episode in the queue and cannot be undone.";
 "下一个播放" = "Play Next";
 "加入队列" = "Add to Queue";
 "标记为已播完" = "Mark as Played";

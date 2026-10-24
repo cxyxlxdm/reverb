@@ -5,6 +5,9 @@ struct QueueView: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
     @Environment(\.dismiss) private var dismiss
+    /// 清空要二次确认。与 Android `QueueScreen.kt` / 音阁「待播」段那颗同一个走法:
+    /// 一键清光没有找回办法,而桌面这一颗原先直连 `clearQueue()`(见 docs/MACOS-GAPS.md M1)。
+    @State private var confirmClear = false
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
 
@@ -53,13 +56,19 @@ struct QueueView: View {
                 }
                 if !player.userQueue.isEmpty {
                     ToolbarItem(placement: .primaryAction) {
-                        Button(role: .destructive) { player.clearQueue() } label: {
+                        Button(role: .destructive) { confirmClear = true } label: {
                             Label("清空", systemImage: "trash")
                         }
                         .help("清空播放队列")
                     }
                 }
             }
+        }
+        .confirmationDialog("清空播放队列?", isPresented: $confirmClear, titleVisibility: .visible) {
+            Button("清空", role: .destructive) { player.clearQueue() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将清空待播队列中的全部单集，无法恢复。")
         }
         .tint(accent)
     }
