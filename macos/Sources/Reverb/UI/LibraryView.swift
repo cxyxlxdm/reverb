@@ -27,6 +27,24 @@ struct LibraryView: View {
     /// 历史清空的二次确认。与 Android `LibraryScreen.kt` 那条路径同口径:
     /// 清掉的是收听记录与续播位置,桌面没有别的入口能补回来(见 docs/MACOS-GAPS.md M1)。
     @State private var confirmClearHistory = false
+    /// 多选批量加入待播。桌面形态:工具栏「选择」进入,不做手机那条长按浮条(见 M5)。
+    @State private var selecting = false
+    @State private var picked = Set<String>()
+    /// 入队后的结果话(与 Android `batch_added` / `batch_added_none` 同一句),2 秒自散。
+    @State private var toast: String?
+    @State private var toastToken = 0
+
+    /// 当前分段里**能批量处理的那一份**列表。订阅/批注不在内:前者不是单集列表,
+    /// 后者是用户手写的字,批量入队对它们都没有意义(与 Android / 鸿蒙同一范围)。
+    private var selectableEpisodes: [Episode] {
+        switch segment {
+        case .inbox: return env.inbox.episodes
+        case .favorites: return env.favorites.favorites
+        case .downloads: return downloads.downloads.map { $0.episode }
+        case .history: return env.history.history.map { $0.episode }
+        case .subscriptions, .notes: return []
+        }
+    }
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin, maximum: Metrics.cardMax),
@@ -71,7 +89,8 @@ struct LibraryView: View {
             Group {
                 switch segment {
                 case .subscriptions: subscriptionsGrid
-                case .inbox: InboxView()
+                case .inbox: InboxView(selecting: selecting, picked: picked,
+                                       onToggleSelect: toggleSelect)
                 case .favorites: favoritesList
                 case .downloads: downloadsList
                 case .history: historyList
@@ -118,6 +137,13 @@ struct LibraryView: View {
                 .environmentObject(settings)
                 .themedSheet(settings)
         }
+        // 换段 = 换了一列单集:已选集合不能跟着搬过去,否则「在收藏里选了 3 集,切到下载
+        // 按入队」会把收藏那 3 集悄悄加进去(集合里存的是 id,不看当前列)。
+        .onChange(of: segment) { _ in
+            selecting = false
+            picked.removeAll()
+        }
+        .overlay(alignment: .top) { TopToast(text: toast) }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button { showListenStats = true } label: {
@@ -148,6 +174,52 @@ struct LibraryView: View {
                     .help("清空播放历史")
                 }
             }
+            // 多选只在有单集的四段里出现(订阅是宫格、批注不是单集行)。
+            if !selectableEpisodes.isEmpty {
+                if selecting {
+                    EpisodeBatchToolbar(episodes: selectableEpisodes,
+                                        selecting: $selecting, picked: $picked,
+                                        enqueue: enqueuePicked)
+                } else {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { selecting = true } label: {
+                            Label("选择", systemImage: "checklist")
+                        }
+                        .help("选择多集")
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - 多选
+
+    private func toggleSelect(_ ep: Episode) {
+        if picked.contains(ep.id) { picked.remove(ep.id) } else { picked.insert(ep.id) }
+    }
+
+    /// 把已选的那些交给 `enqueueAll`(一次去重、一次更新导航标记),然后退出选择模式。
+    /// 结果必须说出来:入队结果在「待播」里,当前列表看不出任何变化,不提示等于没按上
+    /// (Android 用 Toast 说同一句话,这里用顶部的 `TopToast`)。
+    private func enqueuePicked() {
+        let eps = selectableEpisodes.filter { picked.contains($0.id) }
+        let added = player.enqueueAll(eps)
+        Log.i("UI", "批量加入待播 选中=\(eps.count) 新增=\(added)")
+        showToast(added == 0
+            ? NSLocalizedString("所选都已在待播里", comment: "批量入队全部重复")
+            : String(format: NSLocalizedString("已加入待播 %lld 集", comment: "批量入队结果"),
+                     Int64(added)))
+        selecting = false
+        picked.removeAll()
+    }
+
+    private func showToast(_ text: String) {
+        toastToken += 1
+        let token = toastToken
+        toast = text
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            if toastToken == token { toast = nil }
         }
     }
 
@@ -194,13 +266,20 @@ struct LibraryView: View {
                                     showPodcast: true,
                                     played: env.history.isPlayed(ep.id),
                                     accent: accent,
-                                    onPlay: { player.playOrToggle(ep, queue: items, tag: ListTag.fav) })
-                                    .episodeContextMenu(ep)
-                                Button { env.favorites.toggle(ep) } label: {
-                                    Image(systemName: "heart.fill").foregroundStyle(accent)
+                                    selecting: selecting,
+                                    selected: picked.contains(ep.id),
+                                    onPlay: {
+                                        if selecting { toggleSelect(ep) }
+                                        else { player.playOrToggle(ep, queue: items, tag: ListTag.fav) }
+                                    })
+                                    .episodeContextMenu(ep, enabled: !selecting)
+                                if !selecting {
+                                    Button { env.favorites.toggle(ep) } label: {
+                                        Image(systemName: "heart.fill").foregroundStyle(accent)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("取消收藏")
                                 }
-                                .buttonStyle(.plain)
-                                .help("取消收藏")
                             }
                         }
                     }
@@ -231,8 +310,13 @@ struct LibraryView: View {
                                 showPodcast: true,
                                 played: env.history.isPlayed(ep.id),
                                 accent: accent,
-                                onPlay: { player.playOrToggle(ep, queue: items) })
-                                .episodeContextMenu(ep)
+                                selecting: selecting,
+                                selected: picked.contains(ep.id),
+                                onPlay: {
+                                    if selecting { toggleSelect(ep) }
+                                    else { player.playOrToggle(ep, queue: items) }
+                                })
+                                .episodeContextMenu(ep, enabled: !selecting)
                         }
                     }
                     .frame(maxWidth: Metrics.contentMaxWidth)
@@ -259,7 +343,7 @@ struct LibraryView: View {
                     LazyVStack(spacing: 0) {
                         ForEach(env.notes.notes) { n in
                             HStack(spacing: 12) {
-                                Artwork(url: n.episode.artworkUrl, size: 54, corner: 10)
+                                EpisodeArtworkLink(episode: n.episode, size: 54, corner: 10)
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(n.text)
                                         .font(.headline).fontWeight(.medium)
@@ -349,13 +433,20 @@ struct LibraryView: View {
                                     showPodcast: true,
                                     played: env.history.isPlayed(ep.id),
                                     accent: accent,
-                                    onPlay: { player.playOrToggle(ep, queue: items, tag: ListTag.dl) })
-                                    .episodeContextMenu(ep)
-                                Button { pendingDelete = ep } label: {
-                                    Image(systemName: "trash").foregroundStyle(.secondary)
+                                    selecting: selecting,
+                                    selected: picked.contains(ep.id),
+                                    onPlay: {
+                                        if selecting { toggleSelect(ep) }
+                                        else { player.playOrToggle(ep, queue: items, tag: ListTag.dl) }
+                                    })
+                                    .episodeContextMenu(ep, enabled: !selecting)
+                                if !selecting {
+                                    Button { pendingDelete = ep } label: {
+                                        Image(systemName: "trash").foregroundStyle(.secondary)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("删除下载")
                                 }
-                                .buttonStyle(.plain)
-                                .help("删除下载")
                             }
                         }
                     }

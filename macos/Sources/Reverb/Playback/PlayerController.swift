@@ -471,6 +471,25 @@ final class PlayerController: ObservableObject {
         updateNavFlags()
     }
 
+    /// 批量追加到队尾,返回**真正加进去的条数**(与 Android `enqueueAll` 同口径)。
+    ///
+    /// 一次去重、一次 `updateNavFlags`,不循环单条 `enqueue`:
+    /// 逐条调用会让「已存在」那几条各打一行日志,批量按了 30 条时日志里看不出整体结果
+    /// (`added=? of=?` 这一行才是装机判据)。也照 Android 的做法**无条件打这行日志** ——
+    /// `added=0` 正是「全选的这一列都已在待播里」那一轮,提前 return 之后再打就成了静默路径。
+    @discardableResult
+    func enqueueAll(_ eps: [Episode]) -> Int {
+        let before = userQueue.count
+        var seen = Set(userQueue.map(\.id))
+        var fresh: [Episode] = []
+        for ep in eps where seen.insert(ep.id).inserted { fresh.append(ep) }
+        Log.i("Queue", "enqueueAll added=\(fresh.count) of=\(eps.count) 队列=\(before + fresh.count)")
+        guard !fresh.isEmpty else { return 0 }
+        userQueue.append(contentsOf: fresh)
+        updateNavFlags()
+        return fresh.count
+    }
+
     /// 插入到队首,作为「下一个播放」(已存在则移动到队首)。
     func playNext(_ ep: Episode) {
         userQueue.removeAll { $0.id == ep.id }

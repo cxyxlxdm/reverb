@@ -2,6 +2,11 @@ import SwiftUI
 
 /// 播放队列(up next)表单:点击单集直接跳播(摘出立即播)、可拖动重排、滑动删除、一键清空。
 struct QueueView: View {
+    /// 点封面直达频道页。队列这张 sheet 自带一个 `NavigationStack`,但里面没有注册
+    /// `Podcast` 的 destination,而且缺 `listenStats` / 下载两套环境对象 —— 所以不能在
+    /// 这里直接压栈,只能把目的地交回根视图(见 `NowPlayingBar` 的接线)。
+    var onOpenChannel: (Podcast) -> Void = { _ in }
+
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
     @Environment(\.dismiss) private var dismiss
@@ -20,7 +25,17 @@ struct QueueView: View {
                     List {
                         ForEach(player.userQueue) { ep in
                             HStack(spacing: 12) {
-                                Artwork(url: ep.artworkUrl, size: 44, corner: 8)
+                                if let channel = ep.channelRef {
+                                    Button { onOpenChannel(channel) } label: {
+                                        Artwork(url: ep.artworkUrl, size: 44, corner: 8)
+                                    }
+                                    .buttonStyle(.plain)
+                                    .help("进入频道页")
+                                    .accessibilityLabel(Text("进入频道页"))
+                                    .pointingHandCursor()
+                                } else {
+                                    Artwork(url: ep.artworkUrl, size: 44, corner: 8)
+                                }
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(ep.title)
                                         .font(.callout).fontWeight(.medium)

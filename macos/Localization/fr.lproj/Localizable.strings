@@ -192,6 +192,16 @@
 "标记为未播完" = "Marquer comme non lu";
 "已播完" = "Lu";
 
+/* 批量加入待播 + 封面直达频道页。与 Android batch_* / a11y_open_channel 同源(硬规矩 5) */
+"进入频道页" = "Ouvrir la chaîne";
+"选择" = "Sélectionner";
+"选择多集" = "Sélectionner plusieurs épisodes";
+"全选" = "Tout sélectionner";
+"已选 %lld" = "%lld sélectionnés";
+"加入待播" = "Ajouter à la file";
+"已加入待播 %lld 集" = "%lld épisodes ajoutés à la file";
+"所选都已在待播里" = "Ces épisodes sont déjà dans la file";
+
 /* 播放模式(每列右端那颗按钮,与 Android / 鸿蒙同源) */
 "顺序播放" = "Lecture dans l'ordre";
 "单曲循环" = "Répéter cet épisode";

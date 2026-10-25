@@ -229,6 +229,49 @@ struct PodcastCard: View {
     }
 }
 
+extension Episode {
+    /// 这一集所属频道的最小描述,用于「点封面直达频道页」。
+    ///
+    /// 只有单集自带的元信息;频道页会按 `feedUrl` 重新拉完整详情,缺 `author` / 简介无妨。
+    /// `feedUrl` 为空时返回 nil —— 老数据可能缺这一格,不判就会把空串塞进导航栈(H187 同一条门)。
+    var channelRef: Podcast? {
+        guard !feedUrl.isEmpty else { return nil }
+        return Podcast(id: feedUrl, title: podcastTitle,
+                       author: "", artworkUrl: artworkUrl, feedUrl: feedUrl)
+    }
+}
+
+/// 单集封面:点一下进这一集所属的频道页。
+///
+/// 规则与 Android `coverChannelJump` 逐条相同:①本行允许(频道页自己传 `enabled: false`,
+/// 否则点一下会在栈上再压一份同一个频道);②`feedUrl` 非空 —— 老数据可能缺,不判就塞空串进路由。
+/// 另加一条本端约束:选择模式下必须关掉(那一格点击被勾选占用),由调用方传 `enabled: false`。
+///
+/// 用 `NavigationLink(value:)` 而不是回调:根 `RootView` 已注册 `Podcast.self` 的 destination,
+/// 任何一层的列表都能直接把目标塞进栈,不必把 path 一路透传下来。
+struct EpisodeArtworkLink: View {
+    let episode: Episode
+    var size: CGFloat = 54
+    var corner: CGFloat = 10
+    var enabled: Bool = true
+
+    private var channel: Podcast? { enabled ? episode.channelRef : nil }
+
+    var body: some View {
+        if let channel {
+            NavigationLink(value: channel) {
+                Artwork(url: episode.artworkUrl, size: size, corner: corner)
+            }
+            .buttonStyle(.plain)
+            .help("进入频道页")
+            .accessibilityLabel(Text("进入频道页"))
+            .pointingHandCursor()
+        } else {
+            Artwork(url: episode.artworkUrl, size: size, corner: corner)
+        }
+    }
+}
+
 /// 宽松单集行:显眼的圆形播放按钮 + 标题 + 元信息。
 /// 播放按钮与可点击的标题区左右分区,互不重叠,触发可靠。
 struct RoomyEpisodeRow: View {
@@ -239,11 +282,17 @@ struct RoomyEpisodeRow: View {
     var showDate: Bool = false      // 「最新」等场景在频道名之外再显示发布日期
     var played: Bool = false
     var accent: Color = .accentColor
+    /// 封面是否可点进频道页(见 `EpisodeArtworkLink`);频道详情页传 false。
+    var coverOpensChannel: Bool = true
+    /// 选择模式:整行的点击语义由调用方改成"勾选"(行自身不存这份状态 ——
+    /// 与 Android 同一条理由:行会被 Lazy 容器回收,状态留在行里会随滚动丢失)。
+    var selecting: Bool = false
+    var selected: Bool = false
     var onPlay: () -> Void = {}
 
     private var playing: Bool { isCurrent && isPlaying }
     /// 已播完且非当前:标题以次要色淡化。
-    private var titleColor: Color { isCurrent ? accent : (played ? .secondary : .primary) }
+    private var titleColor: Color { isCurrent || selected ? accent : (played ? .secondary : .primary) }
 
     /// 安静的元信息:频道名(如需)· 发布日期(如需/非频道场景默认显示)· 时长。
     private var meta: String {
@@ -256,12 +305,31 @@ struct RoomyEpisodeRow: View {
 
     var body: some View {
         HStack(spacing: 16) {
-            // 封面缩略图:为列表增添色彩,不再单调;当前播放态叠加高亮圈
-            Artwork(url: episode.artworkUrl, size: 54, corner: 10)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(accent, lineWidth: isCurrent ? 2 : 0)
-                )
+            // 封面缩略图:为列表增添色彩,不再单调;当前播放态叠加高亮圈;
+            // 选择模式压一枚勾选环(封面的命中区此时只用于勾选,不跳频道)。
+            Group {
+                if selecting {
+                    Artwork(url: episode.artworkUrl, size: 54, corner: 10)
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: onPlay)
+                } else {
+                    EpisodeArtworkLink(episode: episode, size: 54, corner: 10,
+                                       enabled: coverOpensChannel)
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(accent, lineWidth: isCurrent ? 2 : 0)
+            )
+            .overlay(alignment: .topTrailing) {
+                if selecting {
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 18, weight: .bold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, selected ? accent : Color.black.opacity(0.35))
+                        .offset(x: 5, y: -5)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack(alignment: .top, spacing: 6) {
@@ -289,14 +357,19 @@ struct RoomyEpisodeRow: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: onPlay)
 
-            Button(action: onPlay) {
-                Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(isCurrent ? accent : Color.secondary)
-                    .symbolRenderingMode(.hierarchical)
+            // 选择模式里行尾这颗**不显示**(不是禁灰):它在行内自己消费点击,
+            // 留着就是「点行尾播放、点行中间勾选」—— 同一行两种语义,用户无从预期
+            // (与 Android `Components.kt` 里那三颗行尾按钮同一条理由)。
+            if !selecting {
+                Button(action: onPlay) {
+                    Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(isCurrent ? accent : Color.secondary)
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .help(playing ? "暂停" : "播放")
             }
-            .buttonStyle(.plain)
-            .help(playing ? "暂停" : "播放")
         }
         .padding(.vertical, 16)
         .frame(minHeight: 74)
@@ -346,37 +419,103 @@ struct PlayModeButton: View {
     }
 }
 
+/// 多选批量入队的**工具栏**(桌面形态,不做手机那条长按浮条)。
+///
+/// 为什么不是浮条:桌面没有长按手势的传统,浮条还会压住末行;窗口工具栏是 macOS 里
+/// 「选一批东西然后对它们做一件事」的默认落点(Finder、邮件都这样)。
+/// 进入选择模式仍然是工具栏上那颗「选择」,退出是「完成」—— 与全选/入队同属一组。
+///
+/// 已选集合由调用方持有(`@State Set<String>`),这里只改它:
+/// 行会被 Lazy 容器回收,状态留在行里会随滚动丢失,而且「全选」要能一次改整列
+/// (与 Android `EpisodeBatchBar` 同一条理由)。
+struct EpisodeBatchToolbar: ToolbarContent {
+    /// 这一列**当前显示的**全部单集(全选按它算,调用方必须传显示的那一份)。
+    let episodes: [Episode]
+    @Binding var selecting: Bool
+    @Binding var picked: Set<String>
+    var enqueue: () -> Void
+
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Text("已选 \(picked.count)")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+            Button("全选") { picked = Set(episodes.map(\.id)) }
+                .disabled(picked.count >= episodes.count)
+            Button("加入待播") { enqueue() }
+                .disabled(picked.isEmpty)
+            Button("完成") {
+                selecting = false
+                picked.removeAll()
+            }
+        }
+    }
+}
+
+/// 顶部自散的一条结果提示。桌面没有 Toast:`NSUserNotification` 已废弃、
+/// 弹 sheet 会把用户从正在做的事里拽出来(批量入队是低风险动作,不值得打断)。
+/// 胶囊走 `.regularMaterial`,2 秒后由调用方清空;`allowsHitTesting(false)` 让它不挡任何点击。
+struct TopToast: View {
+    let text: String?
+
+    var body: some View {
+        Group {
+            if let text {
+                Text(text)
+                    .font(.callout)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.primary.opacity(0.12)))
+                    .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
+                    .padding(.top, 12)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: text)
+        .allowsHitTesting(false)
+    }
+}
+
 /// 单集行通用右键菜单:下一个播放 / 加入队列 / 标记已播完切换。
 /// 依赖注入的 env(历史)与 player(队列)。
 struct EpisodeContextMenu: ViewModifier {
     let episode: Episode
+    /// 选择模式里不挂菜单:那三项在批量面前逐条做没有意义,而且右键菜单会抢走
+    /// 本该用于勾选的注意力(Android 同一条取舍,见 `Components.kt` 的 `selectionMode` 分支)。
+    var enabled: Bool = true
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
 
+    @ViewBuilder
     func body(content: Content) -> some View {
-        content.contextMenu {
-            Button {
-                player.playNext(episode)
-            } label: { Label("下一个播放", systemImage: "text.line.first.and.arrowtriangle.forward") }
-            Button {
-                player.enqueue(episode)
-            } label: { Label("加入队列", systemImage: "text.append") }
-            Divider()
-            let played = env.history.isPlayed(episode.id)
-            Button {
-                env.history.markPlayed(episode.id, !played)
-            } label: {
-                Label(played ? "标记为未播完" : "标记为已播完",
-                      systemImage: played ? "circle" : "checkmark.circle")
+        if enabled {
+            content.contextMenu {
+                Button {
+                    player.playNext(episode)
+                } label: { Label("下一个播放", systemImage: "text.line.first.and.arrowtriangle.forward") }
+                Button {
+                    player.enqueue(episode)
+                } label: { Label("加入队列", systemImage: "text.append") }
+                Divider()
+                let played = env.history.isPlayed(episode.id)
+                Button {
+                    env.history.markPlayed(episode.id, !played)
+                } label: {
+                    Label(played ? "标记为未播完" : "标记为已播完",
+                          systemImage: played ? "circle" : "checkmark.circle")
+                }
             }
+        } else {
+            content
         }
     }
 }
 
 extension View {
     /// 为单集行附加通用右键菜单(队列 / 已播完)。
-    func episodeContextMenu(_ episode: Episode) -> some View {
-        modifier(EpisodeContextMenu(episode: episode))
+    func episodeContextMenu(_ episode: Episode, enabled: Bool = true) -> some View {
+        modifier(EpisodeContextMenu(episode: episode, enabled: enabled))
     }
 }
 

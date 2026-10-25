@@ -51,9 +51,22 @@ struct NowPlayingBar: View {
 
             HStack(spacing: 12) {
                 if let ep = player.current {
-                    Button { showPlayer = true } label: {
-                        HStack(spacing: 12) {
+                    // 封面独立成一颗按钮:直达这一集所属的频道页(与 Android 迷你条同一条门,
+                    // 见 M4)。播放条在 `NavigationStack` 之外,所以走 `onOpenChannel` 回调,
+                    // 由根视图把频道压进导航栈 —— 这里不能用 `NavigationLink(value:)`。
+                    if let channel = ep.channelRef {
+                        Button { onOpenChannel(channel) } label: {
                             Artwork(url: ep.artworkUrl, size: 46, corner: 8)
+                        }
+                        .buttonStyle(.plain)
+                        .help("进入频道页")
+                        .accessibilityLabel(Text("进入频道页"))
+                        .pointingHandCursor()
+                    } else {
+                        Artwork(url: ep.artworkUrl, size: 46, corner: 8)
+                    }
+                    Button { showPlayer = true } label: {
+                        HStack(spacing: 0) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(ep.title).font(.callout).fontWeight(.medium).lineLimit(1)
                                 Text(ep.podcastTitle).font(.caption)
@@ -117,7 +130,12 @@ struct NowPlayingBar: View {
                 .themedSheet(settings)
         }
         .sheet(isPresented: $showQueue) {
-            QueueView()
+            QueueView(onOpenChannel: { pod in
+                // 先收 sheet 再压栈:根视图的 path 在 sheet 后面改了,用户会「关掉之后
+                // 才看见目的地」—— 中间那一帧看起来像点空了。
+                showQueue = false
+                onOpenChannel(pod)
+            })
                 .environmentObject(env)
                 .environmentObject(player)
                 .environmentObject(settings)
