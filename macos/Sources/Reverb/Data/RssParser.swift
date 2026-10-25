@@ -60,7 +60,9 @@ final class RssParser {
                 podcastTitle: channelTitle,
                 durationSec: duration,
                 pubDate: (item["pubDate"] ?? "").trimmed,
-                feedUrl: feedUrl
+                feedUrl: feedUrl,
+                transcriptUrl: (item["transcriptUrl"] ?? "").trimmed,
+                transcriptType: (item["transcriptType"] ?? "").trimmed
             )
         }
 
@@ -158,9 +160,34 @@ private final class RssDelegate: NSObject, XMLParserDelegate {
             }
         case "podcast:funding":
             if !inItem { pendingFundingUrl = attributeDict["url"] ?? "" }
+        case "podcast:transcript":
+            // 发布方自己的逐字稿(Podcasting 2.0)。**空元素、信息全在属性里**,
+            // 所以和 `podcast:funding` / `itunes:image` 一样只能在 START_TAG 取。
+            // 一集常有多条(同一稿的不同格式,外加 `rel="captions"` 的字幕版),
+            // 按 transcriptRank 取最优,不是"取第一条" —— 与 Android `RssParser` 同一规则。
+            if inItem, let url = attributeDict["url"], !url.isEmpty {
+                let type = attributeDict["type"] ?? ""
+                let rank = Self.transcriptRank(type)
+                let best = Int(currentItem?["transcriptRank"] ?? "") ?? -1
+                if rank > best {
+                    currentItem?["transcriptUrl"] = url
+                    currentItem?["transcriptType"] = type
+                    currentItem?["transcriptRank"] = String(rank)
+                }
+            }
         default:
             break
         }
+    }
+
+    /// 只收带时间轴的格式:JSON(Podcast Index 那套,可能带词级时间)> VTT > SRT。
+    /// HTML / 纯文本稿常见但没有时间轴,拿来做不了跟读高亮,直接排除(同 Android)。
+    private static func transcriptRank(_ type: String) -> Int {
+        let t = type.lowercased()
+        if t.contains("json") { return 3 }
+        if t.contains("vtt") { return 2 }
+        if t.contains("srt") || t.contains("subrip") { return 1 }
+        return -1
     }
 
     func parser(_ parser: XMLParser, foundCharacters string: String) {

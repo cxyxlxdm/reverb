@@ -25,6 +25,41 @@ struct Episode: Codable, Identifiable, Hashable {
     var durationSec: Int = 0
     var pubDate: String = ""
     var feedUrl: String = ""   // 所属频道的 RSS 地址,用于从播放页跳转频道主页
+    /// 发布方自己提供的逐字稿(Podcasting 2.0 的 `podcast:transcript`)。
+    /// 空串 = 这一集没有官方稿,界面才退回本机识别。字段名与 Android / 鸿蒙同义同名
+    /// (Android `EpisodeJson` 一直在备份里写 `transcriptUrl`)。
+    var transcriptUrl: String = ""
+    /// feed 里声明的 MIME 类型。**只当提示**:同一条链接标错 type 很常见,
+    /// 真正用哪种解析器由内容嗅探决定(见 `TranscriptFetcher.parse`)。
+    /// 这一键桌面独有(Android `EpisodeJson` 不存),所以缺省必须能解成空串。
+    var transcriptType: String = ""
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, description, audioUrl, artworkUrl, podcastTitle
+        case durationSec, pubDate, feedUrl, transcriptUrl, transcriptType
+    }
+}
+
+// 自定义解码必须放在 extension:写在类型体内会吞掉成员初始化器(H86 同一个坑)。
+extension Episode {
+    /// 逐键 `decodeIfPresent`:Episode 会被写进历史 / 下载 / 批注 / 播放态 / 备份,
+    /// 而旧文件(以及鸿蒙早期版本)没有 `transcriptUrl` / `transcriptType`。
+    /// Swift 合成解码里「字段有默认值」**不等于「键可缺省」**,一个缺键就会让整份
+    /// 历史或备份解码失败 —— 这条教训已经用 H86 付过一次学费。
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = (try? c.decode(String.self, forKey: .id)) ?? ""
+        title = (try? c.decode(String.self, forKey: .title)) ?? ""
+        description = (try? c.decode(String.self, forKey: .description)) ?? ""
+        audioUrl = (try? c.decode(String.self, forKey: .audioUrl)) ?? ""
+        artworkUrl = (try? c.decode(String.self, forKey: .artworkUrl)) ?? ""
+        podcastTitle = (try? c.decode(String.self, forKey: .podcastTitle)) ?? ""
+        durationSec = (try? c.decode(Int.self, forKey: .durationSec)) ?? 0
+        pubDate = (try? c.decode(String.self, forKey: .pubDate)) ?? ""
+        feedUrl = (try? c.decode(String.self, forKey: .feedUrl)) ?? ""
+        transcriptUrl = (try? c.decode(String.self, forKey: .transcriptUrl)) ?? ""
+        transcriptType = (try? c.decode(String.self, forKey: .transcriptType)) ?? ""
+    }
 }
 
 /// 解析 RSS 后的结果:频道元信息 + 分集列表。

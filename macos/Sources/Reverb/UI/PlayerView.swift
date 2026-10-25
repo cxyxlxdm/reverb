@@ -61,10 +61,12 @@ struct PlayerView: View {
 
     // MARK: - 轮播:播放 / 简介 / 转录
 
-    /// 横滑分页(macOS 14+)。转录页仅在设置开启时出现。
+    /// 横滑分页(macOS 14+)。转录页在设置开启时出现;
+    /// 但发布方给了逐字稿时即使本机识别关着也要露出 —— 那只是下载一个文件,
+    /// 与「要不要在这台机器上跑几分钟的识别」是两件事(对齐 Android `(AsrEngine && enabled) || transcriptUrl`)
     @available(macOS 14, *)
     private func carousel(_ ep: Episode) -> some View {
-        let showTranscript = env.settings.transcriptionEnabled
+        let showTranscript = env.settings.transcriptionEnabled || !ep.transcriptUrl.isEmpty
         let count = showTranscript ? 3 : 2
         return VStack(spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
