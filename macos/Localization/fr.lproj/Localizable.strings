@@ -119,6 +119,12 @@
 "导出 OPML" = "Exporter OPML";
 "导入 OPML" = "Importer OPML";
 "存储" = "Stockage";
+"清除缓存" = "Vider le cache";
+"榜单、频道、图片、逐字稿与已播音频缓存" = "Classements, chaînes, images, transcriptions et l'audio écouté";
+"计算中…" = "Calcul…";
+"清除缓存?" = "Vider le cache ?";
+"清除" = "Vider";
+"将清除榜单、频道缓存、图片、已生成的逐字稿与已播音频缓存，不影响订阅与下载。" = "Vide les classements, chaînes, images, transcriptions générées en cache et l'audio déjà écouté. Abonnements et téléchargements non affectés.";
 "离线下载" = "Téléchargements hors ligne";
 "清空下载" = "Vider les téléchargements";
 "%lld 集 · %@" = "%lld épisodes · %@";
@@ -175,7 +181,6 @@
 "完成" = "Terminé";
 "分享" = "Partager";
 "保存" = "Enregistrer";
-"重试" = "Réessayer";
 "加载失败,请检查网络后重试" = "Échec du chargement. Vérifiez le réseau et réessayez.";
 "加载失败,点击重试" = "Échec — cliquez pour réessayer";
 
@@ -268,9 +273,12 @@
 "好" = "OK";
 "这个文件无法识别为余音的备份,可能已损坏或来自不兼容的版本。" = "Ce fichier n'est pas reconnu comme une sauvegarde de Reverb. Il est peut-être corrompu ou issu d'une version incompatible.";
 
-/* 关于 / 许可 / 首次同意(M11)。键名是简中原文;桌面端不列播放缓存与订阅提醒,
-   数据来源里也没有官网 OPML —— 这三样在桌面上都没有实现,见 docs/MACOS-GAPS.md。
-   撇号沿用本文件其余部分的弯撇号(’),不是直撇号。 */
+/* 关于 / 许可 / 首次同意(M11)。键名是简中原文;桌面端不列订阅提醒(M3 未做),
+   数据来源里也没有官网 OPML(桌面不读那份)—— 见 docs/MACOS-GAPS.md。
+   播放缓存 M8 已补,那一行照列。
+   撇号:本文件两种都有(HEAD 里既有 24 行直撇号、62 处弯撇号),不是统一的;
+   新增行跟着所在段落走,本段用弯撇号(’)。.strings 是 plist,直撇号不用转义
+   —— 与鸿蒙那份 JSON 不是一回事(JSON 的 `\'` 非法,见 AGENTS.md 硬规矩 5 / H191)。 */
 "关于" = "À propos";
 "关于余音" = "À propos de Reverb";
 "版本" = "Version";
@@ -291,6 +299,7 @@
 "· 音阁：订阅、收藏、下载、待播、历史、批注六栏管理" = "· Bibliothèque : abonnements, favoris, téléchargements, à écouter, historique et notes en six sections";
 "· 批量与直达：点任意单集封面直达它所属的频道；多个列表可切换「选择」把一批一次加入待播" = "· Lot et accès direct : cliquez sur la pochette d’un épisode pour ouvrir son émission ; plusieurs listes ont un mode Sélectionner pour ajouter un lot à À écouter d’un coup";
 "· 离线下载：下载的单集长期留在本机" = "· Hors ligne : les épisodes téléchargés restent sur ce Mac";
+"· 播放缓存：播过的单集自动留在本机，下次直接本地起播；断网时已加载的列表与封面仍可浏览，可在设置一键清除" = "· Cache de lecture : les épisodes écoutés restent sur ce Mac et démarrent en local la fois suivante ; les listes et pochettes déjà chargées restent consultables hors ligne, à vider depuis Réglages";
 "· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播，以及系统媒体键与「正在播放」" = "· Lecture : vitesse, retour et avance, minuteur, modes (dans l’ordre / répéter un titre / aléatoire), lecture automatique, touches multimédia et « Lecture en cours »";
 "· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）" = "· Transcription : affiche la transcription de l’éditeur quand il y en a une ; sinon, convertit l’épisode en texte sur ce Mac, surligné au fil de la lecture (la transcription locale nécessite macOS 26)";
 "· 批注：记下这一秒和此刻的一句话；音阁「批注」栏把它们连成时间线，点一下从那一句接着听" = "· Notes : marquez cette seconde avec une phrase ; la section Notes de la Bibliothèque les relie en une chronologie — cliquez pour reprendre à cette phrase";

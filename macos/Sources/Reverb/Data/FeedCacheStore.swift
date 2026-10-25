@@ -9,8 +9,7 @@ import Foundation
 ///
 /// 容量有意收紧(RSS 是这个 App 里最大的数据):最多 maxFeeds 个频道、每个频道 maxEpisodes 集,
 /// 超出按最近写入时间淘汰。整体 ~1-2MB。
-/// (注:`sizeBytes()` / `clear()` 目前**没有**接进 macOS 设置页 —— 那里只展示日志体积。
-///  这两个方法是留着给「清除缓存」用的,别把「计入设置页缓存大小」当成现状。)
+/// (两个入口 `sizeBytes()` / `clear()` 现由设置页「清除缓存」调用,见 `PodcastRepository.cacheSizeBytes()`。)
 final class FeedCacheStore {
 
     /// 一条缓存:解析结果 + 落缓存时刻(用于「上次更新于」与淘汰排序)。

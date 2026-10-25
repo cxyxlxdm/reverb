@@ -101,6 +101,9 @@ final class PlayerController: ObservableObject {
     private var lastCountedEpId = ""
     /// 下载模块注入:给定单集,若已离线下载则返回本地文件 URL,优先本地播放。
     var localFileProvider: ((Episode) -> URL?)?
+    /// 播放缓存:流式起播之后由它把整集落到本机,下次直接本地起播。
+    /// 与 `localFileProvider`(用户点名下载的那份)是两条独立的路,见 `AudioCacheManager` 顶部。
+    private var audioCache: AudioCacheManager?
 
     // 队列上下文
     private var queue: [Episode] = []
@@ -186,12 +189,14 @@ final class PlayerController: ObservableObject {
     }
 
     private func loadArtworkIfNeeded(_ url: String) {
-        guard !url.isEmpty, url != artworkCacheURL, let u = URL(string: url) else { return }
+        guard !url.isEmpty, url != artworkCacheURL, URL(string: url) != nil else { return }
         artworkCacheURL = url
         Task { [weak self] in
-            guard let data = try? await URLSession.shared.data(from: u).0,
+            // 走与列表同一份封面磁盘缓存:断网时「正在播放」那张也还在,
+            // 且不会再往系统 URLCache 里另存一份看不见的副本(见 ArtworkCache 顶部)。
+            guard let data = await ArtworkCache.shared.data(for: url),
                   let img = NSImage(data: data) else {
-                Log.w("NowPlaying", "封面加载失败 \(url)")
+                Log.w("NowPlaying", "封面加载失败 \(Log.endpoint(url))")
                 return
             }
             let art = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
@@ -212,6 +217,8 @@ final class PlayerController: ObservableObject {
     }
 
     func bindListenStats(_ s: ListenStatsStore) { self.listenStats = s }
+
+    func bindAudioCache(_ c: AudioCacheManager) { audioCache = c }
 
     // MARK: - 播放态跨启动(playback_state.json)
 
@@ -446,13 +453,24 @@ final class PlayerController: ObservableObject {
         lastCountedEpId = episode.id
         lastCountedPosMs = resumeMs
 
-        let local = localFileProvider?(episode)
+        // 选源三级,与 Android `PlayerController.kt` 同序:**下载 > 缓存 > 流式**。
+        // 下载是用户点名留的那份;缓存是本类上一条流式播完之后自己攒的。
+        // 缓存命中要记一次访问 —— 淘汰只看「最后一次从缓存起播」,不记的话常听的那集会
+        // 因为写入时间太早而被先挤掉,预算就白设了(见 AudioCacheStore.touch)。
+        let downloaded = localFileProvider?(episode)
+        let cached = downloaded == nil ? audioCache?.localURL(episode.id) : nil
+        if cached != nil { audioCache?.touch(episode.id) }
+        let local = downloaded ?? cached
         guard let url = local ?? URL(string: episode.audioUrl) else {
             Log.e("Player", "playEpisode 无效音频 URL id=\(episode.id) title=\"\(episode.title)\" audioUrl=\(episode.audioUrl)")
             playbackError = String(localized: "加载失败,请检查网络后重试")
             return
         }
-        Log.i("Player", "playEpisode id=\(episode.id) title=\"\(episode.title)\" feed=\"\(episode.podcastTitle)\" radio=\(isRadio) 源=\(local != nil ? "本地" : "网络") resume=\(resumeMs)ms")
+        let source = downloaded != nil ? "本地" : (cached != nil ? "缓存" : "网络")
+        Log.i("Player", "playEpisode id=\(episode.id) title=\"\(episode.title)\" feed=\"\(episode.podcastTitle)\" radio=\(isRadio) 源=\(source) resume=\(resumeMs)ms")
+        // 只有真正在走流式时才排一次整集落缓存。电台那一路不缓存 —— 它是漫游,
+        // 下一集由随机推荐决定;把每一集都留在盘上等于用 300 MB 换一份听不回去的清单。
+        if local == nil && !isRadio { audioCache?.cache(episode) }
         let item = AVPlayerItem(url: url)
         // 观察加载状态:失败(常见于睡眠唤醒后网络栈短暂异常)自动重试,仍失败则给出可见提示,避免静默卡死
         itemStatusObserver = item.publisher(for: \.status)

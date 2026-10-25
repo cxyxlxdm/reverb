@@ -119,6 +119,12 @@
 "导出 OPML" = "Exportar OPML";
 "导入 OPML" = "Importar OPML";
 "存储" = "Almacenamiento";
+"清除缓存" = "Borrar caché";
+"榜单、频道、图片、逐字稿与已播音频缓存" = "Listas, canales, imágenes, transcripciones y el audio reproducido";
+"计算中…" = "Calculando…";
+"清除缓存?" = "¿Borrar la caché?";
+"清除" = "Borrar";
+"将清除榜单、频道缓存、图片、已生成的逐字稿与已播音频缓存，不影响订阅与下载。" = "Borra listas, canales, imágenes, transcripciones generadas en caché y el audio ya reproducido. Las suscripciones y descargas no se ven afectadas.";
 "离线下载" = "Descargas sin conexión";
 "清空下载" = "Vaciar descargas";
 "%lld 集 · %@" = "%lld episodios · %@";
@@ -175,7 +181,6 @@
 "完成" = "Listo";
 "分享" = "Compartir";
 "保存" = "Guardar";
-"重试" = "Reintentar";
 "加载失败,请检查网络后重试" = "Error al cargar. Verifica la red y reinténtalo.";
 "加载失败,点击重试" = "Error — clic para reintentar";
 
@@ -266,8 +271,9 @@
 "好" = "OK";
 "这个文件无法识别为余音的备份,可能已损坏或来自不兼容的版本。" = "Este archivo no se reconoce como una copia de Reverb. Puede estar dañado o proceder de una versión incompatible.";
 
-/* 关于 / 许可 / 首次同意(M11)。键名是简中原文;桌面端不列播放缓存与订阅提醒,
-   数据来源里也没有官网 OPML —— 这三样在桌面上都没有实现,见 docs/MACOS-GAPS.md。 */
+/* 关于 / 许可 / 首次同意(M11)。键名是简中原文;桌面端不列订阅提醒(M3 未做),
+   数据来源里也没有官网 OPML(桌面不读那份)—— 见 docs/MACOS-GAPS.md。
+   播放缓存 M8 已补,那一行照列。 */
 "关于" = "Acerca de";
 "关于余音" = "Acerca de Reverb";
 "版本" = "Versión";
@@ -288,6 +294,7 @@
 "· 音阁：订阅、收藏、下载、待播、历史、批注六栏管理" = "· Biblioteca: suscripciones, favoritos, descargas, en espera, historial y notas en seis secciones";
 "· 批量与直达：点任意单集封面直达它所属的频道；多个列表可切换「选择」把一批一次加入待播" = "· Lote y salto: haz clic en la portada de cualquier episodio para abrir su programa; varias listas tienen un modo Seleccionar para añadir un lote a En espera de una vez";
 "· 离线下载：下载的单集长期留在本机" = "· Sin conexión: los episodios descargados se quedan en este Mac";
+"· 播放缓存：播过的单集自动留在本机，下次直接本地起播；断网时已加载的列表与封面仍可浏览，可在设置一键清除" = "· Caché de reproducción: los episodios que escuchas se quedan en este Mac y la próxima vez empiezan en local; las listas y portadas ya cargadas siguen visibles sin conexión y se borran desde Ajustes";
 "· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播，以及系统媒体键与「正在播放」" = "· Reproducción: velocidad, retroceso y avance, temporizador, modos (en orden / repetir uno / aleatorio), reproducción automática, teclas multimedia y «Reproduciendo ahora»";
 "· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）" = "· Transcripción: muestra la transcripción del editor cuando existe; si no, convierte el episodio en texto en este Mac con resaltado según el progreso (la transcripción local requiere macOS 26)";
 "· 批注：记下这一秒和此刻的一句话；音阁「批注」栏把它们连成时间线，点一下从那一句接着听" = "· Notas: marca ese segundo con una frase; la sección Notas de la Biblioteca las une en una línea de tiempo: haz clic en una para seguir desde esa frase";

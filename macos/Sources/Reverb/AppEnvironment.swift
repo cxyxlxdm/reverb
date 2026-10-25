@@ -16,6 +16,8 @@ final class AppEnvironment: ObservableObject {
     let player = PlayerController()
     let downloads = DownloadStore()
     let downloadManager: DownloadManager
+    /// 播放缓存(整集音频)。与 `downloads` 是两份独立的账,见 `AudioCacheManager` 顶部。
+    let audioCache = AudioCacheManager()
     // 转录:高频 append,不转发到 env(由 TranscriptPage 直接观察),避免整树重渲。
     let transcripts = TranscriptStore()
     // 收听时长:播放中约每 5s 才刷新一次,单独注入、由相关页面直接观察,不转发到 env。
@@ -36,6 +38,7 @@ final class AppEnvironment: ObservableObject {
         player.bindListenStats(listenStats)
         listenStats.seedFromHistory(history.history)   // 首启用历史近似种子(仅当无既有统计)
         player.localFileProvider = { [downloads] ep in downloads.localURL(ep.id) }
+        player.bindAudioCache(audioCache)
         player.bindState(playbackState)
         // 恢复排在**依赖都绑好之后**:预载要能命中本地下载文件(优先本地源),
         // 续播起点要从历史读。它内部只在「当前没有在播的」时执行,重复调用是安全的。
