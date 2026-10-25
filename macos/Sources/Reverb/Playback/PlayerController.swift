@@ -81,6 +81,9 @@ final class PlayerController: ObservableObject {
     private var itemStatusObserver: AnyCancellable?
     private var loadRetries = 0
     private var lastIsRadio = false
+    /// 上一次装载是「起播」还是「预载」。自动重试要沿用它:
+    /// 冷启动恢复的那一次若加载失败,重试完就自己出声 —— 那正是「恢复现场不恢复意图」要防的事。
+    private var lastAutoplay = true
     /// 批注「跳回那一秒」用的一次性起点覆盖。`-1` = 没有覆盖(所以入口不能写 0)。
     private var startMsOverride = -1
     /// 本次起播的起点是**用户明确指定的那一秒**还是一条**续播进度**。
@@ -90,6 +93,9 @@ final class PlayerController: ObservableObject {
     private var history: HistoryStore?
     private var settings: SettingsStore?
     private var listenStats: ListenStatsStore?
+    /// 跨启动的播放态存储(「正在播哪一集 / 它来自哪一列 / 排好的 up next」)。
+    /// 没绑上时持久化与恢复都静默跳过 —— 无界面自检(`--selftest`)不需要它。
+    private var stateStore: PlaybackStateStore?
     // 累计收听时长的基线:仅统计"同一集、播放中、合理正向增量"的内容毫秒
     private var lastCountedPosMs = 0
     private var lastCountedEpId = ""
@@ -206,6 +212,58 @@ final class PlayerController: ObservableObject {
     }
 
     func bindListenStats(_ s: ListenStatsStore) { self.listenStats = s }
+
+    // MARK: - 播放态跨启动(playback_state.json)
+
+    func bindState(_ s: PlaybackStateStore) { stateStore = s }
+
+    /// 把「正在播什么 / 它来自哪一列 / 排好的 up next」落一次盘。
+    /// 每个**用户动作**改完队列或起播之后都调一次(`enqueue` / `playNext` / `removeFromQueue` /
+    /// `moveInQueue` / `clearQueue` / `consumeUserQueue` / `playEpisode`)。
+    ///
+    /// 电台模式只落 upNext(`current=nil`):两端同口径 —— 随机电台的上下文是**一次性的**,
+    /// 重启后没有"下一条随机"的种子,硬恢复那一集会让用户从电台掉回单集播放。
+    private func persistState() {
+        guard let st = stateStore else { return }
+        if radioMode {
+            st.save(current: nil, listTag: "", context: [], contextIndex: 0, upNext: userQueue)
+        } else {
+            st.save(current: current, listTag: activeListTag, context: queue,
+                    contextIndex: queueIndex, upNext: userQueue)
+        }
+    }
+
+    /// 冷启动恢复**现场**,不恢复**意图**:预载暂停态(与 Android / 鸿蒙同口径),
+    /// 用户按播放才出声。理由与两端注释同一条 —— 启动即响是用户没要求的动作,
+    /// 而"上次听到哪一集"这条信息本身在迷你条上已经给回来了。
+    ///
+    /// 只在 `current == nil` 时执行:重复启动、或 UI 已经自己起播之后再调都不该把正在播的换掉。
+    func restoreState() {
+        guard let st = stateStore, current == nil else { return }
+        let snap = st.snapshot
+        if snap.isEmpty { return }
+        if !snap.upNext.isEmpty {
+            userQueue = snap.upNext
+            Log.i("Player", "restore upNext=\(snap.upNext.count)")
+        }
+        let saved = snap.current
+        // 引导音频不进历史也不该跨启动恢复:两端都在这里过滤掉
+        let cur = saved.flatMap { GuideEpisode.isGuide($0.id) ? nil : $0 }
+        guard let cur else {
+            if saved != nil { Log.i("Player", "restore 忽略引导音频,重写播放态"); persistState() }
+            updateNavFlags()
+            return
+        }
+        // 上下文窗口里找不到这一集(极端:落盘那份被手改过)时退化成只有它自己的单集队列,
+        // 而不是丢掉 cur —— 迷你条必须出现,那是这条恢复的主要目的。
+        queue = snap.context.contains { $0.id == cur.id } ? snap.context : [cur]
+        queueIndex = queue.firstIndex { $0.id == cur.id } ?? 0
+        activeListTag = snap.listTag
+        applyPlayMode(mode(for: snap.listTag))
+        updateNavFlags()
+        Log.i("Player", "restore cur='\(cur.title)' ctx=\(queue.count)@\(queueIndex) tag='\(snap.listTag)' mode=\(playMode.logName)")
+        playEpisode(cur, autoplay: false)
+    }
 
     // MARK: - 播放入口
 
@@ -351,11 +409,17 @@ final class PlayerController: ObservableObject {
         playEpisode(queue[queueIndex])
     }
 
-    private func playEpisode(_ episode: Episode, isRadio: Bool = false) {
+    /// - Parameter autoplay: `false` = 预载(冷启动恢复用)。装上 item、跳到续播点、把进度与
+    ///   Now Playing 画出来,但**不 play()** —— 启动即出声是用户没要求的动作(见 `restoreState()`)。
+    private func playEpisode(_ episode: Episode, isRadio: Bool = false, autoplay: Bool = true) {
         if !isRadio && radioMode { stopRadio() }
         lastIsRadio = isRadio
+        lastAutoplay = autoplay
         playbackError = nil
         current = episode
+        // 与 Android 同位置:**换集就落一次盘**,不等播放器就绪 —— 冷启动要恢复的是
+        // 「上次在播哪一集」,而那一集恰恰可能是这次没加载成功的那一集。
+        persistState()
         positionMs = 0
         durationMs = 0
         listenStats?.flush()   // 结算上一集残余
@@ -425,10 +489,18 @@ final class PlayerController: ObservableObject {
         } else {
             Log.i("Player", "跳点落空 seek=\(resumeMs) metaDur=\(metaMs) explicit=\(explicit) id=\(episode.id)")
         }
-        player.volume = 0
-        player.play()
-        player.rate = Float(speed)
-        fadeVolume(to: 1.0, durationMs: 900)
+        if autoplay {
+            player.volume = 0
+            player.play()
+            player.rate = Float(speed)
+            fadeVolume(to: 1.0, durationMs: 900)
+        } else {
+            // 预载:音量直接给 1(下一首按下播放时不该又淡入一次),且**不能**靠 ticker 画进度 ——
+            // ticker 只在播放中跑,而预载永远不会播,不在这里画的话进度线停在 0:00。
+            player.volume = 1
+            if ok { positionMs = resumeMs }
+            Log.i("Player", "预载(暂停) id=\(episode.id) resume=\(resumeMs)ms")
+        }
         updateNowPlaying()
     }
 
@@ -441,7 +513,7 @@ final class PlayerController: ObservableObject {
             Log.w("Player", "加载失败,自动重试 \(loadRetries)/3 id=\(episode.id)")
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 800_000_000)
-                if self.current?.id == episode.id { self.playEpisode(episode, isRadio: isRadio) }
+                if self.current?.id == episode.id { self.playEpisode(episode, isRadio: isRadio, autoplay: self.lastAutoplay) }
             }
         } else {
             loadRetries = 0
@@ -469,6 +541,7 @@ final class PlayerController: ObservableObject {
         userQueue.append(ep)
         Log.i("Queue", "enqueue id=\(ep.id) title=\"\(ep.title)\" 队列=\(userQueue.count)")
         updateNavFlags()
+        persistState()
     }
 
     /// 批量追加到队尾,返回**真正加进去的条数**(与 Android `enqueueAll` 同口径)。
@@ -487,6 +560,9 @@ final class PlayerController: ObservableObject {
         guard !fresh.isEmpty else { return 0 }
         userQueue.append(contentsOf: fresh)
         updateNavFlags()
+        // 一次落盘,不是每条一次:与 Android 同口径(那边这条注释里量过「全选 1994 集 × 每次全量写盘」
+        // 把主线程占满、系统弹无响应,见 H186)。批量入队是唯一会一次改几百条队列的入口。
+        persistState()
         return fresh.count
     }
 
@@ -496,12 +572,14 @@ final class PlayerController: ObservableObject {
         userQueue.insert(ep, at: 0)
         Log.i("Queue", "playNext id=\(ep.id) title=\"\(ep.title)\" 队列=\(userQueue.count)")
         updateNavFlags()
+        persistState()
     }
 
     func removeFromQueue(_ id: String) {
         userQueue.removeAll { $0.id == id }
         Log.i("Queue", "removeFromQueue id=\(id) 队列=\(userQueue.count)")
         updateNavFlags()
+        persistState()
     }
 
     /// 队列内重排。offsets 遵循 SwiftUI onMove 语义。
@@ -510,6 +588,7 @@ final class PlayerController: ObservableObject {
         let ep = userQueue.remove(at: from)
         let dest = to > from ? to - 1 : to
         userQueue.insert(ep, at: min(max(dest, 0), userQueue.count))
+        persistState()
     }
 
     func clearQueue() {
@@ -517,6 +596,7 @@ final class PlayerController: ObservableObject {
         Log.i("Queue", "清空播放队列 \(userQueue.count) 条")
         userQueue.removeAll()
         updateNavFlags()
+        persistState()
     }
 
     /// 取出并播放指定位置的一集(退出电台,不改动既有上下文队列)。
