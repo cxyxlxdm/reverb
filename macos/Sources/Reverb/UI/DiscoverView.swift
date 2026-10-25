@@ -31,6 +31,30 @@ struct DiscoverCategory: Identifiable, Hashable {
 
     /// 全部分类的 genreId(用于随机电台)。
     static var allGenreIds: [Int?] { all.compactMap { $0.genreId }.map { Optional($0) } }
+
+    /// 按用户存下的 key 顺序排列(`SettingsStore.categoryOrder`),口径与 Android
+    /// `DiscoverViewModel.loadOrdered()` / 鸿蒙 `CategoryStore.ordered()` 逐条一致:
+    ///
+    /// - 没存过(空数组)→ 原序;
+    /// - 存过的按序取,**表里已经不在的 key 直接丢**(分类下线时不会留空位),重复的 key 只取第一次;
+    /// - **新增的分类挂在末尾** —— 加了新分类不至于插到用户最看重的那个前面。
+    ///   这一条同时兜住了"存的 key 全都不认识":它们全被丢掉,末尾补回原序的全部(与 Android
+    ///   `loadOrdered()` 末尾那句 `+ DISCOVER_CATEGORIES.filter { … }` 同一个结果)。
+    ///
+    /// 用字典查而不是 `first(where:)`,因为本函数每次重渲都要跑一遍(19 项,仍是 O(n))。
+    static func ordered(by keys: [String]) -> [DiscoverCategory] {
+        guard !keys.isEmpty else { return all }
+        let byKey = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
+        var seen = Set<String>()
+        var out: [DiscoverCategory] = []
+        out.reserveCapacity(all.count)
+        for k in keys {
+            guard let c = byKey[k], seen.insert(k).inserted else { continue }
+            out.append(c)
+        }
+        for c in all where !seen.contains(c.key) { out.append(c) }
+        return out
+    }
 }
 
 struct DiscoverView: View {
@@ -39,6 +63,7 @@ struct DiscoverView: View {
     @EnvironmentObject var settings: SettingsStore
 
     @State private var selected: DiscoverCategory = DiscoverCategory.all[0]
+    @State private var showReorder = false
     @State private var popular: [Podcast] = []
     @State private var loading = false
     /// 当前列表来自随包内置清单(而非联网榜单),据此改标题
@@ -52,6 +77,8 @@ struct DiscoverView: View {
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
+    /// 用户排过序就按它,没排过就是原序(见 `DiscoverCategory.ordered(by:)`)。
+    private var categories: [DiscoverCategory] { DiscoverCategory.ordered(by: settings.categoryOrder) }
 
     private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin, maximum: Metrics.cardMax),
                                     spacing: Metrics.gridSpacing)]
@@ -80,6 +107,19 @@ struct DiscoverView: View {
             ToolbarItem(placement: .primaryAction) { radioButton }
         }
         .task { await loadPopular(initial: true) }
+        .sheet(isPresented: $showReorder) {
+            CategoryOrderSheet(initial: categories) { ordered in
+                // 空表不落盘:与 Android `saveOrder` 的早退、鸿蒙 `CategoryStore.save` 同一条
+                // —— 「空」在有备份参与的语境里表示"从没排过",不能当成"恢复默认序"。
+                if !ordered.isEmpty { settings.categoryOrder = ordered.map(\.key) }
+                showReorder = false
+            } onCancel: {
+                showReorder = false
+            }
+            // sheet 是独立呈现,不继承窗口的 preferredColorScheme(见 `themedSheet` 注释);
+            // 漏掉的症状是深色主题下这份白底表格里的黑字看不见。
+            .themedSheet(settings)
+        }
     }
 
     // MARK: - 榜单
@@ -193,7 +233,7 @@ struct DiscoverView: View {
     /// 安静的分类下拉,取代原先密集的胶囊条。
     private var categoryMenu: some View {
         Menu {
-            ForEach(DiscoverCategory.all) { c in
+            ForEach(categories) { c in
                 Button {
                     guard c.id != selected.id else { return }
                     selected = c
@@ -202,6 +242,14 @@ struct DiscoverView: View {
                     if c.id == selected.id { Label(LocalizedStringKey(c.name), systemImage: "checkmark") }
                     else { Text(LocalizedStringKey(c.name)) }
                 }
+            }
+            // 排序入口放在这份下拉里而不是单独一颗工具栏按钮:桌面没有那条密集的胶囊条可挂图标,
+            // 而「分类」这一份菜单正是它在这端的等价物(Android 把它挂在胶囊条右端)。
+            Divider()
+            Button {
+                showReorder = true
+            } label: {
+                Label("自定义分类排序…", systemImage: "arrow.up.arrow.down")
             }
         } label: {
             HStack(spacing: 4) {
@@ -364,6 +412,95 @@ struct DiscoverView: View {
                 player.stopRadio()
             }
         }
+    }
+}
+
+/// 分类排序弹窗。
+///
+/// Android 的形态是「长按分类胶囊再拖动」—— 那是触屏独有的手势,桌面端没有长按。
+/// 这里把同一个能力表达成两件 macOS 上本来就有的东西:**拖动行**与**行尾的上/下箭头**。
+/// 箭头放在每一行上(而不是整表一颗「置顶」):它对键盘与读屏可达,拖动只能靠指针。
+///
+/// 两套操作都只改弹窗里的副本,点「完成」才交给调用方落盘 —— 与 Android
+/// `ReorderCategoriesDialog` 的 draft 同口径:取消即全丢,不会边拖边写。
+private struct CategoryOrderSheet: View {
+    @State private var items: [DiscoverCategory]
+    var onDone: ([DiscoverCategory]) -> Void
+    var onCancel: () -> Void
+
+    init(initial: [DiscoverCategory],
+         onDone: @escaping ([DiscoverCategory]) -> Void,
+         onCancel: @escaping () -> Void) {
+        _items = State(initialValue: initial)
+        self.onDone = onDone
+        self.onCancel = onCancel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("自定义分类排序").font(.headline).padding(.horizontal, 24).padding(.top, 24)
+            Text("拖动行或用箭头调整顺序")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 24)
+                .padding(.top, 6)
+            // 用 List 而不是 ScrollView + 手搓行:`.onMove` 在 macOS 的 List 上直接
+            // 提供拖动排序(本端没有 Android 那种"进入编辑模式"的一步)。
+            List {
+                ForEach(items) { c in
+                    row(c)
+                }
+                .onMove { from, to in items.move(fromOffsets: from, toOffset: to) }
+            }
+            .listStyle(.inset)
+            .padding(.top, 8)
+            Divider()
+            HStack(spacing: 12) {
+                Spacer()
+                Button("取消", role: .cancel, action: onCancel)
+                Button("完成") { onDone(items) }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(24)
+        }
+        .frame(width: 380, height: 480)
+    }
+
+    private func row(_ c: DiscoverCategory) -> some View {
+        HStack(spacing: 10) {
+            Text(LocalizedStringKey(c.name))
+            Spacer(minLength: 12)
+            arrow("chevron.up", label: "上移", disabled: items.first?.id == c.id) {
+                move(c.id, by: -1)
+            }
+            arrow("chevron.down", label: "下移", disabled: items.last?.id == c.id) {
+                move(c.id, by: 1)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// `.borderless`:行内有指针交互时仍然允许整行被拖动(默认按钮样式会吃掉这次拖拽),
+    /// 同时也让同一行里的两颗按钮都拿得到点击。
+    private func arrow(_ symbol: String, label: LocalizedStringKey, disabled: Bool,
+                       action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .imageScale(.small)
+                .frame(width: 22, height: 22)
+        }
+        .buttonStyle(.borderless)
+        .disabled(disabled)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+
+    private func move(_ id: String, by delta: Int) {
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+        let j = i + delta
+        guard items.indices.contains(j) else { return }
+        withAnimation(.easeOut(duration: 0.15)) { items.swapAt(i, j) }
     }
 }
 

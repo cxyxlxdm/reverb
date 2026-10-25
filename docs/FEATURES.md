@@ -163,7 +163,7 @@ macOS 走 dmg 自行分发,不涉及应用商店,**没有渠道差异**;端与�
 | 功能 | 说明 | 平台差异/说明 |
 |------|------|----------------|
 | 分类热门榜 | 19 个分类:推荐 / 新闻 / 商业 / 科技 / 文化 / 知识 / 教育 / 喜剧 / 健康 / 历史 / 体育 / 美食 / 旅行 / 动漫 / 情感 / 艺术 / 音乐 / 亲子 / 影视。磁盘缓存秒开后台刷新 | Android:分类 chips + 横滑分页(HorizontalPager),**支持下拉刷新**;macOS:安静的**分类下拉菜单** + 卡片网格,**工具栏刷新按钮**手动刷新 |
-| 分类排序 | 长按拖拽自定义分类顺序并持久化 | Android:分类 chips 长按拖拽,落 `category_order`。**HarmonyOS 已同构**(2026-10-06,分类条右端 `Tune` 入口 → 排序框;`CategoryStore.ets` 与 Android `loadOrdered/saveOrder` 逐句对应,行高按外壳口径 48dp→42vp)—— ⚠️ **只过到编译,未真机**,见 ROADMAP「技术债」那一行;macOS 为下拉菜单,不排序。**备份侧也已接**(2026-10-06):`categoryOrder` 两端都导出、都消费,空数组=不动本机顺序(同 `DiscoverViewModel.kt:104` 的早退口径,不是清空) |
+| 分类排序 | 长按拖拽自定义分类顺序并持久化 | Android:分类 chips 长按拖拽,落 `category_order`。**HarmonyOS 已同构**(2026-10-06,分类条右端 `Tune` 入口 → 排序框;`CategoryStore.ets` 与 Android `loadOrdered/saveOrder` 逐句对应,行高按外壳口径 48dp→42vp)—— ⚠️ **只过到编译,未真机**,见 ROADMAP「技术债」那一行;macOS 自 1.0.6 起也有:分类下拉末尾「自定义分类排序…」→ 弹窗内拖动行或用行尾上/下箭头,点「完成」才落盘(`DiscoverCategory.ordered(by:)` 与 `loadOrdered/saveOrder` 逐条对应)。**备份侧已接**(2026-10-06):`categoryOrder` 三端都导出、都消费,空数组=不动本机顺序(同 `DiscoverViewModel.kt:104` 的早退口径,不是清空) |
 | 搜索 | 「单集」+「节目」两个分段并行检索;单集可直接播放,节目点进详情 | Android / HarmonyOS 分段 chip 切换,macOS 上下分区展示;HarmonyOS 先展示目录结果,再以两路并发预检首屏前 4 个 RSS,当前网络不可访问的条目保留但禁入 |
 | RSS 直接导入 | 搜索框粘贴 http(s) / RSS 地址即解析导入 | 两端一致 |
 | 频道分享 | 频道详情页生成包含频道 Logo、频道名、简介(最多四行,超出省略)与「余音 · Reverb」落款的水墨图片,交给系统分享面板;不把 RSS 地址写入图片 | 三端一致(1.0.2) |

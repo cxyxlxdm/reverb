@@ -68,10 +68,11 @@ enum BackupManager {
         var skipBackSec: Int?
         var skipForwardSec: Int?
         var contextualRadio: Bool?
-        /// 三格"桌面没有对应功能"的键(M3)。带它们不是为了在 Mac 上生效,
+        /// 两格"桌面没有对应功能"的键(M3)。带它们不是为了在 Mac 上生效,
         /// 而是为了让「手机 → Mac → 手机」这条路不把手机那侧的设置抹掉 ——
         /// 缺了它们的后果是:用户在手机上没动过的开关,绕一趟 Mac 回来就变了,
         /// 而三端都会说"我是从备份里读的"。语义与取舍见 `Stores.swift` `SettingsStore` 同段注释。
+        /// `categoryOrder` 不在这一档:1.0.6 起本端也有排序界面,它是**真的读写**(见 M12)。
         var allowCellularDownload: Bool?
         var updatesEnabled: Bool?
         var categoryOrder: [String]?
@@ -202,10 +203,13 @@ enum BackupManager {
         if let v = s.skipBackSec { st.skipBackSec = v }
         if let v = s.skipForwardSec { st.skipForwardSec = v }
         if let v = s.contextualRadio { st.contextualRadio = v }
-        // 只存不生效的三格:本端读进来是为了下次导出原样写回去(见 SettingsPayload 注释)。
+        // 只存不生效的两格:本端读进来是为了下次导出原样写回去(见 SettingsPayload 注释)。
         if let v = s.allowCellularDownload { st.allowCellularDownload = v }
         if let v = s.updatesEnabled { st.updatesEnabled = v }
-        if let v = s.categoryOrder { st.categoryOrder = v }
+        // 分类顺序**空数组不覆盖**:空表示"那份备份从没排过",不是"恢复默认序"
+        // (Android `saveOrder` 的早退、鸿蒙 `CategoryStore.save` 同一条)。
+        // 少了这个 guard,拿一台没排过序的手机备份恢复,会静默抹掉本机排好的顺序。
+        if let v = s.categoryOrder, !v.isEmpty { st.categoryOrder = v }
         // 日志拼平写,别在插值里叠 .map(String.init):Swift 类型检查器会被嵌套可选表达式噎死(H86)
         let restored = "theme=\(s.themeMode ?? -1) speed=\(s.defaultSpeed ?? -1) region=\(s.regionOverride ?? "-")"
         Log.i("Backup", "恢复设置 \(restored)")

@@ -279,18 +279,24 @@ enum AppSupport {
     @Published var skipBackSec: Int { didSet { d.set(skipBackSec, forKey: "skip_back") } }
     @Published var skipForwardSec: Int { didSet { d.set(skipForwardSec, forKey: "skip_fwd") } }
     @Published var contextualRadio: Bool { didSet { d.set(contextualRadio, forKey: "contextual_radio") } }
-    /// 以下三格**在本端没有界面**,只为了备份互通而存在:
+    /// 以下两格**在本端没有界面**,只为了备份互通而存在:
     ///
     /// - `allowCellularDownload`:桌面没有蜂窝基带,"只能 Wi-Fi 下载"在 Mac 上无从谈起;
-    /// - `updatesEnabled`:桌面没有常驻的订阅巡检/通知(追更页是拉取式,打开才刷);
-    /// - `categoryOrder`:发现页分类顺序目前是编译期常量(见 `docs/MACOS-GAPS.md` M12)。
+    /// - `updatesEnabled`:桌面没有常驻的订阅巡检/通知(追更页是拉取式,打开才刷)。
     ///
     /// 那为什么还存?因为备份 JSON 是三端共用的格式(见 `Data/BackupManager.swift` 顶部注释),
-    /// 手机导出 → Mac 恢复 → 再从 Mac 导出回手机 这条路,原先会把这三格**静默抹掉**,
+    /// 手机导出 → Mac 恢复 → 再从 Mac 导出回手机 这条路,原先会把这两格**静默抹掉**,
     /// 用户在手机上明明没动过"允许蜂窝下载",换回手机却变了。既然本端无对应行为,
     /// 唯一正确的处理就是**原样带过去**:读进来、存下来、导出时一字不改地写回去。
     @Published var allowCellularDownload: Bool { didSet { d.set(allowCellularDownload, forKey: "allow_cellular_download") } }
     @Published var updatesEnabled: Bool { didSet { d.set(updatesEnabled, forKey: "updates_enabled") } }
+    /// 发现页分类顺序(用户排过的 key 序列)。
+    ///
+    /// **这一格不是"只存不用"**:1.0.6 起发现页的分类下拉里有「自定义分类排序…」,
+    /// 读写都在本端生效(见 `UI/DiscoverView.swift` `CategoryOrderSheet`)。
+    /// 空数组 = 从没排过(按原序显示),**不是"恢复默认"** —— 与 Android
+    /// `CategoryStore` / 鸿蒙 `CategoryStore` 同一条语义,所以恢复备份时也照这条读:
+    /// 空数组不覆盖本机已排过的顺序(见 `BackupManager` 的 `applySettings`)。
     @Published var categoryOrder: [String] { didSet { d.set(categoryOrder, forKey: "category_order") } }
     /// 播放模式**按列**存:key 是 `ListTag` 的值,value 是 `PlayMode` 的 rawValue(ordinal)。
     /// 与 Android 的 `play_mode_map` / 鸿蒙同名同义(见 `PlayMode` 注释与 H119)。
