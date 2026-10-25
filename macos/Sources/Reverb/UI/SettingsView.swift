@@ -51,6 +51,7 @@ private struct SettingsForm: View {
     }
 
     @State private var showFootprint = false
+    @State private var showExportPicker = false
     @State private var restorePayload: RestorePayload?
     @State private var restoreUnreadable = false
     @State private var confirmClearDownloads = false
@@ -137,7 +138,7 @@ private struct SettingsForm: View {
             }
 
             Section("备份") {
-                Button { exportBackup() } label: {
+                Button { showExportPicker = true } label: {
                     Label("导出备份", systemImage: "square.and.arrow.up")
                 }
                 Button { restoreBackup() } label: {
@@ -212,6 +213,20 @@ private struct SettingsForm: View {
                 .environmentObject(settings)
                 .themedSheet(settings)
         }
+        // 导出分区勾选。选择集由弹窗自持(初值全勾,与另两端一致),不进外部状态 ——
+        // 与恢复弹窗同一个理由:sheet 闭包首开会拿到外部状态的旧快照。
+        // 确认后先把 sheet 收起,再在下一轮 run loop 里弹保存面板:NSSavePanel 是独立模态窗口,
+        // 直接叠在 sheet 上会被 sheet 压在下面,看起来像"点了没反应"。
+        .sheet(isPresented: $showExportPicker) {
+            ExportSheet(
+                onExport: { sections in
+                    showExportPicker = false
+                    DispatchQueue.main.async { exportBackup(sections) }
+                },
+                onCancel: { showExportPicker = false })
+            .tint(Theme.accent(settings.accentIndex))
+            .themedSheet(settings)
+        }
         // 弹窗用 item 驱动而非 isPresented + 外部状态:sections/selection 与弹出
         // 写在同一事务时,sheet 内容闭包首开会拿到旧快照 —— 选项区整块空白,
         // 关掉重开才正常(探针已证明同样的行在独立窗口渲染无恙)。
@@ -264,12 +279,14 @@ private struct SettingsForm: View {
         }.value
     }
 
-    private func exportBackup() {
+    /// 导出前先让人勾分区(与 Android / 鸿蒙的 `BackupSectionDialog` 同口径)。
+    /// 原先这里写死 `Set(allCases)`:想只导出订阅做搬家,桌面做不到,只能连历史与统计一起带走。
+    private func exportBackup(_ sections: Set<BackupManager.Section>) {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "reverb-backup.json"
         panel.allowedContentTypes = [.json]
         guard panel.runModal() == .OK, let url = panel.url else { return }
-        let json = BackupManager.build(env, Set(BackupManager.Section.allCases))
+        let json = BackupManager.build(env, sections)
         Task {
             let ok = await writeText(json, to: url)
             if !ok { prompt = .backupFailed }
@@ -382,6 +399,52 @@ private struct SettingsForm: View {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
         }
+    }
+}
+
+/// 导出备份:勾选要写的分区后交给调用方落盘。
+/// 版式与 `RestoreSheet` 同形(复选框、语义色、不用 `.formStyle(.grouped)`,理由见那边注释),
+/// 初值全勾 —— 与 Android `BackupSectionDialog(available = null, selected = 全集)` 一致。
+private struct ExportSheet: View {
+    @State private var selection = Set(BackupManager.Section.allCases)
+    var onExport: (Set<BackupManager.Section>) -> Void
+    var onCancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("备份数据").font(.headline).padding(24)
+            Divider()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("选择要备份的内容")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 6)
+                    ForEach(BackupManager.Section.allCases) { section in
+                        Toggle(LocalizedStringKey(section.label), isOn: Binding(
+                            get: { selection.contains(section) },
+                            set: { on in
+                                if on { selection.insert(section) } else { selection.remove(section) }
+                            }))
+                            .toggleStyle(.checkbox)
+                            .padding(.horizontal, 24)
+                            .padding(.vertical, 4)
+                    }
+                }
+                .padding(.vertical, 16)
+            }
+            Divider()
+            HStack(spacing: 12) {
+                Spacer()
+                Button("取消", role: .cancel, action: onCancel)
+                Button("备份") { onExport(selection) }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selection.isEmpty)
+            }
+            .padding(24)
+        }
+        .frame(width: 420, height: 500)
     }
 }
 

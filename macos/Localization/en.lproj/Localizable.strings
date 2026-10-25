@@ -125,6 +125,8 @@
 "清空全部离线下载?" = "Clear all offline downloads?";
 "恢复" = "Restore";
 "选择要合并的内容" = "Choose what to merge";
+"备份数据" = "Back up data";
+"选择要备份的内容" = "Choose what to back up";
 "跟随系统" = "Follow System";
 "浅色 · 宣纸" = "Light · Paper";
 "深色 · 水墨" = "Dark · Ink";

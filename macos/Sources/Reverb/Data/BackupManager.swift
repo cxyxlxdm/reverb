@@ -39,6 +39,13 @@ enum BackupManager {
         var skipBackSec: Int?
         var skipForwardSec: Int?
         var contextualRadio: Bool?
+        /// 三格"桌面没有对应功能"的键(M3)。带它们不是为了在 Mac 上生效,
+        /// 而是为了让「手机 → Mac → 手机」这条路不把手机那侧的设置抹掉 ——
+        /// 缺了它们的后果是:用户在手机上没动过的开关,绕一趟 Mac 回来就变了,
+        /// 而三端都会说"我是从备份里读的"。语义与取舍见 `Stores.swift` `SettingsStore` 同段注释。
+        var allowCellularDownload: Bool?
+        var updatesEnabled: Bool?
+        var categoryOrder: [String]?
     }
 
     private struct Payload: Codable {
@@ -71,7 +78,10 @@ enum BackupManager {
                 themeMode: s.themeMode, accentIndex: s.accentIndex, fontScale: s.fontScale,
                 regionOverride: s.regionOverride, defaultSpeed: s.defaultSpeed,
                 skipBackSec: s.skipBackSec, skipForwardSec: s.skipForwardSec,
-                contextualRadio: s.contextualRadio)
+                contextualRadio: s.contextualRadio,
+                allowCellularDownload: s.allowCellularDownload,
+                updatesEnabled: s.updatesEnabled,
+                categoryOrder: s.categoryOrder)
         }
         let enc = JSONEncoder()
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -154,6 +164,10 @@ enum BackupManager {
         if let v = s.skipBackSec { st.skipBackSec = v }
         if let v = s.skipForwardSec { st.skipForwardSec = v }
         if let v = s.contextualRadio { st.contextualRadio = v }
+        // 只存不生效的三格:本端读进来是为了下次导出原样写回去(见 SettingsPayload 注释)。
+        if let v = s.allowCellularDownload { st.allowCellularDownload = v }
+        if let v = s.updatesEnabled { st.updatesEnabled = v }
+        if let v = s.categoryOrder { st.categoryOrder = v }
         // 日志拼平写,别在插值里叠 .map(String.init):Swift 类型检查器会被嵌套可选表达式噎死(H86)
         let restored = "theme=\(s.themeMode ?? -1) speed=\(s.defaultSpeed ?? -1) region=\(s.regionOverride ?? "-")"
         Log.i("Backup", "恢复设置 \(restored)")
