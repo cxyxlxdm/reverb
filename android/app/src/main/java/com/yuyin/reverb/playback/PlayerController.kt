@@ -8,6 +8,7 @@ import android.os.Looper
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
@@ -44,6 +45,16 @@ object PlayerController {
 
     private const val TAG = "Player"
     private val log = com.yuyin.reverb.util.Logger
+
+    /**
+     * 网络/IO 类出错的自动重投上限与退避基数(500ms → 1s)。
+     *
+     * 为什么是 2 次: podcast 的音频 URL 经常是 CDN 上一份几小时的签名,真断网时重试一百次也没用,
+     * 而瞬时抖动(切基站、Wi-Fi 掉一拍)基本都落在 1 秒以内。超过上限就**把失败态留给用户**,
+     * 由 [togglePlayPause]/[retryNow] 那条路(用户明确再按一次)重新计数 —— 见 REVIEW-2026-10-25 中-1。
+     */
+    private const val MAX_ERROR_RETRIES = 2
+    private const val RETRY_BASE_MS = 500L
 
     private var controller: MediaController? = null
     private val handler = Handler(Looper.getMainLooper())
@@ -328,6 +339,62 @@ object PlayerController {
     private val _buffering = MutableStateFlow(false)
     val buffering: StateFlow<Boolean> = _buffering
 
+    /**
+     * 一次播放失败(给界面的那一份)。原先什么都不暴露:`onPlayerError` 只 `log.e` 就结束,
+     * 于是流式播放断网之后的表现是"暂停键按下去没反应、进度线冻住、没有任何提示"
+     * —— 用户只能杀掉 App。见 REVIEW-2026-10-25 中-1。
+     *
+     * ⚠️ **UI 挂载待后续**:这一份状态目前没有消费方(播放页没留错误位,也不该为它新造文案 ——
+     * 五语字符串不能凭空塞没翻译的中文串)。当场能救回症状的是 [togglePlayPause] 里那条 IDLE 分支
+     * (用户按播放键即整集重投),这一份 StateFlow 是给后续那一颗「重试」/一条提示用的数据出口。
+     *
+     * @param retrying 自动重投还在进行中(界面此刻不该报"失败",报"重试中"更准)
+     * @param retriesUsed 本集已经自动重投过几次(上限 [MAX_ERROR_RETRIES])
+     */
+    data class PlaybackError(
+        val episodeId: String,
+        val code: Int,
+        val codeName: String,
+        val retrying: Boolean,
+        val retriesUsed: Int
+    )
+
+    private val _playbackError = MutableStateFlow<PlaybackError?>(null)
+    val playbackError: StateFlow<PlaybackError?> = _playbackError
+
+    /**
+     * 网络/IO 类出错的自动重投次数与归属那一集。
+     *
+     * 清零口径是**「起新一集」**,不是「调用 playEpisode」:两者必须分开,因为 [retryNow] 与
+     * 睡眠/电台路径都会拿**同一集**再走一次 playEpisode —— 若按后者清零,这一集就能无限重试
+     * (错误 → 重投 → 再错 → 计数被自己清掉)。见 [playEpisode] 里那段。
+     */
+    private var errorRetries = 0
+    private var errorRetryEpisodeId = ""
+
+    /**
+     * 退避重投的动作本体(用 handler 排,和淡入淡出同一套法):
+     * Media3 的控制器调用必须留在主线程,而这里要的只是"过一会儿再 prepare 一次"。
+     */
+    private val errorRetryRunnable = Runnable {
+        val c = controller ?: return@Runnable
+        val ep = _current.value ?: return@Runnable
+        if (ep.id != errorRetryEpisodeId) return@Runnable   // 期间已换集,这次重投作废
+        if (c.playbackState != Player.STATE_IDLE) {
+            log.i(TAG, "自动重投跳过:播放器已不在 IDLE(state=${c.playbackState}) id=${ep.id}")
+            return@Runnable
+        }
+        // IDLE 下 seekTo 的位置会在下次 prepare 时生效(Media3 文档口径),所以重投不掉进度。
+        // 不这么做的后果不只是"从头播":播起来后 ticker 每约 5 秒把 currentPosition 写回历史,
+        // 等于把用户上次听到的那一秒抹成 0 —— 那一集还会从「继续收听」里消失(按 10 秒筛)。
+        val resumeAt = _position.value
+        log.w(TAG, "自动重投 #$errorRetries/$MAX_ERROR_RETRIES id=${ep.id} resume=${resumeAt}ms")
+        runCatching {
+            if (resumeAt > 0) c.seekTo(resumeAt)
+            c.prepare()
+        }.onFailure { log.e(TAG, "自动重投失败 id=${ep.id}", it) }
+    }
+
     val speedSteps = listOf(0.8f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
     private val _speed = MutableStateFlow(1.0f)
     val speed: StateFlow<Float> = _speed
@@ -382,7 +449,14 @@ object PlayerController {
                 controller = c
                 c.addListener(playerListener)
                 log.i(TAG, "controller connected")
-                pending?.let { ep -> pending = null; queue = listOf(ep); queueIndex = 0; updateNavFlags(); playEpisode(ep) }
+                // 控制器还没起来时用户已经点了某一集:这里只补播那一集,**不要动队列**。
+                // 原先这里跟着写了 `queue = listOf(ep); queueIndex = 0`,于是"从追更列表第 20 集点开、
+                // 冷启动第一次点"这种场景下整列上下文被抹成单曲 —— 上一集/下一集当场变灰,
+                // 播完也不会自动接下一集。pending 只可能由 playEpisode 设置,而它的每个调用方
+                // (playQueue / playQueueAt / advanceQueue / previous / restoreState / playRadioEpisode)
+                // 都已经**在自己那一处把 queue 摆好了**,这里再盖一次纯属多余且是错的。
+                // 见 REVIEW-2026-10-25 低·族 C-2。
+                pending?.let { ep -> pending = null; updateNavFlags(); playEpisode(ep) }
                 // **syncOnce 要排在恢复之前**:它用播放器的 currentPosition 刷进度线,而预载那一刻
                 // currentPosition 还是 0 —— 排在后面的话它会把 restoreState 里"先按历史画"那一笔覆盖掉,
                 // 界面读到的是 0:00,正是那条注释里说要防的"看着像进度丢了"。
@@ -452,7 +526,13 @@ object PlayerController {
             val c = controller
             when (playbackState) {
                 Player.STATE_BUFFERING -> log.d(TAG, "state BUFFERING id=${_current.value?.id}")
-                Player.STATE_READY -> log.d(TAG, "state READY dur=${c?.duration} id=${_current.value?.id}")
+                Player.STATE_READY -> {
+                    // 装载成功就是"已经恢复了",失败态(包括"重试中"那一档)到此作废。
+                    // 不在这里清的话,自动重投成功后界面那份错误仍挂着,读起来像"还在失败",
+                    // 而这一份状态将来是要点亮界面提示的 —— 见 REVIEW-2026-10-25 中-1。
+                    _playbackError.value = null
+                    log.d(TAG, "state READY dur=${c?.duration} id=${_current.value?.id}")
+                }
                 Player.STATE_ENDED -> log.i(TAG, "state ENDED id=${_current.value?.id}")
                 Player.STATE_IDLE -> log.d(TAG, "state IDLE")
             }
@@ -508,8 +588,48 @@ object PlayerController {
             }
         }
 
-        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+        override fun onPlayerError(error: PlaybackException) {
             log.e(TAG, "onPlayerError code=${error.errorCode} name=${error.errorCodeName} id=${_current.value?.id}", error)
+            // 原先这里只有一句 log.e(见 REVIEW-2026-10-25 中-1):流式播放一旦断网,播放器进 STATE_IDLE,
+            // 之后按播放键走的是 `controller.play()` —— 而 IDLE 下 play() 是空操作(见 [togglePlayPause]),
+            // 于是"这一集再也播不了",只能杀掉 App。现在分两件事:
+            //  ① 瞬时类(网络/IO)自动重投有限几次(退避 500ms、1s),超出上限把失败态留给用户;
+            //  ② 无论重试与否都**对外可见**([playbackError]),界面挂载待后续(见那里的注释)。
+            //
+            // 只把 `ERROR_CODE_IO_*` 里"重投一次有可能就好"的那几个算可重试:
+            //  - FILE_NOT_FOUND / NO_PERMISSION 多为**本地文件被清掉了**(下载件或缓存件在播放器之外被删),
+            //    重投同一个 URI 永远不会好,正确走法是重走一遍起播让源重新选(下载 > 缓存 > 流式),
+            //    那正是 [retryNow] / [togglePlayPause] 那条路;
+            //  - PARSING_* / DECODER_* 是这一份流本身解不出来,重投也是白投。
+            val ep = _current.value
+            val transient = when (error.errorCode) {
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
+                PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
+                PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS,
+                PlaybackException.ERROR_CODE_IO_INVALID_HTTP_CONTENT_TYPE,
+                PlaybackException.ERROR_CODE_IO_UNSPECIFIED -> true
+                else -> false
+            }
+            // 只有"错的还是当前这一集"才允许重投:期间用户已经点了别的集的话,
+            // 那次 prepare 会把新一集重新装载一遍,读起来像"点了没反应又从头播"。
+            if (transient && ep != null && ep.id == errorRetryEpisodeId && errorRetries < MAX_ERROR_RETRIES) {
+                errorRetries++
+                val delayMs = RETRY_BASE_MS shl (errorRetries - 1)
+                _playbackError.value = PlaybackError(ep.id, error.errorCode, error.errorCodeName, true, errorRetries)
+                log.w(TAG, "播放出错 ${error.errorCodeName},第 $errorRetries/$MAX_ERROR_RETRIES 次自动重投(${delayMs}ms 后) id=${ep.id}")
+                handler.removeCallbacks(errorRetryRunnable)
+                handler.postDelayed(errorRetryRunnable, delayMs)
+            } else {
+                // 非瞬时类:记为"这一集没有可自动重投的失败",但**不清计数**,
+                // 于是同一集反复出非瞬时错也不会形成循环。
+                _playbackError.value = PlaybackError(
+                    ep?.id ?: "", error.errorCode, error.errorCodeName, false, errorRetries
+                )
+                log.e(TAG, "播放失败不重投(transient=$transient) name=${error.errorCodeName} id=${ep?.id}")
+            }
+            // 出错时把已听到的位置立刻写回历史:之后的自动重投/暂停回写都以这一笔为基线,
+            // 别让"卡在坏位置上"变成第二件事。saveProgress 自己有 playbackStarted 地闸。
+            saveProgress()
         }
     }
 
@@ -627,6 +747,15 @@ object PlayerController {
         // 手动播放任意单集即退出电台;电台内部续播/换台传 isRadio=true 保持在台
         if (!isRadio && _radioMode.value) stopRadio()
         _current.value = episode
+        // 起**新一集**才清失败计数与失败态。口径必须是"换集",不能是"调用 playEpisode":
+        // [retryNow] 和睡眠/电台路径都会拿**同一集**再走一次这里,若按调用清零就成了
+        // 「出错 → 重投 → 计数被自己清掉 → 再出错」的死循环。见 REVIEW-2026-10-25 中-1。
+        if (episode.id != errorRetryEpisodeId) {
+            errorRetries = 0
+            errorRetryEpisodeId = episode.id
+            _playbackError.value = null
+            handler.removeCallbacks(errorRetryRunnable)   // 上一集排着的自动重投作废
+        }
         playbackStarted = false   // 换集即重新计数:见 saveProgress 那道地闸
         persistState()
         val c = controller
@@ -772,18 +901,67 @@ object PlayerController {
     fun togglePlayPause() {
         val c = controller ?: return
         log.i(TAG, "togglePlayPause wasPlaying=${c.isPlaying} id=${_current.value?.id}")
+        // 播放器在 STATE_IDLE 时 `play()` 是**空操作**(Media3 的口径:IDLE 不响应 play)。
+        // 出错之后播放器正是 IDLE,于是"按播放键永远没反应"—— 这条就是那条反馈的本体,
+        // 也是中-1 里"永久无法播"的实际手感。所以 IDLE + 暂停态这一路不走 play(),
+        // 而是整集重投:重选源(下载 > 缓存 > 流式)、按历史续播、顺带清失败态与重试计数。
+        // 这样界面**一个新按钮都不用加**,现有的播放键就是重试入口(playbackError 留给后续做提示)。
+        if (!c.isPlaying && c.playbackState == Player.STATE_IDLE) {
+            if (_current.value != null) {
+                log.w(TAG, "IDLE 下按播放 → 整集重投 id=${_current.value?.id}")
+                retryNow()
+                return
+            }
+            // 没有当前集(IDLE 且内存里也没东西):按下就是不动,与改动前一致。
+            log.w(TAG, "IDLE 且无当前集,播放键无动作")
+            return
+        }
         if (c.isPlaying) c.pause() else c.play()
+    }
+
+    /**
+     * 完整重投当前这一集(用户侧的"重试")。**与自动重投的区别**是这条会重走一遍选源与续播:
+     *  - 本地文件被清掉(ERROR_CODE_IO_FILE_NOT_FOUND)时,prepare() 重投同一个坏 URI 永远不会好,
+     *    而这里会退到下一级源(缓存 → 流式);
+     *  - 也顺带把 [errorRetries] 与 [playbackError] 归零,否则第二次再按就再也走不到自动那条路。
+     *
+     * ⚠️ UI 挂载待后续:目前没有"重试"按钮调它,播放键在 IDLE 下已经等价于它(见 [togglePlayPause]);
+     * 留这个出口是给后续那条错误提示用的。见 REVIEW-2026-10-25 中-1。
+     */
+    fun retryNow(): Boolean {
+        val ep = _current.value ?: return false
+        log.i(TAG, "retryNow id=${ep.id} retriesResetFrom=$errorRetries")
+        handler.removeCallbacks(errorRetryRunnable)
+        errorRetries = 0
+        _playbackError.value = null
+        playEpisode(ep)
+        return true
     }
 
     fun seekTo(ms: Long) {
         val target = ms.coerceAtLeast(0)
+        val c = controller ?: return
+        // IDLE(出错后 / 还没装载)时 `seekTo` 不会真的动,而原先这里无条件把 `_position` 改成目标值
+        // —— 进度线滑过去、播放器原地不动,读起来就是"进度条被搞坏了",还会让下一次自动重投
+        // 拿着这个假位置去 seek(见 errorRetryRunnable)。所以 IDLE 下**不更新 _position**,直接返回。
+        // 见 REVIEW-2026-10-25 中-1 ③。
+        if (c.playbackState == Player.STATE_IDLE) {
+            log.w(TAG, "STATE_IDLE 下忽略拖动 ${target}ms(播放器没装载东西,动了也是假的)")
+            return
+        }
         log.d(TAG, "seekTo ${target}ms")
-        controller?.seekTo(target)
+        c.seekTo(target)
         _position.value = target
     }
 
     fun seekBy(deltaMs: Long) {
         val c = controller ?: return
+        // 与 [seekTo] 同一族的 IDLE 症状:IDLE 下 `currentPosition` 是 C.TIME_UNSET(Long.MIN_VALUE),
+        // 加完增量再钳到 [0, …] 就得到"跳到 0:00"这个假结果(而且下一次进度回写会真的把历史抹成 0)。
+        if (c.playbackState == Player.STATE_IDLE) {
+            log.w(TAG, "STATE_IDLE 下忽略快进/快退 $deltaMs ms")
+            return
+        }
         val target = (c.currentPosition + deltaMs)
             .coerceIn(0, if (c.duration > 0) c.duration else Long.MAX_VALUE)
         log.d(TAG, "seekBy $deltaMs -> ${target}ms")

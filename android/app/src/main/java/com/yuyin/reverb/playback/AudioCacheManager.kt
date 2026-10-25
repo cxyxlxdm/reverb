@@ -1,10 +1,10 @@
 package com.yuyin.reverb.playback
 
 import android.content.Context
-import android.net.ConnectivityManager
 import com.yuyin.reverb.data.local.AudioCacheStore
 import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.util.ShortHash
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -268,18 +268,14 @@ object AudioCacheManager {
 
     /**
      * 与 [DownloadManager] 同一套口径:没开「蜂窝也允许」且当前默认网络按用量计费就拦。
-     * 判据为什么选 `isActiveNetworkMetered`(而不是「bearer 是不是 Wi-Fi」)、以及为什么与鸿蒙
-     * **刻意不修一致**,都写在 DownloadManager 那条注释里(见 H166)。
+     * 判据本体(为什么用 `isActiveNetworkMetered`、为什么与鸿蒙**刻意不修一致**、两个取不到时
+     * 各朝哪边)已收进 [com.yuyin.reverb.util.CellularGate],见那里的注释(REVIEW-2026-10-25 中-3)。
      *
      * 缓存必须走这道闸门:下载是用户点名要花的流量,而「播过就自动缓存」是 App 替他做的决定,
      * 更不该在计费链路上擅自跑几十 MB。
      */
-    private fun blockedByCellular(): Boolean {
-        val allow = settings?.allowCellularDownload?.value ?: false
-        if (allow) return false
-        val cm = if (::appCtx.isInitialized) appCtx.getSystemService(ConnectivityManager::class.java) else null
-        return cm?.isActiveNetworkMetered == true
-    }
+    private fun blockedByCellular(): Boolean =
+        com.yuyin.reverb.util.CellularGate.blocked(settings, if (::appCtx.isInitialized) appCtx else null)
 
     private fun clearInFlight(id: String) {
         synchronized(lock) {
@@ -300,6 +296,16 @@ object AudioCacheManager {
         }
         // 前缀与下载分开(dl_ / ca_):两个目录本来就分家,再加一层肉眼可辨,
         // 出问题时用 adb 看一眼目录就知道这个文件归谁管。
-        return "ca_" + id.hashCode().toString().replace("-", "n") + ext
+        //
+        // 为什么不用 String.hashCode():32 位散列按生日悖论约 7.7 万个 id 就有 50% 概率撞一对,
+        // 而缓存目录是按文件名落盘的 —— 撞上的两集会共用同一个文件,表现为"这集播的是另一集的声音",
+        // 且 `AudioCacheStore` 里两条记录都自称合法,事后无从解释。SHA-256 截 16 个 hex(64 位)
+        // 把量级推到十亿级。见 REVIEW-2026-10-25 低·族 A。
+        //
+        // 迁移口径(与体检文档的预判不同,这里核实过):`reconcile()` 是按**账本里的 fileName**
+        // 认领文件的,旧格式 `ca_<hashCode>` 的文件仍被旧账条目认领,不会被当孤儿删掉;
+        // [cache] 又是 `store.get(id) != null` 先短路,所以升级后已缓存的集不会重下一份。
+        // 于是老缓存既不丢也不翻倍,只是新旧两种文件名在目录里并存,随 LRU 淘汰自然收敛。
+        return "ca_" + ShortHash.hex16(id) + ext
     }
 }

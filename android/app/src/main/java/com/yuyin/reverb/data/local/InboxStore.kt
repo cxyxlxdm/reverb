@@ -146,10 +146,15 @@ class InboxStore(context: Context) {
             val out = ArrayList<Episode>(arr.length())
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
-                out.add(EpisodeJson.fromJson(o))
+                // 逐条 runCatching:一条坏记录只丢那一条,不打断整份(REVIEW-2026-10-25 高-3 附带条)
+                runCatching { EpisodeJson.fromJson(o) }.onSuccess { out.add(it) }
             }
             out
         } catch (e: Exception) {
+            // 追更是缓存性质的数据,但空态整份写回会顺手把冷启动可见列表清掉,
+            // 而且刷新那一路在 latest 为空时本来就不覆盖(:114 那条判据)—— 标记 + 留证照旧统一
+            JsonWriter.markLoadFailed(file)
+            com.yuyin.reverb.util.Logger.w(TAG, "inbox.json 读取失败,按空处理")
             emptyList()
         }
     }
@@ -188,11 +193,23 @@ class InboxStore(context: Context) {
         const val TAG = "InboxStore"
 
         // RSS 发布时间常见 RFC-822,iTunes 走 ISO/日期;逐个尝试解析,失败按 0(排最后)。
+        //
+        // ⚠️ **`XXX` 那两条排在同形状的 `Z` 之前,顺序是有意的**(REVIEW-2026-10-25 低·族 B-2):
+        // SimpleDateFormat 里 `Z` 只认 `+0800` 这种**不带冒号**的偏移,而 Atom / RSS 2.0 的现代源
+        // 大量写 `+08:00`。少了 XXX 会怎样:带冒号那条对 `Z` 解析失败后,一路掉到
+        // `yyyy-MM-dd'T'HH:mm:ss`(无时区那条),而 SimpleDateFormat **允许尾部有多余文本不消费** ——
+        // 于是 `+08:00` 被**静默丢掉**,时间按**本机时区**解释。症状不是"排最后"而是"差几个小时":
+        // 国内设备上偏移正好等于本机时区时看不出来,一旦源写的是 `-05:00` 这类偏移,
+        // 单集时间就错 13 小时,追更页与"新集"判断跟着错。
+        // 两条 XXX 都排在同形状最前,先按带冒号解,解不出来再退回老格式。
         private val patterns = listOf(
+            "EEE, dd MMM yyyy HH:mm:ss XXX",
             "EEE, dd MMM yyyy HH:mm:ss Z",
             "EEE, dd MMM yyyy HH:mm:ss zzz",
+            "EEE, dd MMM yyyy HH:mm XXX",
             "EEE, dd MMM yyyy HH:mm Z",
             "dd MMM yyyy HH:mm:ss Z",
+            "yyyy-MM-dd'T'HH:mm:ssXXX",
             "yyyy-MM-dd'T'HH:mm:ssZ",
             "yyyy-MM-dd'T'HH:mm:ss'Z'",
             "yyyy-MM-dd'T'HH:mm:ss",

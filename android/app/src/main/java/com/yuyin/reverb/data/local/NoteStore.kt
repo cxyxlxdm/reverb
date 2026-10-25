@@ -119,22 +119,28 @@ class NoteStore(context: Context) {
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
                 val epObj = o.optJSONObject("episode") ?: continue
-                val ep = EpisodeJson.fromJson(epObj)
-                // 缺 episode 体或没有可播的音频地址就跳过,而不是造一条「点不动」的批注 ——
-                // 列表里躺一条永远播不了的记录,比少一条更让人怀疑是 bug。
-                if (ep.audioUrl.isBlank()) continue
-                out.add(
-                    EpisodeNote(
+                // 逐条 runCatching:一条坏批注只丢那一条。**批注是用户写出来的字**,
+                // 整份归零后再被任何一次 persist 落回盘上就永久没了(REVIEW-2026-10-25 高-3)
+                val note = runCatching {
+                    val ep = EpisodeJson.fromJson(epObj)
+                    // 缺 episode 体或没有可播的音频地址就跳过,而不是造一条「点不动」的批注 ——
+                    // 列表里躺一条永远播不了的记录,比少一条更让人怀疑是 bug。
+                    if (ep.audioUrl.isBlank()) null
+                    else EpisodeNote(
                         id = o.optString("noteId"),
                         episode = ep,
                         positionMs = o.optLong("positionMs"),
                         text = o.optString("text"),
                         createdAt = o.optLong("createdAt")
                     )
-                )
+                }.getOrNull()
+                if (note != null) out.add(note)
+                else Logger.w("NoteStore", "notes.json 第 $i 条读坏了,跳过")
             }
             normalize(out)
         } catch (e: Exception) {
+            // 读坏 ≠ 没有批注:标记 + 留证,空态整份写回由 JsonWriter 的空态闸挡下
+            JsonWriter.markLoadFailed(file)
             Logger.e("NoteStore", "notes.json 读取失败,按空处理", e)
             emptyList()
         }
@@ -161,7 +167,8 @@ class NoteStore(context: Context) {
                         .put("episode", EpisodeJson.toJson(n.episode))
                 )
             }
-            file.writeText(arr.toString())
+            // 原子写:.part → rename,见 JsonWriter.writeAtomically(REVIEW-2026-10-25 高-3 A 步)
+            JsonWriter.writeAtomically(file, arr.toString())
         } catch (e: Exception) {
             Logger.e("NoteStore", "notes.json 写入失败", e)
         }

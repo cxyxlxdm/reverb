@@ -48,7 +48,10 @@ class SubscriptionStore(context: Context) {
             val out = ArrayList<Podcast>(arr.length())
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
-                out.add(
+                // 逐条 runCatching:一条坏元素只丢那一条。原先整份只有一个 try,
+                // 中间任何一条抛出来就是"订阅全没了",而空态紧接着会被下一次 persist 落回盘上
+                // (见 JsonWriter.writeAtomically 的空态闸,REVIEW-2026-10-25 高-3 附带条)。
+                val p = runCatching {
                     Podcast(
                         id = o.optString("id"),
                         title = o.optString("title"),
@@ -61,10 +64,15 @@ class SubscriptionStore(context: Context) {
                         fundingUrl = o.optString("fundingUrl"),
                         fundingLabel = o.optString("fundingLabel")
                     )
-                )
+                }.getOrNull()
+                if (p != null) out.add(p)
+                else com.yuyin.reverb.util.Logger.w("SubStore", "subscriptions.json 第 $i 条读坏了,跳过")
             }
             out
         } catch (e: Exception) {
+            // 顶层读坏 ≠ 这份数据是空的:标记 + 留证,后续的空态整份写回会被 JsonWriter 挡下
+            JsonWriter.markLoadFailed(file)
+            com.yuyin.reverb.util.Logger.e("SubStore", "subscriptions.json 读取失败,按空处理", e)
             emptyList()
         }
     }
@@ -87,7 +95,10 @@ class SubscriptionStore(context: Context) {
                         .put("fundingLabel", p.fundingLabel)
                 )
             }
-            file.writeText(arr.toString())
+            // 原子写(.part → rename):订阅是用户最重的一份资产,截断重写等于一次进程被杀全丢
+            // 见 REVIEW-2026-10-25 高-3。这里**不走去抖**(见 JsonWriter 顶部那条分工理由),
+            // 但落盘出口必须和去抖那五份文件同一个。
+            JsonWriter.writeAtomically(file, arr.toString())
         } catch (e: Exception) {
             // 持久化失败不影响内存态，忽略
         }

@@ -118,20 +118,45 @@ class DiscoverViewModel(
     fun onQueryChange(q: String) {
         query = q
         // 清空输入即回到热门推荐，清掉上一次的搜索结果
-        if (q.isBlank()) state = DiscoverState.Idle
+        if (q.isBlank()) {
+            searchGen++      // 作废在途请求,否则它回来还会把结果盖回空输入框下面
+            state = DiscoverState.Idle
+        }
     }
 
     fun clearQuery() {
         query = ""
+        searchGen++
         state = DiscoverState.Idle
     }
+
+    /**
+     * 搜索请求的**代次**。
+     *
+     * 为什么必须有(见 REVIEW-2026-10-25 低·族 C-1):这一路原先没有任何守卫 ——
+     * 用户连输两次「播客」「播客行业」,或从结果页返回后改词再搜,两次 `search()` 的协程同时在跑;
+     * 谁**后回来**谁写 `state`,而"后回来"由网络决定,不是由用户输入顺序决定。
+     * 慢的那个旧请求完全可能最后到达,于是界面显示的是**上一次那个词**的结果,
+     * 而输入框里是当前那个词 —— 症状是"搜不到/结果和关键词对不上",且无法复现。
+     *
+     * 同一条经验在 `PodcastViewModel.load` 里已经有了(`loadedFeed != feedUrl` 那道判据,见那里),
+     * 本类之前只补了详情页、漏了搜索页。
+     *
+     * 口径:每次**新的搜索动作**(以及清空/改空)都让代次 +1;协程回来时发现自己不是最新一代就丢弃。
+     * 只丢结果、不取消旧协程 —— 旧请求已经发出去了,取消省不下什么,而这里要防的是它盖新结果。
+     * (仓库没有自动化测试,这条的判据见代码注释下方的真机判据。)
+     * 真机判据:飞行模式关掉但用限速(或热键连点搜索)输入 A、立刻改成 B,B 的结果必须最终胜出。
+     */
+    private var searchGen = 0
 
     fun search(region: String) {
         val q = query.trim()
         if (q.isBlank()) {
+            searchGen++
             state = DiscoverState.Idle
             return
         }
+        val gen = ++searchGen
         viewModelScope.launch {
             state = DiscoverState.Loading
             // 频道与单集并行检索，切换分段时不再重复请求
@@ -142,6 +167,11 @@ class DiscoverViewModel(
                 val epsJob = async { repo.searchEpisodes(q, region) }
                 outcome = podsJob.await()
                 episodes = epsJob.await()
+            }
+            // 期间又发起了新的搜索(或清空了输入):这一份结果作废
+            if (gen != searchGen) {
+                com.yuyin.reverb.util.Logger.i("DiscoverVM", "搜索结果作废 gen=$gen cur=$searchGen q=$q")
+                return@launch
             }
             state = if (outcome.podcasts.isEmpty() && episodes.isEmpty()) {
                 DiscoverState.Empty

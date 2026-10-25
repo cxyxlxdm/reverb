@@ -5,6 +5,7 @@ import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.TranscribedSegment
 import com.yuyin.reverb.data.model.TranscribedWord
+import com.yuyin.reverb.util.ShortHash
 import com.yuyin.reverb.util.TranscriptLines
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -54,6 +55,23 @@ class WhisperEngine(context: Context) : AsrEngine {
         val audio = if (!localPath.isNullOrBlank() && File(localPath).exists()) {
             localPath
         } else {
+            /**
+             * 蜂窝闸门(见 REVIEW-2026-10-25 中-3)。这一步是**整集音频**的下载,几十 MB 起,
+             * 和「下载」「缓存」是同一个量级的擅自流量,却一直是这三条路径里唯一没接闸门的:
+             * 用户关了设置里的「仅在 Wi-Fi 下载」,前两条老实用不计费的链路,只有这里会在蜂窝上悄悄跑完。
+             *
+             * 拦在这里而不是 `downloadToCache` 里面,是因为那个函数只能回 `null`,
+             * 而调用方需要分清「被规则拦下」和「网络真的坏了/链接死了」—— 前者该告诉用户去开哪个开关。
+             * 判据本体在 [com.yuyin.reverb.util.CellularGate](与下载/缓存共用同一份,别在这里另抄一遍)。
+             *
+             * 已经下载或已缓存到本地的这一集走的是上面那条分支,压根不会到这里 ——
+             * 所以这道闸门不会拦住"离线也能转"那条本来就该通的路。
+             */
+            if (blockedByCellular()) {
+                com.yuyin.reverb.util.Logger.w(TAG, "识别前的音频下载被计费链路拦下 id=${episode.id}")
+                onStage(AsrEngine.Stage.NeedUnmetered)
+                return@withContext false
+            }
             onStage(AsrEngine.Stage.DownloadingAudio)
             temp = downloadToCache(episode) ?: return@withContext false
             temp.absolutePath
@@ -134,6 +152,18 @@ class WhisperEngine(context: Context) : AsrEngine {
     }
 
     // ── 内部 ──
+
+    /**
+     * 识别前那一步整集音频下载该不该被拦。判据与「下载」「缓存」共用同一份
+     * (见 [com.yuyin.reverb.util.CellularGate] 里为什么必须是同一份)。
+     *
+     * 上下文拿不到 `AppContainer` 时按「拿不到设置」处理,也就是**不允许蜂窝** ——
+     * 方向与那两个调用点一致:宁可拦一次让用户去点开开关,不可擅自跑掉几十 MB。
+     */
+    private fun blockedByCellular(): Boolean {
+        val st = runCatching { (appCtx as ReverbApp).container.settingsStore }.getOrNull()
+        return com.yuyin.reverb.util.CellularGate.blocked(st, appCtx)
+    }
 
     /**
      * 该不该留这一句。挡掉两类东西:
@@ -219,7 +249,18 @@ class WhisperEngine(context: Context) : AsrEngine {
 
     private fun downloadToCache(episode: Episode): File? = try {
         val client = (appCtx as ReverbApp).container.httpClient
-        val dest = File(appCtx.cacheDir, "asr-${kotlin.math.abs(episode.id.hashCode())}.audio")
+        /**
+         * 临时音频名不用 `String.hashCode()`(见 REVIEW-2026-10-25 低·族 A)。
+         *
+         * 这处和 `dl_` / `ca_` 两处不同害:它是**一次性**的临时文件(`transcribe` 收尾就 delete),
+         * 撞名了也只是同一轮里互相覆盖,不会像缓存那样留下"这集播的是另一集"的持久错账。
+         * 仍然要改的两个理由:
+         * 1. `kotlin.math.abs(Int.MIN_VALUE)` 还是负数(hashCode 落到 -2147483648 时),
+         *    于是文件名会多出个 `asr--2147483648.audio` —— 不崩,但排查时一眼像是拼错了;
+         * 2. 项目里"把 32 位散列当唯一键"就剩这一处,留着它下一个人就会照着抄。
+         * 换成 [ShortHash.hex16] 后名字恒定 16 位小写 hex。它只在 cacheDir 里活几十秒,不进任何账本。
+         */
+        val dest = File(appCtx.cacheDir, "asr-${ShortHash.hex16(episode.id)}.audio")
         val req = Request.Builder().url(episode.audioUrl)
             .header("User-Agent", "Reverb/1.0 (Android podcast client)").build()
         client.newCall(req).execute().use { resp ->

@@ -83,18 +83,29 @@ class HistoryStore(context: Context) {
             val out = ArrayList<HistoryEntry>(arr.length())
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
-                out.add(
+                // 逐条宽容:原先这里是抛异常型的 `o.getJSONObject("episode")`,
+                // 一条缺 episode 键的记录就把整个循环打断 ⇒ **整份历史被当成空**,
+                // 之后任何一次 persist(播放中每约 5 秒就有一次)都会把这个空态永久落盘。
+                // 现在坏的那一条只丢那一条,其余照常读回(REVIEW-2026-10-25 高-3 附带条)。
+                val epObj = o.optJSONObject("episode") ?: continue
+                val h = runCatching {
                     HistoryEntry(
-                        episode = EpisodeJson.fromJson(o.getJSONObject("episode")),
+                        episode = EpisodeJson.fromJson(epObj),
                         positionMs = o.optLong("positionMs"),
                         durationMs = o.optLong("durationMs"),
                         updatedAt = o.optLong("updatedAt"),
                         played = o.optBoolean("played", false)
                     )
-                )
+                }.getOrNull()
+                if (h != null) out.add(h)
+                else com.yuyin.reverb.util.Logger.w("HistoryStore", "history.json 第 $i 条读坏了,跳过")
             }
             out
         } catch (e: Exception) {
+            // 顶层解析失败 → 只当"这次读不出来",不当"用户没有历史":标记 + 留证,
+            // 空态整份写回由 JsonWriter 的空态闸挡下(见那里的 writeAtomically)
+            JsonWriter.markLoadFailed(file)
+            com.yuyin.reverb.util.Logger.e("HistoryStore", "history.json 读取失败,按空处理", e)
             emptyList()
         }
     }

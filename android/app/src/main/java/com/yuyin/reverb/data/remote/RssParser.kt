@@ -69,14 +69,23 @@ class RssParser(private val client: OkHttpClient) {
             var iImage = ""; var iGuid = ""; var iDate = ""; var iDur = ""
             // 逐字稿:同一集可能给多条(不同格式),iTrRank 记住当前已选那条的优先级
             var iTrUrl = ""; var iTrType = ""; var iTrRank = -1
-            val textBuf = StringBuilder() // 累积当前元素文本，START 时清空，避免空元素继承兄弟节点文本
+            // 累积**当前元素**的文本。为什么是栈而不是一个 buffer:
+            // 原先在 START_TAG 里 `setLength(0)`,于是标题里内嵌一个标签就把前半截丢掉 ——
+            // `<title>前情<b>提要</b>收尾</title>` 读出来只剩「提要收尾」(REVIEW-2026-10-25 低·族 B-3)。
+            // 栈的语义:进子元素时把父元素已攒的文本压栈、子元素从零开始,出元素时把子元素的文本并回父元素。
+            // 这样两件事同时成立:
+            //  ① 空元素不再继承兄弟的文本(它自己的 buffer 是新的,父的在栈上)—— 原 clear 要防的就是这个;
+            //  ② 内联标签前后的文字拼成完整标题。
+            var textBuf = StringBuilder()
+            val textStack = ArrayList<StringBuilder>()
 
             var event = parser.eventType
             while (event != XmlPullParser.END_DOCUMENT) {
                 val name = parser.name?.lowercase() ?: ""
                 when (event) {
                     XmlPullParser.START_TAG -> {
-                        textBuf.setLength(0)
+                        textStack.add(textBuf)
+                        textBuf = StringBuilder()
                         when (name) {
                             "item", "entry" -> {
                                 inItem = true
@@ -188,6 +197,12 @@ class RssParser(private val client: OkHttpClient) {
                                     }
                             }
                         }
+                        // 出元素:把本元素攒到的文本并回父元素,这样 `<title>前<b>中</b>后</title>`
+                        // 的父(= title)最终拿到「前中后」。与 START_TAG 那次压栈一一对应:
+                        // 压栈时栈顶是父、当前 buffer 是新的;出栈时弹回父并把子文本接上去。
+                        val parent = textStack.removeAt(textStack.size - 1)
+                        if (textBuf.isNotEmpty()) parent.append(textBuf)
+                        textBuf = parent
                     }
                 }
                 event = parser.next()
@@ -263,13 +278,19 @@ class RssParser(private val client: OkHttpClient) {
         t = t.replace(Regex("(?i)</div>"), "\n")
         t = t.replace(Regex("(?i)<li[^>]*>"), "· ")
         t = t.replace(Regex("<[^>]*>"), "")
+        // 实体解码顺序:**`&amp;` 必须放最后**。
+        // 原先 `&amp;`→`&` 排在 `&lt;`→`<` 前面,于是源里字面写的 `&amp;lt;`(用户想看到「&lt;」)
+        // 先折成 `&lt;`,再被下一行折成 `<` —— 双重反转义(REVIEW-2026-10-25 低·族 B-1)。
+        // 反过来先解 `&lt;`/`&gt;`/`&quot;` 等,`&amp;lt;` 里并不含字面 `&lt;`,不受影响;
+        // 最后一步才把 `&amp;` 折成 `&`,得到的正是发布方写的那个 `&lt;`。
+        // (RSS 的 description 绝大多数在 CDATA 里,解析器不会替我们解一层,所以这一层必须自己解对。)
         t = t.replace("&nbsp;", " ")
-            .replace("&amp;", "&")
             .replace("&lt;", "<")
             .replace("&gt;", ">")
             .replace("&quot;", "\"")
             .replace("&#39;", "'")
             .replace("&apos;", "'")
+            .replace("&amp;", "&")
         t = t.replace(Regex("[ \\t]+"), " ")
         t = t.replace(Regex(" *\\n *"), "\n")
         t = t.replace(Regex("\\n{3,}"), "\n\n")

@@ -88,8 +88,13 @@ class PlaybackStateStore(context: Context) {
         if (cur != null) body.put("current", EpisodeJson.toJson(cur))
         synchronized(lock) {
             snapshot = Snapshot(cur, listTag, window, idx - from, queued)
-            runCatching { file.writeText(body.toString()) }
-                .onFailure { Logger.e(TAG, "播放态写入失败", it) }
+            // 原子写(写 .part → rename),REVIEW-2026-10-25 高-3 A 步。这一份是同步直写点之一:
+            // 它必须在用户点完「加入队列」之后就已经在盘上(见类注释里那条「不能用去抖」的理由),
+            // 但"同步"和"可能被拦腰截断"是两件事 —— 落盘出口统一走 JsonWriter.writeAtomically。
+            // 该文件是可再生的临时态,不参与备份,所以写失败只记日志、不改内存(内存才是当前真相)。
+            if (!JsonWriter.writeAtomically(file, body.toString())) {
+                Logger.e(TAG, "播放态落盘失败(见 JsonWriter 的日志:空态闸或 rename)")
+            }
         }
         Logger.i(
             TAG,
@@ -132,7 +137,14 @@ class PlaybackStateStore(context: Context) {
         if (text.isBlank()) return Snapshot()
         // 逐键宽容解析:备份/缓存是跨版本边界,任何一键坏掉都不该让整份读不出来
         // (H86 那个坑的同一形状 —— 只是这里失败的方向是"重启后没有播放栏")。
-        val root = runCatching { JSONObject(text) }.getOrNull() ?: return Snapshot()
+        val root = runCatching { JSONObject(text) }.getOrNull()
+        if (root == null) {
+            // 顶层就不是 JSON(多半是被截断):留证 + 立空态闸,见 REVIEW-2026-10-25 高-3 B②。
+            // 下面那条 version>VERSION 的早退**不标记** —— 那是「新版本格式老版本看不懂」,
+            // 按设计作废,把空态写回去是对的。
+            JsonWriter.markLoadFailed(file)
+            return Snapshot()
+        }
         if (root.optInt("version", 1) > VERSION) {
             // 新格式被老版本读到:整份作废,别拿半懂不懂的字段去恢复播放态
             Logger.w(TAG, "播放态 version=${root.optInt("version")} > $VERSION,忽略")

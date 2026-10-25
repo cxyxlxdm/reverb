@@ -49,6 +49,10 @@ class PopularCacheStore(context: Context) {
             }
             map
         } catch (e: Exception) {
+            // 顶层解析失败:留证 + 立空态闸(REVIEW-2026-10-25 高-3 B②)。
+            // 逐条读取侧不用改 —— toPodcasts() 全用 opt*,坏条目只会变成空串字段,抛不出来。
+            JsonWriter.markLoadFailed(file)
+            com.yuyin.reverb.util.Logger.w("PopularCache", "popular_cache.json 读坏了,按空处理")
             mutableMapOf()
         }
     }

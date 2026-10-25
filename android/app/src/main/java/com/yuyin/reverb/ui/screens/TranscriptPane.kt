@@ -125,6 +125,22 @@ fun TranscriptPane(
             is TranscriptStore.State.DownloadingAudio -> Progress(stringResource(R.string.transcript_preparing_audio))
             is TranscriptStore.State.LoadingModel -> Progress(stringResource(R.string.transcript_loading_model))
 
+            /**
+             * 识别前要下的整集音频被计费链路拦下了(REVIEW-2026-10-25 中-3)。
+             *
+             * 文案**复用设置里那条既有的** `set_wifi_only_sub`(「关闭后蜂窝网络也允许下载与缓存」,
+             * 五语都已翻)—— 本轮约束是不往 strings.xml 塞没翻译的新串,而这一屏要说的事实正好就是
+             * 那条设置管的事。留一颗「重试」:切到 Wi-Fi 后再点就能走通(不点它,用户只能杀 App)。
+             * 想要一句更贴"逐字稿"这个场景的话,得五语一起补 —— 那是另一件事。
+             */
+            is TranscriptStore.State.NeedUnmetered -> Hint(
+                icon = Icons.Rounded.WarningAmber,
+                tint = MaterialTheme.colorScheme.error,
+                text = stringResource(R.string.set_wifi_only_sub),
+                actionLabel = stringResource(R.string.action_retry),
+                onAction = start
+            )
+
             is TranscriptStore.State.Failed -> Hint(
                 icon = Icons.Rounded.WarningAmber,
                 tint = MaterialTheme.colorScheme.error,

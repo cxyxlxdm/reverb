@@ -69,20 +69,28 @@ class FeedCacheStore(context: Context) {
                 val arr = o.optJSONArray("episodes") ?: JSONArray()
                 val episodes = ArrayList<Episode>(arr.length())
                 for (i in 0 until arr.length()) {
-                    arr.optJSONObject(i)?.let { episodes.add(EpisodeJson.fromJson(it)) }
+                    // 逐条 runCatching:一个坏条目只少一条,不让整个频道被打断
+                    // (REVIEW-2026-10-25 高-3 附带条;这里原先是 `episodes.add(fromJson(it))` 裸调)
+                    val o = arr.optJSONObject(i) ?: continue
+                    runCatching { EpisodeJson.fromJson(o) }.onSuccess { episodes.add(it) }
                 }
                 if (episodes.isEmpty()) continue
-                items.add(
-                    url to Entry(
+                val entry = runCatching {
+                    Entry(
                         FeedResult(PodcastJson.fromJson(podcastObj), episodes),
                         o.optLong("fetchedAt", 0L)
                     )
-                )
+                }.getOrNull()
+                if (entry != null) items.add(url to entry)
             }
             items.sortBy { it.second.fetchedAt }
             for ((url, entry) in items) out[url] = entry
             com.yuyin.reverb.util.Logger.i(TAG, "feed cache loaded feeds=${out.size}")
         } catch (e: Exception) {
+            // 顶层解析失败:交给 JsonWriter 留证 + 立空态闸(REVIEW-2026-10-25 高-3 B②)。
+            // feed_cache 是可再生的缓存,留证的价值不如用户资产那份,但**原地覆盖**同样是白扔一次
+            // 网络请求的结果;而且这里必须走同一个出口,否则"每个 store 自律"的漏洞又开一个。
+            JsonWriter.markLoadFailed(file)
             com.yuyin.reverb.util.Logger.w(TAG, "feed cache load failed: ${e.message}")
             out.clear()
         }
