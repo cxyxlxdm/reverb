@@ -89,11 +89,23 @@ export class DownloadManager {
       return DownloadResult.IGNORED;
     }
     if (e.audioUrl.length === 0) return DownloadResult.IGNORED;
-    const gate = await this.downloadGate();
-    if (gate !== DownloadResult.STARTED) return gate;
-
+    // 占位必须挂在**唯一那个 await 之前**(见 REVIEW-2026-10-25 低·族D D3)。
+    // 原先顺序是:查重 → `await downloadGate()` → setState(QUEUED)。中间那个 await 是两次系统调用
+    // (getDefaultNet + getNetCapabilities),几十到几百毫秒;快速连点两下时两次都越过上面的
+    // 「正在下载/已排队」判据,于是两条下载各自 open 同一个 `.part`、两个 fd 交替写 requestInStream
+    // 的分片 —— 音频字节错序即损坏,而这一份照样 rename 成正式文件并 `store.add`,
+    // 用户拿到一条"已下载"却播不了的记录。
+    // 与 `AudioCacheManager.cache()` 的 `inFlightId` 是同一条经验:**认领要在同步段里完成**,
+    // 异步检查排在认领之后,没过再把占位撤掉。
     this.setState(e.id, DownloadState.QUEUED, 0);
-    const target = `${this.dir}/${DownloadManager.fileName(e.id, e.audioUrl)}`;
+    const gate = await this.downloadGate();
+    if (gate !== DownloadResult.STARTED) {
+      // 闸门没过就撤掉占位:界面上不能留一条永远没人改的「排队中」(见上面 setState 的观察代价)。
+      this.clearState(e.id);
+      return gate;
+    }
+
+    const target = `${this.dir}/${this.uniqueName(e.id, e.audioUrl)}`;
     const part = `${target}.part`;
     const req = http.createHttp();
     let file: fs.File | null = null;
@@ -204,9 +216,13 @@ export class DownloadManager {
    * 都不上报 NOT_METERED,这个信号在 ArkTS 侧不可用;Android 侧仍能识别,两端在这条上
    * 就是不等价,不要试图"修一致"。
    *
-   * 两个兜底方向仍与 Android 一致:
-   * - **设置读不到就按"不允许蜂窝"**(Android 是 `?: false`;本端原先 `settings === null` 直接放行);
-   * - 拿不到 capability 数组时放行(拦下载比拦错下载更烦人)。
+   * 三个兜底方向(2026-10-25 复核后按代码逐条改写成实话 —— 原先最后一条写「拿不到 capability
+   * 数组时放行」,而代码在**蜂窝**链路上其实是拦;见 REVIEW-2026-10-25 低·族D D2):
+   * - **设置读不到**(`settings === null`)按"不允许蜂窝"处理,蜂窝链路照拦(Android 是 `?: false`,同向);
+   * - **capability 数组缺失**时 `declaredNotMetered` 记 false ⇒ 非蜂窝照常放行、蜂窝仍按拦。
+   *   这不是"拦错比拦对烦人"的宽容,而是:没有证据说这条链路不计费,就不在用户承诺过的开关上擅自下载;
+   * - **整个读取过程抛异常** → `NO_NETWORK`,同样是拦。另一道闸门 `AudioCacheManager.blockedByCellular()`
+   *   原先在 catch 里返回"放行"、注释还声称与本端一致,本次一并改成拦,取舍写在它那侧的注释里(互指)。
    */
   private async downloadGate(): Promise<DownloadResult> {
     try {
@@ -296,9 +312,39 @@ export class DownloadManager {
     this.states = next;
   }
 
+  /**
+   * 撤掉一条进度。ArkTS 没有 `delete`(arkts-no-delete),所以重建一份不含该键的表 ——
+   * 与 `FeedCacheStore` 淘汰、`PlaybackClock` 各处同一个写法。
+   * 整体赋值是**必须**的:`states` 挂在 @Observed 上,原地改属性不通知(见 H27)。
+   */
+  private clearState(id: string): void {
+    if (this.states[id] === undefined) return;
+    const next: Record<string, DownloadProgress> = {};
+    const keys = Object.keys(this.states);
+    for (let i = 0; i < keys.length; i++) {
+      if (keys[i] !== id) next[keys[i]] = this.states[keys[i]];
+    }
+    this.states = next;
+  }
+
   /// 文件名:dl_<id 简易哈希><扩展名>。
+  /**
+   * **哈希只是"够用"的短键,不是唯一键**(见 REVIEW-2026-10-25 低·族A)。它是 int32,
+   * 两个不同 id 撞上同一个名字时,后下完的那集会 `rename` 盖掉前一集的文件,而两条账本
+   * 记录都指向那个路径 —— 症状就是审核给这一族写的最坏后果:「播 A 集出 B 集的声音」。
+   * 两道处理,都不动哈希本体:
+   *  ① 种子放**串长**:原先 h 从 0 起,长度信息在第一轮就被 `|0` 绕掉了,
+   *     长短不同的 id 更容易同余;先播种长度,不同长度从第一轮就分道(零成本)。
+   *  ② 真正兜住的是写盘前的 `uniqueName()` 探测:账本里已有**别的集**占着这个名字时换名,
+   *     不给别人覆盖。
+   * 换命名只影响**之后的新下载**:`downloads.json` 存的是 `localPath` 全路径(见 DownloadStore.load
+   * 还会上逐个 `accessSync` 校验),老条目照旧按记下的路径读,不需要迁移。
+   * 前缀 `dl_` 与音频缓存的 `ca_` 区分不变 —— 装机看一眼目录就知道归谁管。
+   * Android 侧这一族由另一个代理同步加长;缓存文件名**不是三端互通格式**(互通的是备份 JSON),
+   * 所以两端各自加长、不要求逐字节相同。
+   */
   private static fileName(id: string, url: string): string {
-    let h = 0;
+    let h = id.length;
     for (let i = 0; i < id.length; i++) {
       h = (h * 31 + id.charCodeAt(i)) | 0;
     }
@@ -310,5 +356,37 @@ export class DownloadManager {
     else if (lower.indexOf('.ogg') >= 0) ext = '.ogg';
     else if (lower.indexOf('.wav') >= 0) ext = '.wav';
     return `${name}${ext}`;
+  }
+
+  /**
+   * 撞名探测(低·族A ②):只有当账本里**另一集**的落盘文件名正好等于候选名时才换名。
+   * 同步、线性扫,只在用户点下载时跑一次(不在渲染路径),账本条数量级是"手动下载的几十集"。
+   * 极端情况连撞 9 次(概率上不会)就退回原名并记一行日志,别把下载这条路堵死。
+   */
+  private uniqueName(id: string, url: string): string {
+    const store = this.store;
+    const base = DownloadManager.fileName(id, url);
+    if (store === null || !DownloadManager.claimedByOther(store, base, id)) return base;
+    const dot = base.indexOf('.');
+    const stem = dot > 0 ? base.substring(0, dot) : base;
+    const ext = dot > 0 ? base.substring(dot) : '';
+    for (let n = 2; n <= 9; n++) {
+      const cand = `${stem}-${n}${ext}`;
+      if (!DownloadManager.claimedByOther(store, cand, id)) {
+        Log.w('Download', `文件名撞车(${base}),这一集改用 ${cand} 落盘 —— 见 REVIEW-2026-10-25 低·族A`);
+        return cand;
+      }
+    }
+    Log.w('Download', `文件名 ${base} 连续撞车 8 次,仍按原名落盘`);
+    return base;
+  }
+
+  private static claimedByOther(store: DownloadStore, name: string, id: string): boolean {
+    const done = store.downloads;
+    for (let i = 0; i < done.length; i++) {
+      const p = done[i].localPath;
+      if (p.substring(p.lastIndexOf('/') + 1) === name && done[i].episode.id !== id) return true;
+    }
+    return false;
   }
 }

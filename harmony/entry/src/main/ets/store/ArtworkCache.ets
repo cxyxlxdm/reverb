@@ -9,6 +9,12 @@ interface Entry {
   size: number;
   mtime: number;
   uri: string;
+  /**
+   * 这个文件是为**哪个 URL** 下的;`''` = 不知道(本次启动由 `scan()` 从目录里认回来的)。
+   * 只为 低·族A 的回验而存在(见 `uriFor`),不落盘 —— 本类刻意**没有账本文件**(见类注释),
+   * 为一个哈希回验引入第四种持久化数据不值得。
+   */
+  url: string;
 }
 
 /**
@@ -81,10 +87,22 @@ export class ArtworkCache {
   }
 
   /// 已有本地副本时返回可直接交给 `Image()` 的沙箱 uri,否则 null。
+  /**
+   * 命中时做一次 **url 回验**(见 REVIEW-2026-10-25 低·族A ②):文件名是 url 的 int32 哈希,
+   * 两个不同 url 撞名时会互相顶掉,症状是「A 频道显示 B 频道的封面」。本类没有账本文件,
+   * 所以只有**本次进程下过的**那些知道自己是为什么 url 落的盘(`scan()` 认回来的 url 为空,
+   * 无从证伪,只能照旧接受 —— 这是"不引入第四份持久化数据"的代价,写在 `Entry.url` 上)。
+   * 回验不过就按未命中处理:返回 null,让调用方去 `ensure()` 重新下一份正确的覆盖回来,能自愈。
+   */
   uriFor(url: string): string | null {
     if (url.length === 0 || this.dir.length === 0) return null;
     const e = this.entries.get(ArtworkCache.nameOf(url));
-    return e === undefined ? null : e.uri;
+    if (e === undefined) return null;
+    if (e.url.length > 0 && e.url !== url) {
+      Log.w('Artwork', `封面缓存 url 不符,判为未命中(哈希撞名)—— 见 REVIEW-2026-10-25 低·族A`);
+      return null;
+    }
+    return e.uri;
   }
 
   /**
@@ -99,7 +117,10 @@ export class ArtworkCache {
     if (url.length === 0 || this.dir.length === 0) return;
     const name = ArtworkCache.nameOf(url);
     const have = this.entries.get(name);
-    if (have !== undefined) {
+    // 与 `uriFor` 同一道回验(低·族A ②):这里如果只判"名字在不在",撞名时会把别人的封面
+    // 直接回调给组件,那条路径比 uriFor 更隐蔽(它在下载完成时也会走)。
+    // 判为不可用就走下面的重新下载 —— 覆盖写回同一个文件名,并把 entry.url 改成正确的 url,自愈。
+    if (have !== undefined && (have.url.length === 0 || have.url === url)) {
       if (onReady !== null) onReady(have.uri);
       return;
     }
@@ -135,7 +156,11 @@ export class ArtworkCache {
         }
         const uri = fileUri.getUriFromPath(`${this.dir}/${name}`);
         const st = this.statQuiet(`${this.dir}/${name}`);
-        this.entries.set(name, { size: st[0], mtime: st[1], uri: uri });
+        // 覆盖同一个文件名时先把旧尺寸从预算里扣掉,否则 total 只会单调变大、把没占空间的
+        // 文件算成占过(撞名重下这条路会反复走到,见 uriFor 的回验)。
+        const prev = this.entries.get(name);
+        if (prev !== undefined) this.total -= prev.size;
+        this.entries.set(name, { size: st[0], mtime: st[1], uri: uri, url: url });
         this.total += st[0];
         this.failedAt.delete(name);
         const ws = this.waiters.get(name);
@@ -204,7 +229,9 @@ export class ArtworkCache {
             continue;
           }
           sum += st.size;
-          this.entries.set(names[i], { size: st.size, mtime: st.mtime, uri: fileUri.getUriFromPath(p) });
+          // url 记空:目录本身就是账,扫回来的文件无从知道它是为哪个 url 下的(见 Entry.url),
+          // 所以这一类条目在 `uriFor` 的回验里按"不能证伪就算可用"处理。
+          this.entries.set(names[i], { size: st.size, mtime: st.mtime, uri: fileUri.getUriFromPath(p), url: '' });
         } catch (e) {
           // 单个文件读不到就跳过
         }
@@ -356,8 +383,19 @@ export class ArtworkCache {
 
   /// 文件名:art_<url 简易哈希><从 URL 猜的扩展名>。扩展名只是给解码器一个提示,
   /// 真判据是上面那次 decodable(URL 无后缀时统一按 .jpg 命名)。
+  /**
+   * 哈希是 int32,**不是唯一键**(见 REVIEW-2026-10-25 低·族A)。撞名的后果是两张封面互相顶掉,
+   * 所以这里只做两件小事、不改哈希本体:
+   *  ① 种子放**串长**:原先 h 从 0 起,长度信息第一轮就被 `|0` 绕掉,长短不同的 url 更容易同余;
+   *  ② 命中路径按 url 回验(见 `uriFor` / `ensure`),不符就重下、覆盖回来。
+   * **刻意不给撞名换后缀**(与 ca_/dl_ 不同):本类没有账本,文件名本身就是唯一的查找路径,
+   * 换了名老文件就再也算不出来 —— 它既不会被 `uriFor` 命中,也只能等预算淘汰慢慢清掉。
+   * 加长种子同样让**装机时已在盘上的旧命名**算不出来,表现是"首屏封面重新拉一次",
+   * 旧文件由 mtime 淘汰收尾;图片是可重取的小对象,这一笔换"不再串图"是划算的。
+   * Android 侧这一族由另一个代理同步加长;缓存文件名**不是三端互通格式**,不要求两端逐字节相同。
+   */
   private static nameOf(url: string): string {
-    let h = 0;
+    let h = url.length;
     for (let i = 0; i < url.length; i++) {
       h = (h * 31 + url.charCodeAt(i)) | 0;
     }
