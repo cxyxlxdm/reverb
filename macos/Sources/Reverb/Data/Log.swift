@@ -60,6 +60,20 @@ enum Log {
         "(\(Int(Date().timeIntervalSince(start) * 1000))ms)"
     }
 
+    /// 搜索词的**词数**,不是原文。
+    ///
+    /// 为什么要有这个函数:已发布的隐私政策(`docs/PRIVACY.md` 第二节)写明
+    /// 「日志不记录搜索词、完整 URL 或安装随机标识」,而这份日志在设置页有导出 / 分享 / 发邮箱
+    /// 三条离机出口。H131(2026-10-05)定的修法「搜索词一律换词数」当时**只落在了
+    /// `PodcastRepository.search` 一个调用点**,三个 Source 层各自把搜索词原文拼进了消息串,
+    /// 于是 10 处漏扫 —— 正是那次自己总结的「规矩落在调用点上必漏」的复发
+    /// (见 `docs/REVIEW-2026-10-25.md` 高-1)。
+    /// 结构性解法只有一个:把「记什么」收到这一处。词数之外的事实(地区、条数上限、命中数、耗时)
+    /// 照常打 —— 它们不含用户输入,却正是排查要看的。
+    static func wordCount(_ text: String) -> Int {
+        text.split(whereSeparator: { $0 == " " || $0.isNewline }).count
+    }
+
     /// 拼接的完整日志文本(历史 + 当前),供导出/分享。
     static func allText() -> String {
         queue.sync {

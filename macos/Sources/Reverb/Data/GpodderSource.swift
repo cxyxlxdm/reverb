@@ -6,9 +6,13 @@ final class GpodderSource {
     func search(_ term: String) async -> [Podcast] {
         let url = "https://gpodder.net/search.json?q=\(HTTP.encode(term))"
         let t0 = Date()
-        Log.d("gpodder", "search term=\"\(term)\"")
+        // 只记词数(见 REVIEW-2026-10-25 高-1):政策说「日志不记录搜索词」,
+        // 而这三行原本把用户敲进去的那串字整个拼进了消息里,
+        // 和同一个仓库里 `PodcastRepository.search` 的口径相反。
+        let termWords = Log.wordCount(term)
+        Log.d("gpodder", "search termWords=\(termWords)")
         guard let arr = await HTTP.jsonArray(url) else {
-            Log.w("gpodder", "search 无结果 term=\"\(term)\" \(Log.ms(t0))")
+            Log.w("gpodder", "search 无结果 termWords=\(termWords) \(Log.ms(t0))")
             return []
         }
         let list = arr.compactMap { any -> Podcast? in
@@ -22,7 +26,7 @@ final class GpodderSource {
                 feedUrl: feedUrl
             )
         }
-        Log.i("gpodder", "search term=\"\(term)\" → \(list.count) 频道 \(Log.ms(t0))")
+        Log.i("gpodder", "search termWords=\(termWords) → \(list.count) 频道 \(Log.ms(t0))")
         return list
     }
 }

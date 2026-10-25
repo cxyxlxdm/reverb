@@ -51,8 +51,9 @@ enum BackupManager {
     // MARK: - 序列化载荷
 
     /// 各字段全部可选:备份 JSON 是跨端边界,三端 settings 的 schema 各有增删
-    /// (Android 带 allowCellularDownload/updatesEnabled/categoryOrder,
-    ///  鸿蒙带 fontIndex/language/subsGrid,macOS 带 fontIndex/regionOverride/contextualRadio),
+    /// (Android 与鸿蒙的键集相同;macOS 这一份 1.0.6 起也补齐到同一套 14 键,
+    ///  其中 `allowCellularDownload` / `updatesEnabled` / `subsGrid` 三格本端无界面对应功能,
+    ///  只 pass-through —— 见下面那三行的注释),
     /// 且旧版导出可能缺键 —— 任何一个非可选键缺失都会让**整份备份**解码失败
     /// (H86),恢复就静默无效。缺的键在 applySettings 里保持现值不动。
     private struct SettingsPayload: Codable {
@@ -68,6 +69,10 @@ enum BackupManager {
         var skipBackSec: Int?
         var skipForwardSec: Int?
         var contextualRadio: Bool?
+        /// 界面语言(`""` = 跟随系统)。**本端有真设置**(Stores 那份 didSet 写 AppleLanguages、
+        /// 设置页有语言 Picker),却一直没进备份 —— 于是 Mac→Mac 换机也丢语言,
+        /// 手机→Mac→手机 同样把它抹掉(见 REVIEW-2026-10-25 中-8)。
+        var language: String?
         /// 两格"桌面没有对应功能"的键(M3)。带它们不是为了在 Mac 上生效,
         /// 而是为了让「手机 → Mac → 手机」这条路不把手机那侧的设置抹掉 ——
         /// 缺了它们的后果是:用户在手机上没动过的开关,绕一趟 Mac 回来就变了,
@@ -75,6 +80,10 @@ enum BackupManager {
         /// `categoryOrder` 不在这一档:1.0.6 起本端也有排序界面,它是**真的读写**(见 M12)。
         var allowCellularDownload: Bool?
         var updatesEnabled: Bool?
+        /// 订阅列表/宫格切换:触屏手势才有"切宫格"这个入口,桌面侧无对应界面,
+        /// 所以和上面两格同待遇(pass-through)。补这一格才凑齐三端 settings 的 14 键
+        /// (见 REVIEW-2026-10-25 中-8)。
+        var subsGrid: Bool?
         var categoryOrder: [String]?
     }
 
@@ -109,9 +118,9 @@ enum BackupManager {
                 fontScale: s.fontScale, fontIndex: Self.fontIndex(for: s.fontScale),
                 regionOverride: s.regionOverride, defaultSpeed: s.defaultSpeed,
                 skipBackSec: s.skipBackSec, skipForwardSec: s.skipForwardSec,
-                contextualRadio: s.contextualRadio,
+                contextualRadio: s.contextualRadio, language: s.language,
                 allowCellularDownload: s.allowCellularDownload,
-                updatesEnabled: s.updatesEnabled,
+                updatesEnabled: s.updatesEnabled, subsGrid: s.subsGrid,
                 categoryOrder: s.categoryOrder)
         }
         let enc = JSONEncoder()
@@ -170,15 +179,13 @@ enum BackupManager {
     /// 历史合并:同集冲突保留 updatedAt 更新者,不回退进度。
     @MainActor
     private static func mergeHistory(_ env: AppEnvironment, _ incoming: [HistoryEntry]) {
-        // 从旧到新处理,使最近更新的条目最终置顶。
-        for entry in incoming.sorted(by: { $0.updatedAt < $1.updatedAt }) {
-            let existing = env.history.history.first { $0.episode.id == entry.episode.id }
-            if let existing, entry.updatedAt <= existing.updatedAt { continue }
-            env.history.record(entry.episode, at: entry.updatedAt)
-            env.history.updatePosition(entry.episode.id, positionMs: entry.positionMs, durationMs: entry.durationMs)
-            // record() 会把 played 重置为 false,备份里带 true 的要补回(H86)
-            if entry.played { env.history.markPlayed(entry.episode.id, true) }
-        }
+        // 整批交给 `HistoryStore.mergeForRestore`(见 REVIEW-2026-10-25 中-7)。
+        // 原先这里是从旧到新逐条 `record` + `updatePosition` + `markPlayed`,
+        // 而 `record` 每插一条就把整表夹到 100 条并落盘一次 ——
+        // 于是恢复一份 100 条的备份会把本机既有历史**整批顶掉**(与 updatedAt 无关,
+        // 是被"插入即截断"挤出去的),还写盘 100 次。
+        // 合并语义(同 id 取较新、平局留在场那份、来入条目整体覆盖)搬进了那边,注释也在那里。
+        env.history.mergeForRestore(incoming)
     }
 
     @MainActor
@@ -203,15 +210,23 @@ enum BackupManager {
         if let v = s.skipBackSec { st.skipBackSec = v }
         if let v = s.skipForwardSec { st.skipForwardSec = v }
         if let v = s.contextualRadio { st.contextualRadio = v }
-        // 只存不生效的两格:本端读进来是为了下次导出原样写回去(见 SettingsPayload 注释)。
+        // 语言走 SettingsStore 的**正常 setter**(不是绕过去直接写 UserDefaults):
+        // 它的 didSet 负责把 `AppleLanguages` 一起写掉(空串则移除,回到跟随系统),
+        // 和设置页那个语言 Picker 是同一条路 —— 绕过去就会出现"备份里读了但界面不认"。
+        // 生效时机与 Picker 一致:重启后生效(政策与提示都这么写)。
+        // 这一格本端有真功能却没进备份,于是连 Mac→Mac 换机都会把语言抹回默认
+        // (见 REVIEW-2026-10-25 中-8)。
+        if let v = s.language { st.language = v }
+        // 只存不生效的三格:本端读进来是为了下次导出原样写回去(见 SettingsPayload 注释)。
         if let v = s.allowCellularDownload { st.allowCellularDownload = v }
         if let v = s.updatesEnabled { st.updatesEnabled = v }
+        if let v = s.subsGrid { st.subsGrid = v }
         // 分类顺序**空数组不覆盖**:空表示"那份备份从没排过",不是"恢复默认序"
         // (Android `saveOrder` 的早退、鸿蒙 `CategoryStore.save` 同一条)。
         // 少了这个 guard,拿一台没排过序的手机备份恢复,会静默抹掉本机排好的顺序。
         if let v = s.categoryOrder, !v.isEmpty { st.categoryOrder = v }
         // 日志拼平写,别在插值里叠 .map(String.init):Swift 类型检查器会被嵌套可选表达式噎死(H86)
-        let restored = "theme=\(s.themeMode ?? -1) speed=\(s.defaultSpeed ?? -1) region=\(s.regionOverride ?? "-")"
+        let restored = "theme=\(s.themeMode ?? -1) speed=\(s.defaultSpeed ?? -1) region=\(s.regionOverride ?? "-") lang=\(s.language ?? "-")"
         Log.i("Backup", "恢复设置 \(restored)")
     }
 

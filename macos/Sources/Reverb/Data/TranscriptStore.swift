@@ -91,7 +91,10 @@ enum TranscriptFormat {
     }()
 
     /// `version` 是**可选**的:v2 之前写出的缓存压根没这个键,缺省按 v1 处理(见 `TranscriptFormat.version`)。
-    private struct Cached: Codable { let version: Int?; let localeId: String; let complete: Bool; let segments: [TranscribedSegment] }
+    /// `episodeId` 同样可选,理由一致 —— 补这个字段之前写出的缓存没有它。它存的是**未 sanitize 的原始 id**:
+    /// 文件名走 `sanitize`(非字母数字全折 `_` 且截 120),所以 `abc:def` 与 `abc_def` 会落到同一个路径;
+    /// 读回时拿这个字段核对归属,对不上就当没缓存(REVIEW-2026-10-25 低·族 A 末尾,三端同改)。
+    private struct Cached: Codable { let version: Int?; let localeId: String; let complete: Bool; let segments: [TranscribedSegment]; let episodeId: String? }
 
     // MARK: - 对外
 
@@ -314,16 +317,24 @@ enum TranscriptFormat {
                 Log.i("Transcript", "缓存是旧口径(v\(cached.version ?? 1)),丢弃重转")
                 return nil
             }
+            // 文件名撞车时(两条 id sanitize 后同名),用文件里写的原始 id 辨归属。
+            // **缺这个字段的旧缓存照认** —— 那时只可能是自己写的,拦它只会白重转一次。
+            if let owner = cached.episodeId, owner != episodeId {
+                Log.w("Transcript", "缓存归属不符(文件名撞车),丢弃 id=\(episodeId)")
+                return nil
+            }
             return Cached(version: TranscriptFormat.version, localeId: cached.localeId,
                           complete: cached.complete,
-                          segments: TranscriptFormat.monotonic(cached.segments))
+                          segments: TranscriptFormat.monotonic(cached.segments),
+                          episodeId: cached.episodeId)
         }.value
     }
 
     /// 写缓存:同样在后台编码 + 写盘。segments 是值类型,捕获即快照,不存在数据竞争。
     private func saveCache(episodeId: String, localeId: String, segments: [TranscribedSegment]) {
         let url = cacheURL(episodeId: episodeId, localeId: localeId)
-        let c = Cached(version: TranscriptFormat.version, localeId: localeId, complete: true, segments: segments)
+        let c = Cached(version: TranscriptFormat.version, localeId: localeId, complete: true,
+                       segments: segments, episodeId: episodeId)
         Task.detached(priority: .utility) {
             if let data = try? JSONEncoder().encode(c) {
                 try? data.write(to: url, options: .atomic)

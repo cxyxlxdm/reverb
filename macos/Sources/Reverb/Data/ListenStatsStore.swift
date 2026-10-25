@@ -40,7 +40,11 @@ import Foundation
         }
         publish()
         if migrated { persist() }
-        Log.i("Store", "收听时长加载 \(table.count) 个频道 device=\(deviceId.prefix(8)) 迁移=\(migrated)")
+        // 这一行原本还顺手把安装随机标识的前 8 位打进了日志。去掉它:政策第二节写的是
+        // 「日志不记录……安装随机标识」,不是「不记录完整标识」,截断仍然是同一标识的一部分
+        // (见 REVIEW-2026-10-25 高-1)。这一项对排查也没有价值:分账是否落对设备,
+        // 看 listen_stats.json 里的 perDevice 键就能看出来,不需要日志。
+        Log.i("Store", "收听时长加载 \(table.count) 个频道 迁移=\(migrated)")
     }
 
     /// 历史估算种子的分账键(所有设备共用一格,合并取 max ⇒ 估算不会跨设备翻倍)。

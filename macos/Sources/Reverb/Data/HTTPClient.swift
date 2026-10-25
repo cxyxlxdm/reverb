@@ -45,8 +45,22 @@ enum HTTP {
         return obj as? [Any]
     }
 
-    /// URL 查询参数编码。
+    /// 查询参数**值**的百分号编码。
+    ///
+    /// ⚠️ **不能用 `.urlQueryAllowed`**(见 REVIEW-2026-10-25 中-5)。那个集合的名字说的是
+    /// 「在 query 里合法」,而 `& = + ? : @ ; $ ,` 这些字符在 query 里确实合法 —— 但它们是
+    /// **分隔符**,出现在参数值里就把一条 URL 切成两条参数。搜「AT&T」时
+    /// `term=AT&T&limit=50` 被服务端读成 `term=AT` 加一个莫名的 `T`,命中结果整个不对,
+    /// 而且不报错( iTunes / fyyd / gpodder 三条链一起中)。
+    /// 所以这里只放行 RFC 3986 的 unreserved 集(字母数字 + `-._~`),其余一律百分号编码 ——
+    /// `+` 也编掉:query 里 `+` 按惯例是空格的另一种写法,交给各家服务的解析差异去猜不值。
+    ///
+    /// **只对参数值调用,不要拿它编整拼好的 URL**(那会把 `?` `&` `:` `/` 一起编码掉)。
+    /// 三个调用点:`ITunesSource`(两处)、`FyydSource`、`GpodderSource`。
     static func encode(_ s: String) -> String {
-        s.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? s
+        s.addingPercentEncoding(withAllowedCharacters: Self.unreserved) ?? s
     }
+
+    /// unreserved 集:字母 + 数字 + `-._~`(按 Unicode 取,中文等非 ASCII 一律编掉)。
+    private static let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
 }

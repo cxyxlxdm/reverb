@@ -79,6 +79,9 @@ final class PlayerController: ObservableObject {
     private var endObserver: NSObjectProtocol?
     private var statusObserver: AnyCancellable?
     private var itemStatusObserver: AnyCancellable?
+    /// settings 里快进/快退两档秒数的订阅:变了就把声明给系统的档位重刷一次
+    /// (为什么需要它见 `refreshRemoteCommandIntervals`,REVIEW-2026-10-25 族 E)。
+    private var skipIntervalObserver: AnyCancellable?
     private var loadRetries = 0
     private var lastIsRadio = false
     /// 上一次装载是「起播」还是「预载」。自动重试要沿用它:
@@ -121,6 +124,10 @@ final class PlayerController: ObservableObject {
     private var radioHistory: [Episode] = []
     private var radioPos = -1
     private let radioHistoryCap = 100
+    /// 随机电台去重窗口:抽下一集时排除**最近这么多集**。
+    /// 数字与 Android `playback/RadioStation.kt` 的 `RECENT_CAP` 逐项相同 ——
+    /// 三端「随机」撞车的概率该是同一个,不该这端 40 那端 100。
+    private let radioRecentCap = 40
 
     // 淡入淡出 / 睡眠
     private var fadeTimer: Timer?
@@ -160,14 +167,31 @@ final class PlayerController: ObservableObject {
         c.togglePlayPauseCommand.addTarget { [weak self] _ in self?.togglePlayPause(); return .success }
         c.nextTrackCommand.addTarget { [weak self] _ in self?.next(); return .success }
         c.previousTrackCommand.addTarget { [weak self] _ in self?.previous(); return .success }
-        c.skipForwardCommand.preferredIntervals = [NSNumber(value: Double(settings?.skipForwardSec ?? 30))]
+        refreshRemoteCommandIntervals()
         c.skipForwardCommand.addTarget { [weak self] _ in self?.skipForward(); return .success }
-        c.skipBackwardCommand.preferredIntervals = [NSNumber(value: Double(settings?.skipBackSec ?? 10))]
         c.skipBackwardCommand.addTarget { [weak self] _ in self?.skipBackward(); return .success }
         c.changePlaybackPositionCommand.addTarget { [weak self] event in
             guard let e = event as? MPChangePlaybackPositionCommandEvent else { return .commandFailed }
             self?.seek(toMs: Int(e.positionTime * 1000)); return .success
         }
+    }
+
+    /// 把「快进 / 快退」两档**声明**给系统(控制中心、触控栏、锁屏上那两颗按钮显示的秒数)。
+    ///
+    /// ⚠️ 这只影响**系统侧显示的提示值**,不影响实际跳过步长:命令 handler
+    /// (`skipForward()` / `skipBackward()`,本文件下面那两行)忽略 `event.interval`、
+    /// 每次实时读 settings,所以真按下去跳的秒数一直是对的。
+    ///
+    /// 为什么要单独成函数并在 settings 到位之后再调一次(见 REVIEW-2026-10-25 族 E):
+    /// `init()` 里的 `setupRemoteCommands()` 跑在 `AppEnvironment` 调
+    /// `bind(history:settings:)` **之前**,那一刻 `settings` 还是 nil,
+    /// `settings?.skipForwardSec ?? 30` 恒取到兜底值 —— 于是设置页把快退改成 15 秒,
+    /// 控制中心仍然写着 10 秒,而且**永远是 30/10**,声明等于没声明。
+    /// 现在 bind 里调一次、两格再变时由 Combine 订阅各调一次。
+    private func refreshRemoteCommandIntervals() {
+        let c = MPRemoteCommandCenter.shared()
+        c.skipForwardCommand.preferredIntervals = [NSNumber(value: Double(settings?.skipForwardSec ?? 30))]
+        c.skipBackwardCommand.preferredIntervals = [NSNumber(value: Double(settings?.skipBackSec ?? 10))]
     }
 
     private func updateNowPlaying() {
@@ -214,6 +238,14 @@ final class PlayerController: ObservableObject {
         self.speed = settings.defaultSpeed
         refreshPlayModes()
         playMode = mode(for: activeListTag)
+        // init() 里那次 setupRemoteCommands 跑在本方法之前,那一刻 settings 还是 nil,
+        // 于是给系统声明的快进/快退档位恒为兜底的 30/10(见 REVIEW-2026-10-25 族 E)。
+        // 设置到位了:先补声明一次,再跟着两格后续每次改动重刷。
+        refreshRemoteCommandIntervals()
+        skipIntervalObserver = Publishers
+            .Merge(settings.$skipBackSec.map { _ in }, settings.$skipForwardSec.map { _ in })
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.refreshRemoteCommandIntervals() }
     }
 
     func bindListenStats(_ s: ListenStatsStore) { self.listenStats = s }
@@ -691,6 +723,24 @@ final class PlayerController: ObservableObject {
         radioNext = nil; radioMode = false; updateNavFlags()
     }
 
+    /// 随机电台**该排除的最近听过的单集 id**(末尾 `radioRecentCap` 个)。
+    ///
+    /// 为什么在播放器这里出,而不是让发现页自己攒:这份「最近」只有一个真值,就是电台
+    /// 实际播过的那条流水;界面侧另存一份必然和它漂移,而发现页本来也不关心它。
+    /// Android 侧同一件事在 `playback/RadioStation.kt` 里由 `recent` 队列提供
+    /// (见 REVIEW-2026-10-25 族 E),macOS 原先两处都传 `exclude: []`,
+    /// 于是随机抽到的候选池只有 6 个频道 × 各自若干集 —— 连着几首重复播同一集是常态。
+    ///
+    /// 取的是 `radioHistory` 的**末尾** N 个:那张表是追加式的(超 `radioHistoryCap` 丢最旧),
+    /// 末尾就是最近。
+    /// ⚠️ 与 Android 有一处**已知差异**,不是漏改:本端 `startRadio` 会把 `radioHistory` 清空
+    /// (那张表同时是电台「上一首/下一首」的导航栈,开台必须从头),所以开台后的第一次抽取不排除任何集;
+    /// Android 那份 `recent` 是 `RadioStation` 单例里的进程级队列,开关台都不清,第一次抽取就带着上一次的记忆。
+    /// 要对齐那条得把「去重用的 recent」和「导航用的 history」拆成两张表,本轮不拆。
+    func recentRadioIds() -> Set<String> {
+        Set(radioHistory.suffix(radioRecentCap).map { $0.id })
+    }
+
     func playRadioEpisode(_ episode: Episode) {
         loadRetries = 0
         radioHistory.append(episode)
@@ -851,6 +901,26 @@ final class PlayerController: ObservableObject {
         guard let ep = current else { return }
         // 引导音频不写历史:playEpisode 已跳过 record,这里若还写就会又建出一条
         if GuideEpisode.isGuide(ep.id) { return }
+        // 「刚起播、续播点还没落地」那一瞬间不写盘(见 REVIEW-2026-10-25 中-6)。
+        //
+        // 竞态的来源:`playEpisode` 先把 `positionMs = 0`,再在后面才 `seek(to: resumeMs)`;
+        // 而 `statusObserver` 的回调里有一条 `if tickCount % 10 == 0 { saveProgress() }`,
+        // 它和 seek 谁先到没有保证。命中时就把 0 写进了 history,下次进这一集从头播 ——
+        // 用户感知是"续播丢了",而且只在起播那一下发生,最难复现。
+        //
+        // 判据取「positionMs == 0 **且** durationMs == 0」这一对,而不是只看 positionMs == 0,
+        // 因为下面两路都合法地写着 0,不能误伤:
+        // ① 自然播完归零走的是 `observeEnd` 里那条**显式** `updatePosition(positionMs: 0)`,
+        //    它根本不经过 saveProgress,所以这道守卫碰不到它;
+        // ② 暂停落盘(saveProgress 的另一条触发路径)发生在播了任意时长之后,
+        //    此时 `durationMs` 早已被 `onTick` 填上,两个条件不会同时成立。
+        // 于是"两个都是 0"只剩一种解释:时长还没被读到、位置也还没被 seek 落过,这一次写盘没有信息量。
+        //
+        // ⚠️ 体检原文里那句「重试耗尽即确定性归零」**经复核不成立**:
+        // `handleLoadFailure` 的耗尽分支只写 `playbackError`,不碰进度;
+        // 而且加载失败时 ticker 不再推进,`% 10` 那条本来也不会再触发。
+        // 所以本条真正的问题只有上面这个 `%10` 竞态,修的就只是这一道守卫。
+        if positionMs == 0 && durationMs == 0 { return }
         history?.updatePosition(ep.id, positionMs: max(0, positionMs), durationMs: max(0, durationMs))
     }
 

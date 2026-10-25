@@ -47,7 +47,9 @@ final class PodcastRepository {
 
         // 只记词数,不记原文:已发布的隐私政策第二节承诺「日志不记录搜索词」,
         // 而这份日志用户可在设置里一键导出。与 Android util/Logger 那条同一口径。
-        let words = q.split(whereSeparator: { $0 == " " || $0.isNewline }).count
+        // 词数算法收在 `Log.wordCount`(见 REVIEW-2026-10-25 高-1):原先这一行是唯一的正确范式,
+        // 三个 Source 层各抄一份必然各抄各的,现在它们与这里共用同一个函数。
+        let words = Log.wordCount(q)
         Log.i("Repo", "search queryWords=\(words) region=\(region.isEmpty ? "-" : region)")
         if q.hasPrefix("http://") || q.hasPrefix("https://") {
             if let result = await rss.fetch(q) {
