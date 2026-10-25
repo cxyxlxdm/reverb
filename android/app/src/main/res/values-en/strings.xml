@@ -201,6 +201,7 @@
     <string name="a11y_pause">Pause</string>
     <string name="a11y_collapse_player">Collapse</string>
     <string name="a11y_expand_player">Expand player</string>
+    <string name="a11y_close_player">Close player</string>
     <string name="a11y_skip_back">Back %d sec</string>
     <string name="a11y_skip_fwd">Forward %d sec</string>
     <string name="a11y_downloaded">Downloaded — tap to delete</string>

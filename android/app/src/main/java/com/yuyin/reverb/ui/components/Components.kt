@@ -1247,6 +1247,9 @@ fun MiniPlayer(
     onToggle: () -> Unit,
     onNext: () -> Unit,
     onExpand: () -> Unit,
+    /// 关闭播放条(最右那枚 X):停止播放并清掉「正在播」上下文,整条塌陷消失。
+    /// 语义见 [com.yuyin.reverb.playback.PlayerController.close]。
+    onClose: () -> Unit = {},
     onOpenQueue: () -> Unit = {},
     collapsed: Boolean = false,
     ballIcon: ImageVector? = null,
@@ -1434,6 +1437,20 @@ fun MiniPlayer(
                             Icons.AutoMirrored.Rounded.QueueMusic,
                             contentDescription = stringResource(R.string.queue_title),
                             tint = scheme.onBackground,
+                            modifier = Modifier.size(MINI_SYMBOL)
+                        )
+                    }
+                    // 关闭(参考视频的位次:X 在播放条最右端,队列入口之外再一格)。
+                    // 色阶用 onSurfaceVariant 而不是 onBackground:它是这一行的次要动作,
+                    // 亮度和标题副行同档,不与播放键(主色)争视觉权重。
+                    Box(
+                        Modifier.size(MINI_HIT).clip(CircleShape).clickable(onClick = onClose),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.a11y_close_player),
+                            tint = scheme.onSurfaceVariant,
                             modifier = Modifier.size(MINI_SYMBOL)
                         )
                     }

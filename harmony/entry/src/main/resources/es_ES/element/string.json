@@ -1029,6 +1029,10 @@
       "value": "Expandir el reproductor"
     },
     {
+      "name": "a11y_close_player",
+      "value": "Cerrar el reproductor"
+    },
+    {
       "name": "a11y_play",
       "value": "Reproducir"
     },

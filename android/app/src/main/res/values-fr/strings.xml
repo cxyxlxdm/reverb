@@ -201,6 +201,7 @@
     <string name="a11y_pause">Pause</string>
     <string name="a11y_collapse_player">Réduire</string>
     <string name="a11y_expand_player">Développer le lecteur</string>
+    <string name="a11y_close_player">Fermer le lecteur</string>
     <string name="a11y_skip_back">Reculer de %d s</string>
     <string name="a11y_skip_fwd">Avancer de %d s</string>
     <string name="a11y_downloaded">Téléchargé — toucher pour supprimer</string>

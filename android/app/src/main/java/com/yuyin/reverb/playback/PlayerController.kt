@@ -887,6 +887,38 @@ object PlayerController {
         updateNavFlags()
     }
 
+    /**
+     * 关闭播放条(迷你条上那枚 X):停止播放并清掉「正在播」的上下文。
+     *
+     * 语义上它是「把这一场关掉」,不是暂停 —— 所以 [current] 置空(迷你条的显隐门就是它,
+     * `ReverbRoot.MiniPlayerBar` 的 AnimatedVisibility 与让位量都挂在这上面),上下文队列
+     * ([queue] / [queueIndex])一并清掉;但 **[userQueue] 保留**:用户排的队是用户数据,
+     * 「关掉正在播的」不该把它抹掉,持久化也写「无 current、留 upNext」而不是 `clear()`
+     * (后者会把 upNext 一起删)。下次起播任何一集,条子带着队列照常回来。
+     *
+     * [cancelSleep] 与 [stopRadio] 必须显式调:睡眠定时到点只 pause(不再有正在播的内容,
+     * 那个 ticker 空转);电台模式留着的话,持久化会走「只存 upNext」那条电台口径。
+     * 播放器回 IDLE 用 [Player.stop] —— 之后 `playEpisode` 本来就重新 setMediaItem+prepare,
+     * 不会有残留状态的路径。
+     */
+    fun close() {
+        log.i(TAG, "close id=${_current.value?.id}")
+        if (_radioMode.value) stopRadio()
+        cancelSleep()
+        val c = controller
+        if (c != null) {
+            c.pause()
+            c.stop()
+        }
+        _playbackError.value = null
+        _current.value = null
+        _isPlaying.value = false
+        queue = emptyList()
+        queueIndex = 0
+        persistState()
+        updateNavFlags()
+    }
+
     /** 本集播完:抓下一首随机节目续播;抓不到则自动关台。 */
     private fun advanceRadio() {
         val next = radioNext ?: return

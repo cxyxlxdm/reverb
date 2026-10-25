@@ -1029,6 +1029,10 @@
       "value": "Développer le lecteur"
     },
     {
+      "name": "a11y_close_player",
+      "value": "Fermer le lecteur"
+    },
+    {
       "name": "a11y_play",
       "value": "Lire"
     },

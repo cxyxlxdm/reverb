@@ -1029,6 +1029,10 @@
       "value": "展开播放条"
     },
     {
+      "name": "a11y_close_player",
+      "value": "关闭播放条"
+    },
+    {
       "name": "a11y_play",
       "value": "播放"
     },

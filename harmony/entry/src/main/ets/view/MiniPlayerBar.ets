@@ -64,6 +64,9 @@ export struct MiniPlayerBar {
   @Prop collapsed: boolean = false;
   onExpand: () => void = () => {};
   onOpenQueue: () => void = () => {};
+  /// 关闭播放条(最右那枚 X):停止播放并清掉「正在播」上下文,整条塌陷消失。
+  /// 动画不在这里 —— 显隐门是 `player.current`,塌陷/让位的 animateTo 在 Index 那一层。
+  onClose: () => void = () => {};
   /// 收束态点左端那颗小圆球:展开回两行共存(它显示的是当前那一格,动作**不是**切 tab)
   onBallTap: () => void = () => {};
   /**
@@ -272,6 +275,15 @@ export struct MiniPlayerBar {
               .responseRegion({ x: MINI_HIT_OFF, y: MINI_HIT_OFF, width: MINI_HIT_EXT, height: MINI_HIT_EXT })
               .accessibilityText(L.s('queue_title'))
               .onClick(() => this.onOpenQueue())
+            /**
+             * 关闭(参考视频的位次:X 在播放条最右端,队列入口之外再一枚)。
+             * 色阶用 onSurfaceVariant:次要动作,不与播放键的实色争权重(与 Android/macOS 同判)。
+             * 命中框外扩与前三枚同款 —— 图标缩到 16 之后节点本身小于拇指目标。
+             */
+            Glyph({ symbol: Sym.close, dim: MINI_SYMBOL, color: withAlpha(this.scheme.onSurfaceVariant, 0.8) })
+              .responseRegion({ x: MINI_HIT_OFF, y: MINI_HIT_OFF, width: MINI_HIT_EXT, height: MINI_HIT_EXT })
+              .accessibilityText(L.s('a11y_close_player'))
+              .onClick(() => this.onClose())
           }
           .width('100%')
           /**

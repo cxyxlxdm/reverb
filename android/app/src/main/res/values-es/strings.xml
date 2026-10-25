@@ -201,6 +201,7 @@
     <string name="a11y_pause">Pausa</string>
     <string name="a11y_collapse_player">Contraer</string>
     <string name="a11y_expand_player">Expandir el reproductor</string>
+    <string name="a11y_close_player">Cerrar el reproductor</string>
     <string name="a11y_skip_back">Retroceder %d s</string>
     <string name="a11y_skip_fwd">Avanzar %d s</string>
     <string name="a11y_downloaded">Descargado — toca para eliminar</string>
