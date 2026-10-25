@@ -28,6 +28,35 @@ final class PopularCacheStore {
         try? data.write(to: fileURL(for: key), options: .atomic)
     }
 
+    /// 「清除缓存」用:删掉本目录下全部 `popular_*.json`。返回删除的个数(供日志)。
+    ///
+    /// 只按**文件名前缀**匹配,不删整个 Application Support/Reverb ——
+    /// 那里还躺着订阅、历史、下载账本与日志,清缓存不能碰它们。
+    @discardableResult
+    func clear() -> Int {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return 0 }
+        var removed = 0
+        for n in names where n.hasPrefix("popular_") && n.hasSuffix(".json") {
+            if (try? FileManager.default.removeItem(at: dir.appendingPathComponent(n))) != nil {
+                removed += 1
+            }
+        }
+        return removed
+    }
+
+    /// 榜单缓存的磁盘占用(字节)。设置页把它算进缓存总量。
+    func sizeBytes() -> Int64 {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return 0 }
+        var total: Int64 = 0
+        for n in names where n.hasPrefix("popular_") && n.hasSuffix(".json") {
+            let p = dir.appendingPathComponent(n).path
+            if let size = (try? FileManager.default.attributesOfItem(atPath: p))?[.size] as? NSNumber {
+                total += size.int64Value
+            }
+        }
+        return total
+    }
+
     // MARK: - 私有
 
     private func fileURL(for key: String) -> URL {

@@ -131,8 +131,8 @@ enum Fmt {
     }
 }
 
-/// 带重试 + URLCache 缓存的远程图片加载。修复冷启动时 AsyncImage 偶发失败(不重试)导致封面空白。
-/// URLSession.shared 默认走内存/磁盘缓存,重开即命中;失败按 0.4s 退避重试至多 3 次。
+/// 远程图片:先查封面磁盘缓存,没有再联网取一份顺手落盘(见 `ArtworkCache`)。
+/// 失败按 0.4s 退避重试至多 3 次 —— 冷启动时网络栈偶发未就绪,给一次重试比直接留白好。
 struct RemoteImage<Placeholder: View>: View {
     let url: String
     @ViewBuilder var placeholder: () -> Placeholder
@@ -146,7 +146,7 @@ struct RemoteImage<Placeholder: View>: View {
                 placeholder()
             }
         }
-        // id 绑定 url:换集时重跑;先清空旧图,避免残留上一集封面(URLCache 使重载很快)
+        // id 绑定 url:换集时重跑;先清空旧图,避免残留上一集封面
         .task(id: url) {
             image = nil
             await load()
@@ -154,10 +154,10 @@ struct RemoteImage<Placeholder: View>: View {
     }
 
     private func load() async {
-        guard !url.isEmpty, let u = URL(string: url) else { return }
+        guard !url.isEmpty else { return }
         for attempt in 0..<3 {
             if Task.isCancelled { return }
-            if let data = try? await URLSession.shared.data(from: u).0,
+            if let data = await ArtworkCache.shared.data(for: url),
                let img = NSImage(data: data) {
                 if Task.isCancelled { return } // 换集后旧任务已取消,勿写回旧图
                 image = img

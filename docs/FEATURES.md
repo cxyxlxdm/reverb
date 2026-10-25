@@ -290,7 +290,7 @@ macOS 走 dmg 自行分发,不涉及应用商店,**没有渠道差异**;端与�
 |------|------|
 | Android | 频道详情页触发下载;设置内「仅 WiFi 下载」开关(判据是**当前默认网络是否计费**,所以限量热点也算;开关默认开 ⇒ 默认不允许蜂窝);下载用量统计与清理。**播放缓存**:`playback/AudioCacheManager.kt` + 账本 `filesDir/audio_cache.json`,目录 `filesDir/audio_cache/`;`PlayerController` 选源次序改为 **下载 → 缓存 → 流式**,走流式那一次顺手排一次缓存(电台那一路不排)。<br>**运行侧 2026-10-24 已在 Pixel 3 实跑成立**(断网冷启动读回 `source cache`、300 MB 预算恰好淘汰最久没听的三集、「清除缓存」与「清除下载」互不动对方一个字节、首播后台补齐 ≈1.8 s 后断网可播);逐条读数与取证方法见 `docs/ROADMAP.md` 三-A 那条缓存行与 `docs/TROUBLESHOOTING.md` **H211** |
 | HarmonyOS | 频道详情页触发下载;同一个开关,但**判据只能按链路类型**:只有 `bearerTypes` 含 `BEARER_CELLULAR`(蜂窝)才拦。**不是没做成同口径,是这一端拿不到计费信号** —— 2026-10-09 实测连着 Wi-Fi 时 `networkCap` 只给 `[12,15,16]`(INTERNET / NOT_VPN / VALIDATED),**不含 `NOT_METERED(11)`**;把它当拦截依据就会在 Wi-Fi 上拦下正常下载(用户 2026-10-08/09 连着报的那条,见 H162 与 H166)。所以 `networkCap` 在本端**只当放行信号**(含 11 一定放行),空数组与 `undefined` 同等对待也放行。**代价:计费的 Wi-Fi 热点在鸿蒙会被放行,Android 会拦 —— 两端在这条上不等价,不要"修一致"。** 提示文案与权限用途串五语已改成**按蜂窝说话**(「当前是蜂窝网络,已取消下载」),与判据同口径。默认开(= 不允许蜂窝),与 Android 同。**播放缓存**:`playback/AudioCacheManager.ets` + 账本 `audio_cache.json`,同一个 `ca_` 前缀与同一道蜂窝闸门;选源走 `localFileProvider` 那条**已有的同步链**(引导音频 → 下载 → 缓存),命中后仍按本端既有方式播本地文件。**这一端做不到"边播边存"** —— AVPlayer 播 http 流时字节不经过 JS,拿不到数据,所以只能首播时整集拉全 |
-| macOS | `URLSession` 下载任务 + 进度上报;设置「存储」区显示下载集数与占用,可清空;**无「仅 WiFi」开关**。**本轮不做播放缓存**(与 Android/鸿蒙的这条不在同一批,macOS 侧只有下载) |
+| macOS | `URLSession` 下载任务 + 进度上报;设置「存储」区显示下载集数与占用,可清空;**无「仅 WiFi」开关**。**播放缓存已对齐(2026-10-25,代码侧)**:`Playback/AudioCacheManager.swift` + 账本 `Application Support/Reverb/audio_cache.json`、目录 `audio_cache/`,同一个 `ca_` 前缀与 300 MB 预算 + LRU;`PlayerController` 选源次序同为 **下载 → 缓存 → 流式**,流式那次排缓存(电台不排)。**与手机端的唯一差异是不设蜂窝闸门** —— Mac 没有蜂窝基带,而本端 Downloads / RSS 也从不做这类拦截,只给音频缓存单独加一道看不见的闸门会让症状比问题更难查(理由写在类头)。封面另有自研 `Data/ArtworkCache.swift`(20 MB)。⚠️ **一帧没跑过**:只到 `swift build -c release` exit 0 与 `macos/tools/cache-probe/run.sh` 的 36 条断言 |
 
 ## 七、听觉印记与足迹
 
@@ -351,7 +351,7 @@ macOS 侧 2026-10-07 才补上(见 **H159**):`saveWithPanel` 原先返回 `Void`
 | 真实频谱 | 开关(默认关,开启时请求录音权限) | **仅 Android**(macOS / 鸿蒙平台限制,无此开关) |
 | 仅 WiFi 下载 | 开关(**默认开**,即默认不允许蜂窝下载) | **Android / 鸿蒙**,但**判据两端不等价**:Android 用 `isActiveNetworkMetered`(计费判,限量热点也拦),鸿蒙只能按 `bearerTypes` 判「是不是蜂窝」(限量热点会放行)—— 因为这一端连着 Wi-Fi 也不上报 `NET_CAPABILITY_NOT_METERED`,把它当拦截依据会在 Wi-Fi 上拦下正常下载(见 H166)。兜底方向一致:设置读不到按"不允许蜂窝",链路类型取不到按放行。**1.0.5 起这道闸门同时管「播过即缓存」的自动下载**(副标题已改成「关闭后蜂窝网络也允许下载与缓存」):用户点名下载是自愿花流量,而自动缓存是 App 替他做的决定,更不该在蜂窝上擅自跑几十 MB。**封面图片不走这道闸门**(两端一致,与 Android 的 Coil 原行为对齐 —— 单张几十 KB,拦下来会让列表出现空白格) |
 | 更新提醒 | 开关 | **Android / 鸿蒙**(macOS 无后台更新);鸿蒙拒绝通知授权时保持关闭 |
-| 清理 | 缓存 / 下载 / 历史 | Android:缓存 + 下载 + 历史,均带用量与二次确认;macOS:下载(存储区)+ 历史(音阁内)。**「缓存」的口径 1.0.5 起是五件**:榜单/热门缓存 + RSS 频道缓存 + 已生成逐字稿 + **播放缓存(整集音频)** + **封面图片磁盘缓存**;其中**封面那一格两端实现不同** —— Android 复用 Coil 的磁盘缓存(`imageLoader.diskCache?.clear()`),鸿蒙是本端自研 `ArtworkCache`(ArkUI 没有带磁盘缓存的图片库)。**「清除缓存」永不触碰 `downloads/`**,用户点名下载的那一份只能由「清除下载」负责 |
+| 清理 | 缓存 / 下载 / 历史 | Android:缓存 + 下载 + 历史,均带用量与二次确认;macOS:缓存(存储区首行,2026-10-25 补)+ 下载(存储区)+ 历史(音阁内),前者同样带用量与二次确认。**「缓存」的口径 1.0.5 起是五件**:榜单/热门缓存 + RSS 频道缓存 + 已生成逐字稿 + **播放缓存(整集音频)** + **封面图片磁盘缓存**;其中**封面那一格三端实现不同** —— Android 复用 Coil 的磁盘缓存(`imageLoader.diskCache?.clear()`),鸿蒙与 macOS 是各自的自研 `ArtworkCache`(ArkUI 没有带磁盘缓存的图片库;macOS 不用 `URLSession.shared` 的 URLCache 是因为它既不计数也清不掉)。**「清除缓存」永不触碰 `downloads/`**,用户点名下载的那一份只能由「清除下载」负责 |
 | 听觉足迹 | 入口 | 两端一致 |
 
 ## 十一、系统集成

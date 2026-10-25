@@ -119,6 +119,12 @@
 "导出 OPML" = "Export OPML";
 "导入 OPML" = "Import OPML";
 "存储" = "Storage";
+"清除缓存" = "Clear cache";
+"榜单、频道、图片、逐字稿与已播音频缓存" = "Charts, channels, images, transcripts and played audio";
+"计算中…" = "Calculating…";
+"清除缓存?" = "Clear the cache?";
+"清除" = "Clear";
+"将清除榜单、频道缓存、图片、已生成的逐字稿与已播音频缓存，不影响订阅与下载。" = "This clears cached charts, channels, images, generated transcripts and played-audio cache. Subscriptions and downloads are unaffected.";
 "离线下载" = "Offline downloads";
 "清空下载" = "Clear downloads";
 "%lld 集 · %@" = "%lld episodes · %@";
@@ -175,7 +181,6 @@
 "完成" = "Done";
 "分享" = "Share";
 "保存" = "Save";
-"重试" = "Retry";
 "加载失败,请检查网络后重试" = "Failed to load. Check your network and retry.";
 "加载失败,点击重试" = "Failed to load — click to retry";
 
@@ -273,7 +278,7 @@
 
 /* 关于 / 许可 / 首次同意(M11)。键名是简中原文,与 Android `about_*` / `licenses_*` /
    `privacy_consent_*` 一一对应;有几处在桌面端单独写,因为两端的实现不一样:
-   - 桌面没有播放缓存、订阅提醒 —— 那两条**不列**;
+   - 桌面没有订阅提醒 —— 那一条**不列**(M3 未做);播放缓存 M8 已补,照列;
    - 桌面不读官网那份推荐 OPML,数据来源里也就没有它。
    这一页会被逐字读,宁可少写,不能多写。 */
 "关于" = "About";
@@ -296,6 +301,7 @@
 "· 音阁：订阅、收藏、下载、待播、历史、批注六栏管理" = "· Library: subscriptions, favorites, downloads, up next, history and notes in six sections";
 "· 批量与直达：点任意单集封面直达它所属的频道；多个列表可切换「选择」把一批一次加入待播" = "· Batch and jump: click any episode cover to open its show; several lists have a Select mode to add a batch to Up Next at once";
 "· 离线下载：下载的单集长期留在本机" = "· Offline: downloaded episodes stay on this Mac";
+"· 播放缓存：播过的单集自动留在本机，下次直接本地起播；断网时已加载的列表与封面仍可浏览，可在设置一键清除" = "· Playback cache: episodes you play stay on this Mac and start locally next time; loaded lists and artwork remain browsable offline, clearable in Settings";
 "· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播，以及系统媒体键与「正在播放」" = "· Playback: speed, skip back and forward, sleep timer, play modes (in order / repeat one / shuffle), autoplay next, plus media keys and Now Playing";
 "· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）" = "· Transcript: shows the publisher’s transcript when there is one, otherwise turns the episode into text on this Mac, highlighted as it plays (on-device transcription needs macOS 26)";
 "· 批注：记下这一秒和此刻的一句话；音阁「批注」栏把它们连成时间线，点一下从那一句接着听" = "· Notes: mark that second with a sentence; the Library's Notes section strings them into a timeline — click one to resume from that line";

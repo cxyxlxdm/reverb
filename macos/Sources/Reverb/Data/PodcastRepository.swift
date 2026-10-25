@@ -19,6 +19,24 @@ final class PodcastRepository {
         charts = AppleChartsSource(itunes: itunes)
     }
 
+    // MARK: - 缓存维护(设置页「清除缓存」)
+
+    /// 榜单与频道两类磁盘缓存的总字节数。
+    ///
+    /// 刻意**不含**图片与音频:那两份各自有独立预算与清空入口(`ArtworkCache` 是 actor、
+    /// `AudioCacheManager` 要抬代号),设置页分头去要,这里只管仓库自己写的那两份文件。
+    func cacheSizeBytes() -> Int64 {
+        cache.sizeBytes() + feedCache.sizeBytes()
+    }
+
+    /// 清空仓库写的那两份缓存。**不动订阅/历史/下载** —— 它们的文件在同一个目录里,
+    /// 只按各自的文件名处理(见 `PopularCacheStore.clear()` 与 `FeedCacheStore.clear()`)。
+    func clearCaches() {
+        let popular = cache.clear()
+        feedCache.clear()
+        Log.i("Repo", "清除缓存 popular=\(popular) 份")
+    }
+
     // MARK: - 搜索
 
     /// 搜索频道。URL 直接走 RSS 导入;否则依次尝试 Apple / fyyd / gpodder,取首个非空。

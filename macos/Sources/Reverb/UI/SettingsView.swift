@@ -60,6 +60,9 @@ private struct SettingsForm: View {
     @State private var restoreUnreadable = false
     @State private var confirmClearDownloads = false
     @State private var confirmClearLog = false
+    /// 缓存总量;`-1` = 还在算(显示「计算中…」而不是一个会被下一个瞬间推翻的 0)。
+    @State private var cacheBytes: Int64 = -1
+    @State private var confirmClearCache = false
     @State private var logSizeText = ""
     @State private var shareLogURL: URL?
     @State private var prompt: Prompt = .none
@@ -159,6 +162,29 @@ private struct SettingsForm: View {
             }
 
             Section("存储") {
+                // 与 Android `SettingsScreen.kt` / 鸿蒙 `SettingsPage.ets` 同一个分区口径:
+                // 缓存(可再生的)一行、下载(用户点名要留的)一行,清空入口分开。
+                // 合成一个「清除缓存」会把下载一并删掉,而那正是用户最不该被顺手清掉的东西。
+                Button { confirmClearCache = true } label: {
+                    HStack {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("清除缓存")
+                                Text("榜单、频道、图片、逐字稿与已播音频缓存")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "trash.slash")
+                        }
+                        Spacer()
+                        Text(cacheBytes < 0 ? "计算中…" : cacheSizeText)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    .contentShape(Rectangle())
+                }
+                .disabled(cacheBytes < 0)
                 HStack {
                     Label("离线下载", systemImage: "internaldrive")
                     Spacer()
@@ -232,7 +258,7 @@ private struct SettingsForm: View {
                 }
             }
         }
-        .onAppear { refreshLogSize(); prepareShareLog() }
+        .onAppear { refreshLogSize(); prepareShareLog(); refreshCacheSize() }
         .confirmationDialog("确定清空日志?", isPresented: $confirmClearLog, titleVisibility: .visible) {
             Button("清空日志", role: .destructive) {
                 Log.clear()
@@ -245,6 +271,13 @@ private struct SettingsForm: View {
         .frame(width: 460, height: 560)
         .tint(Theme.accent(settings.accentIndex))
         .preferredColorScheme(Theme.colorScheme(settings.themeMode))
+        .confirmationDialog("清除缓存?", isPresented: $confirmClearCache, titleVisibility: .visible) {
+            Button("清除", role: .destructive) { clearCaches() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            // 正文照抄 Android `confirm_clear_cache`:三端这一句说的是同一件事(硬规矩 5)
+            Text("将清除榜单、频道缓存、图片、已生成的逐字稿与已播音频缓存，不影响订阅与下载。")
+        }
         .confirmationDialog("清空全部离线下载?", isPresented: $confirmClearDownloads, titleVisibility: .visible) {
             Button("清空", role: .destructive) {
                 for d in downloadStore.downloads { env.downloadManager.delete(d.episode.id) }
@@ -317,6 +350,45 @@ private struct SettingsForm: View {
         let f = ByteCountFormatter()
         f.countStyle = .file
         return f.string(fromByteCount: Int64(bytes))
+    }
+
+    private var cacheSizeText: String {
+        let f = ByteCountFormatter()
+        f.countStyle = .file
+        return f.string(fromByteCount: max(0, cacheBytes))
+    }
+
+    /// 算缓存总量:榜单/频道(仓库自己写的两份文件)、逐字稿、封面、已播音频四块之和。
+    ///
+    /// 逐字稿、封面、音频三份可能各自上百个文件,扫描丢到后台(硬规矩 8:await 回来之后的
+    /// 同步计算照样占调用线程)。榜单/频道在同一个目录里只有十来个文件,留在主 actor 上算
+    /// —— 它是 `@MainActor` 仓库的方法,硬要挪到后台就得把它那两个 store 也改造成 Sendable,
+    /// 为一个十几行的目录读付这个代价不值。
+    /// 四条**分头要、一起显示**:任一格算不出来就沿用 0,不让一个目录读失败把整行卡在「计算中…」。
+    private func refreshCacheSize() {
+        let repoBytes = env.repository.cacheSizeBytes()
+        let audio = env.audioCache
+        Task {
+            let rest = await Task.detached(priority: .utility) {
+                TranscriptStore.diskUsageBytes() + audio.usageBytes()
+            }.value
+            let artBytes = await ArtworkCache.shared.usageBytes()
+            cacheBytes = repoBytes + rest + artBytes
+        }
+    }
+
+    /// 清除四类可再生数据。**不动**订阅、历史、批注、下载、设置 —— 它们的文件与缓存同在
+    /// `Application Support/Reverb` 下,所以每一格都只按自己的文件名/子目录删,
+    /// 没有一处用「把目录清空」这种省事的写法。
+    private func clearCaches() {
+        env.repository.clearCaches()
+        env.transcripts.clearAll()
+        env.audioCache.clearAll()
+        cacheBytes = -1
+        Task {
+            await ArtworkCache.shared.clear()
+            refreshCacheSize()
+        }
     }
 
     // MARK: - 文件操作

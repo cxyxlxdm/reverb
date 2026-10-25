@@ -82,7 +82,9 @@ enum TranscriptFormat {
     private var generation = 0
     private var job: Task<Void, Never>?
 
-    private static let subdir: URL = {
+    /// `nonisolated`: `diskUsageBytes()` 要在后台扫它,而本类整体是 `@MainActor`
+    /// (否则 `Self.subdir` 的读取就是一次跨 actor 访问,Swift 6 语言模式下直接报错)。
+    nonisolated private static let subdir: URL = {
         let d = AppSupport.dir.appendingPathComponent("Transcripts", isDirectory: true)
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
@@ -182,6 +184,42 @@ enum TranscriptFormat {
     func cancel() {
         job?.cancel()   // 停止消费 → 事件流 onTermination 取消底层分析
         job = nil
+    }
+
+    /// 「清除缓存」:取消在跑的任务、作废当前这几格,并删掉全部已生成的稿。
+    ///
+    /// **先抬代号再删文件**:在途识别每条语句入库前都会看代号,否则它会在目录清空之后
+    /// 把刚生成的那份 `saveCache` 又写回去 —— 用户点了清除,数字却马上又变回来
+    /// (与 `AudioCacheManager.clearAll` 同一条顺序)。
+    func clearAll() {
+        cancel()
+        generation += 1
+        segments = []
+        volatileTail = ""
+        state = .idle
+        episodeId = ""
+        localeId = ""
+        let fm = FileManager.default
+        let names = (try? fm.contentsOfDirectory(atPath: Self.subdir.path)) ?? []
+        for n in names { try? fm.removeItem(at: Self.subdir.appendingPathComponent(n)) }
+        Log.i("Transcript", "clearAll files=\(names.count)")
+    }
+
+    /// 已生成稿件的磁盘占用。设置页把它算进缓存总量。
+    ///
+    /// 写成 **static + nonisolated** 而不是实例方法:本类整体是 `@MainActor`,
+    /// 调用方要在 `Task.detached` 里扫目录,捕获一个 `@MainActor` 实例进后台闭包
+    /// 在 Swift 6 语言模式下本身就是一次跨 actor 捕获;而这里要的只是那个目录。
+    nonisolated static func diskUsageBytes() -> Int64 {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: Self.subdir.path) else { return 0 }
+        var total: Int64 = 0
+        for n in names {
+            let p = Self.subdir.appendingPathComponent(n).path
+            if let size = (try? FileManager.default.attributesOfItem(atPath: p))?[.size] as? NSNumber {
+                total += size.int64Value
+            }
+        }
+        return total
     }
 
     // MARK: - 执行
