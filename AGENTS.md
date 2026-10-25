@@ -135,8 +135,10 @@ $HV assembleHap --mode module -p product=default -p buildMode=debug --no-daemon
 
 ⚠️ **装机被拒的两种签名报法不同因**(详见 `tools/install-device.sh` 头注与 H216 教训):
 `9568286 provision type not same` = 机上包与本包一个 debug 一个 release 口径,互不让覆盖;
-`9568448 verify app signature failed` **且机上没装** = 设备侧拦截 release 包侧载
-(纯净模式/外部来源限制;**dist 里在架正式包同样被拒**是判据),手机设置里放行或就用 debug 包。
+`9568448 verify app signature failed` **且机上没装** = 鸿蒙 NEXT(Mate 60 / 7.0.0.109 实测)的
+签名信任边界:**hdc 侧载只认含本机 UDID 的调试 profile**,release 正式签名一律被拒(连 dist 里
+在架正式包都一样),**与系统设置无关**(老系统的「纯净模式」开关在 NEXT 上不存在,别找)——
+release 口径真机验收走应用市场/AGC 云真机,日常装机验证用 debug 包。
 
 **新增 native 类型包(`.so` 的 `index.d.ts`)之后必须跑一次 `ohpm install`**,
 否则类型解析成 `any`、报 `arkts-no-any-unknown`(症状很误导,见 H61)。

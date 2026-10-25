@@ -68,13 +68,16 @@ if echo "$OUT" | grep -qE '9568286|9568448'; then
   INSTALLED_TYPE="$("$HDC" shell bm dump -n "$BUNDLE" 2>/dev/null \
     | grep -o '"appProvisionType"[^,]*' | head -1 || true)"
   if [ -z "$INSTALLED_TYPE" ]; then
-    # 空机也报 9568448(2026-10-25 实测,连 dist 里在架的正式包都被拒):
-    # 不是包的问题,是设备侧对 **release 签名包侧载**的拦截 —— HarmonyOS 的
-    # 纯净模式/外部来源安装限制只拦正式签名包,debug profile 走开发者调试通道不受影响。
-    echo "✗ 验签失败(9568448),且机上原本就没装这个应用 —— 这是设备侧拦截 release 包侧载,"
-    echo "  不是包坏了(判据:换 dist/ 里那份在架正式包装,同样报 9568448)。"
-    echo "  出路:① 手机 设置 → 安全(和隐私) → 更多安全设置 → 关闭「纯净模式」/允许外部来源安装;"
-    echo "        ② 或就用 debug 包装(本脚本默认),日常装机验证不受影响。"
+    # 空机也报 9568448(2026-10-25 在 Mate 60 / 鸿蒙 7.0.0.109 实测,连 dist 里在架的
+    # 正式包都被拒):不是包的问题,也不是什么设置 —— NEXT 系的安装管控做在签名信任链里,
+    # **hdc 侧载通道只认含本机 UDID 的调试 profile**,release 正式签名(发布型 profile,
+    # 本来就不绑设备)一律 verify app signature failed。旧系统那个「纯净模式」开关在
+    # NEXT 上不存在,别去找。release 口径的真机验收走应用市场(上架后装)或 AGC 云真机。
+    echo "✗ 验签失败(9568448),且机上原本就没装这个应用 —— 鸿蒙 NEXT 的签名信任边界:"
+    echo "  hdc 侧载只认调试 profile(要含本机 UDID),release 正式签名一律被拒,"
+    echo "  连 dist/ 在架正式包也一样(实测),与任何系统设置无关。"
+    echo "  出路:日常装机验证用 debug 包(本脚本默认,已含本机 UDID);release 口径的"
+    echo "        真机验收走应用市场(上架后)/ AGC 云真机。"
   else
     echo "✗ 覆盖被拒:签名口径冲突(9568286 provision type not same / 9568448 verify signature"
     echo "  failed,是同一件事的两个报法)。机上现状:$INSTALLED_TYPE"
