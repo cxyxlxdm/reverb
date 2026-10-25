@@ -15,7 +15,17 @@ export class SubscriptionStore {
   load(): void {
     const arr = JsonFile.readArray(SubscriptionStore.FILE);
     const out: Podcast[] = [];
-    for (let i = 0; i < arr.length; i++) out.push(Codec.podcastFromJson(J.asObj(arr[i])));
+    for (let i = 0; i < arr.length; i++) {
+      // 逐条判,坏的那一条只丢那一条:原先把非对象元素也交给 Codec,会得到一条**全空**的
+      // 订阅(标题/封面/feedUrl 全空)挂在列表里 —— 它点不动、刷不动,还占一格
+      // (见 REVIEW-2026-10-25 高-3 附带项:单条坏元素不该污染整份)。
+      // feedUrl 是订阅的身份键(所有查找与退订都按它),空串等于这条根本不可用。
+      const o = J.asObj(arr[i]);
+      if (o === null) continue;
+      const p = Codec.podcastFromJson(o);
+      if (p.feedUrl.length === 0) continue;
+      out.push(p);
+    }
     this.subscriptions = out;
     Log.i('Store', `订阅加载 ${out.length} 条`);
   }
@@ -63,7 +73,16 @@ export class FavoriteStore {
   load(): void {
     const arr = JsonFile.readArray(FavoriteStore.FILE);
     const out: Episode[] = [];
-    for (let i = 0; i < arr.length; i++) out.push(Codec.episodeFromJson(J.asObj(arr[i])));
+    for (let i = 0; i < arr.length; i++) {
+      // 同 SubscriptionStore:一条坏元素只丢那一条,不让它变成一个全空收藏挤在列表里
+      // (见 REVIEW-2026-10-25 高-3 附带项)。id 是收藏的身份键(isFavorite / toggle 都按它),
+      // 空 id 的条目点掉之后 findIndex 命中不了,界面上永远取消不掉。
+      const o = J.asObj(arr[i]);
+      if (o === null) continue;
+      const e = Codec.episodeFromJson(o);
+      if (e.id.length === 0) continue;
+      out.push(e);
+    }
     this.favorites = out;
     Log.i('Store', `收藏加载 ${out.length} 条`);
   }
@@ -107,7 +126,16 @@ export class HistoryStore {
   load(): void {
     const arr = JsonFile.readArray(HistoryStore.FILE);
     const out: HistoryEntry[] = [];
-    for (let i = 0; i < arr.length; i++) out.push(Codec.historyFromJson(J.asObj(arr[i])));
+    for (let i = 0; i < arr.length; i++) {
+      // 同收藏:一条坏记录只丢那一条(见 REVIEW-2026-10-25 高-3 附带项)。
+      // 历史的身份键是 episode.id —— positionFor / isPlayed / updatePosition 都按它找,
+      // 空 id 的记录既找不到也删不掉,还会把历史里的「已看过」判断带偏。
+      const o = J.asObj(arr[i]);
+      if (o === null) continue;
+      const h = Codec.historyFromJson(o);
+      if (h.episode.id.length === 0) continue;
+      out.push(h);
+    }
     this.history = out;
     Log.i('Store', `历史加载 ${out.length} 条`);
   }
@@ -221,7 +249,15 @@ export class PopularCacheStore {
       if (!Array.isArray(raw)) continue;
       const list: Podcast[] = [];
       const a = raw as Object[];
-      for (let j = 0; j < a.length; j++) list.push(Codec.podcastFromJson(J.asObj(a[j])));
+      for (let j = 0; j < a.length; j++) {
+        // 同收藏/订阅:一条坏元素只丢那一条(见 REVIEW-2026-10-25 高-3 附带项)。
+        // 榜单条目点进详情页靠 feedUrl 拉 RSS,空 feedUrl 的条目是一张点不开的卡片。
+        const o = J.asObj(a[j]);
+        if (o === null) continue;
+        const p = Codec.podcastFromJson(o);
+        if (p.feedUrl.length === 0) continue;
+        list.push(p);
+      }
       this.mem[keys[i]] = list;
     }
     Log.i('Store', `热门缓存加载 ${keys.length} 组`);

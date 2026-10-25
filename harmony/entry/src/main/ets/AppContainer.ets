@@ -113,7 +113,7 @@ export class AppContainer {
     // 本机识别当前关着(系统识别质量不够用,见 Features.LOCAL_ASR 的长注释)。
     // 不装配识别器 ⇒ store 只走"发布方提供的逐字稿"那一条路。
     if (Features.LOCAL_ASR) {
-      this.transcripts.transcriber = new SpeechTranscriber(ctx);
+      this.transcripts.transcriber = new SpeechTranscriber(ctx, this.settings);
     }
     this.downloads.load();
     this.downloadManager.init(ctx.filesDir, this.downloads, this.settings);
@@ -167,7 +167,9 @@ export class AppContainer {
       if (guide !== null) return guide;
       const dl = this.downloadManager.localPath(e.id);
       if (dl !== null) return dl;
-      return this.audioCache.localPathForPlay(e.id);
+      // url 一起传进去:命中时要与账本记的地址回验一次(见 AudioCacheManager.localPathForPlay,
+      // 低·族A ②)
+      return this.audioCache.localPathForPlay(e.id, e.audioUrl);
     };
     // 走网络起播时排一次「整集落缓存」(fire-and-forget,不影响这次起播)
     this.player.networkPlayNotice = (e: Episode) => { this.audioCache.cache(e); };

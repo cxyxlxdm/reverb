@@ -112,6 +112,21 @@ struct Index {
   @State player: PlayerController = PlayerController.get();
   /// 播放状态变化触发重渲的计数(PlayerController 非 @Observed 字段级追踪,用它兜底刷新)
   @State tick: number = 0;
+  /**
+   * 本实例挂到 `player.onStateChanged` 上的**那一层**,以及进来时链上已有的**上一层**。
+   *
+   * 为什么要存成实例字段(见 REVIEW-2026-10-25 低·族D D1):`player` 是进程级单例,链子跨
+   * 组件树存活;而语言切换会让 EntryAbility **整体重建**这棵 `@Entry` 树。原先每次
+   * `aboutToAppear` 都无条件再链一层、又从不退 —— 换几次语言链上就叠几层,每层闭包抓住的是
+   * **已销毁的旧实例**,播放状态每次变化它们都照常执行并往死树上写 `@State tick` 与
+   * `@StorageLink(MORPH_KEY)`(泄漏 + 无谓的 AppStorage 写)。存下来才能在
+   * `aboutToDisappear` 里精确退掉自己那一层。
+   *
+   * ⚠️ 硬规矩 7:加这两个字段只为"能摘下来"。**不要**顺手把 tick / 播放态挪到
+   * PlayerController 这类被整体观察的对象上 —— 那是秒级高频变化,会让整棵树重渲。
+   */
+  private myStateHandler: (() => void) | null = null;
+  private chainedStateHandler: (() => void) | null = null;
   /// 长按菜单开着(以及刚关掉那一瞬)—— 整屏盖一层「误触盾」,见 TapGuard。
   @StorageLink('tapShield') tapShield: boolean = false;
 
@@ -121,19 +136,41 @@ struct Index {
     const app = AppContainer.get();
     app.boot(ctx);
     this.player = app.player;
-    // 播放状态变化时驱动界面刷新
+    // 播放状态变化时驱动界面刷新。挂法见 [myStateHandler]:这一层必须能在 aboutToDisappear 里退掉。
     const prev = app.player.onStateChanged;
-    app.player.onStateChanged = () => {
+    this.chainedStateHandler = prev;
+    const handler: () => void = (): void => {
       if (prev !== null) prev();
       this.tick = this.tick + 1;
       // 已经没有播放条了,收束标志必须跟着清:否则下次起播时栏项一上来就是淡没状态,
       // 界面上看就是"底部栏空了半条"
       if (this.collapsed && this.player.current === null) this.collapsed = false;
     };
+    this.myStateHandler = handler;
+    app.player.onStateChanged = handler;
     this.readInsets();
     this.applySystemBar();
     this.applyColorMode();
     Log.i('UI', `外壳就绪 systemDark=${this.systemDark}`);
+  }
+
+  /**
+   * 树被销毁(换语言 / 换深浅色这类 EntryAbility 重载)时退掉**自己这一层**监听。
+   *
+   * 判据是**身份比较**:只有链头仍是本实例挂上去的那个函数时才摘,并把上一层原样接回去。
+   * 若时序上已有新实例往链上叠过(旧树销毁晚于新树构建),这里什么都不动 ——
+   * 多留一层是可回收的账,把别人的链拦腰截断则是把界面刷新弄坏,两害取轻。
+   *
+   * 为什么不在这里置 `null`:`startGated` 里 `AvSessionBridge` 那一层是全局的
+   * (锁屏 / 控制中心的播控同步靠它),清空会连带把它关掉。
+   */
+  aboutToDisappear(): void {
+    const p = this.player;
+    if (this.myStateHandler !== null && p.onStateChanged === this.myStateHandler) {
+      p.onStateChanged = this.chainedStateHandler;
+      Log.i('UI', '外壳销毁,退掉刷界面那一层播放状态监听');
+    }
+    this.myStateHandler = null;
   }
 
   /**

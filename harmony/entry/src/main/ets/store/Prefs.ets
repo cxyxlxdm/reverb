@@ -84,6 +84,10 @@ export class Prefs {
    * (鸿蒙 preferences 并非多进程安全)。混在一起时,扩展进程写 `seen_*` 落盘,
    * 就可能把 UI 进程之后改的主题/配色等一并盖回它快照里的旧值 —— 属静默数据丢失,
    * 排查时只会看到「设置自己变回去了」。分文件后两个进程不再写同一份,从根上避免。
+   *
+   * `seen_*` 的**值形态**是 `<feedUrl>\n<已见集 id>`(键是 feedUrl 的 int32 哈希,不是唯一键,
+   * 所以要带归属才认得出撞车 —— 判据与第二键的取舍写在 `UpdateNotifier.checkNow`,
+   * 见 REVIEW-2026-10-25 低·族A ③)。这里只提供裸的键值读写,不解析值。
    */
   static seenPut(key: string, value: string): void {
     if (Prefs.seen === null) return;

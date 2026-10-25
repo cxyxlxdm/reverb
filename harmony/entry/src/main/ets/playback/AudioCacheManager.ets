@@ -1,9 +1,9 @@
 import fs from '@ohos.file.fs';
 import http from '@ohos.net.http';
-import connection from '@ohos.net.connection';
 import { Episode } from '../model/Models';
 import { AudioCacheStore, AudioCacheItem } from '../store/AudioCacheStore';
 import { SettingsStore } from '../store/SettingsStore';
+import { blockedByCellular as cellularGateBlocked } from '../util/CellularGate';
 import { Log } from '../util/Logger';
 
 /**
@@ -74,11 +74,24 @@ export class AudioCacheManager {
   /**
    * 起播时的本地路径:命中就顺手记一次访问(LRU 的依据)。
    * **只在文件已确认存在时**返回路径 —— 把播不了的路径交给 AVPlayer 表现为"点了没反应"。
+   *
+   * [url] 是调用方(播放器手上那一集)当前要播的音频地址,命中时与账本记的 url 比一次
+   * (见 REVIEW-2026-10-25 低·族A ②)。不一致就当未命中,让这一集走网络:
+   *  - 挡住"这条账本记录不是为这个音频资源写的"那一类错位(宁可多走一次网络,也不播错内容);
+   *  - 代价是发布方**换过 enclosure 地址**(常见于带签名/时效参数的 URL)时这一集不再走本地缓存,
+   *    而且 `cache()` 见账上有记录不会重下 —— 只是这一集离线不受益,不会出错,也不会反复白下。
+   * 注意 id 撞名那种错位这里看不出来(两条各记各的 url),真正拦住它的是写盘前的
+   * `uniqueName()` 探测,见 `fileName()` 的注释。
    */
-  localPathForPlay(id: string): string | null {
+  localPathForPlay(id: string, url: string): string | null {
     if (this.store === null) return null;
     const p = this.known.get(id);
     if (p === undefined) return null;
+    const item = this.store.get(id);
+    if (item !== null && url.length > 0 && item.url !== url) {
+      Log.w('AudioCache', `缓存 url 与本次要播的地址不符,判为未命中 id=${id}`);
+      return null;
+    }
     this.store.touch(id);
     Log.i('AudioCache', `缓存命中 id=${id}`);
     return p;
@@ -167,7 +180,7 @@ export class AudioCacheManager {
       this.clearInFlight(id);
       return 0;
     }
-    const name = AudioCacheManager.fileName(id, url);
+    const name = this.uniqueName(id, url);
     const target = `${this.dir}/${name}`;
     const part = `${target}.part`;
     const req = http.createHttp();
@@ -286,24 +299,22 @@ export class AudioCacheManager {
    *
    * 缓存必须走这道闸门:下载是用户点名要花的流量,而「播过就自动缓存」是 App 替他做的决定,
    * 更不该在流量上擅自跑几十 MB。
+   *
+   * **读不到网络状态时按"拦"处理**(见 REVIEW-2026-10-25 低·族D D2)。原先这一支 `return false`
+   * 放行,注释还写「与下载闸门同取向」—— 那是**谎话**:`downloadGate()` 的 catch 返回
+   * `NO_NETWORK`,是拦。两边取向本来就不一致,而注释把它说成一致,比不一致更难查。
+   * 现在两边都是拦、注释互指对方真实的那一支。取向选拦的理由是代价不对称:
+   *  - 拦的代价是"这一次不缓存",用户无感(播放照常走网络,只是下次仍要联网);
+   *  - 放的代价是在用户关了"允许蜂窝"的设备上擅自跑几十 MB 流量 —— 那是承诺过的开关,不能猜。
+   * 只影响这一道闸门:`usageBytes`/`sweepOrphans` 那些不花流量的读失败仍按忽略处理。
+   *
+   * **判据本体已上收到 `util/CellularGate.ets`** —— 这一道闸门当时是第二份拷贝,
+   * 而第三份(转写下载)根本没接,所以三条判据搬到一个文件里,调用点只留一句。
+   * 本方法的取向(读不到就拦)、以及"为什么只有布尔、`DownloadManager` 那份留三个结果码",
+   * 都写在闸门文件头,不在这里重复论证。
    */
   private async blockedByCellular(): Promise<boolean> {
-    try {
-      const handle = await connection.getDefaultNet();
-      const caps = await connection.getNetCapabilities(handle);
-      const bearers = caps.bearerTypes;
-      if (bearers.length === 0) return true;      // 没网:下了也白费,按拦处理
-      const settings = this.settings;
-      if (settings !== null && settings.allowCellular) return false;
-      const netCap = caps.networkCap;
-      const declaredNotMetered = netCap !== undefined && netCap.length > 0
-        && netCap.indexOf(connection.NetCap.NET_CAPABILITY_NOT_METERED) >= 0;
-      const isCellular = bearers.indexOf(connection.NetBearType.BEARER_CELLULAR) >= 0;
-      return !declaredNotMetered && isCellular;
-    } catch (e) {
-      Log.w('AudioCache', `读网络状态失败 ${(e as Error).message}`);
-      return false;   // 拿不到信息时放行(与下载闸门"拦错不如拦对"同取向)
-    }
+    return cellularGateBlocked(this.settings, 'AudioCache');
   }
 
   private destroyInFlight(): void {
@@ -332,8 +343,21 @@ export class AudioCacheManager {
   }
 
   /// 文件名:ca_<id 简易哈希><扩展名>(与 Android 同前缀;与下载的 dl_ 区分,便于装机看一眼目录就知道归谁管)。
+  /**
+   * 哈希是 int32,**不是唯一键**(见 REVIEW-2026-10-25 低·族A)。撞名的最坏后果就是审核写的那句
+   * 「播 A 集出 B 集的声音」:两个 id 算出同一个 `ca_<h>`,后缓存的那集把自己的音频盖进了
+   * 前一集的文件,而前一集账本里的 `f` 还是这个名字 —— 元数据全对,内容换人。
+   * 两道处理,都不动哈希本体:
+   *  ① 种子放**串长**:原先 h 从 0 起,长度信息第一轮就被 `|0` 绕掉,长短不同的 id 更容易同余。
+   *  ② 写盘前 `uniqueName()` 探测:账本里已有**别的集**占着这个名字就换名,不给别人覆盖。
+   *     再加起播时 `localPathForPlay()` 的 url 回验(见那里)作为第二道 —— 注意它单独并不成立:
+   *     id 撞名时两条账本各记各的 url,回验比的是"同一 id 的 url",看不出文件被谁盖了,
+   *     所以真正拦住这条的是 ②。复核这一点值得写下来,免得以后有人以为 ② 可以省。
+   * 命名只影响之后的新缓存:账本 `audio_cache.json` 每条存的是文件名 `f` 原样,老条目照旧命中。
+   * Android 侧同一族由另一个代理同步加长;缓存文件名**不是三端互通格式**,两端各自加长即可。
+   */
   private static fileName(id: string, url: string): string {
-    let h = 0;
+    let h = id.length;
     for (let i = 0; i < id.length; i++) {
       h = (h * 31 + id.charCodeAt(i)) | 0;
     }
@@ -345,5 +369,36 @@ export class AudioCacheManager {
     else if (lower.indexOf('.ogg') >= 0) ext = '.ogg';
     else if (lower.indexOf('.wav') >= 0) ext = '.wav';
     return `${name}${ext}`;
+  }
+
+  /**
+   * 撞名探测(低·族A ②):账本里**另一集**的 `f` 正好等于候选名时换名落盘,谁也不盖谁。
+   * 只在缓存真正开写前跑一次(不在渲染路径),条目数由预算封顶(个位数到几十),线性扫够快。
+   * 连撞 8 次(概率上不会)退回原名并记日志 —— 别把缓存这条路堵死,最差只是回到改前行为。
+   */
+  private uniqueName(id: string, url: string): string {
+    const store = this.store;
+    const base = AudioCacheManager.fileName(id, url);
+    if (store === null || !AudioCacheManager.claimedByOther(store, base, id)) return base;
+    const dot = base.indexOf('.');
+    const stem = dot > 0 ? base.substring(0, dot) : base;
+    const ext = dot > 0 ? base.substring(dot) : '';
+    for (let n = 2; n <= 9; n++) {
+      const cand = `${stem}-${n}${ext}`;
+      if (!AudioCacheManager.claimedByOther(store, cand, id)) {
+        Log.w('AudioCache', `文件名撞车(${base}),这一集改用 ${cand} 落盘 —— 见 REVIEW-2026-10-25 低·族A`);
+        return cand;
+      }
+    }
+    Log.w('AudioCache', `文件名 ${base} 连续撞车 8 次,仍按原名落盘`);
+    return base;
+  }
+
+  private static claimedByOther(store: AudioCacheStore, name: string, id: string): boolean {
+    const items = store.byLeastRecent();
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].f === name && items[i].id !== id) return true;
+    }
+    return false;
   }
 }

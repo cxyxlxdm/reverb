@@ -265,7 +265,7 @@ export class TranscriptStore implements TranscriptSink {
     const p = `${this.filesDir}/${this.cacheName(episodeId, loc)}`;
     try {
       const out: Object = await taskpool.execute(
-        loadTranscriptCacheConcurrent, p, TranscriptStore.CACHE_VERSION);
+        loadTranscriptCacheConcurrent, p, TranscriptStore.CACHE_VERSION, episodeId);
       const r = out as TranscriptCacheOut;
       if (r.stale) Log.i(TranscriptStore.TAG, '缓存是旧口径,已丢弃,需重转');
       return r.segments;
@@ -283,6 +283,14 @@ export class TranscriptStore implements TranscriptSink {
       if (!fs.accessSync(p)) return [];
       const root = JSON.parse(fs.readTextSync(p)) as Record<string, Object>;
       if (J.num(root, 'complete') === 0 && root['complete'] !== true) return [];
+      // 归属校验:文件名 sanitize(id) 把 `:` 与 `_` 折成同一个字符,`abc:def` 与 `abc_def` 同名
+      // (见 loadCacheAsync 与 TranscriptTask 里的同名校验,REVIEW-2026-10-25 低·族 A 末尾)。
+      // 缺这个字段的旧缓存照认 —— 判它们不匹配等于把全部历史稿一次作废。
+      const owner: string = J.str(root, 'episodeId');
+      if (owner.length > 0 && owner !== episodeId) {
+        Log.w(TranscriptStore.TAG, `缓存归属不符(文件名撞车),当作没有:期望 ${episodeId}`);
+        return [];
+      }
       // 缺 version 字段的是更早的口径,一律作废重转
       const ver = J.num(root, 'version');
       if (ver < TranscriptStore.CACHE_VERSION) {
@@ -330,7 +338,7 @@ export class TranscriptStore implements TranscriptSink {
     const p = `${this.filesDir}/${this.cacheName(episodeId, loc)}`;
     try {
       const ok: Object = await taskpool.execute(saveTranscriptCacheConcurrent,
-        p, loc, complete, TranscriptStore.CACHE_VERSION, segs);
+        p, loc, complete, TranscriptStore.CACHE_VERSION, episodeId, segs);
       if (ok as boolean) return;
     } catch (e) {
       Log.w(TranscriptStore.TAG, `子线程写缓存失败,回落本线程:${(e as Error).message}`);
@@ -338,7 +346,13 @@ export class TranscriptStore implements TranscriptSink {
     this.saveCache(episodeId, loc, segs, complete);
   }
 
-  /// 本线程版(子线程不可用时的回落)。
+  /**
+   * 本线程版(子线程不可用时的回落)。
+   *
+   * 与 `saveTranscriptCacheConcurrent` 同步改成**原子写**(临时文件 → fsyncSync → rename),
+   * 见 REVIEW-2026-10-25 高-3(B 项)。原先 `open(target, TRUNC)` + `writeSync`,进程死在写窗口
+   * 内就留下一份半截稿 —— 下一次读它解析失败,当"这一集没有稿"。
+   */
   private saveCache(episodeId: string, loc: string, segs: TranscribedSegment[], complete: boolean = true): void {
     if (this.filesDir.length === 0) return;
     const arr: Object[] = [];
@@ -361,15 +375,37 @@ export class TranscriptStore implements TranscriptSink {
       'localeId': loc,
       'complete': complete,
       'version': TranscriptStore.CACHE_VERSION,
+      // 与 saveTranscriptCacheConcurrent 同一件事:把原始 id 写进内容,读侧才分得出撞名的两份稿是谁的
+      'episodeId': episodeId,
       'segments': arr
     };
     const p = `${this.filesDir}/${this.cacheName(episodeId, loc)}`;
+    const tmp = `${p}.tmp`;
     let file: fs.File | null = null;
     try {
-      file = fs.openSync(p, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+      file = fs.openSync(tmp, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
       fs.writeSync(file.fd, JSON.stringify(root));
+      fs.fsyncSync(file.fd);
+      fs.closeSync(file);
+      file = null;
+      try {
+        fs.renameSync(tmp, p);
+      } catch (e) {
+        // rename 覆盖同名目标的语义不敢只赌成立(见 JsonFile.replaceSync 的说明):先删再 rename
+        try {
+          if (fs.accessSync(p)) fs.unlinkSync(p);
+        } catch (e2) {
+          // 忽略
+        }
+        fs.renameSync(tmp, p);
+      }
     } catch (e) {
-      Log.w(TranscriptStore.TAG, `缓存写失败:${e}`);
+      Log.w(TranscriptStore.TAG, `缓存写失败:${(e as Error).message}`);
+      try {
+        if (fs.accessSync(tmp)) fs.unlinkSync(tmp);
+      } catch (e3) {
+        // 忽略
+      }
     } finally {
       if (file !== null) {
         try { fs.closeSync(file); } catch (e) { /* 忽略 */ }

@@ -49,9 +49,25 @@ export class FeedCacheStore {
 
   private mem: Record<string, FeedCacheEntry> = {};
 
+  /**
+   * 是否从盘上读过一次。**这是 中-4 的开关**:
+   * `update/FeedUpdateExtension.ets` 里的 `new FeedCacheStore()` 是刻意不 load 的
+   * (后台进程不该握着别人家的缓存,见那里的 H28 注释),但 `put()` 原先结尾**无条件** `persist()`,
+   * 于是后台每轮刷新都会拿"这一轮只装了几个频道"的内存态整份覆写 `feed_cache.json` ——
+   * 没订阅变化的那些频道详情缓存就此清空,还会和 UI 进程的去抖写互相踩。
+   * 现在未 load 就只改内存、不落盘(见 REVIEW-2026-10-25 中-4)。
+   */
+  private loaded = false;
+  /// 「跳过落盘」只在每个实例打一行,免得后台一轮 put 十几次就刷十几行同样的话。
+  private skipLogged = false;
+
   load(): void {
     const o = JsonFile.readObject(FeedCacheStore.FILE);
-    if (o === null) return;
+    if (o === null) {
+      // 文件不存在/为空也算"已经读过盘":这是全新装机,不是还没读,必须允许后续落盘。
+      this.loaded = true;
+      return;
+    }
     const keys = Object.keys(o);
     for (let i = 0; i < keys.length; i++) {
       const item = J.asObj(o[keys[i]]);
@@ -61,12 +77,19 @@ export class FeedCacheStore {
       const arr = J.arr(item, 'episodes');
       const episodes: Episode[] = [];
       for (let j = 0; j < arr.length; j++) {
-        episodes.push(Codec.episodeFromJson(J.asObj(arr[j])));
+        // 一集坏数据只丢那一集,别让它变成详情页里一行空白点不开的格子
+        // (见 REVIEW-2026-10-25 高-3 附带项)。id 是这一集的身份键(进度/收藏都按它)。
+        const eo = J.asObj(arr[j]);
+        if (eo === null) continue;
+        const e = Codec.episodeFromJson(eo);
+        if (e.id.length === 0) continue;
+        episodes.push(e);
       }
       if (episodes.length === 0) continue;
       this.mem[keys[i]] = new FeedCacheEntry(
         Codec.podcastFromJson(podcastObj), episodes, J.num(item, 'fetchedAt'));
     }
+    this.loaded = true;
     Log.i('FeedCache', `频道缓存加载 ${Object.keys(this.mem).length} 个`);
   }
 
@@ -93,6 +116,16 @@ export class FeedCacheStore {
         kept[keys[i]] = this.mem[keys[i]];
       }
       this.mem = kept;
+    }
+    // 没 load 过就不落盘(中-4):本实例内存里只有"这一轮刷到的那几个频道",整份写回等于
+    // 把别的频道的详情缓存抹掉(那正是后台轮次最不该做的事)。内存照写,让这一轮的刷新结果可用。
+    if (!this.loaded) {
+      if (!this.skipLogged) {
+        this.skipLogged = true;
+        Log.w('FeedCache', `未加载即写入(feedUrl=${feedUrl}),仅更新内存、跳过落盘:` +
+          `整份覆写会清掉未订阅变化频道的缓存(见 REVIEW-2026-10-25 中-4)`);
+      }
+      return;
     }
     this.persist();
   }

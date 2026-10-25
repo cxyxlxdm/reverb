@@ -42,7 +42,15 @@ export class InboxStore {
   load(): void {
     const arr = JsonFile.readArray(InboxStore.FILE);
     const out: Episode[] = [];
-    for (let i = 0; i < arr.length; i++) out.push(Codec.episodeFromJson(J.asObj(arr[i])));
+    for (let i = 0; i < arr.length; i++) {
+      // 同收藏/历史:一条坏元素只丢那一条,不毒死整份(见 REVIEW-2026-10-25 高-3 附带项)。
+      // 这一页按 id 挂收藏/已播/进度状态,空 id 的条目那些状态全落不到实处。
+      const o = J.asObj(arr[i]);
+      if (o === null) continue;
+      const e = Codec.episodeFromJson(o);
+      if (e.id.length === 0) continue;
+      out.push(e);
+    }
     this.episodes = out;
     Log.i('Inbox', `加载 ${out.length} 条`);
   }

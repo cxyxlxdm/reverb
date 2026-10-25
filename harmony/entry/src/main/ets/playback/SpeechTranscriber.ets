@@ -6,6 +6,8 @@ import { Episode, TranscribedSegment } from '../model/Models';
 import { TranscriptState, TranscriptSink, SpeechTranscriberLike } from '../store/TranscriptStore';
 import { TranscriptLines } from '../util/TranscriptLines';
 import { PcmReader } from './PcmReader';
+import { SettingsStore } from '../store/SettingsStore';
+import { blockedByCellular } from '../util/CellularGate';
 import { Log } from '../util/Logger';
 
 /**
@@ -59,16 +61,21 @@ export class SpeechTranscriber implements SpeechTranscriberLike {
   /// `finish` 之后等收尾的上限
   private static readonly FINISH_TIMEOUT_MS: number = 15000;
   private static readonly TAG: string = 'Speech';
+  /// 本进程内的临时件序号,给 `asr_*` 文件名加唯一性(见 `downloadToCache`,低·族A 第五条)。
+  private static seq: number = 0;
 
   private ctx: common.UIAbilityContext;
+  /// 蜂窝闸门的判据要读它(用户那个开关)。构造时由 `AppContainer` 传进来。
+  private settings: SettingsStore | null;
   /// 这台设备到底能不能用系统识别。null = 还没试过(第一次问的时候试一次并记住)
   private ok: boolean | null = null;
   private cancelled: boolean = false;
   /// 当前那一窗。监听器只绑一次,回调统一转给它(见 bindListener)
   private cur: WindowSession | null = null;
 
-  constructor(ctx: common.UIAbilityContext) {
+  constructor(ctx: common.UIAbilityContext, settings: SettingsStore | null) {
     this.ctx = ctx;
+    this.settings = settings;
   }
 
   /**
@@ -340,9 +347,34 @@ export class SpeechTranscriber implements SpeechTranscriberLike {
     return localeId.length > 0 ? localeId : 'zh-CN';
   }
 
+  /**
+   * 转写前把整集音频拉下来。这是本端**第三条**大流量路径,所以必须过同一道蜂窝闸门
+   * (见 REVIEW-2026-10-25 中-3):用户关了「仅在 Wi-Fi 下载」,下载与自动缓存都老实走 Wi-Fi,
+   * 而这一条原先**没有任何闸门** —— 一次逐字稿转换就在蜂窝上悄悄跑掉几十 MB。
+   * 判据本体在 `util/CellularGate.ets`,与另外两条路径共用同一份,不再各抄一遍。
+   *
+   * 拦下来时返回空串,调用方(`transcribe` 的第 1 步)按既有的失败路径走:
+   * 界面显示转换失败,不写坏稿、不留半截文件。**取向是拦不是放** ——
+   * 这是 App 替用户决定的流量,不是用户点名要下的东西。
+   *
+   * ⚠️ 本端 `LOCAL_ASR=false`,这条路当前不启用(见 `AppContainer`),属于**潜伏**修复:
+   * 翻开关之前它必须已经接好,否则一翻就在计费网络上跑。
+   */
   private async downloadToCache(episode: Episode): Promise<string> {
     if (episode.audioUrl.length === 0) return '';
-    const dest = `${this.ctx.cacheDir}/asr-${SpeechTranscriber.hash(episode.id)}.audio`;
+    if (await blockedByCellular(this.settings, SpeechTranscriber.TAG)) {
+      Log.w(SpeechTranscriber.TAG, '蜂窝闸门拦下待转写音频的下载(整集几十 MB),本次转换不启动');
+      return '';
+    }
+    // 临时件名:`asr_<id 哈希>-<本次调用号>.audio`(见 REVIEW-2026-10-25 低·族A 第五条)。
+    // 哈希是 int32、**不是唯一键**;原先两集撞名时两次下载会写同一个路径 —— 后到的那次
+    // `TRUNC` 打开当场把前一次正在喂给解码器的那份清空,症状是其中一次识别整段出乱码。
+    // 这里比 `ca_/dl_` 那两处更简单:这个文件**转完就删、没有任何调用点按 id 反推路径**
+    // (不是查找键,只是临时件名),所以直接给每次调用一个唯一号,连"同一集并发两次"也一并挡住。
+    // 保留哈希只为了在 cacheDir 里一眼看得出是 ASR 的临时件。
+    // 泄漏面:只有进程在转录中途被杀才会留下一个孤儿件,cacheDir 由系统在空间紧张时回收。
+    SpeechTranscriber.seq += 1;
+    const dest = `${this.ctx.cacheDir}/asr-${SpeechTranscriber.hash(episode.id)}-${SpeechTranscriber.seq}.audio`;
     const req = http.createHttp();
     try {
       const resp = await req.request(episode.audioUrl, {
@@ -381,8 +413,11 @@ export class SpeechTranscriber implements SpeechTranscriberLike {
     try { fs.unlinkSync(p); } catch (e) { /* 忽略 */ }
   }
 
+  /// id → int32 短键。**不是唯一键**,所以临时件名另外带了序号(见 `downloadToCache`);
+  /// 种子放串长是让不同长度的 id 第一轮就分道(原先 h 从 0 起,长度信息第一轮被 `|0` 绕掉)。
+  /// 见 REVIEW-2026-10-25 低·族A。Android 侧同一族由另一个代理同步加长,临时件名不是三端互通格式。
   private static hash(s: string): number {
-    let h = 0;
+    let h = s.length;
     for (let i = 0; i < s.length; i++) {
       h = (h * 31 + s.charCodeAt(i)) | 0;
     }
