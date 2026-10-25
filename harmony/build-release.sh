@@ -110,38 +110,128 @@ if [ "${1:-}" != "--fast" ]; then
   rm -rf build entry/build .hvigor/cache
 fi
 
+# ── 构建结果判定(见 REVIEW-2026-10-25 中-9)──────────────────────────────
+# 原先这一行是:
+#     "$HVIGOR" ... | grep -iE "ERROR|WARN|BUILD SUCCESSFUL|BUILD FAILED" || true
+# 三个洞叠在一起,失败也能一路走到 exit 0:
+#   1) 管道尾部的 `|| true` 把 **hvigor 自己的非零退出码**吞了(`set -o pipefail` 救不了带 || 的末段);
+#   2) 一行都没匹配上(构建半途挂掉,既没打 ERROR 也没打 BUILD FAILED)同样被 `|| true` 放过;
+#   3) 之后 `[ -d "$OUT" ]` 只证明**目录**在 —— 目录是上一次构建留下的,`--fast` 不清缓存,
+#      于是 `cp "$OUT"/*-signed.app → dist/reverb.app` 拷的是**旧包**,末尾的 debugKey 校验
+#      检的也是那个旧包(它当然不含 debugKey),脚本最后 exit 0。
+#      审核原话:发出去的是上一次那个包,不是本次代码编出来的那份。
+# 现在:整份输出进日志文件,先按 hvigor 的**退出码**判成败(失败就 tail 出来给人看),
+# 再断言日志里有 BUILD SUCCESSFUL 且无 BUILD FAILED —— 两道都判是因为退出码与自述结果
+# 理论上可以不一致(工具链把某个任务记挂但仍整体成功),宁可多一道。
+# 日志放 mktemp 目录而不是工程内:非 --fast 会 `rm -rf build`,而构建缓存 `.hvigor/` 绝不入库(硬规矩 14)。
+START_TS=$(date +%s)
+BUILD_TMP=$(mktemp -d)
+BUILD_LOG="$BUILD_TMP/hvigor.log"
+
 echo "▸ 构建 release(含混淆)"
+set +e
 "$HVIGOR" assembleApp --mode project -p product=release -p buildMode=release --no-daemon \
-  | grep -iE "ERROR|WARN|BUILD SUCCESSFUL|BUILD FAILED" || true
+  > "$BUILD_LOG" 2>&1
+HVIGOR_RC=$?
+set -e
+grep -iE "ERROR|WARN|BUILD SUCCESSFUL|BUILD FAILED" "$BUILD_LOG" || true
+
+if [ "$HVIGOR_RC" -ne 0 ]; then
+  echo "✗ hvigor 退出码 $HVIGOR_RC —— 构建失败,日志最后 30 行:"
+  tail -30 "$BUILD_LOG"
+  echo "  (完整日志:$BUILD_LOG)"
+  exit 1
+fi
+if ! grep -qiE "BUILD SUCCESSFUL" "$BUILD_LOG"; then
+  echo "✗ hvigor 退出码 0,但日志里没有 BUILD SUCCESSFUL,不认这次构建。日志最后 30 行:"
+  tail -30 "$BUILD_LOG"
+  echo "  (完整日志:$BUILD_LOG)"
+  exit 1
+fi
+if grep -qiE "BUILD FAILED" "$BUILD_LOG"; then
+  echo "✗ 日志里出现 BUILD FAILED(和 BUILD SUCCESSFUL 同时打印说明有任务挂了),不出包。"
+  echo "  (完整日志:$BUILD_LOG)"
+  exit 1
+fi
 
 OUT="build/outputs/release"
-[ -d "$OUT" ] || { echo "✗ 没有产物目录 $OUT,构建应该失败了"; exit 1; }
+[ -d "$OUT" ] || { echo "✗ 构建报成功却没有产物目录 $OUT,这不该发生;完整日志:$BUILD_LOG"; exit 1; }
+
+# 产物新鲜度闸门:光有 BUILD SUCCESSFUL 还不够,得证明 dist 里那份是**本次**生成的。
+# 审核给的写法是 `find "$OUT" -name '*-signed.app' -newermt "@$START_TS"`,但实测本机
+# (macOS 的 BSD find)不认 `@epoch` —— `find: Can't parse date/time: @1792825404`,退出码 1;
+# `-newermt "2026-10-25"` 那种日期串虽然能用,却要多过格式与时区两套解析。所以这里改成
+# 拿 `stat -f %m` 的 mtime 与 START_TS 直接比数值:判据相同,中间没有任何解析环节。
+# 留 2 秒余量:同一秒内写完的产物不该被判成旧(要防的"旧包"是上一次构建留下的,
+# 时间差是分钟/天级,几秒余量挡不住它,不影响本条要防的事故)。
+is_fresh() {
+  [ -e "$1" ] || return 1
+  local m
+  m=$(stat -f %m "$1" 2>/dev/null) || return 1
+  [ "$m" -ge $((START_TS - 2)) ]
+}
+
+# 挑同类产物里 mtime 最新的一个(原先的 `ls | head -1` 按名字取第一个,
+# 目录里同时留着 release 与旧文件时会挑错;--fast 场景下"最新"恰恰是判据要的语义)。
+freshest() {
+  local f best="" bt=-1 m
+  for f in "$OUT"/$1; do
+    [ -e "$f" ] || continue
+    m=$(stat -f %m "$f" 2>/dev/null) || continue
+    if [ "$m" -gt "$bt" ]; then bt=$m; best="$f"; fi
+  done
+  printf '%s' "$best"
+}
 
 DIST="$ROOT/dist"
 mkdir -p "$DIST"
 rm -f "$DIST"/reverb.app "$DIST"/reverb-unsigned.app "$DIST"/reverb-symbol.zip
 
-SIGNED=$(ls "$OUT"/*-signed.app 2>/dev/null | head -1 || true)
-UNSIGNED=$(ls "$OUT"/*-unsigned.app 2>/dev/null | head -1 || true)
-SYMBOL="$OUT/symbol/release/app-symbol.zip"
-
-[ -n "$UNSIGNED" ] && cp "$UNSIGNED" "$DIST/reverb-unsigned.app"
-[ -f "$SYMBOL" ]   && cp "$SYMBOL"   "$DIST/reverb-symbol.zip"
-
+SIGNED=$(freshest '*-signed.app')
 if [ -z "$SIGNED" ]; then
-  echo "✗ 没有生成已签名包,只有 unsigned。检查 build-profile.json5 的 release 签名配置。"
+  echo "✗ 没有生成已签名包($OUT 里有:$(ls "$OUT" 2>/dev/null | tr '\n' ' '))。"
+  echo "  只有 unsigned 的话:检查 build-profile.json5 的 release 签名配置。"
+  exit 1
+fi
+if ! is_fresh "$SIGNED"; then
+  # 这一条是 中-9 的正主:构建没真跑出产物时,绝不把上一次那份 cp 进 dist。
+  echo "✗ $SIGNED 的修改时间($(stat -f '%Sm' "$SIGNED"))早于本次构建开始($(date -r "$START_TS" '+%Y-%m-%d %H:%M:%S')),"
+  echo "  说明本次构建没有产出新的签名包 —— 那是**上一次**那个包,不能当本次发布物。"
+  echo "  修法:去掉 --fast 全量重打(默认路径会清 build/entry/build/.hvigor/cache)。"
   exit 1
 fi
 cp "$SIGNED" "$DIST/reverb.app"
 
+# 次要产物:一份备查、一份用于还原崩溃栈,都不直接进市场,所以不为它们挂掉整个发布;
+# 但**过期的一律不拷** —— dist 里留一份和当前包不匹配的 mapping,比留个空更坏(崩溃栈会误导人)。
+UNSIGNED=$(freshest '*-unsigned.app')
+if [ -n "$UNSIGNED" ]; then
+  if is_fresh "$UNSIGNED"; then cp "$UNSIGNED" "$DIST/reverb-unsigned.app";
+  else echo "! $UNSIGNED 是旧产物,跳过不拷"; fi
+fi
+SYMBOL="$OUT/symbol/release/app-symbol.zip"
+if [ -f "$SYMBOL" ]; then
+  if is_fresh "$SYMBOL"; then cp "$SYMBOL" "$DIST/reverb-symbol.zip";
+  else echo "! 符号包早于本次构建,跳过不拷 —— dist 里没有它就别上传旧的"; fi
+fi
+
 # 关键校验:确认签的是发布证书而不是调试证书。
 # 早先就因为用调试签名打了"发布包",这一条能挡住同类事故。
-HAP=$(mktemp -d)/entry.hap
+# 顺带把这条校验自身的两个静默口子补掉(同 中-9 的"不许静默判过"口径):
+#   - `unzip ... || true` + `grep ... 2>/dev/null`:unzip 没提出东西时 $HAP 是空文件,
+#     grep 找不到 debugKey 就"通过"了 —— 校验实际什么都没做。现在先断言取到了内容。
+#   - 上面加了新鲜度闸门之后,这里检的确定是本次那份(原先可能检的是旧包,白检)。
+HAP="$BUILD_TMP/entry.hap"
 unzip -p "$DIST/reverb.app" '*.hap' > "$HAP" 2>/dev/null || true
+if [ ! -s "$HAP" ]; then
+  echo "✗ 从 dist/reverb.app 里没取出 .hap,签名校验做不了 —— 不出包(别把'没查出问题'当'查过了')。"
+  exit 1
+fi
 if grep -aq debugKey "$HAP" 2>/dev/null; then
   echo "✗ 包内含 debugKey —— 这是**调试签名**,应用市场会拒。请检查 product=release 的签名配置。"
   exit 1
 fi
+rm -rf "$BUILD_TMP"
 
 echo
 echo "▸ 产物(harmony/dist/):"

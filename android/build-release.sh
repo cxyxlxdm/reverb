@@ -104,17 +104,28 @@ if [ -n "$APKSIGNER" ] && "$APKSIGNER" verify "$APK" >/dev/null 2>&1; then
   SIGNER_DN=$("$APKSIGNER" verify --print-certs "$APK" 2>/dev/null | sed -n 's/^Signer #1 certificate DN: //p' | head -1)
 fi
 
+# 调试证书**先挡,再动 dist**。
+# 顺序在这里不是风格问题(REVIEW-2026-10-25 低·族 F-1):下面那句 `rm -f` 原先排在本拦截之前,
+# 于是注释里承诺的「清旧产物放在签名结果已经判出来之后」只做对了一半 ——
+# DN 确实在删之前就取到了,但**决定(Exit 1)在删之后**才发生:
+# 一次签名材料配错(调试证书)的构建会先把 dist 里那个还能用的旧包**和它的 mapping** 一起删掉,
+# 然后才报"这是调试证书"退出。而 H204/H205 反复写过:**在架那份的 mapping 本地只此一份**。
+# 现在删之前先判,判不过就原样保留旧产物。
+if [ "$IS_SIGNED" = "1" ]; then
+  case "$SIGNER_DN" in
+    *"CN=Android Debug"*)
+      echo "✗ 这个包是**调试证书**签的($SIGNER_DN),发布会被拒。检查 keystore.properties。"
+      echo "  dist/ 里的旧产物未动 —— 重打成功后再取。"
+      exit 1;;
+  esac
+fi
+
 # 清旧产物放在「签名结果已经判出来」之后。原先它紧跟构建,于是后面任一步失败
 # (SDK 没解析出来 → 找不到 apksigner → 判成未签名;或证书是调试签名被挡)都会先把
 # dist 里那个还能用的旧包删掉,而脚本的退出码可能仍然是 0 —— 见 H151。
 rm -f "$DIST/$OUT_APK" "$DIST/${OUT_APK%.apk}-unsigned.apk" "$DIST/${OUT_APK%.apk}.aab" "$DIST/${OUT_APK%.apk}-mapping.txt"
 
 if [ "$IS_SIGNED" = "1" ]; then
-  case "$SIGNER_DN" in
-    *"CN=Android Debug"*)
-      echo "✗ 这个包是**调试证书**签的($SIGNER_DN),发布会被拒。检查 keystore.properties。"
-      exit 1;;
-  esac
   # v1 补签:AGP 8.5 在 minSdk>=24 时会忽略 enableV1Signing,v1(JAR)签名块进不了包
   # (build.gradle 里的 enableV3Signing 有效,v1 无效 —— 实测确认过)。
   # 部分国内风控的静态解析器只认 META-INF 里的 JAR 签名块,读不到证书就走
