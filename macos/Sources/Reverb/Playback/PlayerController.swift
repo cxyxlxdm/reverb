@@ -723,6 +723,29 @@ final class PlayerController: ObservableObject {
         radioNext = nil; radioMode = false; updateNavFlags()
     }
 
+    /// 关闭播放条(底部条上那枚 X):停止播放并清掉「正在播」的上下文。
+    /// 语义与 Android / 鸿蒙的 `close` 同一条 —— `current` 置空(底部条的显隐门),
+    /// 上下文队列清掉,**`userQueue` 保留**(用户排的队是用户数据,持久化写
+    /// 「无 current、留 upNext」而不是 `PlaybackStateStore.clear()`),下次起播条子照常回来。
+    ///
+    /// 顺序上先 `current = nil` 再 `pause()`:pause 触发的 KVO 里 `saveProgress` 有
+    /// `guard current` 守卫,先清可保证迟到的回调一律短路;`handleLoadFailure` 的在途
+    /// 重试同样按 `current?.id` 守卫自弃。`cancelSleep` 与 `stopRadio` 与两端同口径显式调。
+    func close() {
+        Log.i("Player", "close id=\(current?.id ?? "-")")
+        if radioMode { stopRadio() }
+        cancelSleep()
+        current = nil
+        player.pause()
+        isPlaying = false
+        playbackError = nil
+        loadRetries = 0
+        queue = []
+        queueIndex = 0
+        persistState()
+        updateNavFlags()
+    }
+
     /// 随机电台**该排除的最近听过的单集 id**(末尾 `radioRecentCap` 个)。
     ///
     /// 为什么在播放器这里出,而不是让发现页自己攒:这份「最近」只有一个真值,就是电台

@@ -1029,6 +1029,10 @@
       "value": "Expand player"
     },
     {
+      "name": "a11y_close_player",
+      "value": "Close player"
+    },
+    {
       "name": "a11y_play",
       "value": "Play"
     },

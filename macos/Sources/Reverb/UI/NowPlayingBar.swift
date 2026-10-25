@@ -113,6 +113,18 @@ struct NowPlayingBar: View {
                         }
                         .buttonStyle(.plain)
                         .help("待播")
+
+                        // 关闭(参考视频的位次:X 在播放条最右端,待播入口之外再一枚)。
+                        // 色阶 secondary:次要动作,不与播放键争权重(与另两端同判)。
+                        // 动画不在这里包 withAnimation —— 根视图那条 .animation(value:)
+                        // 已经把「current 有无」的变化统一交给塌陷过渡。
+                        Button { player.close() } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.plain)
+                        .help("关闭播放条")
                     }
                 }
             }

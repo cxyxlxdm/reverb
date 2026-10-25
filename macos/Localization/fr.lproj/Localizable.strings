@@ -96,6 +96,7 @@
 
 /* Now Playing bar */
 "打开播放页" = "Ouvrir le lecteur";
+"关闭播放条" = "Fermer le lecteur";
 
 /* Podcast detail */
 "暂无单集" = "Aucun épisode";

@@ -56,8 +56,19 @@ struct RootView: View {
             }
 
             if player.current != nil {
-                Divider()
-                NowPlayingBar(onOpenChannel: { path.append($0) })
+                // 塌陷过渡(参考视频:播放条被压成细缝后消失,下方内容同步补位,不是滑出)。
+                // 用 modifier 过渡而不是 .move/.opacity 的理由:只有它能把**布局高度**一起收掉,
+                // 内容区才跟着上移 —— 这是"塌陷"与"滑出/淡出"的分水岭。
+                // 触发一律走底部那行 .animation(value:):起播出现(反向弹出)与点 X 关闭
+                // 两条路同一套曲线,不用每个调用点各自 withAnimation。
+                Group {
+                    Divider()
+                    NowPlayingBar(onOpenChannel: { path.append($0) })
+                }
+                .transition(AnyTransition.modifier(
+                    active: CollapseModifier(collapsed: true),
+                    identity: CollapseModifier(collapsed: false)
+                ))
             }
         }
         .frame(minWidth: 1100, minHeight: 760)
@@ -67,6 +78,21 @@ struct RootView: View {
         .tint(Theme.accent(settings.accentIndex))
         .preferredColorScheme(Theme.colorScheme(settings.themeMode))
         .noFocusRing() // 整树去键盘焦点环
+        // 「current 有无」翻转的统一动画源:驱动上面那条塌陷过渡(出现/消失两个方向),
+        // 曲线与另两端收束 morph 的手感同档(欠阻尼小弹簧)。
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: player.current != nil)
+    }
+}
+
+/// 播放条的塌陷形状:收到高度 0 + 裁剪 + 淡出。挂法见 `RootView` 那条 transition 注释。
+private struct CollapseModifier: ViewModifier {
+    let collapsed: Bool
+    func body(content: Content) -> some View {
+        if collapsed {
+            content.frame(height: 0).clipped().opacity(0)
+        } else {
+            content
+        }
     }
 }
 

@@ -7,6 +7,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -65,7 +71,9 @@ import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.LocalOpenPodcastChannel
 import com.yuyin.reverb.ui.components.MINI_GAP
 import com.yuyin.reverb.ui.components.MINI_H
+import com.yuyin.reverb.ui.components.MINI_MORPH_DAMP
 import com.yuyin.reverb.ui.components.MINI_MORPH_SLOPE
+import com.yuyin.reverb.ui.components.MINI_MORPH_STIFFNESS
 import com.yuyin.reverb.ui.components.MiniPlayer
 import com.yuyin.reverb.ui.screens.AboutScreen
 import com.yuyin.reverb.ui.screens.DiscoverScreen
@@ -431,10 +439,20 @@ private fun MainShell(rootNav: NavHostController) {
              *
              * ⚠️ 停止播放时这一块的宽度仍要留给栏,所以是"没有播放条"而不是"整块消失"。
              */
+            // 条带高度(有无播放条两档)走弹簧而不是硬切:点 X 关闭时 [MiniPlayerBar] 的
+            // AnimatedVisibility 在塌陷,这条带若瞬跳,塌到一半的胶囊会被带子先行"抽走";
+            // 起播出现时同理反向。曲线与收束 morph 同一条 —— 三种运动一个手感。
+            // ⚠️ 只依赖 [playing]、不依赖 collapsed:"收束/展开翻转时让位量恒定"那条
+            // 既有约束(见上面那条注释)不被破坏,翻转仍不会重排列表。
+            val bandH by animateDpAsState(
+                targetValue = if (playing) GLASS_BAR_H + MINI_GAP + MINI_H else GLASS_BAR_H,
+                animationSpec = spring(dampingRatio = MINI_MORPH_DAMP, stiffness = MINI_MORPH_STIFFNESS),
+                label = "playerBandH"
+            )
             Box(
                 Modifier
                     .fillMaxWidth()
-                    .height(if (playing) GLASS_BAR_H + MINI_GAP + MINI_H else GLASS_BAR_H)
+                    .height(bandH)
             ) {
                 // 底部栏在这一层**恒显示**(它是顶层外壳的一部分;详情/播放页各有各的外壳,
                 // 不经过这里)。以前包一层 `AnimatedVisibility(isTopLevel)`,而 isTopLevel 由
@@ -526,7 +544,16 @@ private fun MiniPlayerBar(
     // 装机实测:展开态图标中心 1874、收束态 1885,差 11px(只有块高 44→52 的那半档),
     // 而按落点算式该差 **154px** = `lift(60dp=165px) − Δ块高/2(11px)` ——
     // 上面这两个"错的数"和那个 154 都能由同一条算式精确复现,见 H181。
-    AnimatedVisibility(visible = cur != null, modifier = modifier) {
+    //
+    // 塌陷方向(点 X 关闭那条):退场 `shrinkOut(shrinkTowards = Bottom)` = 高度贴着底边收拢,
+    // 内容被裁而不是位移 —— 与参考视频"整条被压成细缝后消失、无横向滑出"同形;
+    // 出场对称地从底边展开。曲线用与收束 morph 同一条弹簧,两种运动(收束/消失)一个手感。
+    AnimatedVisibility(
+        visible = cur != null,
+        modifier = modifier,
+        enter = fadeIn() + expandVertically(expandFrom = Alignment.Bottom),
+        exit = fadeOut() + shrinkOut(shrinkTowards = Alignment.BottomCenter)
+    ) {
         if (cur != null) {
             val progress = if (duration > 0) position.toFloat() / duration else 0f
             MiniPlayer(
@@ -538,6 +565,7 @@ private fun MiniPlayerBar(
                 onToggle = { PlayerController.togglePlayPause() },
                 onNext = { PlayerController.next() },
                 onExpand = onExpand,
+                onClose = { PlayerController.close() },
                 onOpenQueue = onOpenQueue,
                 collapsed = collapsed,
                 ballIcon = ballIcon,
@@ -584,7 +612,13 @@ private fun FloatingMini(
 ) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomPad = if (current == null) navInset else navInset + MINI_H + MINI_GAP
+    // 让位量与 tab 外壳那条带同一条弹簧:关闭时内容补位与播放条塌陷同步,
+    // 硬切会出现"条子还在塌、列表先跳上去"的两段感(参考视频是整块一起收)。
+    val bottomPad by animateDpAsState(
+        targetValue = if (current == null) navInset else navInset + MINI_H + MINI_GAP,
+        animationSpec = spring(dampingRatio = MINI_MORPH_DAMP, stiffness = MINI_MORPH_STIFFNESS),
+        label = "floatingMiniPad"
+    )
     CompositionLocalProvider(LocalGlassBottomPad provides bottomPad) {
         Box(
             Modifier

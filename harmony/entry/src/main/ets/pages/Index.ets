@@ -531,9 +531,19 @@ struct Index {
               fontScale: this.fontScale(),
               player: this.player,
               onExpand: () => { this.stack.pushPathByName('player', null); },
-              onOpenQueue: () => { this.stack.pushPathByName('queue', null); }
+              onOpenQueue: () => { this.stack.pushPathByName('queue', null); },
+              onClose: () => this.closeMini()
             })
               .margin({ bottom: this.detailLanding() })
+              /**
+               * 塌陷退场:纵向压扁到 0 + 淡出(参考视频里播放条被压成细缝后消失,
+               * 不是横滑也不是纯淡出)。出现时同一形状反向弹出。
+               * 与 [closeMini] 的 animateTo 配套 —— transition 只管条子自己的形,
+               * 列表让位量那条在 animateTo 的隐式动画里。
+               */
+              .transition(TransitionEffect.scale({ x: 1, y: 0 })
+                .combine(TransitionEffect.OPACITY)
+                .animation({ curve: morphSpring() }))
           }
         }
         .width('100%').height('100%')
@@ -601,6 +611,20 @@ struct Index {
     this.morphAcc = 0;
     this.morphDir = 0;
     this.collapsed = false;
+  }
+
+  /**
+   * 点 X 关掉播放条(停播清场,见 `PlayerController.close`)。
+   *
+   * `animateTo` 里包的是 `close()` 整个动作:current 置 null 会让**两样东西同时变** ——
+   * 条子本体(if 摘除,走各自的 transition)与列表让位量([underBarPad] / 频道页的
+   * bottomPad,属性动画)。必须在同一次 animateTo 里,拆开就是"列表先跳上去、
+   * 条子随后才没"的两段感;曲线取 [morphSpring],与收束/展开同一手感。
+   */
+  private closeMini(): void {
+    this.getUIContext().animateTo({ curve: morphSpring() }, () => {
+      this.player.close();
+    });
   }
 
   /**
@@ -801,7 +825,8 @@ struct Index {
             onExpand: () => { this.stack.pushPathByName('player', null); },
             onOpenQueue: () => { this.stack.pushPathByName('queue', null); },
             onOpenChannel: (feedUrl: string) => this.openPodcastByFeed(feedUrl),
-            onBallTap: () => this.expandMini()
+            onBallTap: () => this.expandMini(),
+            onClose: () => this.closeMini()
           })
         }
         .width('100%')
@@ -819,6 +844,10 @@ struct Index {
          */
         .hitTestBehavior(HitTestMode.None)
         .animation({ curve: morphSpring() })
+        /** 塌陷退场与频道页那处同一条(见 podcast 分支的注释)。 */
+        .transition(TransitionEffect.scale({ x: 1, y: 0 })
+          .combine(TransitionEffect.OPACITY)
+          .animation({ curve: morphSpring() }))
       }
     }
     .width('100%')

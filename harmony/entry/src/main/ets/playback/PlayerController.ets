@@ -1236,6 +1236,41 @@ export class PlayerController {
     this.updateNavFlags();
   }
 
+  /**
+   * 关闭播放条(迷你条上那枚 X):停止播放并清掉「正在播」的上下文。
+   * 语义与 Android / macOS 的 `close` 同一条 —— current 置空(迷你条与让位量的显隐门),
+   * 上下文队列清掉,**userQueue 保留**(用户排的队是用户数据,持久化写「无 current、
+   * 留 upNext」而不是 `PlaybackStateStore` 的清空),下次起播任何一集条子照常回来。
+   *
+   * [loadGeneration] 必须先加:装载是异步的,不废掉在途那一代,晚到的完成回调会把
+   * `current` 又设回去 —— 用户眼里的"关掉了又自己冒出来"。AVPlayer 只 stop 不 release:
+   * 下次 startEpisode 本来就重新 setSource+prepare,release 会让重建路径多一条。
+   */
+  close(): void {
+    Log.i('Player', `close id=${this.current === null ? '-' : this.current.id}`);
+    if (this.radioMode) this.stopRadio();
+    this.cancelSleep();
+    this.loadGeneration++;
+    this.playbackDesiredPlaying = false;
+    this.playbackActionGeneration++;
+    const p = this.player;
+    if (p !== null && p.state !== 'idle') {
+      p.stop().catch((e: Object): void => Log.w('Player', `close 时 stop 失败 ${e}`));
+    }
+    this.current = null;
+    this.queue = [];
+    this.queueIndex = 0;
+    this.isPlaying = false;
+    this.buffering = false;
+    this.loading = false;
+    this.playbackError = '';
+    this.stopTicker();
+    this.deactivateAudioSession();
+    this.updateNavFlags();
+    this.persistState();
+    this.notify();
+  }
+
   /// 地区改变时只丢弃电台前后导航,当前音频与普通收听历史不受影响。
   resetRadioHistory(): void {
     this.radioHistory = [];
