@@ -120,12 +120,24 @@ export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk
 HV=/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw
 # debug hap(装机调试用)
 $HV assembleHap --mode module -p product=default -p buildMode=debug --no-daemon
-hdc install -r entry/build/default/outputs/default/entry-default-signed.hap
-# 发布包
+./tools/install-device.sh              # 装机一条命令:覆盖装 + 签名口径冲突识别(见 H216)
+# 发布包(build-release.sh 自带 node 版本闸,≥23 会自动切 ~/Library/OpenHarmony 的 node 22,见 H216)
 ./build-release.sh [--fast]        # → dist/reverb.app + reverb-symbol.zip
 ```
 
-`hdc` 在 `$DEVECO_SDK_HOME/default/openharmony/toolchains/`。
+`hdc` 在 `$DEVECO_SDK_HOME/default/openharmony/toolchains/`;本机还有一份较新的在
+`~/Library/OpenHarmony/Sdk/26.0.0/toolchains/`(**两份都认得当前真机**,哪份顺手用哪份)。
+
+⚠️ **`hdc list targets` 空但手机确实插着**(2026-10-25 实测):先用
+`ioreg -p IOUSB -l | grep -A2 'HDC Device'` 看总线上有没有枚举 —— **有 "HDC Device" = 物理链路通,
+卡的是授权**:看手机屏幕上的「允许 USB 调试」弹窗;没弹就去开发人员选项「撤销 USB 调试授权」
+再拔插线。确认手机端「USB 连接方式」是传输文件而非仅充电。
+
+⚠️ **装机被拒的两种签名报法不同因**(详见 `tools/install-device.sh` 头注与 H216 教训):
+`9568286 provision type not same` = 机上包与本包一个 debug 一个 release 口径,互不让覆盖;
+`9568448 verify app signature failed` **且机上没装** = 设备侧拦截 release 包侧载
+(纯净模式/外部来源限制;**dist 里在架正式包同样被拒**是判据),手机设置里放行或就用 debug 包。
+
 **新增 native 类型包(`.so` 的 `index.d.ts`)之后必须跑一次 `ohpm install`**,
 否则类型解析成 `any`、报 `arkts-no-any-unknown`(症状很误导,见 H61)。
 

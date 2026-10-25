@@ -10873,20 +10873,28 @@ debug 之所以"全绿"是 native 任务**增量 up-to-date 跳过了清理段**
 必走 `checkAndHandleBuildState` 的目录清理,一进就炸。这也解释了为什么换机(10-24)之后
 本机从来没出过鸿蒙 release 包 —— 之前的 release 都是旧机出的,本机只跑过 debug。
 
-**修法**:给 hvigorw 一个 Node ≤22。不用 brew(本机红线,brew 装大包超时):
-直接下官方 tarball 到 /tmp 解压用 ——
-`curl -sL -o /tmp/node22.tar.gz https://nodejs.org/dist/v22.14.0/node-v22.14.0-darwin-arm64.tar.gz`
-`tar -xzf node22.tar.gz -C /tmp/node22 --strip-components=1`
-然后 `export NODE_HOME=/tmp/node22` 再跑 hvigorw,实测 BUILD SUCCESSFUL(5s)。
-**1.0.6 鸿蒙 release 出包(build-release.sh)前必须带这个环境变量**,否则必炸。
-(node22 目录在 /tmp,重启即失;要不要把它挪到不丢的位置、或写进出包脚本的前置检查,待维护者拍。)
+**修法(当天已全部落地,不再是临时绕法)**:
+① node 22 持久安装在 `~/Library/OpenHarmony/node-v22.14.0/`(不走 brew,官方 tarball 解压,重启不丢);
+② `build-release.sh` 加了**node 版本闸**:按 hvigorw 的查找序(NODE_HOME → PATH)解析将用的 node,
+   主版本 ≥23 就自动 `export NODE_HOME` 切到上面的 node 22;本机没有可切的就 1 秒内报清楚并给
+   下载命令退出。手跑 `assembleApp/assembleHap` 的人机命令仍需自己带 NODE_HOME(AGENTS 鸿蒙节已注明);
+③ 端到端验证:node 22 下 `assembleApp --mode project -p product=release`(build-release.sh 同款参数,
+   只出 `build/` 中间产物、不碰 `dist/`)全链路 42 任务 BUILD SUCCESSFUL —— **新机出鸿蒙 release 包
+   这条路从此通了**。
 
 **教训与可复用的规律**:
 ① "debug 绿、release 红"的同工具链差异,先怀疑**增量缓存**:debug 全绿可能只是没走到
    那段代码,不代表那段代码没病。`--stacktrace` 一发就能看到真凶在 `node:fs:1530`,
    比对着 00308018 的"Unknown Error"猜快得多。
 ② DevEco 自带的 node 不保证老于 23 —— 别把"IDE 自带"当兼容性保证,`--version` 现测。
-③ 装机验证遇到的 `install provision type not same (code:9568286)`:本地构建链(debug 或
-   release 模式)出的 hap 全是 **debug profile 签名**,机上若装过上架口径的 release profile 包,
-   `-r` 覆盖必被拒,只能卸载重装(本机这次机上沙箱本来就是空的,无备份负担;若在数据机器上,
-   先走硬规矩 12 的完整备份四步)。
+③ 装机验证遇到的 `install provision type not same (code:9568286)`:**真因是构建入口,
+   不是材料缺失** —— `assembleHap --mode module`(debug 或 release 模式都一样)出的 hap 走
+   build-profile 的 default 段(DevEco 自动签名,debug profile);`build-release.sh` 那条链
+   (`assembleApp --mode project`)才用 release 正式材料。两种 profile 互不让覆盖。已工具化:
+   `harmony/tools/install-device.sh` 装机并自动识别/翻译这两类报错。
+④ **`9568448 verify app signature failed` 且机上没装** = 设备侧拦截 release 包侧载(纯净模式/
+   外部来源安装限制),不是包的问题 —— 判据是**连 `dist/` 里在架的正式包同样被拒**(2026-10-25
+   在 BRA-AL00 实测),而 debug profile 包走开发者调试通道不受影响。profile/证书本身都查过在
+   有效期(`signature/reverb.p7b` 明文 JSON 里 `validity` 2026-08-15 ~ 2029-08-15)。
+⑤ **hdc 的退出码不可用**:安装失败(9568448 实测)也 exit 0,脚本判成败只能认输出里的
+   `error:`。凡是「命令成败要进脚本」的 hdc 调用,先拿一个已知失败样例验退出码,别假设非零。

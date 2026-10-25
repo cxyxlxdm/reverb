@@ -23,6 +23,38 @@ HVIGOR="${HVIGOR:-/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvig
 
 [ -x "$HVIGOR" ] || { echo "✗ 找不到 hvigorw:$HVIGOR(可用 HVIGOR=... 覆盖)"; exit 1; }
 
+# ── Node 版本闸(H216,2026-10-25)─────────────────────────────────────────
+# hvigor 的 native 任务(BuildNativeWithNinja)在清理目录时调 fs.rmdirSync(recursive),
+# 这个 API 在 Node 23 起被整个移除 —— 本机 PATH 的 node 26 与 DevEco 自带的 node 24 都会炸,
+# 报 Error Code 00308018 + "options.recursive is no longer supported"。debug 构建
+# 之所以"没事",只是增量缓存让它跳过了那段清理;release 必走,一进就炸。
+# 这里先解析 hvigorw 实际会用的 node(NODE_HOME 优先于 PATH,与 hvigorw 的查找序一致),
+# 主版本 ≥23 就切到本机持久安装的 node 22(~/Library/OpenHarmony/,不进 brew 不进仓库)。
+# 用户显式设过 NODE_HOME 的不动它 —— 尊重覆盖,哪怕设错了也让 hvigor 自己报。
+resolve_node() {
+  if [ -n "${NODE_HOME:-}" ] && [ -x "${NODE_HOME}/bin/node" ]; then
+    echo "${NODE_HOME}/bin/node"; return
+  fi
+  command -v node 2>/dev/null || true
+}
+BUILD_NODE="$(resolve_node)"
+NODE_VER="$("$BUILD_NODE" --version 2>/dev/null || echo v0)"
+NODE_MAJOR="${NODE_VER#v}"; NODE_MAJOR="${NODE_MAJOR%%.*}"
+if [ -z "$BUILD_NODE" ] || [ "${NODE_MAJOR:-0}" -ge 23 ]; then
+  NODE22_DIR="$HOME/Library/OpenHarmony/node-v22.14.0"
+  if [ -x "$NODE22_DIR/bin/node" ]; then
+    export NODE_HOME="$NODE22_DIR"
+    echo "▸ node ${NODE_MAJOR:-无} ≥23 会炸 release native 构建(H216),已切 NODE_HOME → node 22"
+  else
+    echo "✗ 将被 hvigor 使用的 node 是 ${NODE_MAJOR:-找不到} 版(≥23),release 的 native 构建必炸(H216),"
+    echo "  且本机没有 node 22 可切。装一份(不走 brew,直接解官方 tarball,重启不丢):"
+    echo "    mkdir -p ~/Library/OpenHarmony/node-v22.14.0"
+    echo "    curl -sL https://nodejs.org/dist/v22.14.0/node-v22.14.0-darwin-arm64.tar.gz \\"
+    echo "      | tar -xz -C ~/Library/OpenHarmony/node-v22.14.0 --strip-components=1"
+    exit 1
+  fi
+fi
+
 # build-profile.json5 不入库(存签名口令),新 clone 后需从模板复制再填
 if [ ! -f build-profile.json5 ]; then
   echo "✗ 缺 build-profile.json5(它不入版本管理,因为存签名口令)"
