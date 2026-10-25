@@ -26,9 +26,13 @@ private struct SettingsForm: View {
     /// 主题名。**这四条同时是本地化 key**(`Text(LocalizedStringKey(...))`),
     /// 改动要连 Localization/*.lproj 一起改。「· 宣纸 / · 水墨」的后缀与 Android、鸿蒙一致。
     private let themeNames = ["跟随系统", "浅色 · 宣纸", "深色 · 水墨", "纯白"]
+    /// 地区列表。**12 项,与 Android `REGION_OPTIONS` / 鸿蒙 `Genres.ets` `REGIONS` 逐项同序同码**
+    /// (`docs/MACOS-GAPS.md` D1):少一项就等于"这份目录在桌面上取不到",不是显示问题。
+    /// 名称同时是本地化 key,加一项要连 4 个 `.lproj` 一起加(简中是代码里的 key 本身)。
     private let regions: [(code: String, name: String)] = [
         ("", "自动"), ("cn", "中国大陆"), ("hk", "中国香港"), ("tw", "中国台湾"),
-        ("us", "美国"), ("jp", "日本"), ("kr", "韩国"), ("gb", "英国")
+        ("us", "美国"), ("jp", "日本"), ("kr", "韩国"), ("gb", "英国"),
+        ("sg", "新加坡"), ("au", "澳大利亚"), ("ca", "加拿大"), ("de", "德国")
     ]
     private let skipBackOptions = [5, 10, 15, 30]
     private let skipForwardOptions = [15, 30, 45, 60]
@@ -172,9 +176,9 @@ private struct SettingsForm: View {
                     Spacer()
                     Text(logSizeText).foregroundStyle(.secondary)
                 }
-                Button { exportLog() } label: {
-                    Label("导出日志…", systemImage: "square.and.arrow.up")
-                }
+                // 四行顺序与 Android `SettingsScreen.kt` / 鸿蒙 `SettingsPage.ets` 一致
+                // (分享 → 邮件 → 导出 → 清空,D6)。这不是审美问题:三端同一节设置,
+                // 用户按位置记按钮,顺序不同就会点错一次。
                 if let url = shareLogURL {
                     ShareLink(item: url) {
                         Label("分享日志", systemImage: "square.and.arrow.up.on.square")
@@ -182,6 +186,9 @@ private struct SettingsForm: View {
                 }
                 Button { mailLog() } label: {
                     Label("发送日志到开发者邮箱", systemImage: "envelope")
+                }
+                Button { exportLog() } label: {
+                    Label("导出日志…", systemImage: "square.and.arrow.up")
                 }
                 Button(role: .destructive) { confirmClearLog = true } label: {
                     Label("清空日志", systemImage: "trash")

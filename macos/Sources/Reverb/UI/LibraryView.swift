@@ -271,6 +271,13 @@ struct LibraryView: View {
 
     // MARK: - 历史
 
+    /// 历史列的反向撤销:只有 `played` 为真的行给(H192 / D7)。
+    /// 未播完的行给"标记为未播完"没有意义;而未播完的行也**不该给正向** ——
+    /// 浏览列的那颗正向被摘掉的理由见 `EpisodeContextMenu` 注释。
+    private func markUnplayedAction(_ ep: Episode) -> (() -> Void)? {
+        env.history.isPlayed(ep.id) ? { env.history.markPlayed(ep.id, false) } : nil
+    }
+
     private var historyList: some View {
         Group {
             if env.history.history.isEmpty {
@@ -293,7 +300,10 @@ struct LibraryView: View {
                                     if selection.selecting { selection.toggle(ep) }
                                     else { player.playOrToggle(ep, queue: items) }
                                 })
-                                .episodeContextMenu(ep, enabled: !selection.selecting)
+                                // 反向撤销只给已播完的行(H192 / D7);正向那颗全 App 只有
+                                // 发现页「继续收听」卡还有 —— 见 `EpisodeContextMenu` 注释。
+                                .episodeContextMenu(ep, enabled: !selection.selecting,
+                                                    onMarkUnplayed: markUnplayedAction(ep))
                         }
                     }
                     .frame(maxWidth: Metrics.contentMaxWidth)

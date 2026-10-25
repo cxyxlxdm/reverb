@@ -524,14 +524,27 @@ struct TopToast: View {
     }
 }
 
-/// 单集行通用右键菜单:下一个播放 / 加入队列 / 标记已播完切换。
-/// 依赖注入的 env(历史)与 player(队列)。
+/// 单集行通用右键菜单:下一个播放 / 加入队列,外加**调用方显式给的那一颗**单集状态项。
+///
+/// 单集状态项**不再按 `played` 换向**(H192 / `docs/MACOS-GAPS.md` D7):两颗各是一个可选回调,
+/// 传哪颗就显示哪颗、文案写死。`played` 的显示(标题压暗 + 打勾)不归这里管,照旧。
+/// - `onMarkPlayed`(正向「标记为已播完」)**只有发现页「继续收听」卡传** —— 那一处是全 App
+///   唯一的正向入口(卡片按"未播完"过滤,标完即从横条消失;两端同口径,Android 那张卡用的是
+///   `DiscoverScreen` 自己的菜单)。
+/// - `onMarkUnplayed`(反向「标记为未播完」)**只有 `音阁 · 历史` 的已播完行传**。
+///   浏览列不给正向的两条理由见 H192:① 那些列的集大多没进过历史,而 `Stores.swift` 的
+///   `markPlayed` 对没有历史条目的 id 直接 return,点了连标题压暗都不会发生;② 少数真生效的
+///   (播过、有历史条目)当页也没有回程 —— 想撤必须翻到历史页找同一条。
+///
+/// **别把这两颗改回"一个布尔开关 + 按状态换向"**:换向表达式本身就是"下一列顺手接出正向"
+/// 的通道,写死之后接错只会在 review 里露出来,不会静默上线(`Components.kt` 同一条注释)。
 struct EpisodeContextMenu: ViewModifier {
     let episode: Episode
     /// 选择模式里不挂菜单:那三项在批量面前逐条做没有意义,而且右键菜单会抢走
     /// 本该用于勾选的注意力(Android 同一条取舍,见 `Components.kt` 的 `selectionMode` 分支)。
     var enabled: Bool = true
-    @EnvironmentObject var env: AppEnvironment
+    var onMarkPlayed: (() -> Void)? = nil
+    var onMarkUnplayed: (() -> Void)? = nil
     @EnvironmentObject var player: PlayerController
 
     @ViewBuilder
@@ -544,13 +557,18 @@ struct EpisodeContextMenu: ViewModifier {
                 Button {
                     player.enqueue(episode)
                 } label: { Label("加入队列", systemImage: "text.append") }
-                Divider()
-                let played = env.history.isPlayed(episode.id)
-                Button {
-                    env.history.markPlayed(episode.id, !played)
-                } label: {
-                    Label(played ? "标记为未播完" : "标记为已播完",
-                          systemImage: played ? "circle" : "checkmark.circle")
+                if onMarkPlayed != nil || onMarkUnplayed != nil {
+                    Divider()
+                }
+                if let action = onMarkPlayed {
+                    Button { action() } label: {
+                        Label("标记为已播完", systemImage: "checkmark.circle")
+                    }
+                }
+                if let action = onMarkUnplayed {
+                    Button { action() } label: {
+                        Label("标记为未播完", systemImage: "circle")
+                    }
                 }
             }
         } else {
@@ -560,9 +578,14 @@ struct EpisodeContextMenu: ViewModifier {
 }
 
 extension View {
-    /// 为单集行附加通用右键菜单(队列 / 已播完)。
-    func episodeContextMenu(_ episode: Episode, enabled: Bool = true) -> some View {
-        modifier(EpisodeContextMenu(episode: episode, enabled: enabled))
+    /// 为单集行附加通用右键菜单。两个 `onMark*` 的给法见 `EpisodeContextMenu` 注释:
+    /// **正向只给发现页横条卡,反向只给历史的已播完行**,其余调用点两个都不传。
+    func episodeContextMenu(_ episode: Episode, enabled: Bool = true,
+                            onMarkPlayed: (() -> Void)? = nil,
+                            onMarkUnplayed: (() -> Void)? = nil) -> some View {
+        modifier(EpisodeContextMenu(episode: episode, enabled: enabled,
+                                    onMarkPlayed: onMarkPlayed,
+                                    onMarkUnplayed: onMarkUnplayed))
     }
 }
 
