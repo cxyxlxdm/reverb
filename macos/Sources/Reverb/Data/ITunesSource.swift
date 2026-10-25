@@ -7,14 +7,20 @@ final class ITunesSource {
         var url = "https://itunes.apple.com/search?media=podcast&term=\(HTTP.encode(term))&limit=\(limit)"
         if !country.isEmpty { url += "&country=\(country)" }
         let t0 = Date()
-        Log.d("iTunes", "search term=\"\(term)\" country=\(country.isEmpty ? "-" : country)")
+        // 日志只记**词数**不记原文(见 REVIEW-2026-10-25 高-1):已发布的隐私政策第二节承诺
+        // 「日志不记录搜索词」,而 `reverb.log` 在设置页有导出 / 分享 / 发邮箱三条离机出口。
+        // 这一行原先把用户敲进去的那串字整个拼进了消息里,与同一个仓库里
+        // `PodcastRepository.search` 那条正确范式自相矛盾 —— 用户搜什么,日志里就躺着什么。
+        // country / limit / 命中数留着:它们不含用户输入,又正是排查要看的。
+        let termWords = Log.wordCount(term)
+        Log.d("iTunes", "search termWords=\(termWords) country=\(country.isEmpty ? "-" : country)")
         guard let json = await HTTP.json(url),
               let results = json["results"] as? [[String: Any]] else {
-            Log.w("iTunes", "search 无结果 term=\"\(term)\" \(Log.ms(t0))")
+            Log.w("iTunes", "search 无结果 termWords=\(termWords) \(Log.ms(t0))")
             return []
         }
         let list = results.compactMap { parsePodcast($0) }
-        Log.i("iTunes", "search term=\"\(term)\" 命中 \(list.count) 频道 \(Log.ms(t0))")
+        Log.i("iTunes", "search termWords=\(termWords) 命中 \(list.count) 频道 \(Log.ms(t0))")
         return list
     }
 
@@ -23,10 +29,12 @@ final class ITunesSource {
         var url = "https://itunes.apple.com/search?media=podcast&entity=podcastEpisode&term=\(HTTP.encode(term))&limit=\(limit)"
         if !country.isEmpty { url += "&country=\(country)" }
         let t0 = Date()
-        Log.d("iTunes", "searchEpisodes term=\"\(term)\" country=\(country.isEmpty ? "-" : country)")
+        // 同 `search`:只记词数(见 REVIEW-2026-10-25 高-1)。
+        let termWords = Log.wordCount(term)
+        Log.d("iTunes", "searchEpisodes termWords=\(termWords) country=\(country.isEmpty ? "-" : country)")
         guard let json = await HTTP.json(url),
               let results = json["results"] as? [[String: Any]] else {
-            Log.w("iTunes", "searchEpisodes 无结果 term=\"\(term)\" \(Log.ms(t0))")
+            Log.w("iTunes", "searchEpisodes 无结果 termWords=\(termWords) \(Log.ms(t0))")
             return []
         }
         let episodes: [Episode] = results.compactMap { item in
@@ -50,7 +58,7 @@ final class ITunesSource {
                 feedUrl: (item["feedUrl"] as? String) ?? ""
             )
         }
-        Log.i("iTunes", "searchEpisodes term=\"\(term)\" 命中 \(episodes.count) 单集 \(Log.ms(t0))")
+        Log.i("iTunes", "searchEpisodes termWords=\(termWords) 命中 \(episodes.count) 单集 \(Log.ms(t0))")
         return episodes
     }
 

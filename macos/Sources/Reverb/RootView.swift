@@ -39,6 +39,15 @@ struct RootView: View {
                         // 三格是定宽:最长的一组是法语(Découvrir / Nouveautés / Bibliothèque)。
                         // 加第三格之后会不会截断标签,只有把界面跑起来才看得见 —— 别凭猜再调这个数。
                         .frame(width: 300)
+                        // 换分段 = 换了一个根视图,NavigationStack 里已经推上去的详情页要一起清掉
+                        // (见 REVIEW-2026-10-25 族 E)。原先只换根视图、`path` 不动,
+                        // 于是栈顶停在某频道主页时点「追更」/「音阁」**没有任何可见效果** ——
+                        // 看着像分段按钮坏了,而 path 里那条 Podcast 栈还在,切回「发现」又冒出来。
+                        // 用单参数闭包是**故意的**:双参数 `onChange(of:initial:_:)` 是 macOS 14 的 API,
+                        // 本包 `platforms: [.macOS(.v13)]`,与 `LibraryView` 里那条同段切换清状态的写法保持一致。
+                        .onChange(of: section) { _ in
+                            path = NavigationPath()
+                        }
                     }
                     ToolbarItem(placement: .primaryAction) {
                         SettingsButton()

@@ -152,6 +152,36 @@ enum AppSupport {
         persist()
     }
 
+    /// 备份恢复用的**批量**合并入口(见 REVIEW-2026-10-25 中-7)。
+    ///
+    /// 与「逐条 `record`」的差别有两层,第二层才是加它的原因:
+    /// ① **合并语义完全相同** —— 同 id 冲突取 `updatedAt` 较新者,平局留在场那一份(不回退进度);
+    ///    来入条目胜出时 episode / positionMs / durationMs / played 整体覆盖,与原来
+    ///    `record` + `updatePosition` + `markPlayed` 三连的净效果一致。
+    /// ② **上限的作用域不同** —— `record` 每插一条就 `prefix(maxCount)` 夹一次并 persist 一次。
+    ///    恢复是"一次进来几十上百条",于是每插一条就踢掉表尾一条:
+    ///    一份 100 条的备份能把**本机既有历史整批顶掉**(和来入条目的 updatedAt 无关,纯粹是被
+    ///    "插入即截断"挤的),同时写盘 100 次(每次都是整份 history.json)。
+    ///    这里改成:先在全量集合上合并 → 排一次序 → 截断一次 → 落盘一次。
+    ///    「只留最近 100 条」这条上限本身没动,动的是它**在整批之后才生效一次**。
+    ///
+    /// `record` 原样保留:日常起播走它,那条路径一次只加一条,"插入即截断"在那里是正确行为。
+    func mergeForRestore(_ incoming: [HistoryEntry]) {
+        guard !incoming.isEmpty else { return }
+        var merged: [String: HistoryEntry] = [:]
+        for h in history { merged[h.episode.id] = h }
+        for inc in incoming {
+            let id = inc.episode.id
+            if let cur = merged[id], inc.updatedAt <= cur.updatedAt { continue }
+            merged[id] = inc
+        }
+        // 最近置顶;`sorted(by:)` 是稳定排序,同一时间戳的两条保持它们在各自列表里的原有先后。
+        let ordered = merged.values.sorted { $0.updatedAt > $1.updatedAt }
+        history = Array(ordered.prefix(maxCount))
+        Log.i("Store", "历史批量合并恢复 来入\(incoming.count) 合并后\(merged.count) 保留\(history.count)")
+        persist()
+    }
+
     /// 是否已播完。
     func isPlayed(_ id: String) -> Bool { history.first { $0.episode.id == id }?.played ?? false }
 
@@ -279,17 +309,20 @@ enum AppSupport {
     @Published var skipBackSec: Int { didSet { d.set(skipBackSec, forKey: "skip_back") } }
     @Published var skipForwardSec: Int { didSet { d.set(skipForwardSec, forKey: "skip_fwd") } }
     @Published var contextualRadio: Bool { didSet { d.set(contextualRadio, forKey: "contextual_radio") } }
-    /// 以下两格**在本端没有界面**,只为了备份互通而存在:
+    /// 以下三格**在本端没有界面**,只为了备份互通而存在:
     ///
     /// - `allowCellularDownload`:桌面没有蜂窝基带,"只能 Wi-Fi 下载"在 Mac 上无从谈起;
-    /// - `updatesEnabled`:桌面没有常驻的订阅巡检/通知(追更页是拉取式,打开才刷)。
+    /// - `updatesEnabled`:桌面没有常驻的订阅巡检/通知(追更页是拉取式,打开才刷);
+    /// - `subsGrid`:订阅列表/宫格的切换,触屏上才有"切宫格"这个动作,桌面侧本来就没有这一视图开关
+    ///   (见 REVIEW-2026-10-25 中-8 补的那一格)。
     ///
     /// 那为什么还存?因为备份 JSON 是三端共用的格式(见 `Data/BackupManager.swift` 顶部注释),
-    /// 手机导出 → Mac 恢复 → 再从 Mac 导出回手机 这条路,原先会把这两格**静默抹掉**,
+    /// 手机导出 → Mac 恢复 → 再从 Mac 导出回手机 这条路,原先会把这几格**静默抹掉**,
     /// 用户在手机上明明没动过"允许蜂窝下载",换回手机却变了。既然本端无对应行为,
     /// 唯一正确的处理就是**原样带过去**:读进来、存下来、导出时一字不改地写回去。
     @Published var allowCellularDownload: Bool { didSet { d.set(allowCellularDownload, forKey: "allow_cellular_download") } }
     @Published var updatesEnabled: Bool { didSet { d.set(updatesEnabled, forKey: "updates_enabled") } }
+    @Published var subsGrid: Bool { didSet { d.set(subsGrid, forKey: "subs_grid") } }
     /// 发现页分类顺序(用户排过的 key 序列)。
     ///
     /// **这一格不是"只存不用"**:1.0.6 起发现页的分类下拉里有「自定义分类排序…」,
@@ -339,10 +372,21 @@ enum AppSupport {
         skipBackSec = d.object(forKey: "skip_back") as? Int ?? 10
         skipForwardSec = d.object(forKey: "skip_fwd") as? Int ?? 30
         contextualRadio = d.object(forKey: "contextual_radio") as? Bool ?? false
-        // 初值与另两端同口径:允许蜂窝下载 = true(桌面用不到,但要和手机默认一致才不篡改备份);
-        // 订阅更新提醒 = true;分类顺序空数组表示"没自定义过",导出时同样写空数组。
-        allowCellularDownload = d.object(forKey: "allow_cellular_download") as? Bool ?? true
-        updatesEnabled = d.object(forKey: "updates_enabled") as? Bool ?? true
+        // 这两格**默认关**,与 Android `SettingsStore.kt` / 鸿蒙 `SettingsStore.ets` 同一口径
+        // (见 REVIEW-2026-10-25 高-2)。原先这里写的是 `?? true`,注释还自称「初值与另两端同口径」——
+        // 那句话是错的:两端都是 false,于是"要和手机默认一致才不篡改备份"这个动机
+        // 恰好被写成了反效果:一台从没恢复过手机备份的 Mac 导出的备份(导出弹窗默认全勾含 settings),
+        // 拿到 Android 恢复时会**无条件把那两个开关打开**。
+        // 默认关不是"桌面用不到所以随便填",而是合规要求:
+        // - `updatesEnabled`:政策承诺「仅在你主动开启订阅更新提醒时征求同意」,默认开等于没经同意就去要通知权限;
+        // - `allowCellularDownload`:默认开等于替用户在蜂窝网络下花流量。
+        // 本端这两格仍然没有界面、只为了「手机 → Mac → 手机」不把手机那侧的设置抹掉(见上方属性注释)。
+        allowCellularDownload = d.object(forKey: "allow_cellular_download") as? Bool ?? false
+        updatesEnabled = d.object(forKey: "updates_enabled") as? Bool ?? false
+        // 与 Android `subs_grid` / 鸿蒙 `Prefs.getBool('subs_grid', false)` 同一初值 false。
+        // 本端没有这个开关的界面,这个数只可能是从备份里读回来的,所以初值要跟两端一致 ——
+        // 一台从没恢复过备份的 Mac 导出时写 true,等于替手机那侧的用户打开了宫格视图。
+        subsGrid = d.object(forKey: "subs_grid") as? Bool ?? false
         categoryOrder = d.stringArray(forKey: "category_order") ?? []
         transcriptionEnabled = d.object(forKey: "transcription_enabled") as? Bool ?? true
         language = d.string(forKey: "app_language") ?? ""

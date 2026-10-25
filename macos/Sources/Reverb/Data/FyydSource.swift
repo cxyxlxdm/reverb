@@ -5,7 +5,9 @@ final class FyydSource {
     /// 按标题搜索。跳过没有 xmlURL 的结果。
     func search(_ term: String) async -> [Podcast] {
         let url = "https://api.fyyd.de/0.2/search/podcast?title=\(HTTP.encode(term))"
-        return await fetchList(url, kind: "search term=\"\(term)\"")
+        // kind 会在 `fetchList` 的三行日志里被展开,所以这里也必须只写词数
+        // (见 REVIEW-2026-10-25 高-1 / 政策「日志不记录搜索词」)。
+        return await fetchList(url, kind: "search termWords=\(Log.wordCount(term))")
     }
 
     /// 热门推荐。

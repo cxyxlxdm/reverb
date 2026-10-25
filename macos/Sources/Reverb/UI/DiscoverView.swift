@@ -404,12 +404,20 @@ struct DiscoverView: View {
         let region = env.region
         let genreIds = settings.contextualRadio ? contextualGenreIds() : DiscoverCategory.allGenreIds
         let repo = env.repository
-        player.startRadio { await repo.randomEpisode(region: region, genreIds: genreIds, exclude: []) }
+        // 排除集合从播放器取(radioHistory 末尾 40 条)。原先两处都写死 `exclude: []`,
+        // 于是「随机」没有任何记忆 —— 与 Android `RadioStation` 传 recent 的口径不一致
+        // (见 REVIEW-2026-10-25 族 E)。
+        // 这里把 player 收到局部变量再进闭包:escaping 闭包里直接写 `player` 会把整个 View 的
+        // self 捕获进去,而这里要的只是那一个 ObservableObject。
+        let playerRef = player
+        player.startRadio { await repo.randomEpisode(region: region, genreIds: genreIds,
+                                                     exclude: playerRef.recentRadioIds()) }
         Task {
-            if let first = await repo.randomEpisode(region: region, genreIds: genreIds, exclude: []) {
-                player.playRadioEpisode(first)
+            if let first = await repo.randomEpisode(region: region, genreIds: genreIds,
+                                                    exclude: playerRef.recentRadioIds()) {
+                playerRef.playRadioEpisode(first)
             } else {
-                player.stopRadio()
+                playerRef.stopRadio()
             }
         }
     }
