@@ -10892,9 +10892,13 @@ debug 之所以"全绿"是 native 任务**增量 up-to-date 跳过了清理段**
    build-profile 的 default 段(DevEco 自动签名,debug profile);`build-release.sh` 那条链
    (`assembleApp --mode project`)才用 release 正式材料。两种 profile 互不让覆盖。已工具化:
    `harmony/tools/install-device.sh` 装机并自动识别/翻译这两类报错。
-④ **`9568448 verify app signature failed` 且机上没装** = 设备侧拦截 release 包侧载(纯净模式/
-   外部来源安装限制),不是包的问题 —— 判据是**连 `dist/` 里在架的正式包同样被拒**(2026-10-25
-   在 BRA-AL00 实测),而 debug profile 包走开发者调试通道不受影响。profile/证书本身都查过在
-   有效期(`signature/reverb.p7b` 明文 JSON 里 `validity` 2026-08-15 ~ 2029-08-15)。
+④ **`9568448 verify app signature failed` 且机上没装** = 鸿蒙 NEXT 的**签名信任边界**,不是
+   设置问题 —— **hdc 侧载通道只认含本机 UDID 的调试 profile**,release 正式签名(发布型
+   profile 本来就不绑设备)一律被拒。判据三件套(2026-10-25 在 Mate 60 / 鸿蒙 7.0.0.109 实测):
+   连 `dist/` 在架正式包同样被拒;debug 包(DevEco 自动签名,含 UDID)同机可装;profile/证书
+   均在有效期(`reverb.p7b` 明文 JSON 的 `validity` 2026-08-15 ~ 2029-08-15)。
+   **老系统的「纯净模式」开关在 NEXT 上不存在**(用户实找无果 + 联网核实),别再指那个方向;
+   旧机上见过的 release 口径包是从**应用市场**装的,不走侧载。release 口径真机验收的正路 =
+   市场上架后装 / AGC 云真机。
 ⑤ **hdc 的退出码不可用**:安装失败(9568448 实测)也 exit 0,脚本判成败只能认输出里的
    `error:`。凡是「命令成败要进脚本」的 hdc 调用,先拿一个已知失败样例验退出码,别假设非零。
