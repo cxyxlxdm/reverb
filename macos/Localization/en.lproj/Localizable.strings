@@ -192,6 +192,16 @@
 "标记为未播完" = "Mark as Unplayed";
 "已播完" = "Played";
 
+/* 批量加入待播 + 封面直达频道页。与 Android batch_* / a11y_open_channel 同源(硬规矩 5) */
+"进入频道页" = "Open channel";
+"选择" = "Select";
+"选择多集" = "Select multiple episodes";
+"全选" = "Select all";
+"已选 %lld" = "Selected %lld";
+"加入待播" = "Add to Up next";
+"已加入待播 %lld 集" = "Added %lld episodes to Up next";
+"所选都已在待播里" = "Those episodes are already in Up next";
+
 /* 播放模式(每列右端那颗按钮,与 Android / 鸿蒙同源) */
 "顺序播放" = "Play in order";
 "单曲循环" = "Repeat this episode";

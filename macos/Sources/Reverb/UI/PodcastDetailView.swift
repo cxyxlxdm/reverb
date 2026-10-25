@@ -15,6 +15,11 @@ struct PodcastDetailView: View {
     @State private var shareCardURL: URL?
     /// 非 nil 表示当前内容来自磁盘缓存、联网刷新还没成功,据此显示「离线内容」提示
     @State private var staleAt: Date?
+    /// 多选批量加入待播(桌面形态:工具栏「选择」,与音阁四段同一套,见 M5)。
+    @State private var selecting = false
+    @State private var picked = Set<String>()
+    @State private var toast: String?
+    @State private var toastToken = 0
 
     private var display: Podcast { loaded ?? podcast }
     private var accent: Color { Theme.accent(settings.accentIndex) }
@@ -57,10 +62,22 @@ struct PodcastDetailView: View {
                                         isPlaying: player.isPlaying,
                                         played: env.history.isPlayed(ep.id),
                                         accent: accent,
-                                        onPlay: { player.playOrToggle(ep, queue: episodes,
-                                                                     tag: ListTag.podcast(channelKey)) })
-                                        .episodeContextMenu(ep)
-                                    EpisodeDownloadButton(episode: ep, accent: accent)
+                                        // 已经在频道页里了,封面再点一次只会把同一个频道压进栈
+                                        // (Android `coverChannelJump` 同一条门)。
+                                        coverOpensChannel: false,
+                                        selecting: selecting,
+                                        selected: picked.contains(ep.id),
+                                        onPlay: {
+                                            if selecting { toggleSelect(ep) }
+                                            else {
+                                                player.playOrToggle(ep, queue: episodes,
+                                                                    tag: ListTag.podcast(channelKey))
+                                            }
+                                        })
+                                        .episodeContextMenu(ep, enabled: !selecting)
+                                    if !selecting {
+                                        EpisodeDownloadButton(episode: ep, accent: accent)
+                                    }
                                 }
                             }
                         }
@@ -100,10 +117,55 @@ struct PodcastDetailView: View {
                         .help("分享")
                 }
             }
+            // 频道页也能批量入队(Android / 鸿蒙 2026-10-17 补的同一栏)。
+            if !episodes.isEmpty {
+                if selecting {
+                    EpisodeBatchToolbar(episodes: episodes,
+                                        selecting: $selecting, picked: $picked,
+                                        enqueue: enqueuePicked)
+                } else {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button { selecting = true } label: {
+                            Label("选择", systemImage: "checklist")
+                        }
+                        .help("选择多集")
+                    }
+                }
+            }
         }
+        .overlay(alignment: .top) { TopToast(text: toast) }
         .task(id: podcast.id) { await load() }
         .task(id: "\(display.title)|\(display.artworkUrl)|\(settings.accentIndex)") {
             await prepareShareCard()
+        }
+    }
+
+    // MARK: - 多选
+
+    private func toggleSelect(_ ep: Episode) {
+        if picked.contains(ep.id) { picked.remove(ep.id) } else { picked.insert(ep.id) }
+    }
+
+    /// 与音阁四段同一个入队出口:一次去重、一次落盘,结果用顶部提示说出来。
+    private func enqueuePicked() {
+        let eps = episodes.filter { picked.contains($0.id) }
+        let added = player.enqueueAll(eps)
+        Log.i("UI", "频道页批量加入待播 选中=\(eps.count) 新增=\(added) 频道=\(channelKey)")
+        showToast(added == 0
+            ? NSLocalizedString("所选都已在待播里", comment: "批量入队全部重复")
+            : String(format: NSLocalizedString("已加入待播 %lld 集", comment: "批量入队结果"),
+                     Int64(added)))
+        selecting = false
+        picked.removeAll()
+    }
+
+    private func showToast(_ text: String) {
+        toastToken += 1
+        let token = toastToken
+        toast = text
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            if toastToken == token { toast = nil }
         }
     }
 
