@@ -175,15 +175,17 @@
 "加载失败,请检查网络后重试" = "Échec du chargement. Vérifiez le réseau et réessayez.";
 "加载失败,点击重试" = "Échec — cliquez pour réessayer";
 
-/* Latest / inbox, Queue, Continue listening, Played (v2 features) */
-"最新" = "Nouveautés";
+/* 顶部三格 / 音阁分段 / 追更页 (M6, 2026-10-25) */
+"追更" = "Nouveautés";
+"待播" = "À suivre";
+"清空待播" = "Vider la file";
+"还没有订阅。去「发现」订阅几档，它们播过的单集都会汇到这里" = "Aucun abonnement pour l’instant. Abonnez-vous dans Découvrir et leurs épisodes arriveront ici.";
+"这些频道还没有可播的单集，点工具栏刷新再试" = "Aucun épisode jouable pour l’instant. Cliquez sur Actualiser dans la barre d’outils.";
+
+/* Queue, Continue listening, Played (v2 features) */
 "继续收听" = "Continuer l'écoute";
 "刷新" = "Actualiser";
-"订阅节目后,这里会汇集最新单集" = "Abonnez-vous à des émissions pour voir ici leurs derniers épisodes";
-"暂无最新单集" = "Aucun nouvel épisode";
-"播放队列" = "File d'attente";
 "播放队列为空" = "File d'attente vide";
-"清空播放队列" = "Vider la file";
 "清空播放队列?" = "Vider la file de lecture ?";
 "将清空待播队列中的全部单集，无法恢复。" = "Tous les épisodes de la file seront supprimés, sans possibilité d'annulation.";
 "下一个播放" = "Lire ensuite";

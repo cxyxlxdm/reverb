@@ -419,6 +419,53 @@ struct PlayModeButton: View {
     }
 }
 
+/// 一列单集的「多选」状态:进入/退出、已选集合、入队后那句话。
+///
+/// 三张列表(音阁 / 追更 / 频道页)各持一份 `@StateObject`,互不串味 —— 集合里存的是 id,
+/// 而同一个 id 可能同时出现在收藏与下载两列,共用一份就会"在这一列选、在那列入队"。
+/// 行本身不存这份状态:行会被 Lazy 容器回收(与 Android `EpisodeBatchBar` 同一条理由)。
+@MainActor final class EpisodeSelection: ObservableObject {
+    @Published var selecting = false
+    @Published var picked = Set<String>()
+    @Published private(set) var toast: String?
+    private var toastToken = 0
+
+    func toggle(_ ep: Episode) {
+        if picked.contains(ep.id) { picked.remove(ep.id) } else { picked.insert(ep.id) }
+    }
+
+    func reset() {
+        selecting = false
+        picked.removeAll()
+    }
+
+    /// 把已选的那些交给 `enqueueAll`(一次去重、一次更新导航标记),然后退出选择模式。
+    /// 结果必须说出来:入队结果在「待播」里,当前列表看不出任何变化,不提示等于没按上
+    /// (Android 用 Toast 说同一句话,这里用顶部的 `TopToast`)。
+    ///
+    /// - Parameter log: 日志里那一列的名字(「列=追更」「列=频道 <key>」),用来分辨读数。
+    func enqueue(from episodes: [Episode], using player: PlayerController, log: String) {
+        let chosen = episodes.filter { picked.contains($0.id) }
+        let added = player.enqueueAll(chosen)
+        Log.i("UI", "批量加入待播 \(log) 选中=\(chosen.count) 新增=\(added)")
+        showToast(added == 0
+            ? NSLocalizedString("所选都已在待播里", comment: "批量入队全部重复")
+            : String(format: NSLocalizedString("已加入待播 %lld 集", comment: "批量入队结果"),
+                     Int64(added)))
+        reset()
+    }
+
+    private func showToast(_ text: String) {
+        toastToken += 1
+        let token = toastToken
+        toast = text
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            if toastToken == token { toast = nil }
+        }
+    }
+}
+
 /// 多选批量入队的**工具栏**(桌面形态,不做手机那条长按浮条)。
 ///
 /// 为什么不是浮条:桌面没有长按手势的传统,浮条还会压住末行;窗口工具栏是 macOS 里

@@ -112,7 +112,7 @@ struct NowPlayingBar: View {
                                 }
                         }
                         .buttonStyle(.plain)
-                        .help("播放队列")
+                        .help("待播")
                     }
                 }
             }

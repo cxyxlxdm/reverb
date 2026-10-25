@@ -19,8 +19,9 @@ enum AppSupport {
     //
     // 为什么需要:这些 store 都是 `@MainActor`,而 `save` 原先在主 actor 上
     // **同步**做 `JSONEncoder().encode` + `write(to:)`。播放中每 5 秒
-    // `history.updatePosition` 就会整份写回一次 —— 本机实测 history.json **270 KB**、
-    // inbox.json **747 KB**,这是主线程上每 5 秒一次的固定开销。
+    // `history.updatePosition` 就会整份写回一次 —— 本机实测 history.json **270 KB**;
+    // inbox.json 自 2026-10-25 起按三端口径落 300 条(Android 同规模实测 741 KB),
+    // 每轮刷新写一次。这些编码与写盘都是主线程上的固定开销。
     // 与鸿蒙那一轮同一个道理(TROUBLESHOOTING H65):去抖要连"生成数据"一起去抖,
     // 只把写盘挪走、编码还留在主线程是没解决问题。
     //

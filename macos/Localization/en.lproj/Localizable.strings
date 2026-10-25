@@ -175,15 +175,17 @@
 "加载失败,请检查网络后重试" = "Failed to load. Check your network and retry.";
 "加载失败,点击重试" = "Failed to load — click to retry";
 
-/* Latest / inbox, Queue, Continue listening, Played (v2 features) */
-"最新" = "Latest";
+/* 顶部三格 / 音阁分段 / 追更页 (M6, 2026-10-25) */
+"追更" = "Updates";
+"待播" = "Up next";
+"清空待播" = "Clear queue";
+"还没有订阅。去「发现」订阅几档，它们播过的单集都会汇到这里" = "No subscriptions yet. Subscribe in Discover and their episodes will land here.";
+"这些频道还没有可播的单集，点工具栏刷新再试" = "No playable episodes yet. Click Refresh in the toolbar to try again.";
+
+/* Queue, Continue listening, Played (v2 features) */
 "继续收听" = "Continue Listening";
 "刷新" = "Refresh";
-"订阅节目后,这里会汇集最新单集" = "Subscribe to shows to see their latest episodes here";
-"暂无最新单集" = "No new episodes";
-"播放队列" = "Queue";
 "播放队列为空" = "Queue is empty";
-"清空播放队列" = "Clear queue";
 "清空播放队列?" = "Clear the queue?";
 "将清空待播队列中的全部单集，无法恢复。" = "This clears every episode in the queue and cannot be undone.";
 "下一个播放" = "Play Next";
