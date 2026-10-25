@@ -45,6 +45,12 @@
 "情境电台" = "Contextual Radio";
 "随机电台" = "Shuffle Radio";
 "停止电台" = "Stop Radio";
+/* 分类排序(M12):菜单项带省略号(macOS HIG:会再弹一层的动作),弹窗标题不带。 */
+"自定义分类排序…" = "Reorder categories…";
+"自定义分类排序" = "Reorder categories";
+"拖动行或用箭头调整顺序" = "Drag rows or use the arrows to reorder";
+"上移" = "Move up";
+"下移" = "Move down";
 
 /* Library */
 "订阅" = "Subscribe";
