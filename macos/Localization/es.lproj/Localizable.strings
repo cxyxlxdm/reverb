@@ -175,15 +175,17 @@
 "加载失败,请检查网络后重试" = "Error al cargar. Verifica la red y reinténtalo.";
 "加载失败,点击重试" = "Error — clic para reintentar";
 
-/* Latest / inbox, Queue, Continue listening, Played (v2 features) */
-"最新" = "Novedades";
+/* 顶部三格 / 音阁分段 / 追更页 (M6, 2026-10-25) */
+"追更" = "Novedades";
+"待播" = "A continuación";
+"清空待播" = "Vaciar la cola";
+"还没有订阅。去「发现」订阅几档，它们播过的单集都会汇到这里" = "Aún no tienes suscripciones. Suscríbete en Descubrir y los episodios aparecerán aquí.";
+"这些频道还没有可播的单集，点工具栏刷新再试" = "Aún no hay episodios reproducibles. Pulsa Actualizar en la barra de herramientas.";
+
+/* Queue, Continue listening, Played (v2 features) */
 "继续收听" = "Seguir escuchando";
 "刷新" = "Actualizar";
-"订阅节目后,这里会汇集最新单集" = "Suscríbete a programas para ver aquí sus últimos episodios";
-"暂无最新单集" = "No hay episodios nuevos";
-"播放队列" = "Cola";
 "播放队列为空" = "La cola está vacía";
-"清空播放队列" = "Vaciar la cola";
 "清空播放队列?" = "¿Vaciar la cola de reproducción?";
 "将清空待播队列中的全部单集，无法恢复。" = "Se vaciarán todos los episodios de la cola y no se podrá deshacer.";
 "下一个播放" = "Reproducir a continuación";

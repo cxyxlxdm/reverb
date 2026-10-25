@@ -1,10 +1,13 @@
 import SwiftUI
 
-/// 根视图:顶部工具栏内的 发现/音阁 分段切换 + 齿轮设置,内容区填满窗口,
+/// 根视图:顶部工具栏内的 发现/追更/音阁 分段切换 + 齿轮设置,内容区填满窗口,
 /// 底部常驻播放条(仅当有正在播放的内容)。使用 NavigationStack 让详情页原生推入。
 struct RootView: View {
+    /// 三格的顺序与两端一致(发现 / 追更 / 音阁):换端时手指/眼睛不用重新找。
+    /// 「追更」是 2026-10-25 从音阁分段提上来的第三格(见 docs/MACOS-GAPS.md M6)。
     enum Section: String, CaseIterable, Identifiable {
         case discover = "发现"
+        case inbox = "追更"
         case library = "音阁"
         var id: String { rawValue }
     }
@@ -21,6 +24,7 @@ struct RootView: View {
                 Group {
                     switch section {
                     case .discover: DiscoverView()
+                    case .inbox: InboxView()
                     case .library: LibraryView()
                     }
                 }
@@ -32,7 +36,9 @@ struct RootView: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        .frame(width: 190)
+                        // 三格是定宽:最长的一组是法语(Découvrir / Nouveautés / Bibliothèque)。
+                        // 加第三格之后会不会截断标签,只有把界面跑起来才看得见 —— 别凭猜再调这个数。
+                        .frame(width: 300)
                     }
                     ToolbarItem(placement: .primaryAction) {
                         SettingsButton()
