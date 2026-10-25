@@ -47,10 +47,15 @@ class FavoriteStore(context: Context) {
             val arr = JSONArray(file.readText())
             val out = ArrayList<Episode>(arr.length())
             for (i in 0 until arr.length()) {
-                arr.optJSONObject(i)?.let { out.add(EpisodeJson.fromJson(it)) }
+                val o = arr.optJSONObject(i) ?: continue
+                // 一条坏元素只丢那一条,不要把整份收藏毒成"空列表"再让空态落盘(REVIEW-2026-10-25 高-3)
+                runCatching { EpisodeJson.fromJson(o) }.onSuccess { out.add(it) }
             }
             out
         } catch (e: Exception) {
+            // 收藏是用户点出来的,读坏 ≠ 没有:标记 + 留证,空态整份写回由 JsonWriter 挡下
+            JsonWriter.markLoadFailed(file)
+            com.yuyin.reverb.util.Logger.e("FavStore", "favorites.json 读取失败,按空处理", e)
             emptyList()
         }
     }
@@ -59,7 +64,8 @@ class FavoriteStore(context: Context) {
         try {
             val arr = JSONArray()
             for (e in list) arr.put(EpisodeJson.toJson(e))
-            file.writeText(arr.toString())
+            // 原子写:.part → rename,见 JsonWriter.writeAtomically(REVIEW-2026-10-25 高-3 A 步)
+            JsonWriter.writeAtomically(file, arr.toString())
         } catch (e: Exception) {
             // 持久化失败不影响内存态,忽略
         }

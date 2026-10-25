@@ -1,11 +1,11 @@
 package com.yuyin.reverb.playback
 
 import android.content.Context
-import android.net.ConnectivityManager
 import com.yuyin.reverb.data.local.DownloadStore
 import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.DownloadStatus
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.util.ShortHash
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -42,19 +42,12 @@ object DownloadManager {
     /**
      * 未允许蜂窝下载、且**当前默认网络按用量计费**时拦截。
      *
-     * 判据是 `isActiveNetworkMetered` 而不是「bearer 是不是 WIFI」—— 限量热点是计费的 Wi-Fi,要拦;
-     * 以太网/免流链路不是 Wi-Fi 但不计费,放行。
-     * **鸿蒙侧与这条不等价**(2026-10-09 实测:那边连着 Wi-Fi 也不上报 `NET_CAPABILITY_NOT_METERED`,
-     * 计费信号在 ArkTS 拿不到,只能按 `bearerTypes` 判「是不是蜂窝」)⇒ 限量热点 Android 拦、鸿蒙放行。
-     * **不要把它"修一致"**,除非先在鸿蒙上把计费信号真取出来(见 H166)。
-     * `settings` 读不到按「不允许」(?: false),ConnectivityManager 取不到时放行。
+     * 判据本体已收进 [com.yuyin.reverb.util.CellularGate](为什么必须收:见那里的注释,
+     * REVIEW-2026-10-25 中-3)。**这里只留一层转发**,因为调用点与日志都按这个名字写好了,
+     * 而"下载"和"缓存"和"转写前下音频"三条路径必须问的是同一个问题。
      */
-    private fun blockedByCellular(): Boolean {
-        val allow = settings?.allowCellularDownload?.value ?: false
-        if (allow) return false
-        val cm = if (::appCtx.isInitialized) appCtx.getSystemService(ConnectivityManager::class.java) else null
-        return cm?.isActiveNetworkMetered == true
-    }
+    private fun blockedByCellular(): Boolean =
+        com.yuyin.reverb.util.CellularGate.blocked(settings, if (::appCtx.isInitialized) appCtx else null)
 
     fun deleteAll() {
         if (!::store.isInitialized) return
@@ -163,6 +156,12 @@ object DownloadManager {
             url.contains(".wav", true) -> ".wav"
             else -> ".mp3"
         }
-        return "dl_" + id.hashCode().toString().replace("-", "n") + ext
+        // 为什么不用 String.hashCode():它是 32 位,按生日悖论约 7.7 万个 id 就有 50% 概率撞一对,
+        // 撞上后两集共用一个文件 —— 表现为"下载 A 却听到 B",而且账本里两条记录都自称合法,
+        // 事后根本查不出来。SHA-256 截 16 个 hex(64 位)把量级推到十亿级。见 REVIEW-2026-10-25 低·族 A。
+        // 迁移:这里只决定磁盘文件名,而 DownloadStore 账本存的是 localPath 绝对路径原文,
+        // 没有按文件名反查 id 的地方,所以旧文件改名前后都能照常播、不会变孤儿。
+        // 短名不进备份 JSON,不是跨端契约的一部分(见 AGENTS.md 的备份格式约束)。
+        return "dl_" + ShortHash.hex16(id) + ext
     }
 }

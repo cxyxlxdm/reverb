@@ -141,6 +141,9 @@ class AudioCacheStore(context: Context) {
             }
             com.yuyin.reverb.util.Logger.i(TAG, "cache ledger loaded items=${out.size}")
         } catch (e: Exception) {
+            // 顶层解析失败才留证(REVIEW-2026-10-25 高-3 B②)。上面那条版本不符的早退**不能**标记:
+            // 那是「按设计整体作废」,空态写回去是对的;这里的空态是「读不出来」,写回去就是把缓存账本抹了。
+            JsonWriter.markLoadFailed(file)
             com.yuyin.reverb.util.Logger.w(TAG, "cache ledger load failed: ${e.message}")
             out.clear()
         }

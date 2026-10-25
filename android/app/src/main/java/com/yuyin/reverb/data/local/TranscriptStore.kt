@@ -51,6 +51,17 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         data class Failed(val message: String) : State
         /** 这份包不含可用的离线识别引擎,且这一集没有官方稿 */
         data object NoEngine : State
+        /**
+         * 识别前要下的那整集音频被**蜂窝/计费链路闸门**拦下了(见 REVIEW-2026-10-25 中-3)。
+         *
+         * 为什么不是一个 `Failed("…")`:失败态给用户的只有"再点一次",而再点一次会被同样拦下,
+         * 表现就是"这个功能坏了"。这一态说的是**改哪个设置就能用**,不是"出了错"。
+         *
+         * 界面用的串是既有的 `set_wifi_only_sub`(「关闭后蜂窝网络也允许下载与缓存」,五语都已翻),
+         * **没有新增文案** —— 本轮的约束是不往 5 个 strings.xml 里塞没翻译的新串。
+         * 想要一句更贴这场景的话,得五语一起补,那是要人拍板的事。
+         */
+        data object NeedUnmetered : State
     }
 
     private val dir = File(context.filesDir, "transcripts").apply { mkdirs() }
@@ -195,6 +206,8 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
                         AsrEngine.Stage.DownloadingAudio -> State.DownloadingAudio
                         AsrEngine.Stage.LoadingModel -> State.LoadingModel
                         AsrEngine.Stage.Running -> State.Running
+                        // 引擎说"被计费链路拦下",这里就照它是"拦下"报,不要折成泛泛的失败
+                        AsrEngine.Stage.NeedUnmetered -> State.NeedUnmetered
                     }
                 }
             },
@@ -210,7 +223,12 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         if (stale()) return
         _volatileTail.value = ""
         if (_segments.value.isEmpty()) {
-            _state.value = State.Failed("")
+            /**
+             * 引擎已经给出**明确原因**(被蜂窝闸门拦下)时不要把它盖成泛泛的"转写失败":
+             * 那一屏给的是"改哪个开关"和重试,而"失败"给的是"再点一次",后者在这个网络下必然又拦一次。
+             * 见 REVIEW-2026-10-25 中-3。
+             */
+            if (_state.value != State.NeedUnmetered) _state.value = State.Failed("")
         } else {
             _state.value = State.Done
             saveCache(episode.id, loc, _segments.value)
@@ -222,13 +240,33 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
     private fun cacheFile(episodeId: String, loc: String) =
         File(dir, "${sanitize(episodeId)}.${loc.ifEmpty { "auto" }}.json")
 
-    /// 只认 `complete = true` 且**时间轴口径没变**的缓存 —— 半截的转写下次要重来,不该当成完整稿显示。
+    /// 只认 `complete = true`、**时间轴口径没变**、且**归属对得上**的缓存 —— 半截的转写下次要重来,不该当成完整稿显示。
     private fun loadCache(episodeId: String, loc: String): List<TranscribedSegment>? {
         val f = cacheFile(episodeId, loc)
         if (!f.exists()) return null
         return try {
             val root = JSONObject(f.readText())
             if (!root.optBoolean("complete")) return null
+            /**
+             * **归属校验**(见 REVIEW-2026-10-25 低·族 A 末尾那条)。
+             *
+             * 文件名是 [sanitize] 出来的:非字母数字一律折成 `_`,所以 `abc:def` 与 `abc_def`
+             * **写到同一个文件**。原先命中不校验归属,后果不是崩溃而是**张冠李戴** ——
+             * 甲集显示乙集的逐字稿,时间轴还看着"像对的"(整句高亮),根本发现不了。
+             * 播客 id 里带冒号很常见(guid/uri 形式的 id 就有)。
+             *
+             * 为什么不改文件名:文件名换成长哈希会让**现存的全部缓存同时作废**,
+             * 而这里要防的只是"两个 id 撞同一个名"这一小概率,不是"名字不够长"。
+             * 改成写侧带 `episodeId`、读侧比一句:不撞时零成本,撞了就是后写的那份生效、
+             * 另一集重转一次 —— 两集反复横跳才会来回重转,而那已经不是本 App 的使用形状。
+             *
+             * **缺 `episodeId` 的旧缓存照认** —— 那些文件是这一版之前写的,里面没有这个字段;
+             * 判它们不匹配等于把全部历史缓存一次作废,收益只有"更严格",代价是用户的全部稿子重转。
+             */
+            if (root.has("episodeId") && root.optString("episodeId") != episodeId) {
+                com.yuyin.reverb.util.Logger.w(TAG, "缓存归属不符(文件名撞车),丢弃 id=$episodeId")
+                return null
+            }
             /**
              * **旧版本的稿一律作废重转。**
              *
@@ -285,11 +323,21 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
                 }
                 arr.put(o)
             }
-            cacheFile(episodeId, loc).writeText(
+            // 原子写(REVIEW-2026-10-25 高-3 A 步):逐字稿是这里体量最大的一份落盘(整集可达几百 KB),
+            // 原先 `writeText` 截断重写时进程死在中间,留下的就是半截 JSON —— 读取侧正好把它当成
+            // "没有缓存"(见 loadCache 的 catch),用户看到的是一集"跑完却没了"的稿子。
+            // 这些文件可再生(重跑一次识别就有),所以只借 rename 这一件事,不上空态闸:
+            // markLoadFailed 不标记,免得一次坏读反过来把后续正常结果也挡住。
+            JsonWriter.writeAtomically(
+                cacheFile(episodeId, loc),
                 JSONObject()
                     .put("localeId", loc)
                     .put("complete", true)
                     .put("version", CACHE_VERSION)
+                    // 归属自证:文件名是 sanitize(id) 来的,而 sanitize 将 `:` 与 `_` 折成同一个字符
+                    // (`abc:def` 与 `abc_def` 同名),见 REVIEW-2026-10-25 低·族 A 末尾那条。
+                    // 把原始 id 写进内容,读侧比一句就能分辨这份稿到底是谁的。
+                    .put("episodeId", episodeId)
                     .put("segments", arr)
                     .toString()
             )

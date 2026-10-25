@@ -232,8 +232,20 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                     episode = episode,
                     store = container.transcriptStore,
                     uiLanguage = uiLanguage,
-                    // 已下载的单集直接用本地文件转写:不必再下一遍,飞行模式下也能转
-                    localPath = container.downloadStore.get(episode.id)?.localPath,
+                    /**
+                     * 本地音频**两级**:下载件优先,其次"播过即缓存"那一份(见 REVIEW-2026-10-25 中-3 ②)。
+                     *
+                     * 原先只看 `downloadStore`,于是**明明已经整集在机器上**的一集(听着是从缓存起播的),
+                     * 转逐字稿时却要走网络重下一遍 —— 而那条路还要被蜂窝闸门拦(REVIEW 中-3 ① 新接的那道),
+                     * 用户看到的就是"这集我能听,却转不了"。两级顺序与起播选源那一路完全一致
+                     * (下载 > 缓存,见 `PlayerController.playEpisode`),口径不能在这儿分叉。
+                     *
+                     * 两级都过 `AudioCacheManager.localPath` / 文件存在性判断:账本可能比文件新
+                     * (系统清理、用户手动删过),把不存在的路径交给转写等于白跑一趟网络。
+                     */
+                    localPath = container.downloadStore.get(episode.id)?.localPath
+                        ?.takeIf { java.io.File(it).exists() }
+                        ?: com.yuyin.reverb.playback.AudioCacheManager.localPath(episode.id),
                     engine = container.asrEngine,
                     active = pagerState.currentPage == 2
                 )

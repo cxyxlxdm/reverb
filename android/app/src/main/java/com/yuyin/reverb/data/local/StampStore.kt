@@ -74,6 +74,9 @@ class StampStore(context: Context) {
             }
             out
         } catch (e: Exception) {
+            // 印记同样是用户盖出来的:读坏 ≠ 没有,标记 + 留证(见 JsonWriter,REVIEW-2026-10-25 高-3)
+            JsonWriter.markLoadFailed(file)
+            com.yuyin.reverb.util.Logger.e("StampStore", "stamps.json 读取失败,按空处理", e)
             emptyList()
         }
     }
@@ -91,7 +94,8 @@ class StampStore(context: Context) {
                         .put("createdAt", s.createdAt)
                 )
             }
-            file.writeText(arr.toString())
+            // 原子写:.part → rename,见 JsonWriter.writeAtomically(REVIEW-2026-10-25 高-3 A 步)
+            JsonWriter.writeAtomically(file, arr.toString())
         } catch (e: Exception) {
         }
     }

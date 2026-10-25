@@ -144,9 +144,12 @@ class ITunesSource(private val client: OkHttpClient) {
         return s.replace(Regex("(?i)<br\\s*/?>"), "\n")
             .replace(Regex("(?i)</p>"), "\n\n")
             .replace(Regex("<[^>]*>"), "")
-            .replace("&nbsp;", " ").replace("&amp;", "&")
-            .replace("&lt;", "<").replace("&gt;", ">")
+            // 顺序与 RssParser.htmlToText 同一件事:`&amp;` 必须最后解,否则源里字面的
+            // `&amp;lt;` 会被双重反转义成 `<`(REVIEW-2026-10-25 低·族 B-1,两端两处同型)。
+            .replace("&nbsp;", " ").replace("&lt;", "<")
+            .replace("&gt;", ">")
             .replace("&quot;", "\"").replace("&#39;", "'")
+            .replace("&amp;", "&")
             .trim()
     }
 

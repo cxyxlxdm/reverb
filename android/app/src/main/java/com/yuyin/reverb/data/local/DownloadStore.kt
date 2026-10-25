@@ -55,10 +55,20 @@ class DownloadStore(context: Context) {
                 val o = arr.optJSONObject(i) ?: continue
                 val path = o.optString("localPath")
                 if (path.isBlank() || !File(path).exists()) continue // 文件已被清理则跳过
-                out.add(DownloadedEpisode(EpisodeJson.fromJson(o.getJSONObject("episode")), path))
+                // `getJSONObject("episode")` → `optJSONObject` + 逐条 runCatching:
+                // 原先缺 episode 键会抛 JSONException,跳出整个循环 ⇒ **一份好端端的下载账本
+                // 因为一条坏记录被当成"零下载"**,而那个空态紧接着就会被 persist 落回盘上
+                // (REVIEW-2026-10-25 高-3 附带条,与 HistoryStore 同型)
+                val epObj = o.optJSONObject("episode") ?: continue
+                val d = runCatching { DownloadedEpisode(EpisodeJson.fromJson(epObj), path) }.getOrNull()
+                if (d != null) out.add(d)
+                else com.yuyin.reverb.util.Logger.w("DownloadStore", "downloads.json 第 $i 条读坏了,跳过")
             }
             out
         } catch (e: Exception) {
+            // 读坏 ≠ 一个下载都没有:标记 + 留证(见 JsonWriter)
+            JsonWriter.markLoadFailed(file)
+            com.yuyin.reverb.util.Logger.e("DownloadStore", "downloads.json 读取失败,按空处理", e)
             emptyList()
         }
     }
@@ -73,7 +83,8 @@ class DownloadStore(context: Context) {
                         .put("localPath", d.localPath)
                 )
             }
-            file.writeText(arr.toString())
+            // 原子写:.part → rename,见 JsonWriter.writeAtomically(REVIEW-2026-10-25 高-3 A 步)
+            JsonWriter.writeAtomically(file, arr.toString())
         } catch (e: Exception) {
         }
     }

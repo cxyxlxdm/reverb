@@ -210,10 +210,14 @@ class ListenStatsStore(context: Context) {
             val out = ArrayList<Pair<ChannelListen, Long>>(arr.length())
             for (i in 0 until arr.length()) {
                 val o = arr.optJSONObject(i) ?: continue
-                out.add(ChannelListenJson.parse(o))
+                // 逐条 runCatching:一条坏记录不该让整份分账归零(REVIEW-2026-10-25 高-3 附带条)
+                runCatching { ChannelListenJson.parse(o) }.onSuccess { out.add(it) }
             }
             out
         } catch (e: Exception) {
+            // 读坏 ≠ 一分钟都没听过:标记 + 留证,空态整份写回由 JsonWriter 挡下
+            JsonWriter.markLoadFailed(file)
+            com.yuyin.reverb.util.Logger.e("ListenStats", "listen_stats.json 读取失败,按空处理", e)
             emptyList()
         }
     }

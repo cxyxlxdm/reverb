@@ -230,39 +230,113 @@ object BackupManager {
             if (list.isNotEmpty()) container.listenStatsStore.merge(list, legacy)
         }
         var importedSettings = false
-        if (Section.SETTINGS in include) root.optJSONObject("settings")?.let { s ->
-            val st = container.settingsStore
-            if (s.has("themeMode")) st.setThemeMode(s.getInt("themeMode"))
-            /**
-             * 字号:**优先读 `fontScale`(倍率,跨端契约键),读不到才退 `fontIndex`(下标)**。
-             *
-             * 先后不能反:新版两端导出的备份两个键都写(见上面导出段),而它们由同一个值派生,
-             * 正常情况下取哪个都一样。之所以仍要以倍率优先 —— 一份**手改过**或**来自只改了下标
-             * 那一侧**的备份里两者可能不一致,这时必须有一个确定性的胜出者,否则同一份文件
-             * 在两台机器上恢复出两档字号,而两端都显示"我从自己的库里读出来的",查不到。
-             */
-            if (s.has("fontScale")) st.setFontScale(s.getDouble("fontScale").toFloat())
-            else if (s.has("fontIndex"))
-                st.setFontScale(SettingsStore.scaleForFontIndex(s.getInt("fontIndex")))
-            if (s.has("accentIndex")) st.setAccentIndex(s.getInt("accentIndex"))
-            if (s.has("allowCellularDownload")) st.setAllowCellularDownload(s.getBoolean("allowCellularDownload"))
-            if (s.has("updatesEnabled")) st.setUpdatesEnabled(s.getBoolean("updatesEnabled"))
-            if (s.has("defaultSpeed")) st.setDefaultSpeed(s.getDouble("defaultSpeed").toFloat())
-            if (s.has("skipBackSec")) st.setSkipBackSec(s.getInt("skipBackSec"))
-            if (s.has("skipForwardSec")) st.setSkipForwardSec(s.getInt("skipForwardSec"))
-            // 这三项是这次补的消费端。语言标签两端用的是同一套("" = 跟随系统),
-            // 所以对空串要照实写回去 —— 它的意思就是"跟随系统",不是"没值"。
-            if (s.has("language")) st.setLanguage(s.getString("language"))
-            if (s.has("subsGrid")) st.setSubsGrid(s.getBoolean("subsGrid"))
-            if (s.has("contextualRadio")) st.setContextualRadio(s.getBoolean("contextualRadio"))
-            val region = if (s.isNull("regionOverride")) null else s.optString("regionOverride").ifBlank { null }
-            container.regionStore.setOverride(region)
-            s.optJSONArray("categoryOrder")?.let { ca ->
-                val order = (0 until ca.length()).map { ca.optString(it) }.filter { it.isNotBlank() }
-                if (order.isNotEmpty()) container.categoryStore.saveOrder(order)
+        // 整段再包一层 runCatching(setter 本身也可能抛),不能让「设置」这一个分区
+        // 把其余 7 个分区一起带走。见 REVIEW-2026-10-25 中-2。
+        runCatching {
+            if (Section.SETTINGS in include) root.optJSONObject("settings")?.let { s ->
+                val st = container.settingsStore
+                /**
+                 * 逐键「有则取、类型不对则**跳过**」。
+                 *
+                 * 原先每个键都是 `s.getInt(...)` / `getBoolean(...)` 这类**会抛**的取法(org.json
+                 * 在类型不符时抛 JSONException),而整段外面没有 try —— 于是一份手改过、或来自
+                 * 另一端的备份里只要有一个键的类型不对:
+                 *  1. `apply()` 直接抛出,后面的 `regionOverride`/`categoryOrder` 连同
+                 *     **后面根本没跑到的分区**全丢;
+                 *  2. 更糟的是调用方 `SettingsScreen` 之后照样把 `restore_done` 弹出来,
+                 *     用户看到的是"恢复成功"。
+                 *
+                 * 三种状态必须分开(这是这条整改意见点名的坑):
+                 *  - **键不存在** → 不动本端(这份备份压根没谈这一项);
+                 *  - **键存在但类型不对** → 不动本端 + 记一行日志。
+                 *    图省事的 `optInt(key, 本端当前值)` 会把这两种情况折成同一个"值没变",
+                 *    看着无害,实际是把备份里那个坏值**静默**当成"用户就是要这个";
+                 *    而如果默认值写的是硬编码常量(0 / false),类型不对就等于**把用户现有设置盖掉**,
+                 *    那才是真的丢数据。
+                 *  - **键存在且类型对** → 照它写。
+                 *
+                 * 判"类型对不对"用的是同一键取两次不同兜底:两次结果一致才说明值本身读得出来,
+                 * 不一致说明其中一次落到了兜底上(org.json 的 opt* 只在无法转换时才返回兜底)。
+                 *
+                 * ⚠️ 这里**只改读法,不改任何键名/类型/结构** —— settings 分区的键集是三端
+                 *    `reverb-backup.json` 的互通契约(见上面导出段)。
+                 */
+                fun typeBad(key: String, want: String) =
+                    com.yuyin.reverb.util.Logger.w(TAG, "settings.$key 类型不是$want,跳过这一项(保留本端现值)")
+
+                fun intOf(key: String): Int? {
+                    if (!s.has(key) || s.isNull(key)) return null
+                    val a = s.optInt(key, Int.MIN_VALUE)
+                    if (a == s.optInt(key, Int.MAX_VALUE)) return a
+                    typeBad(key, "整数"); return null
+                }
+
+                fun doubleOf(key: String): Double? {
+                    if (!s.has(key) || s.isNull(key)) return null
+                    val a = s.optDouble(key, Double.NaN)
+                    if (!a.isNaN() && a == s.optDouble(key, Double.POSITIVE_INFINITY)) return a
+                    typeBad(key, "小数"); return null
+                }
+
+                fun boolOf(key: String): Boolean? {
+                    if (!s.has(key) || s.isNull(key)) return null
+                    val a = s.optBoolean(key, false)
+                    if (a == s.optBoolean(key, true)) return a
+                    typeBad(key, "布尔"); return null
+                }
+
+                fun strOf(key: String): String? {
+                    if (!s.has(key) || s.isNull(key)) return null
+                    // 字符串必须**看原始类型**:optString 会把 false 转成 "false" 这种看着合法的串,
+                    // 塞进 language 就是把一个不可能的值当真了。
+                    return (s.opt(key) as? String).also { if (it == null) typeBad(key, "字符串") }
+                }
+
+                intOf("themeMode")?.let { st.setThemeMode(it) }
+                /**
+                 * 字号:**优先读 `fontScale`(倍率,跨端契约键),读不到才退 `fontIndex`(下标)**。
+                 *
+                 * 先后不能反:新版两端导出的备份两个键都写(见上面导出段),而它们由同一个值派生,
+                 * 正常情况下取哪个都一样。之所以仍要以倍率优先 —— 一份**手改过**或**来自只改了下标
+                 * 那一侧**的备份里两者可能不一致,这时必须有一个确定性的胜出者,否则同一份文件
+                 * 在两台机器上恢复出两档字号,而两端都显示"我从自己的库里读出来的",查不到。
+                 *
+                 * 「fontScale 存在但类型坏了」时**不再退到 fontIndex**:那等于用另一把尺子去补一个
+                 * 坏掉的读数,读出来的字号和用户那份文件里的意图毫无关系(中-2 说的就是这种混淆)。
+                 */
+                val hasFontScale = s.has("fontScale") && !s.isNull("fontScale")
+                if (hasFontScale) doubleOf("fontScale")?.let { st.setFontScale(it.toFloat()) }
+                else intOf("fontIndex")?.let { st.setFontScale(SettingsStore.scaleForFontIndex(it)) }
+                intOf("accentIndex")?.let { st.setAccentIndex(it) }
+                boolOf("allowCellularDownload")?.let { st.setAllowCellularDownload(it) }
+                boolOf("updatesEnabled")?.let { st.setUpdatesEnabled(it) }
+                doubleOf("defaultSpeed")?.let { st.setDefaultSpeed(it.toFloat()) }
+                intOf("skipBackSec")?.let { st.setSkipBackSec(it) }
+                intOf("skipForwardSec")?.let { st.setSkipForwardSec(it) }
+                // 这三项是这次补的消费端。语言标签两端用的是同一套("" = 跟随系统),
+                // 所以对空串要照实写回去 —— 它的意思就是"跟随系统",不是"没值"。
+                strOf("language")?.let { st.setLanguage(it) }
+                boolOf("subsGrid")?.let { st.setSubsGrid(it) }
+                boolOf("contextualRadio")?.let { st.setContextualRadio(it) }
+                // 地区覆盖:**键不存在就不动本端**(原先无条件走 `setOverride(null)`,
+                // 于是"来自没写这一项的旧备份"会把用户选好的地区清成跟随系统 —— 中-2 点名的
+                // 「把键不存在当成有值」的同一个形状)。显式 `null`(导出段写 `JSONObject.NULL`)
+                // 与空串都按"跟随系统"清掉,那是备份里明确表达出来的意图。
+                if (s.has("regionOverride")) {
+                    when (val v = s.opt("regionOverride")) {
+                        // 导出端在"跟随系统"时写的是显式 null(见上面导出段),那是备份明确表达的意图,照办
+                        null, JSONObject.NULL -> container.regionStore.setOverride(null)
+                        is String -> container.regionStore.setOverride(v.ifBlank { null })
+                        else -> typeBad("regionOverride", "字符串")
+                    }
+                }
+                s.optJSONArray("categoryOrder")?.let { ca ->
+                    val order = (0 until ca.length()).map { ca.optString(it) }.filter { it.isNotBlank() }
+                    if (order.isNotEmpty()) container.categoryStore.saveOrder(order)
+                }
+                importedSettings = true
             }
-            importedSettings = true
-        }
+        }.onFailure { com.yuyin.reverb.util.Logger.e(TAG, "settings 分区恢复中断,其余分区不受影响", it) }
         com.yuyin.reverb.util.Logger.i(TAG, "restore done importedSettings=$importedSettings")
         return importedSettings
     }
