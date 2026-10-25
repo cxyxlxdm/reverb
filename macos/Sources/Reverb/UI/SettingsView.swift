@@ -63,6 +63,8 @@ private struct SettingsForm: View {
     @State private var logSizeText = ""
     @State private var shareLogURL: URL?
     @State private var prompt: Prompt = .none
+    @State private var showAbout = false
+    @State private var showLicenses = false
 
     var body: some View {
         Form {
@@ -194,6 +196,41 @@ private struct SettingsForm: View {
                     Label("清空日志", systemImage: "trash")
                 }
             }
+
+            // 四行的顺序与 Android `SettingsScreen.kt` 的同名分区逐项对应
+            // (关于 → 隐私政策 → 开源许可 → 版本,M11)。隐私政策这一行**不能只在首启出现**:
+            // 平台合规指引要求应用内随时可查,所以它在设置里常驻,指向官网那份完整政策。
+            Section("关于") {
+                Button { showAbout = true } label: {
+                    Label("关于余音", systemImage: "info.circle")
+                }
+                Button { AppInfo.openPrivacyPolicy() } label: {
+                    HStack {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("隐私政策")
+                                Text("我们如何处理你的数据")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "hand.raised")
+                        }
+                        Spacer()
+                        Image(systemName: "arrow.up.forward.square")
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                Button { showLicenses = true } label: {
+                    Label("开源许可", systemImage: "doc.text.magnifyingglass")
+                }
+                HStack {
+                    Label("版本", systemImage: "number")
+                    Spacer()
+                    Text(AppInfo.version).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }
         }
         .onAppear { refreshLogSize(); prepareShareLog() }
         .confirmationDialog("确定清空日志?", isPresented: $confirmClearLog, titleVisibility: .visible) {
@@ -218,6 +255,20 @@ private struct SettingsForm: View {
             FootprintView()
                 .environmentObject(env)
                 .environmentObject(settings)
+                .themedSheet(settings)
+        }
+        // 关于页与许可页都做成 sheet(设置窗口本身是 Form,推不出新页):
+        // 与「听觉足迹」同一种呈现,尺寸由内容自己声明。
+        .sheet(isPresented: $showAbout) {
+            AboutView()
+                .environmentObject(settings)
+                .tint(Theme.accent(settings.accentIndex))
+                .themedSheet(settings)
+        }
+        .sheet(isPresented: $showLicenses) {
+            LicensesView()
+                .environmentObject(settings)
+                .tint(Theme.accent(settings.accentIndex))
                 .themedSheet(settings)
         }
         // 导出分区勾选。选择集由弹窗自持(初值全勾,与另两端一致),不进外部状态 ——

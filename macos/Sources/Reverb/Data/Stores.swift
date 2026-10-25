@@ -301,6 +301,16 @@ enum AppSupport {
     @Published var playModeDefault: Int { didSet { d.set(playModeDefault, forKey: "play_mode") } }
     /// 语音转文字:开启后播放页出现"转录"轮播页。默认关(需 macOS 26 + 首次下载语言模型)。
     @Published var transcriptionEnabled: Bool { didSet { d.set(transcriptionEnabled, forKey: "transcription_enabled") } }
+    /// 是否已同意**当前版本**的隐私政策。
+    ///
+    /// 存的是「已同意的政策版本」而不是布尔:政策有实质变更时(新增网络访问点、新增权限、
+    /// 改变数据用途…)按合规惯例要重新征求一次同意。**与 Android `SettingsStore.PRIVACY_VERSION`
+    /// 同一个数,两边一起 +1** —— 手机与桌面说同一种话,不该一端的用户被重问、另一端没有。
+    ///
+    /// 门控在 `ReverbApp` 的 `PrivacyGate`:未同意时主界面树**根本不构建**,
+    /// 发现页那些 `.task` 也就不会去请求 iTunes / fyyd / gpodder(与 Android 同一条理由)。
+    static let privacyVersion = 2
+    @Published private(set) var privacyAccepted: Bool
     /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。
     @Published var language: String {
         didSet {
@@ -332,6 +342,15 @@ enum AppSupport {
         language = d.string(forKey: "app_language") ?? ""
         playModeByTag = (d.dictionary(forKey: "play_mode_map") as? [String: Int]) ?? [:]
         playModeDefault = d.object(forKey: "play_mode") as? Int ?? 0
+        // 没存过 = 从没同意过(桌面端以前没有这一页,不存在 Android 那条
+        // `privacy_accepted` 布尔的老格式要兼容)。
+        privacyAccepted = (d.object(forKey: "privacy_version") as? Int ?? 0) >= Self.privacyVersion
+    }
+
+    /// 同意当前版本的隐私政策。写入后主界面树才第一次构建。
+    func acceptPrivacy() {
+        d.set(Self.privacyVersion, forKey: "privacy_version")
+        privacyAccepted = true
     }
 
     /// 写某一列的模式。**空 tag 不写这张表** —— 它表示「没有列身份」,走回落那一格。

@@ -35,13 +35,17 @@ struct ReverbApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environmentObject(env)
-                .environmentObject(env.player)
-                .environmentObject(env.settings)
-                .environmentObject(env.downloads)
-                .environmentObject(env.downloadManager)
-                .environmentObject(env.listenStats)
+            // 首次启动的隐私同意门:未同意时 `RootView` 根本不构建,
+            // 发现页那些联网 `.task` 也就一次都发不出去(M11)。
+            PrivacyGate {
+                RootView()
+            }
+            .environmentObject(env)
+            .environmentObject(env.player)
+            .environmentObject(env.settings)
+            .environmentObject(env.downloads)
+            .environmentObject(env.downloadManager)
+            .environmentObject(env.listenStats)
         }
         .defaultSize(width: 1240, height: 860)
         .windowToolbarStyle(.unified)
