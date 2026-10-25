@@ -10856,3 +10856,37 @@ macOS 没有这条病,是因为 `FeedCacheStore` 早就用了 `.atomic` —— �
 ④ **阳性对照的形状要选对。** 「工具读不到」和「界面上没有」是两件事,
    拿另一个**结构相同、已知非空**的目标(这里选的是一样弹 `NSMenu` 的第二个 popup)读一次,
    才分得开这两者 —— 这比在本目标上重试三次可靠得多。
+
+### H216. 本机(新机)出鸿蒙 release 包:BuildNativeWithNinja 必炸 `options.recursive is no longer supported`,debug 却全绿
+
+**现象**(2026-10-25 实测):`hvigorw assembleHap -p buildMode=debug` 全绿,同一条命令
+换成 `-p buildMode=release` 在 `:entry:default@BuildNativeWithNinja` 报
+`Error Code: 00308018 Unknown Error`,真错误是 Node 的
+`The property 'options.recursive' is no longer supported. Received true`。
+清 `.cxx/release` 与中间产物**绕不过** —— 清理本身就是炸点。
+
+**根因**:hvigor-ohos-plugin 的 `build-native-with-ninja.js`(`removeDirectoriesByFilter`)
+调的是 `fs.rmdirSync(path, {recursive: true})`,这个 API 在 **Node 23 起被整个移除**。
+hvigorw 找 node 的顺序是 `NODE_HOME` → PATH:本机 PATH 里是 brew 的 **node 26**,
+DevEco 自带的也是 **node 24**(`Contents/tools/node/bin/node --version` 实测)—— 两个都 ≥23。
+debug 之所以"全绿"是 native 任务**增量 up-to-date 跳过了清理段**;release 是新 build state
+必走 `checkAndHandleBuildState` 的目录清理,一进就炸。这也解释了为什么换机(10-24)之后
+本机从来没出过鸿蒙 release 包 —— 之前的 release 都是旧机出的,本机只跑过 debug。
+
+**修法**:给 hvigorw 一个 Node ≤22。不用 brew(本机红线,brew 装大包超时):
+直接下官方 tarball 到 /tmp 解压用 ——
+`curl -sL -o /tmp/node22.tar.gz https://nodejs.org/dist/v22.14.0/node-v22.14.0-darwin-arm64.tar.gz`
+`tar -xzf node22.tar.gz -C /tmp/node22 --strip-components=1`
+然后 `export NODE_HOME=/tmp/node22` 再跑 hvigorw,实测 BUILD SUCCESSFUL(5s)。
+**1.0.6 鸿蒙 release 出包(build-release.sh)前必须带这个环境变量**,否则必炸。
+(node22 目录在 /tmp,重启即失;要不要把它挪到不丢的位置、或写进出包脚本的前置检查,待维护者拍。)
+
+**教训与可复用的规律**:
+① "debug 绿、release 红"的同工具链差异,先怀疑**增量缓存**:debug 全绿可能只是没走到
+   那段代码,不代表那段代码没病。`--stacktrace` 一发就能看到真凶在 `node:fs:1530`,
+   比对着 00308018 的"Unknown Error"猜快得多。
+② DevEco 自带的 node 不保证老于 23 —— 别把"IDE 自带"当兼容性保证,`--version` 现测。
+③ 装机验证遇到的 `install provision type not same (code:9568286)`:本地构建链(debug 或
+   release 模式)出的 hap 全是 **debug profile 签名**,机上若装过上架口径的 release profile 包,
+   `-r` 覆盖必被拒,只能卸载重装(本机这次机上沙箱本来就是空的,无备份负担;若在数据机器上,
+   先走硬规矩 12 的完整备份四步)。
