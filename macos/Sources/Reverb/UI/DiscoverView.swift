@@ -140,7 +140,10 @@ struct DiscoverView: View {
                         ContinueCard(entry: entry, accent: accent) {
                             player.playQueue([entry.episode], startIndex: 0)
                         }
-                        .episodeContextMenu(entry.episode)
+                        // 横条卡是全 App **唯一**保留正向「标记为已播完」的地方(H192 / D7):
+                        // 它按"未播完"过滤,这颗同时是把条目从横条上拿掉的入口。两端同口径。
+                        .episodeContextMenu(entry.episode,
+                                            onMarkPlayed: { env.history.markPlayed(entry.episode.id, true) })
                     }
                 }
                 .padding(.vertical, 2)

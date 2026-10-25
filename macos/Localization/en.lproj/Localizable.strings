@@ -139,6 +139,10 @@
 "日本" = "Japan";
 "韩国" = "South Korea";
 "英国" = "United Kingdom";
+"新加坡" = "Singapore";
+"澳大利亚" = "Australia";
+"加拿大" = "Canada";
+"德国" = "Germany";
 "%lld 秒" = "%lld s";
 "语言" = "Language";
 "重启后生效" = "Takes effect after restart";

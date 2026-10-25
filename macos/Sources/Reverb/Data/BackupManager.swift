@@ -23,17 +23,46 @@ enum BackupManager {
         }
     }
 
+    // MARK: - 字号换算(跨端备份的档位 ↔ 倍率)
+
+    /// 四档字号**倍率**,与 Android `SettingsStore.FONT_SCALES` / 鸿蒙 `Theme.ets` 那组**逐项相同**。
+    ///
+    /// 桌面界面是连续滑杆(`UI/SettingsView.swift` 0.85–1.3 step 0.05),没有"档位"这个概念 ——
+    /// 这张表只在备份边界上用(D2):导出时把滑杆值就近折成下标写给旧鸿蒙,恢复时把下标换回倍率。
+    /// **就近取整的方向必须与 Android 的同名函数一致**(严格小于才替换,平局取靠前那档),
+    /// 否则同一个滑杆值在两端会落到相邻两档,而两边都不会报错。
+    private static let fontScales: [Double] = [0.85, 1.0, 1.15, 1.3]
+
+    private static func fontIndex(for scale: Double) -> Int {
+        var best = 1
+        var diff = Double.greatestFiniteMagnitude
+        for (i, s) in fontScales.enumerated() {
+            let d = abs(s - scale)
+            if d < diff { diff = d; best = i }
+        }
+        return best
+    }
+
+    /// 下标 → 倍率,越界夹到端点(备份是外部输入,不能信任它的范围)。
+    private static func fontScale(forIndex index: Int) -> Double {
+        fontScales[min(max(index, 0), fontScales.count - 1)]
+    }
+
     // MARK: - 序列化载荷
 
     /// 各字段全部可选:备份 JSON 是跨端边界,三端 settings 的 schema 各有增删
     /// (Android 带 allowCellularDownload/updatesEnabled/categoryOrder,
-    ///  鸿蒙带 fontIndex/language/subsGrid,macOS 带 regionOverride/contextualRadio),
+    ///  鸿蒙带 fontIndex/language/subsGrid,macOS 带 fontIndex/regionOverride/contextualRadio),
     /// 且旧版导出可能缺键 —— 任何一个非可选键缺失都会让**整份备份**解码失败
     /// (H86),恢复就静默无效。缺的键在 applySettings 里保持现值不动。
     private struct SettingsPayload: Codable {
         var themeMode: Int?
         var accentIndex: Int?
         var fontScale: Double?
+        /// 字号档位下标。**桌面没有"档位"这个界面概念**(它是连续滑杆),这一格纯为跨端(D2):
+        /// 导出时把滑杆值就近折成下标给只认它的旧鸿蒙,恢复时作为 `fontScale` 缺失后的兜底。
+        /// 两端都写、读时倍率优先 —— 与 Android `BackupManager.kt` 同一套次序。
+        var fontIndex: Int?
         var regionOverride: String?
         var defaultSpeed: Double?
         var skipBackSec: Int?
@@ -75,7 +104,8 @@ enum BackupManager {
         if include.contains(.settings) {
             let s = env.settings
             p.settings = SettingsPayload(
-                themeMode: s.themeMode, accentIndex: s.accentIndex, fontScale: s.fontScale,
+                themeMode: s.themeMode, accentIndex: s.accentIndex,
+                fontScale: s.fontScale, fontIndex: Self.fontIndex(for: s.fontScale),
                 regionOverride: s.regionOverride, defaultSpeed: s.defaultSpeed,
                 skipBackSec: s.skipBackSec, skipForwardSec: s.skipForwardSec,
                 contextualRadio: s.contextualRadio,
@@ -155,7 +185,15 @@ enum BackupManager {
         let st = env.settings
         if let v = s.themeMode { st.themeMode = v }
         if let v = s.accentIndex { st.accentIndex = v }
-        if let v = s.fontScale { st.fontScale = v }
+        // 字号:**优先 `fontScale`(倍率,跨端契约键),读不到才退 `fontIndex`(下标)**。
+        // 先后与 Android `BackupManager.kt` 同一条理由:新版两端导出的备份两个键都写,
+        // 且由同一个值派生,正常情况下取哪个都一样;但手改过、或只改了另一侧那一格的备份里
+        // 两者可能不一致,必须有一个确定性的胜出者,否则同一份文件在两台机器上恢复出两档字号。
+        if let v = s.fontScale {
+            st.fontScale = v
+        } else if let v = s.fontIndex {
+            st.fontScale = Self.fontScale(forIndex: v)
+        }
         if let v = s.regionOverride { st.regionOverride = v }
         if let v = s.defaultSpeed {
             st.defaultSpeed = v
