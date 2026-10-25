@@ -59,17 +59,18 @@ enum TranscriptFormat {
 @MainActor final class TranscriptStore: ObservableObject {
 
     enum State: Equatable {
-        case idle              // 未转录:显示"生成转录"
+        case idle              // 未取稿:显示"查看逐字稿"或"生成转录"
         /// 正在读本机缓存。解码搬到后台之后不再是同一帧出结果,
-        /// 这几十毫秒若沿用 idle 会**闪一下「生成转录」按钮**。与鸿蒙的 LoadingCache 对齐。
+        /// 这几十毫秒若沿用 idle 会**闪一下按钮**。与鸿蒙的 LoadingCache 对齐。
         case loadingCache
+        case fetchingOfficial  // 正取发布方的官方稿(与 Android `FetchingOfficial` 同名同义)
         case downloadingAudio  // 流式单集:先下载音频
         case installingModel   // 首次:系统下载语言模型
         case running           // 识别中
         case done              // 完成(或命中缓存)
         case failed(String)
         case unsupportedLocale // 该语言不受支持
-        case needsMacOS26      // 系统过旧
+        case needsMacOS26      // 系统过旧,且这一集没有官方稿
     }
 
     @Published private(set) var segments: [TranscribedSegment] = []
@@ -92,44 +93,90 @@ enum TranscriptFormat {
 
     // MARK: - 对外
 
-    /// 切到某单集/语言时调用:取消旧任务,命中缓存则直接显示,否则置 idle 等待用户手动生成。
+    /// 切到某单集/语言时调用:取消旧任务,命中缓存则直接显示,否则置 idle 等待用户手动开始。
     /// **async**:缓存解码在后台(实测一份 192 KB,主 actor 上解码是白占主线程)。
-    func prepare(episodeId: String, localeId: String) async {
-        guard episodeId != self.episodeId || localeId != self.localeId || state == .idle else { return }
+    ///
+    /// 传整条 `Episode` 而不是 id:待机态要看 `transcriptUrl` 决定——
+    /// 有官方稿时说「查看逐字稿」,没有且系统过旧才落到 `needsMacOS26`。
+    func prepare(episode: Episode, localeId: String) async {
+        guard episode.id != self.episodeId || localeId != self.localeId || state == .idle else { return }
         cancel()
         generation += 1
         let gen = generation
-        self.episodeId = episodeId
+        self.episodeId = episode.id
         self.localeId = localeId
         volatileTail = ""
         segments = []
         state = .loadingCache
-        let cached = await loadCache(episodeId: episodeId, localeId: localeId)
+        let cached = await loadCache(episodeId: episode.id, localeId: localeId)
         // 解码期间用户可能已经切集/切语言 —— 那时这份结果作废(与鸿蒙同一守卫)
         guard gen == generation else { return }
         if let cached, cached.complete {
             segments = cached.segments   // 缓存命中:秒显全文,不重播打字机
             state = .done
         } else {
-            state = .idle
+            // 有官方稿就永远有活路(下载一个文件,不需要 macOS 26);没有官方稿时才看本机引擎
+            state = (episode.transcriptUrl.isEmpty && !Self.localASRAvailable) ? .needsMacOS26 : .idle
         }
     }
 
-    /// 手动开始转录。localURL 有值=已下载(纯离线);否则用远程直链先下载音频。
-    func start(episodeId: String, audioURL: String, localURL: URL?, localeId: String) {
-        guard #available(macOS 26, *) else { state = .needsMacOS26; return }
+    /// 本机离线识别是否可用(Apple Speech 的新接口要 macOS 26)。
+    /// 发布方官方稿**不经过**这道门 —— 那只是下载一个文件,所以 14/15 上也能看
+    /// (更早的系统没有播放页轮播,整条转录 UI 不出现)。
+    static var localASRAvailable: Bool {
+        if #available(macOS 26, *) { return true }
+        return false
+    }
+
+    /// 手动开始取稿/转录。localURL 有值=已下载(纯离线);否则识别前先下音频。
+    func start(episode: Episode, audioURL: String, localURL: URL?, localeId: String) {
         cancel()
         generation += 1
         let gen = generation
-        self.episodeId = episodeId
+        self.episodeId = episode.id
         self.localeId = localeId
         segments = []
         volatileTail = ""
-        state = localURL == nil ? .downloadingAudio : .running
+        state = episode.transcriptUrl.isEmpty
+            ? (localURL == nil ? .downloadingAudio : .running)
+            : .fetchingOfficial
 
         job = Task { [weak self] in
-            await self?.run(gen: gen, episodeId: episodeId, audioURL: audioURL, localURL: localURL, localeId: localeId)
+            await self?.runAny(gen: gen, episode: episode, audioURL: audioURL,
+                               localURL: localURL, localeId: localeId)
         }
+    }
+
+    /// **先官方稿、后本机识别**(与 Android `TranscriptStore.runJob` 同一条顺序)。
+    ///
+    /// 官方稿这条路不要求 macOS 26 —— 它只是下载并解析一个文件,所以老系统上
+    /// 「有官方稿」的集照样能看;只有真的回退到本机识别时才需要 26。
+    private func runAny(gen: Int, episode: Episode, audioURL: String, localURL: URL?, localeId: String) async {
+        func stale() -> Bool { gen != generation }
+
+        if !episode.transcriptUrl.isEmpty {
+            if !stale() { state = .fetchingOfficial }
+            let fetched = await TranscriptFetcher.fetch(url: episode.transcriptUrl,
+                                                        declaredType: episode.transcriptType)
+            if stale() { return }
+            if let fetched, !fetched.isEmpty {
+                // 发布方给的时间轴不能假定排好;出口统一夹一次(硬规矩 10)
+                let segs = TranscriptFormat.monotonic(fetched)
+                segments = segs
+                state = .done
+                saveCache(episodeId: episode.id, localeId: localeId, segments: segs)
+                Log.i("Transcript", "用官方稿 \(segs.count) 句 id=\(episode.id)")
+                return
+            }
+            // 取不到就往下走本机识别 ——「稿链接坏了」不该让功能整个不可用
+            Log.w("Transcript", "官方稿取不到,回退本机识别 id=\(episode.id)")
+        }
+
+        guard #available(macOS 26, *) else {
+            if !stale() { state = .needsMacOS26 }
+            return
+        }
+        await run(gen: gen, episodeId: episode.id, audioURL: audioURL, localURL: localURL, localeId: localeId)
     }
 
     func cancel() {

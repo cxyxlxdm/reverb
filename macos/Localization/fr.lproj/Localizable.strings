@@ -236,6 +236,9 @@
 "音频地址无效" = "URL audio invalide";
 "音频下载失败" = "Échec du téléchargement audio";
 "转录失败,点按重试" = "Échec de la transcription. Touchez pour réessayer";
+"正在获取发布方提供的逐字稿…" = "Récupération de la transcription de l’éditeur…";
+"这一集发布方提供了逐字稿" = "L’éditeur fournit une transcription pour cet épisode";
+"查看逐字稿" = "Afficher la transcription";
 
 // 收听时长
 "收听时长" = "Temps d'écoute";
@@ -265,8 +268,8 @@
 "好" = "OK";
 "这个文件无法识别为余音的备份,可能已损坏或来自不兼容的版本。" = "Ce fichier n'est pas reconnu comme une sauvegarde de Reverb. Il est peut-être corrompu ou issu d'une version incompatible.";
 
-/* 关于 / 许可 / 首次同意(M11)。键名是简中原文;桌面端不列播放缓存、订阅提醒与发布方逐字稿,
-   数据来源里也没有官网 OPML —— 这三端在桌面上都没有实现,见 docs/MACOS-GAPS.md。
+/* 关于 / 许可 / 首次同意(M11)。键名是简中原文;桌面端不列播放缓存与订阅提醒,
+   数据来源里也没有官网 OPML —— 这三样在桌面上都没有实现,见 docs/MACOS-GAPS.md。
    撇号沿用本文件其余部分的弯撇号(’),不是直撇号。 */
 "关于" = "À propos";
 "关于余音" = "À propos de Reverb";
@@ -289,7 +292,7 @@
 "· 批量与直达：点任意单集封面直达它所属的频道；多个列表可切换「选择」把一批一次加入待播" = "· Lot et accès direct : cliquez sur la pochette d’un épisode pour ouvrir son émission ; plusieurs listes ont un mode Sélectionner pour ajouter un lot à À écouter d’un coup";
 "· 离线下载：下载的单集长期留在本机" = "· Hors ligne : les épisodes téléchargés restent sur ce Mac";
 "· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播，以及系统媒体键与「正在播放」" = "· Lecture : vitesse, retour et avance, minuteur, modes (dans l’ordre / répéter un titre / aléatoire), lecture automatique, touches multimédia et « Lecture en cours »";
-"· 逐字稿：在本机把当前单集转成文字并随进度高亮（需 macOS 26，首次按语言下载系统模型）" = "· Transcription : convertissez l’épisode en cours en texte sur ce Mac, surligné au fil de la lecture (nécessite macOS 26 ; le système télécharge un modèle par langue)";
+"· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）" = "· Transcription : affiche la transcription de l’éditeur quand il y en a une ; sinon, convertit l’épisode en texte sur ce Mac, surligné au fil de la lecture (la transcription locale nécessite macOS 26)";
 "· 批注：记下这一秒和此刻的一句话；音阁「批注」栏把它们连成时间线，点一下从那一句接着听" = "· Notes : marquez cette seconde avec une phrase ; la section Notes de la Bibliothèque les relie en une chronologie — cliquez pour reprendre à cette phrase";
 "· 节目笔记：播放页横滑查看简介" = "· Notes d’émission : faites glisser le lecteur pour lire la description";
 "· 备份：勾选分区导出或恢复备份（与手机端格式互通），也能导入导出 OPML" = "· Sauvegarde : exportez ou restaurez les sections choisies (compatible avec les applis mobiles) et importez ou exportez OPML";

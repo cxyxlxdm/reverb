@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// 播放页「转录」轮播页:离线把当前单集音频转成文字,随播放高亮、点句跳转。
-/// 仅从 macOS 14+ 的轮播容器实例化;转录能力本身进一步要求 macOS 26。
+/// 仅从 macOS 14+ 的轮播容器实例化;发布方官方稿在这一档就能用,
+/// 本机识别才进一步要求 macOS 26(`TranscriptStore.localASRAvailable`)。
 @available(macOS 14, *)
 struct TranscriptPage: View {
     @EnvironmentObject var env: AppEnvironment
@@ -40,7 +41,7 @@ struct TranscriptPage: View {
         .padding(.horizontal, 24)
         .padding(.vertical, 16)
         .task(id: episode.id + "|" + localeId) {
-            await transcripts.prepare(episodeId: episode.id, localeId: localeId)
+            await transcripts.prepare(episode: episode, localeId: localeId)
         }
         // 每次播放进度采样(约 0.5s)刷新锚点,当前句据此逐帧外推
         .onChange(of: player.positionMs) { _, new in
@@ -60,40 +61,45 @@ struct TranscriptPage: View {
 
     // MARK: - 主体(按状态)
 
+    /// 不再用 `if #available(macOS 26)` 把整页包住:发布方官方稿只是下载并解析一个文件,
+    /// 14–15 上同样可用。要不要 26 由 `TranscriptStore` 的状态决定(`needsMacOS26`)。
     @ViewBuilder private var content: some View {
-        if #available(macOS 26, *) {
-            switch transcripts.state {
-            case .idle:
-                startPrompt
-            case .loadingCache:
-                progress("正在读取…")
-            case .downloadingAudio:
-                progress("正在准备音频…")
-            case .installingModel:
-                progress("正在下载语言模型…")
-            case .running:
-                transcriptList(runningTail: true)
-            case .done:
-                transcriptList(runningTail: false)
-            case .failed(let msg):
-                retry(msg)
-            case .unsupportedLocale:
-                hint("magnifyingglass", "该语言暂不支持转录")
-            case .needsMacOS26:
-                hint("exclamationmark.triangle", "需要 macOS 26")
-            }
-        } else {
+        switch transcripts.state {
+        case .idle:
+            startPrompt
+        case .loadingCache:
+            progress("正在读取…")
+        case .fetchingOfficial:
+            progress("正在获取发布方提供的逐字稿…")
+        case .downloadingAudio:
+            progress("正在准备音频…")
+        case .installingModel:
+            progress("正在下载语言模型…")
+        case .running:
+            transcriptList(runningTail: true)
+        case .done:
+            transcriptList(runningTail: false)
+        case .failed(let msg):
+            retry(msg)
+        case .unsupportedLocale:
+            hint("magnifyingglass", "该语言暂不支持转录")
+        case .needsMacOS26:
             hint("exclamationmark.triangle", "需要 macOS 26")
         }
         Spacer(minLength: 0)
     }
 
     private var startPrompt: some View {
-        VStack(spacing: 14) {
+        let official = !episode.transcriptUrl.isEmpty
+        // 两类稿**要说不同的话**:官方稿只是下载一个文件(一两秒),本机识别是几分钟的满载计算。
+        let title: LocalizedStringKey = official ? "这一集发布方提供了逐字稿" : "把这集音频离线转成文字"
+        let action: LocalizedStringKey = official ? "查看逐字稿" : "生成转录"
+        return VStack(spacing: 14) {
             Spacer()
-            Image(systemName: "text.viewfinder").font(.system(size: 40)).foregroundStyle(.secondary)
-            Text("把这集音频离线转成文字").font(.callout).foregroundStyle(.secondary)
-            Button("生成转录") { startTranscription() }
+            Image(systemName: official ? "doc.text" : "text.viewfinder")
+                .font(.system(size: 40)).foregroundStyle(.secondary)
+            Text(title).font(.callout).foregroundStyle(.secondary)
+            Button(action) { startTranscription() }
                 .buttonStyle(.borderedProminent)
             Spacer()
         }
@@ -193,7 +199,7 @@ struct TranscriptPage: View {
 
     private func startTranscription() {
         transcripts.start(
-            episodeId: episode.id,
+            episode: episode,
             audioURL: episode.audioUrl,
             localURL: env.downloads.localURL(episode.id),
             localeId: localeId)

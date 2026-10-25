@@ -236,6 +236,9 @@
 "音频地址无效" = "Invalid audio URL";
 "音频下载失败" = "Audio download failed";
 "转录失败,点按重试" = "Transcription failed. Tap to retry";
+"正在获取发布方提供的逐字稿…" = "Fetching the publisher’s transcript…";
+"这一集发布方提供了逐字稿" = "The publisher provides a transcript for this episode";
+"查看逐字稿" = "Show transcript";
 
 // 收听时长
 "收听时长" = "Listening Time";
@@ -270,7 +273,7 @@
 
 /* 关于 / 许可 / 首次同意(M11)。键名是简中原文,与 Android `about_*` / `licenses_*` /
    `privacy_consent_*` 一一对应;有几处在桌面端单独写,因为两端的实现不一样:
-   - 桌面没有播放缓存、订阅提醒,也没有发布方逐字稿 —— 那三条**不列**;
+   - 桌面没有播放缓存、订阅提醒 —— 那两条**不列**;
    - 桌面不读官网那份推荐 OPML,数据来源里也就没有它。
    这一页会被逐字读,宁可少写,不能多写。 */
 "关于" = "About";
@@ -294,7 +297,7 @@
 "· 批量与直达：点任意单集封面直达它所属的频道；多个列表可切换「选择」把一批一次加入待播" = "· Batch and jump: click any episode cover to open its show; several lists have a Select mode to add a batch to Up Next at once";
 "· 离线下载：下载的单集长期留在本机" = "· Offline: downloaded episodes stay on this Mac";
 "· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播，以及系统媒体键与「正在播放」" = "· Playback: speed, skip back and forward, sleep timer, play modes (in order / repeat one / shuffle), autoplay next, plus media keys and Now Playing";
-"· 逐字稿：在本机把当前单集转成文字并随进度高亮（需 macOS 26，首次按语言下载系统模型）" = "· Transcript: turn the current episode into text on this Mac, highlighted as it plays (needs macOS 26; the system downloads a language model once)";
+"· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）" = "· Transcript: shows the publisher’s transcript when there is one, otherwise turns the episode into text on this Mac, highlighted as it plays (on-device transcription needs macOS 26)";
 "· 批注：记下这一秒和此刻的一句话；音阁「批注」栏把它们连成时间线，点一下从那一句接着听" = "· Notes: mark that second with a sentence; the Library's Notes section strings them into a timeline — click one to resume from that line";
 "· 节目笔记：播放页横滑查看简介" = "· Show notes: swipe across the player to read the description";
 "· 备份：勾选分区导出或恢复备份（与手机端格式互通），也能导入导出 OPML" = "· Backup: export or restore the sections you pick (compatible with the mobile apps), and import or export OPML";
