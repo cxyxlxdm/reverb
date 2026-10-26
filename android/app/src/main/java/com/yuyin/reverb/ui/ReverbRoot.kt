@@ -33,6 +33,15 @@ import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.RssFeed
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import com.yuyin.reverb.ui.components.DissolveLayer
+import com.yuyin.reverb.ui.components.DissolveRequest
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -251,6 +260,8 @@ private fun MainShell(rootNav: NavHostController) {
     val currentEpisode by PlayerController.current.collectAsStateWithLifecycle()
     val playing = currentEpisode != null
     val collapsed = rememberSaveable { mutableStateOf(false) }
+    /// 点 X 的粒子消散请求(tab 外壳一份,FloatingMini 自己另有一份 —— 两个外壳互不可见)。
+    val dissolve = remember { DissolveRequest() }
     val morphThresholdPx = with(density) { MINI_MORPH_SLOPE.toPx() }
 
     /**
@@ -468,6 +479,7 @@ private fun MainShell(rootNav: NavHostController) {
                 MiniPlayerBar(
                     onExpand = { rootNav.navigate("player") },
                     onOpenQueue = { rootNav.navigate("queue") },
+                    onDissolveRequest = { dissolve.burst(it) },
                     collapsed = collapsed.value,
                     // 盘上是**当前那一格**的图标(与鸿蒙 [BALL_ICONS] 同一语义:这颗球读作
                     // "整条栏收在这里",不是"回首页"),所以取栏的 spec 而不是固定的房子。
@@ -482,6 +494,14 @@ private fun MainShell(rootNav: NavHostController) {
                 )
             }
         }
+
+        // 粒子层:声明在栏那列之后 ⇒ 同层最后绘制,碎片飞得再高也不被裁。
+        // 只有点 X 的那 0.6 秒它有内容,其余时候是空 Canvas(零绘制)。
+        DissolveLayer(
+            dissolve,
+            MaterialTheme.colorScheme.primary,
+            Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -521,6 +541,10 @@ private fun Modifier.tabKept(hidden: Boolean): Modifier = if (!hidden) this else
 private fun MiniPlayerBar(
     onExpand: () -> Unit,
     onOpenQueue: () -> Unit = {},
+    /// 点 X 后由外壳接管「粒子消散」:回调给的是条子在根坐标里的矩形。
+    /// 本组件自己只做三件事:条子立即隐身(占位保留)→ 外壳画粒子 → 430ms 后 close()
+    /// 收布局(对应视频「粒子散尽后内容才上移」,直接 close 会边散边上移)。
+    onDissolveRequest: (Rect) -> Unit = {},
     collapsed: Boolean = false,
     ballIcon: ImageVector? = null,
     onRestore: () -> Unit = {},
@@ -545,9 +569,9 @@ private fun MiniPlayerBar(
     // 而按落点算式该差 **154px** = `lift(60dp=165px) − Δ块高/2(11px)` ——
     // 上面这两个"错的数"和那个 154 都能由同一条算式精确复现,见 H181。
     //
-    // 塌陷方向(点 X 关闭那条):退场 `shrinkOut(shrinkTowards = Bottom)` = 高度贴着底边收拢,
-    // 内容被裁而不是位移 —— 与参考视频"整条被压成细缝后消失、无横向滑出"同形;
-    // 出场对称地从底边展开。曲线用与收束 morph 同一条弹簧,两种运动(收束/消失)一个手感。
+    // 点 X 的形态是**粒子消散**(参考视频第二版结论,2026-10-25):条子隐身但占位保留,
+    // 430ms 后才 close() —— 于是 AnimatedVisibility 的退场(shrinkOut)发生在条子已经
+    // 透明之后,读出来就只剩"布局收拢",正好补在粒子散尽之后。
     AnimatedVisibility(
         visible = cur != null,
         modifier = modifier,
@@ -555,24 +579,42 @@ private fun MiniPlayerBar(
         exit = fadeOut() + shrinkOut(shrinkTowards = Alignment.BottomCenter)
     ) {
         if (cur != null) {
-            val progress = if (duration > 0) position.toFloat() / duration else 0f
-            MiniPlayer(
-                episode = cur,
-                isPlaying = isPlaying,
-                buffering = buffering,
-                progress = progress,
-                hasNext = hasNext,
-                onToggle = { PlayerController.togglePlayPause() },
-                onNext = { PlayerController.next() },
-                onExpand = onExpand,
-                onClose = { PlayerController.close() },
-                onOpenQueue = onOpenQueue,
-                collapsed = collapsed,
-                ballIcon = ballIcon,
-                onRestore = onRestore,
-                collapseIntoBar = collapseIntoBar,
-                coverOpensChannel = coverOpensChannel
-            )
+            // ghost/bounds 随内容一起 remember:AnimatedVisibility 把内容摘掉时一并销毁,
+            // 下次起播(重新插入)天然复位,不用手写清零。
+            var ghost by remember { mutableStateOf(false) }
+            val bounds = remember { mutableStateOf(Rect.Zero) }
+            val scope = rememberCoroutineScope()
+            Box(
+                Modifier
+                    .onGloballyPositioned { bounds.value = it.boundsInRoot() }
+                    .graphicsLayer { alpha = if (ghost) 0f else 1f }
+            ) {
+                val progress = if (duration > 0) position.toFloat() / duration else 0f
+                MiniPlayer(
+                    episode = cur,
+                    isPlaying = isPlaying,
+                    buffering = buffering,
+                    progress = progress,
+                    hasNext = hasNext,
+                    onToggle = { PlayerController.togglePlayPause() },
+                    onNext = { PlayerController.next() },
+                    onExpand = onExpand,
+                    onClose = {
+                        ghost = true
+                        onDissolveRequest(bounds.value)
+                        scope.launch {
+                            delay(650)
+                            PlayerController.close()
+                        }
+                    },
+                    onOpenQueue = onOpenQueue,
+                    collapsed = collapsed,
+                    ballIcon = ballIcon,
+                    onRestore = onRestore,
+                    collapseIntoBar = collapseIntoBar,
+                    coverOpensChannel = coverOpensChannel
+                )
+            }
         }
     }
 }
@@ -611,6 +653,7 @@ private fun FloatingMini(
     content: @Composable () -> Unit
 ) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
+    val dissolve = remember { DissolveRequest() }
     val navInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     // 让位量与 tab 外壳那条带同一条弹簧:关闭时内容补位与播放条塌陷同步,
     // 硬切会出现"条子还在塌、列表先跳上去"的两段感(参考视频是整块一起收)。
@@ -630,8 +673,15 @@ private fun FloatingMini(
             MiniPlayerBar(
                 onExpand = onExpand,
                 onOpenQueue = onOpenQueue,
+                onDissolveRequest = { dissolve.burst(it) },
                 coverOpensChannel = miniCoverOpensChannel,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = navInset + MINI_GAP)
+            )
+            // 粒子层与 tab 外壳同款:铺满本外壳,后声明在上,飞散不被裁。
+            DissolveLayer(
+                dissolve,
+                MaterialTheme.colorScheme.primary,
+                Modifier.matchParentSize()
             )
         }
     }

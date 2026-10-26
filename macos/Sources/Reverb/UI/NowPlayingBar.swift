@@ -7,8 +7,14 @@ struct NowPlayingBar: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
     var onOpenChannel: (Podcast) -> Void = { _ in }
+    /// 粒子消散期间条子隐身(占位保留),由根视图在散尽后 close()。
+    var ghost: Bool = false
+    /// 点 X:把条子的窗口矩形交回根视图去放粒子。真正 close 延迟 430ms,不在本组件做。
+    var onDissolve: (CGRect) -> Void = { _ in }
     @State private var showPlayer = false
     @State private var showQueue = false
+    /// 本条在窗口坐标系(.global)里的矩形,布局变化即上报 —— 放粒子要用最后已知位置。
+    @State private var frameInWindow = CGRect.zero
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
 
@@ -116,9 +122,9 @@ struct NowPlayingBar: View {
 
                         // 关闭(参考视频的位次:X 在播放条最右端,待播入口之外再一枚)。
                         // 色阶 secondary:次要动作,不与播放键争权重(与另两端同判)。
-                        // 动画不在这里包 withAnimation —— 根视图那条 .animation(value:)
-                        // 已经把「current 有无」的变化统一交给塌陷过渡。
-                        Button { player.close() } label: {
+                        // 动作交给根视图(粒子 + 延迟 close),本组件不再直接 close ——
+                        // 直接关会让布局收拢与粒子飞散同时发生,读起来是"边散边塌"。
+                        Button { onDissolve(frameInWindow) } label: {
                             Image(systemName: "xmark")
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
@@ -133,6 +139,13 @@ struct NowPlayingBar: View {
         }
         .frame(maxWidth: .infinity)
         .background(.regularMaterial)
+        .background(
+            GeometryReader { g in
+                Color.clear
+                    .onAppear { frameInWindow = g.frame(in: .global) }
+                    .onChange(of: g.frame(in: .global)) { frameInWindow = $0 }
+            }
+        )
         .sheet(isPresented: $showPlayer) {
             PlayerView(onOpenChannel: { pod in showPlayer = false; onOpenChannel(pod) })
                 .environmentObject(env)

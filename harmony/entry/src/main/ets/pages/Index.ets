@@ -17,8 +17,9 @@ import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
 import {
   SystemTabItem, barFloating, pickMaterialType, TAB_BAR_H, TAB_KEY, MORPH_KEY, MORPH_SLOPE,
-  MINI_H, MINI_GAP, MINI_SIDE_MARGIN, morphSpring, barReserve, channelMiniBottom
+  MINI_H, MINI_H_COLLAPSED, MINI_GAP, MINI_SIDE_MARGIN, morphSpring, barReserve, channelMiniBottom
 } from '../view/BottomBar';
+import { DissolveParticles, DissolveState } from '../view/DissolveParticles';
 import { hdsMaterial, HdsTabs } from '@kit.UIDesignKit';
 import { LibraryPage } from '../view/LibraryPage';
 import { SettingsPage } from '../view/SettingsPage';
@@ -109,6 +110,13 @@ struct Index {
    * 和避让区同一次异步读取带回来,所以首帧是 0(那一帧不给 barWidth)。
    */
   @State windowWVp: number = 0;
+  /// 窗口高是给点 X 的粒子消散算条子屏幕坐标用的(见 [closeMini])。
+  @State windowHvp: number = 0;
+  /// 点 X 的粒子消散:tick 变化触发一轮;rect 四分量是条子在**屏幕坐标系**的位置。
+  /// barGhost 让条子在粒子期间隐身但**占位保留** —— 430ms 后才 close() 收布局
+  /// (参考视频的次序:粒子散尽,内容才上移)。
+  @State dissolve: DissolveState = new DissolveState();
+  @State barGhost: boolean = false;
   @State player: PlayerController = PlayerController.get();
   /// 播放状态变化触发重渲的计数(PlayerController 非 @Observed 字段级追踪,用它兜底刷新)
   @State tick: number = 0;
@@ -195,7 +203,8 @@ struct Index {
         this.bottomInset = ui.px2vp(nav.bottomRect.height);
         // 全屏布局下窗口宽 == 屏宽。用窗口而不是 display:旋转 / 分屏时跟着窗口走。
         this.windowWVp = ui.px2vp(w.getWindowProperties().windowRect.width);
-        Log.i('UI', `避让 top=${this.topInset} bottom=${this.bottomInset} winW=${this.windowWVp}`);
+        this.windowHvp = ui.px2vp(w.getWindowProperties().windowRect.height);
+        Log.i('UI', `避让 top=${this.topInset} bottom=${this.bottomInset} winW=${this.windowWVp} winH=${this.windowHvp}`);
       }).catch((e: Error) => {
         Log.w('UI', `读取避让区失败 ${e.message}`);
       });
@@ -356,6 +365,21 @@ struct Index {
             .hitTestBehavior(HitTestMode.Block)
             .onClick(() => { TapGuard.lower(); })
         }
+
+        /**
+         * 粒子消散层(点 X):必须挂在**这个根 Stack** —— 第一版挂在 shell() 的 Stack
+         * (Navigation 的内容区)里,频道详情页的 NavDestination 一打开就把它整个盖住,
+         * 详情页点 X 粒子全画在了页面背后(2026-10-26 装机像素比对定位)。
+         * 这里在 Navigation 与误触盾之后 ⇒ 压过一切页面;碎片飞出条子上方几百 vp 不被裁,
+         * 平时只是个零绘制的 Canvas 节点。rect 用屏幕绝对 vp,与 [closeMini] 同坐标系。
+         */
+        DissolveParticles({
+          state: this.dissolve,
+          primaryColor: this.scheme().primary
+        })
+          .width('100%')
+          .height('100%')
+          .hitTestBehavior(HitTestMode.None)
       }
       .width('100%')
       .height('100%')
@@ -532,9 +556,10 @@ struct Index {
               player: this.player,
               onExpand: () => { this.stack.pushPathByName('player', null); },
               onOpenQueue: () => { this.stack.pushPathByName('queue', null); },
-              onClose: () => this.closeMini()
+              onClose: () => this.closeMini(this.detailMiniRect())
             })
               .margin({ bottom: this.detailLanding() })
+              .opacity(this.barGhost ? 0 : 1)
               /**
                * 塌陷退场:纵向压扁到 0 + 淡出(参考视频里播放条被压成细缝后消失,
                * 不是横滑也不是纯淡出)。出现时同一形状反向弹出。
@@ -614,17 +639,37 @@ struct Index {
   }
 
   /**
-   * 点 X 关掉播放条(停播清场,见 `PlayerController.close`)。
+   * 点 X 关掉播放条 —— **粒子消散版**(2026-10-25 第二版形态,参考用户视频):
+   * 条子立即隐身但占位保留,同屏炸出碎片;430ms(粒子散尽)后才在 animateTo 里
+   * `close()` 收布局 —— 于是"内容上移补位"落在散尽之后,与视频次序一致。
+   * 若直接 close(),布局收拢和粒子飞散同时发生,读起来是"边散边塌"。
    *
-   * `animateTo` 里包的是 `close()` 整个动作:current 置 null 会让**两样东西同时变** ——
-   * 条子本体(if 摘除,走各自的 transition)与列表让位量([underBarPad] / 频道页的
-   * bottomPad,属性动画)。必须在同一次 animateTo 里,拆开就是"列表先跳上去、
-   * 条子随后才没"的两段感;曲线取 [morphSpring],与收束/展开同一手感。
+   * rect 来自两处组装点(tab 外壳/频道页),坐标系是**屏幕绝对 vp** —— 粒子层
+   * 是根 Stack 里的全屏 Canvas,两边必须同一坐标系。
    */
-  private closeMini(): void {
-    this.getUIContext().animateTo({ curve: morphSpring() }, () => {
-      this.player.close();
-    });
+  private closeMini(rect: number[]): void {
+    this.dissolve.burst(rect[0], rect[1], rect[2], rect[3]);
+    this.barGhost = true;
+    setTimeout((): void => {
+      this.getUIContext().animateTo({ curve: morphSpring() }, () => {
+        this.player.close();
+      });
+      // 条子已随 current=null 摘除,ghost 复位只影响"下一次起播"的初始透明度
+      this.barGhost = false;
+    }, 650);
+  }
+
+  /// tab 外壳那一处播放条的屏幕矩形(收束态高度用 [MINI_H_COLLAPSED])。
+  private tabMiniRect(): number[] {
+    const h = this.collapsed ? MINI_H_COLLAPSED : MINI_H;
+    return [MINI_SIDE_MARGIN, this.windowHvp - this.miniBottom() - h,
+      this.windowWVp - MINI_SIDE_MARGIN * 2, h];
+  }
+
+  /// 频道详情页那一处(永不收束,恒 [MINI_H],落点走 [detailLanding])。
+  private detailMiniRect(): number[] {
+    return [MINI_SIDE_MARGIN, this.windowHvp - this.detailLanding() - MINI_H,
+      this.windowWVp - MINI_SIDE_MARGIN * 2, MINI_H];
   }
 
   /**
@@ -826,8 +871,9 @@ struct Index {
             onOpenQueue: () => { this.stack.pushPathByName('queue', null); },
             onOpenChannel: (feedUrl: string) => this.openPodcastByFeed(feedUrl),
             onBallTap: () => this.expandMini(),
-            onClose: () => this.closeMini()
+            onClose: () => this.closeMini(this.tabMiniRect())
           })
+          .opacity(this.barGhost ? 0 : 1)
         }
         .width('100%')
         /**

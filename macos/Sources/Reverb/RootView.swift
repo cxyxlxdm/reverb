@@ -17,8 +17,14 @@ struct RootView: View {
     @EnvironmentObject var settings: SettingsStore
     @State private var section: Section = .discover
     @State private var path = NavigationPath()
+    /// 点 X 的粒子消散(三端同款,见 UI/DissolveParticles.swift):条子隐身但占位保留,
+    /// 430ms 后才 close() —— 内容补位落在粒子散尽之后(参考视频的次序)。
+    @State private var dissolveTick = 0
+    @State private var dissolveRect = CGRect.zero
+    @State private var barGhost = false
 
     var body: some View {
+        ZStack {
         VStack(spacing: 0) {
             NavigationStack(path: $path) {
                 Group {
@@ -56,20 +62,34 @@ struct RootView: View {
             }
 
             if player.current != nil {
-                // 塌陷过渡(参考视频:播放条被压成细缝后消失,下方内容同步补位,不是滑出)。
-                // 用 modifier 过渡而不是 .move/.opacity 的理由:只有它能把**布局高度**一起收掉,
-                // 内容区才跟着上移 —— 这是"塌陷"与"滑出/淡出"的分水岭。
-                // 触发一律走底部那行 .animation(value:):起播出现(反向弹出)与点 X 关闭
-                // 两条路同一套曲线,不用每个调用点各自 withAnimation。
+                // 点 X 走「粒子消散」:close() 延迟到散尽之后,这里的塌陷过渡发生在
+                // 条子已经隐身时 —— 读出来只剩布局收拢,正好接在粒子之后。
+                // 出现方向仍走这条 .animation(value:) 的反向弹出。
                 Group {
                     Divider()
-                    NowPlayingBar(onOpenChannel: { path.append($0) })
+                    NowPlayingBar(
+                        onOpenChannel: { path.append($0) },
+                        ghost: barGhost,
+                        onDissolve: { rect in
+                            dissolveRect = rect
+                            dissolveTick += 1
+                            barGhost = true
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+                                player.close()
+                                barGhost = false
+                            }
+                        })
                 }
+                .opacity(barGhost ? 0 : 1)
                 .transition(AnyTransition.modifier(
                     active: CollapseModifier(collapsed: true),
                     identity: CollapseModifier(collapsed: false)
                 ))
             }
+        }
+        // 粒子层:铺满全窗、声明在 VStack 之后(压过一切),碎片上飞不被裁。
+        DissolveParticles(tick: dissolveTick, rect: dissolveRect,
+                          primary: Theme.accent(settings.accentIndex))
         }
         .frame(minWidth: 1100, minHeight: 760)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
