@@ -344,9 +344,11 @@ object PlayerController {
      * 于是流式播放断网之后的表现是"暂停键按下去没反应、进度线冻住、没有任何提示"
      * —— 用户只能杀掉 App。见 REVIEW-2026-10-25 中-1。
      *
-     * ⚠️ **UI 挂载待后续**:这一份状态目前没有消费方(播放页没留错误位,也不该为它新造文案 ——
-     * 五语字符串不能凭空塞没翻译的中文串)。当场能救回症状的是 [togglePlayPause] 里那条 IDLE 分支
-     * (用户按播放键即整集重投),这一份 StateFlow 是给后续那一颗「重试」/一条提示用的数据出口。
+     * ⚠️ **UI 只有一个消费方**:`ui/screens/PlayerScreen.kt` 里频道名与进度条之间那条状态行
+     * (REVIEW-2026-10-25 中-1 的数据层是 10-25 那批接的,界面那半是 10-26 补五语文案时挂的 ——
+     * 当时故意不挂,因为五语字符串不能凭空塞没翻译的中文串)。
+     * 收起态的播放条**没有**这一行:那一行位置给的是进度与频道名,再塞一条状态会顶掉界面;
+     * 用户在收起态下的自救路径是「点播放键」(IDLE 分支等价于 [retryNow])。
      *
      * @param retrying 自动重投还在进行中(界面此刻不该报"失败",报"重试中"更准)
      * @param retriesUsed 本集已经自动重投过几次(上限 [MAX_ERROR_RETRIES])
@@ -594,7 +596,7 @@ object PlayerController {
             // 之后按播放键走的是 `controller.play()` —— 而 IDLE 下 play() 是空操作(见 [togglePlayPause]),
             // 于是"这一集再也播不了",只能杀掉 App。现在分两件事:
             //  ① 瞬时类(网络/IO)自动重投有限几次(退避 500ms、1s),超出上限把失败态留给用户;
-            //  ② 无论重试与否都**对外可见**([playbackError]),界面挂载待后续(见那里的注释)。
+            //  ② 无论重试与否都**对外可见**([playbackError]),播放页那条状态行读它(见 PlaybackError 注释)。
             //
             // 只把 `ERROR_CODE_IO_*` 里"重投一次有可能就好"的那几个算可重试:
             //  - FILE_NOT_FOUND / NO_PERMISSION 多为**本地文件被清掉了**(下载件或缓存件在播放器之外被删),
@@ -957,8 +959,8 @@ object PlayerController {
      *    而这里会退到下一级源(缓存 → 流式);
      *  - 也顺带把 [errorRetries] 与 [playbackError] 归零,否则第二次再按就再也走不到自动那条路。
      *
-     * ⚠️ UI 挂载待后续:目前没有"重试"按钮调它,播放键在 IDLE 下已经等价于它(见 [togglePlayPause]);
-     * 留这个出口是给后续那条错误提示用的。见 REVIEW-2026-10-25 中-1。
+     * 消费方是播放页那条错误状态行(10-26 补五语文案时才挂上,见 [PlaybackError] 的注释);
+     * 播放键在 IDLE 下已经等价于它(见 [togglePlayPause]),所以收起态下用户也有一条自救路径。
      */
     fun retryNow(): Boolean {
         val ep = _current.value ?: return false
