@@ -185,6 +185,8 @@
     <string name="episode_count">%d episodes</string>
 
     <string name="player_not_playing">Nothing playing</string>
+    <string name="player_err_retrying">Playback interrupted. Retrying automatically (attempt %1$d)</string>
+    <string name="player_err_failed">Playback failed. Tap to retry</string>
     <string name="shownotes">Show notes</string>
     <string name="shownotes_empty">No show notes</string>
     <string name="note_add">Write a note</string>

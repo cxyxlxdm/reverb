@@ -88,6 +88,7 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
     val speed by PlayerController.speed.collectAsStateWithLifecycle()
     val sleepRemaining by PlayerController.sleepRemainingMs.collectAsStateWithLifecycle()
     val sleepEnd by PlayerController.sleepEndOfEpisode.collectAsStateWithLifecycle()
+    val playbackError by PlayerController.playbackError.collectAsStateWithLifecycle()
 
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val backSec by container.settingsStore.skipBackSec.collectAsStateWithLifecycle()
@@ -284,6 +285,46 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                     else Modifier
                 )
         )
+
+        /**
+         * 播放出错状态行(挂在频道名与进度条之间)。
+         *
+         * 为什么必须有这一行:流式播放断网后播放器进 `STATE_IDLE`,而界面**什么都没变** ——
+         * 进度线冻住、按播放键像没反应,用户只能杀掉 App(见 REVIEW-2026-10-25 中-1)。
+         * 数据层那份 [PlayerController.playbackError] 10-25 就接好了,当时故意没挂:
+         * 五语字符串不能凭空塞没翻译的中文串。这一批补的就是文案。
+         *
+         * 判据是「**错的还是当前这一集**」:换集后上一集的失败要继续不显示 ——
+         * 与自动重投那条同一个闸门(`errorRetryEpisodeId`),两处口径不能分叉。
+         *
+         * ⚠️ 用屏幕文字而不是 Toast:Toast 对 `uiautomator dump` 不可见,装机验收取不到证据
+         * (本仓库的取证口径,见 docs/TROUBLESHOOTING.md 里 H133 那轮)。
+         */
+        val err = playbackError?.takeIf { it.episodeId == episode.id }
+        if (err != null) {
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = if (err.retrying) {
+                    // retriesUsed 是"第几次重投正在进行",上限 MAX_ERROR_RETRIES 是私有的,不显示分母
+                    stringResource(R.string.player_err_retrying, err.retriesUsed)
+                } else {
+                    stringResource(R.string.player_err_failed)
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+                // 两行:法语那句 61 字符要 ~1100 px,而这一列只有 948 px 可用
+                // (10-26 真机量过 —— 同字号同列的「播放失败」那句 42 字符实测 760 px,
+                //  即 ~18 px/字)。写成一行会被省略号截断,而截断掉的正好是"第几次"那个数。
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    // 自动重投进行中**不给点**:retryNow() 会清计数并重新走一遍选源,
+                    // 和 handler 上已排的那次退避撞车;重投成功时 STATE_READY 自己会清掉这条。
+                    .then(if (err.retrying) Modifier else Modifier.clickable { PlayerController.retryNow() })
+            )
+        }
 
         Spacer(Modifier.height(20.dp))
         Slider(

@@ -185,6 +185,8 @@
     <string name="episode_count">共 %d 集</string>
 
     <string name="player_not_playing">未在播放</string>
+    <string name="player_err_retrying">播放中斷，正在自動重試（第 %1$d 次）</string>
+    <string name="player_err_failed">播放失敗，點按重試</string>
     <string name="shownotes">節目筆記</string>
     <string name="shownotes_empty">暫無節目筆記</string>
     <string name="note_add">寫批註</string>

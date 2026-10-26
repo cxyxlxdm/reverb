@@ -68,6 +68,10 @@ private struct SettingsForm: View {
     @State private var prompt: Prompt = .none
     @State private var showAbout = false
     @State private var showLicenses = false
+    /// 本视图所在窗口的激活态。**重算时机要挂在它上面,而不是只挂 `.onAppear`**:
+    /// SwiftUI 的 `Settings` scene 关掉窗口是**隐藏、不销毁** ⇒ 一次运行里 `.onAppear` 只跑第一次,
+    /// 第二次 ⌘, 打开时缓存与日志两个数还停在第一次那一刻(用户读到的是永不过期的假值,见 H215)。
+    @Environment(\.controlActiveState) private var controlActiveState
 
     var body: some View {
         Form {
@@ -259,6 +263,13 @@ private struct SettingsForm: View {
             }
         }
         .onAppear { refreshLogSize(); prepareShareLog(); refreshCacheSize() }
+        // 设置窗口第二次打开时 `.onAppear` 不会再跑(见 `controlActiveState` 那条注释),
+        // 所以把入场那三件事在**每次窗口重新成为关键窗口**时重做一遍:
+        // 缓存与日志两个数、以及给 ShareLink 备的那份临时日志文件,否则它们停在第一次开窗那一刻。
+        // 只在 `.key` 时做:切到别的窗口(失焦)不该触发一次全盘扫描(硬规矩 6)。
+        .onChange(of: controlActiveState) { state in
+            if state == .key { refreshLogSize(); prepareShareLog(); refreshCacheSize() }
+        }
         .confirmationDialog("确定清空日志?", isPresented: $confirmClearLog, titleVisibility: .visible) {
             Button("清空日志", role: .destructive) {
                 Log.clear()
