@@ -1151,6 +1151,16 @@ val MINI_PAD_END = 16.dp
 val MINI_PAD_END_COLLAPSED = 8.dp
 
 /**
+ * 收束态的按钮排几何(2026-10-26 加 X 之后补的第四枚按钮把文字挤成了纯省略号):
+ * 胶囊收窄 + 球槽占位后,文字区只剩 ~12dp。收束态把按钮间距 10→2、命中框 40→34
+ * (图标恒 16 不动),随收束 morph 同一条弹簧插值 —— 展开态几何与加 X 之前完全一致。
+ * 省出的 ~60dp 让文字至少放得下四五个字,「这一条在放什么」仍读得出来。
+ */
+val MINI_BTN_GAP = 10.dp
+val MINI_BTN_GAP_COLLAPSED = 2.dp
+val MINI_HIT_COLLAPSED = 34.dp
+
+/**
  * 收束态左端那颗球的**槽宽**(与栏等高那一档,参考片是 56×56 的方槽)。
  * 盘比槽小 [MINI_BALL_DIAM] 那点余量是留给"呼吸"的,撑得太满会读成"一个洞"而不是"一颗球"。
  */
@@ -1283,6 +1293,9 @@ fun MiniPlayer(
     val coverJump = coverChannelJump(episode, coverOpensChannel)
     val openChannelLabel = stringResource(R.string.a11y_open_channel)
     val endPad = MINI_PAD_END + (MINI_PAD_END_COLLAPSED - MINI_PAD_END) * fc
+    // 收束态按钮排「收紧」:间距与命中框一起随 fc 插值(理由见 MINI_BTN_GAP_COLLAPSED 注释)。
+    val btnGap = MINI_BTN_GAP + (MINI_BTN_GAP_COLLAPSED - MINI_BTN_GAP) * fc
+    val btnHit = MINI_HIT + (MINI_HIT_COLLAPSED - MINI_HIT) * fc
     // 落点:展开态抬到栏上方再留一道缝,收束态落进栏那一条带里(与 [blockH] 同源同一条曲线)。
     val lift = if (collapseIntoBar) (GLASS_BAR_H + MINI_GAP) * (1f - fc) else 0.dp
 
@@ -1350,7 +1363,7 @@ fun MiniPlayer(
                         .fillMaxWidth()
                         .padding(start = MINI_PAD_START, end = endPad),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(btnGap)
                 ) {
                     Row(
                         Modifier
@@ -1394,7 +1407,7 @@ fun MiniPlayer(
                     }
                     // 三枚相邻不留缝(理由见 [MINI_HIT])
                     Box(
-                        Modifier.size(MINI_HIT).clip(CircleShape).clickable(onClick = onToggle),
+                        Modifier.size(btnHit).clip(CircleShape).clickable(onClick = onToggle),
                         contentAlignment = Alignment.Center
                     ) {
                         if (buffering) {
@@ -1416,7 +1429,7 @@ fun MiniPlayer(
                     }
                     Box(
                         Modifier
-                            .size(MINI_HIT)
+                            .size(btnHit)
                             .clip(CircleShape)
                             .clickable(enabled = hasNext, onClick = onNext),
                         contentAlignment = Alignment.Center
@@ -1430,7 +1443,7 @@ fun MiniPlayer(
                     }
                     // 队列入口:位次与 macOS 底部条/鸿蒙迷你条一致 —— 都在最右
                     Box(
-                        Modifier.size(MINI_HIT).clip(CircleShape).clickable(onClick = onOpenQueue),
+                        Modifier.size(btnHit).clip(CircleShape).clickable(onClick = onOpenQueue),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
@@ -1444,7 +1457,7 @@ fun MiniPlayer(
                     // 色阶用 onSurfaceVariant 而不是 onBackground:它是这一行的次要动作,
                     // 亮度和标题副行同档,不与播放键(主色)争视觉权重。
                     Box(
-                        Modifier.size(MINI_HIT).clip(CircleShape).clickable(onClick = onClose),
+                        Modifier.size(btnHit).clip(CircleShape).clickable(onClick = onClose),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
