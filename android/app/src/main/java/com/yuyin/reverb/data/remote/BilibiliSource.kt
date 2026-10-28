@@ -33,7 +33,11 @@ import java.util.concurrent.ConcurrentHashMap
  *     三条候选的可用性还会**互换**(一轮是 #0 通、两条 backup 403;另一轮 #0 直接 503)。
  *     每条音轨另带两条 `backupUrl`。⇒ 解析后必须**探测**再交给播放器,并按游标轮换起点;
  *     否则表现是「点了没反应」,而日志里只有一个 503/403。
- *     探活与播放本身**都不需要 UA / Referer**(四种组合实测都是同样的码)。
+ *     ⚠️ 探活与播放**都要 UA + Referer**,而且 UA 不能含 `Android`(全 403)——
+ *     原先这里写的是「四种组合实测都是同样的码」,2026-10-28 复测推翻了它,详见 [UA]。
+ *     ⚠️ 但那是 **`upos-*` 镜像节点**的口径:`*.mcdn.bilivideo.cn` 那类 PCDN 节点**什么都不查**
+ *     (空 UA、无 Referer 也一样 206)。所以「不带头也偶尔能播」是真的 —— 取决于这一集的
+ *     候选 #0 落在哪一侧;按最严的那侧对待(一律带头),见 [streamHeaders]。
  *  4. ⚠️ **搜索要 `Referer: https://www.bilibili.com/`**,缺了会被风控软拦:
  *     回 **`code=0` + `data:{"v_voucher": …}` + 零条结果** —— 看起来完全像「没搜到」,
  *     而不是报错。这一条踩过:本地用 curl 连试三次全 0 条,差点把「搜索做不了」写进结论;
@@ -77,13 +81,51 @@ class BilibiliSource(private val client: OkHttpClient) {
         // 注意这三条路径**不在同一个前缀下**:playurl 挂在 `/x/player/` 而不是 `/x/web-interface/`。
         private const val API = "https://api.bilibili.com/x"
         private const val REFERER = "https://www.bilibili.com/"
-        private const val UA = "Mozilla/5.0 (Linux; Android 12) AppleWebKit/537.36 (KHTML, like Gecko) " +
-            "Chrome/126.0 Mobile Safari/537.36"
+        /**
+         * ⚠️ **这一串是两个相反约束的交点,不是随便挑的**(2026-10-28 同一台机器逐组实测)。
+         *
+         *  - **取流(CDN)** 不要 `Android`:UA 含 `Android` ⇒ 同一集三条候选**全 403**;
+         *    iOS / 桌面串 ⇒ 全 206。缺 `Referer` 同样 403(与 UA 无关)。
+         *    ⚠️ 这条只管 **`upos-*` 镜像节点**;`*.mcdn.bilivideo.cn` 那类 PCDN 节点不查这两样
+         *    (空 UA、无 Referer 也 206),所以"不带头偶尔也能播"取决于候选 #0 落在哪一侧。
+         *  - **搜索接口**反过来不要桌面串:桌面 Chrome ⇒ `code=0` + `v_voucher` + **零条**
+         *    (软拦,看起来像"没搜到",两轮复测稳定);iOS / `Android` 串 ⇒ 20 条。
+         *
+         * ⇒ **只有 iOS 串两头都过**。本端原先用带 `Android` 的那串:搜索正常,
+         * 但 [probe] 恒 403 ⇒ 日志里永远是 `all candidates probe failed, using #0`,
+         * 也就是 PCDN 轮换那层保护**从没生效过** —— 播放能出声只是碰巧 #0 可用。
+         */
+        private const val UA =
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 " +
+                "(KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
         private val BV_RE = Regex("BV[0-9A-Za-z]{10}")
         private val HHMM_RE = Regex("^(\\d+):(\\d+)$")
 
         /** 这一集是不是需要播放前解析。三端同口径(鸿蒙/ macOS 用同一个前缀判断)。 */
         fun isPseudo(url: String): Boolean = url.startsWith("$SCHEME://")
+
+        /**
+         * **取流**(不是探活、不是接口)要带的两个头。
+         *
+         * `upos-*` 镜像节点缺任何一个都 403 —— 实测:空 UA / curl / ExoPlayer 串全 403,
+         * iPhone 串 + Referer 才 206(见 [UA]);mcdn 节点不查,但按严的那侧对待。
+         * 播放器与整集缓存都从这条直链取,所以两处都要给。
+         */
+        fun streamHeaders(): Map<String, String> = mapOf("User-Agent" to UA, "Referer" to REFERER)
+
+        /**
+         * 这条地址要不要补 [streamHeaders]。
+         *
+         * 判据是 playurl 直链的参数指纹,**不是域名白名单**:同一集的三条备用落在
+         * `upos-*.bilivideo.com` / `*.mcdn.bilivideo.cn:8082`,再往外还有第三方 CDN 域名,
+         * 按域名列迟早漏一个,而漏掉的那一路就是 403。
+         * 普通 RSS enclosure 不会同时带 `upsig` 与 `deadline` 这两个参数。
+         */
+        fun needsStreamHeaders(url: String): Boolean {
+            val u = url.lowercase()
+            if (!u.startsWith("http")) return false
+            return u.contains("bilivideo.") || (u.contains("upsig=") && u.contains("deadline="))
+        }
 
         /**
          * 用户输入看起来是不是「某一条视频」。

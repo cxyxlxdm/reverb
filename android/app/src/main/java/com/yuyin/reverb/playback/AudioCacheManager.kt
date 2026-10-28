@@ -96,8 +96,11 @@ object AudioCacheManager {
      * 首播走流式时排一次「整集落缓存」。
      *
      * 幂等且**不排队**:已经在缓存里、正在下的、或已被更新的请求挤掉的,一律直接返回。
+     *
+     * @param headers 取流要带的请求头。视频源那一族必须给(CDN 认 UA + `Referer`,见
+     *   [com.yuyin.reverb.data.remote.BilibiliSource] 的 `UA`);不给就沿用本类自己的 UA。
      */
-    fun cache(episode: Episode) {
+    fun cache(episode: Episode, headers: Map<String, String>? = null) {
         if (!::store.isInitialized) return
         val id = episode.id
         val url = episode.audioUrl
@@ -114,7 +117,7 @@ object AudioCacheManager {
             if (inFlight == id) return
             inFlightJob?.cancel()          // 挤掉上一个:它会在下一块自检时停住
             inFlight = id
-            job = scope.launch { fetch(id, url) }
+            job = scope.launch { fetch(id, url, headers) }
             inFlightJob = job
         }
         com.yuyin.reverb.util.Logger.i(
@@ -151,16 +154,17 @@ object AudioCacheManager {
         dir.listFiles()?.forEach { runCatching { it.delete() } }
     }
 
-    private fun fetch(id: String, url: String) {
+    private fun fetch(id: String, url: String, headers: Map<String, String>?) {
         val name = fileName(id, url)
         val part = File(dir, "$name.part")
         val target = File(dir, name)
-        val call = client.newCall(
-            Request.Builder()
-                .url(url)
-                .header("User-Agent", "Reverb/1.0 (Android podcast client)")
-                .build()
-        )
+        val req = Request.Builder().url(url)
+        if (headers != null) {
+            headers.forEach { (k, v) -> req.header(k, v) }
+        } else {
+            req.header("User-Agent", "Reverb/1.0 (Android podcast client)")
+        }
+        val call = client.newCall(req.build())
         try {
             call.execute().use { resp ->
                 val body = resp.body

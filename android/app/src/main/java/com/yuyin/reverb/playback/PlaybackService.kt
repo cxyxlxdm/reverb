@@ -7,10 +7,14 @@ import android.os.Looper
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.Player
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.yuyin.reverb.MainActivity
+import com.yuyin.reverb.data.remote.BilibiliSource
 
 /**
  * 后台播放服务：基于 Media3 MediaSessionService，
@@ -24,7 +28,26 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         com.yuyin.reverb.util.Logger.i("Service", "PlaybackService onCreate")
+        // 视频 CDN 的直链要 `UA + Referer`,而 ExoPlayer 这一侧默认两样都没有 —— media3 1.3.1 的
+        // DefaultHttpDataSource 默认 `userAgent = null`(不再像 ExoPlayer 2 那样自动填 UA),
+        // 于是 B 站那条地址会 403,且**探活是通的**(探活走 BilibiliSource 自己的 OkHttp,头是齐的),
+        // 现象是「解析直链成功、然后播放器报错」。
+        //
+        // 为什么不用 `setDefaultRequestProperties`:那是整条管道的默认头,会把 Referer 一并发给
+        // 所有播客主机;而这里只需要给它自己那一族地址。ResolvingDataSource 恰好是"按这一次的
+        // 地址改 DataSpec"的位置 —— 补的是 `httpRequestHeaders`,`DefaultHttpDataSource` 会照单设上
+        // (它自己的 userAgent 为 null,不会再把 User-Agent 覆盖回去)。
+        val dataSourceFactory = ResolvingDataSource.Factory(DefaultDataSource.Factory(this)) { spec ->
+            if (BilibiliSource.needsStreamHeaders(spec.uri.toString())) {
+                spec.buildUpon()
+                    .setHttpRequestHeaders(BilibiliSource.streamHeaders())
+                    .build()
+            } else {
+                spec
+            }
+        }
         val exo = ExoPlayer.Builder(this)
+            .setMediaSourceFactory(DefaultMediaSourceFactory(this).setDataSourceFactory(dataSourceFactory))
             .setHandleAudioBecomingNoisy(true)
             .setWakeMode(C.WAKE_MODE_NETWORK) // 锁屏/后台流式播放不因深睡中断
             .build()
