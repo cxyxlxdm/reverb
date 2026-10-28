@@ -9,6 +9,7 @@ import { SeedCatalog } from '../store/SeedCatalog';
 import { FeedCacheStore } from '../store/FeedCacheStore';
 import { Log } from '../util/Logger';
 import { CatalogFeedFilter } from './CatalogFeedFilter';
+import { BilibiliSource } from './BilibiliSource';
 
 export enum FeedProbeState {
   UNCHECKED = 0,
@@ -44,6 +45,11 @@ export class PodcastRepository {
   private feedCache: FeedCacheStore;
   /// 同一 URL + 超时策略只允许一条真实网络/解析链；预检成功后详情直接复用 FeedCache。
   private feedInFlight: Map<string, Promise<FeedResult | null>> = new Map<string, Promise<FeedResult | null>>();
+  /**
+   * 视频当播客听。播放前解析也走它(见 `PlayerController.resolvePseudoUrl`)——
+   * 播放层与检索**共用这一个实例**,候选流缓存与探活游标才有意义。
+   */
+  readonly bilibili: BilibiliSource = new BilibiliSource();
   /// 预检并发在 Repository 全局封顶为 2；新搜索不会绕过旧搜索仍在执行的两个请求。
   private probeActive = 0;
   private probeWaiters: Array<() => void> = [];
@@ -63,6 +69,19 @@ export class PodcastRepository {
   async search(query: string, region: string): Promise<SearchOutcome> {
     const q = query.trim();
     if (q.length === 0) return { podcasts: [], sourceLabel: '', failed: false };
+
+    // 视频页地址(BV 号本体 / 完整 URL / 短链)排在最前:它既是"用户点名的那一条",
+    // 也永远解析不出 RSS —— 先跑 RSS 只会白等一次超时。
+    // 这一步**不受目录闸管**:粘链接不是"下拉就能翻到的目录",与关键词检索不是一回事。
+    if (BilibiliSource.looksLikeVideo(q)) {
+      const feed = await this.bilibili.resolveInput(q);
+      if (feed !== null) {
+        Log.i('Repo', `搜索经视频站直连命中 parts=${feed.episodes.length}`);
+        return { podcasts: [feed.podcast], sourceLabel: 'Bilibili', failed: false };
+      }
+      Log.w('Repo', '视频链接解析失败');
+      return { podcasts: [], sourceLabel: 'Bilibili', failed: true };
+    }
 
     if (q.startsWith('http://') || q.startsWith('https://')) {
       // 目录坏源表只过滤目录结果。用户明确粘贴的 URL 必须真实尝试；失败后也不能把整条
@@ -103,8 +122,18 @@ export class PodcastRepository {
     const q = query.trim();
     if (q.length === 0 || q.startsWith('http://') || q.startsWith('https://')) return [];
     const episodes = CatalogFeedFilter.keepEpisodes(await ITunesSource.searchEpisodes(q, region));
-    Log.i('Repo', `单集搜索命中 ${episodes.length} 条`);
-    return episodes;
+    // 视频的"一条视频"与"一集"是同一粒度,直接并进这一路。**受目录闸管**:关键词检索
+    // 拿到的是动态目录,与 Apple/fyyd/gpodder 同一口径(见 search() 里那段注释)。
+    // 搜索失败不拖垮整列 —— 上面的 Apple 结果照常返回。
+    let extra: Episode[] = [];
+    try {
+      extra = await this.bilibili.searchEpisodes(q);
+    } catch (_e) {
+      Log.w('Repo', '视频站单集搜索失败');
+    }
+    const out: Episode[] = episodes.concat(extra);
+    Log.i('Repo', `单集搜索命中 ${out.length} 条 (视频 ${extra.length})`);
+    return out;
   }
 
   cacheKey(genreId: number, region: string): string {
@@ -156,6 +185,14 @@ export class PodcastRepository {
   async feed(feedUrl: string): Promise<FeedResult | null> {
     const key = feedUrl.trim();
     if (key.length === 0) return null;
+    // 视频源的 feedUrl 是 `bilibili://video/<bvid>` 这种伪地址:交给 RSS 解析器(它走
+    // taskpool 里的 Http)会当场失败,所以在这里分叉,而不是让它统一落进 fetchFeedOnce。
+    // 落盘缓存照写 —— 存的同样只有伪地址,不含会过期的直链(见 BilibiliSource 类注释第 2 条)。
+    if (BilibiliSource.isPseudo(key)) {
+      const result = await this.bilibili.feedOf(key);
+      if (result !== null && result.episodes.length > 0) this.feedCache.put(key, result);
+      return result;
+    }
     return await this.feedWithTimeout(key, PodcastRepository.RSS_TIMEOUT_MS);
   }
 
@@ -163,6 +200,13 @@ export class PodcastRepository {
   async probeFeed(feedUrl: string): Promise<boolean> {
     const key = feedUrl.trim();
     if (key.length === 0) return false;
+    // 伪地址没有 RSS 可"预检":它是不是还在,只能等点进频道页那次 view 回答。
+    // 直接报可用 —— 否则搜索结果会把每一条视频都标成"不可达",而那是假话。
+    if (BilibiliSource.isPseudo(key)) {
+      this.clearProbeFailure(key);
+      this.rememberProbeState(key, FeedProbeState.AVAILABLE);
+      return true;
+    }
     const cached = this.feedCache.get(key);
     if (cached !== null && cached.episodes.length > 0) {
       this.clearProbeFailure(key);

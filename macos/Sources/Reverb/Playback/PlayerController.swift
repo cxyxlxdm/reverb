@@ -107,6 +107,11 @@ final class PlayerController: ObservableObject {
     /// 播放缓存:流式起播之后由它把整集落到本机,下次直接本地起播。
     /// 与 `localFileProvider`(用户点名下载的那份)是两条独立的路,见 `AudioCacheManager` 顶部。
     private var audioCache: AudioCacheManager?
+    /// 视频源(伪地址)的最后一跳是**现取直链**。注入的是仓库里那**同一个** `BilibiliSource` ——
+    /// 候选流缓存与探活游标都在它身上,换实例等于每次起播重新摸一遍 PCDN。
+    var resolvePseudoUrl: ((String) async -> String?)?
+    /// 起播代号:伪地址解析要一次网络往返,等待期间用户可能换了集 —— 旧结果回来必须自弃。
+    private var playGeneration = 0
 
     // 队列上下文
     private var queue: [Episode] = []
@@ -451,6 +456,11 @@ final class PlayerController: ObservableObject {
     /// - Parameter autoplay: `false` = 预载(冷启动恢复用)。装上 item、跳到续播点、把进度与
     ///   Now Playing 画出来,但**不 play()** —— 启动即出声是用户没要求的动作(见 `restoreState()`)。
     private func playEpisode(_ episode: Episode, isRadio: Bool = false, autoplay: Bool = true) {
+        // 每次起播都换代号:伪地址要先解析直链,而解析回来时用户可能已经点了别的集
+        // (见下面那条分支里的比对)。非伪地址的起播不读它,但它必须递增,否则
+        // 「上一集晚到的解析结果」会把自己的代次判成当前这次。
+        playGeneration += 1
+        let generation = playGeneration
         if !isRadio && radioMode { stopRadio() }
         lastIsRadio = isRadio
         lastAutoplay = autoplay
@@ -493,17 +503,89 @@ final class PlayerController: ObservableObject {
         let cached = downloaded == nil ? audioCache?.localURL(episode.id) : nil
         if cached != nil { audioCache?.touch(episode.id) }
         let local = downloaded ?? cached
+        let source = downloaded != nil ? "本地" : (cached != nil ? "缓存" : "网络")
+
+        // **视频源的最后一步是「现取直链」**,而它要联网 —— 所以只在流式这一路分叉:
+        // 本地有下载件或缓存件时,它与普通单集没有任何区别(缓存里存的是当次解析出的直链)。
+        //
+        // 为什么不能把直链在检索时就算好存进 Episode:那条链的 `deadline` 是取链时刻
+        // **+2 小时**(实测),而 Episode 会进历史、进待播、进播放态快照,甚至进备份 ——
+        // 存直链等于第二天点开必然「这一集播不了」,且用户没有任何线索知道要重新搜一次。
+        // 所以模型里存的是 `bilibili://audio/<bvid>/<cid>` 这个坐标,见 `BilibiliSource`。
+        if local == nil && BilibiliSource.isPseudo(episode.audioUrl) {
+            guard let resolve = resolvePseudoUrl else {
+                Log.e("Player", "bilibili 解析器未绑定 id=\(episode.id)")
+                playbackError = String(localized: "加载失败,请检查网络后重试")
+                return
+            }
+            Log.i("Player", "解析直链开始 id=\(episode.id)")
+            Task { @MainActor [weak self] in
+                let resolved = await resolve(episode.audioUrl)
+                guard let self else { return }
+                // 解析期间用户点了别的集:这次作废。不能省 —— 起播只差一次网络往返,
+                // 而「点一下看看、随即划走」正好落在这个时长里,不拦就会把前一集的声音抢回来。
+                guard self.playGeneration == generation, self.current?.id == episode.id else {
+                    Log.i("Player", "解析结果作废 id=\(episode.id)")
+                    return
+                }
+                guard let resolved, let stream = URL(string: resolved) else {
+                    Log.w("Player", "解析直链失败 id=\(episode.id)")
+                    self.playbackError = String(localized: "加载失败,请检查网络后重试")
+                    return
+                }
+                Log.i("Player", "解析直链成功 id=\(episode.id)")
+                // 缓存必须在解析之后:缓存模块拿的是 `audioUrl`,伪地址它拉不下来
+                // (会当成畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
+                // 头也要一起给:CDN 认 UA + `Referer`,缺一个 403(见 `BilibiliSource.uaBrowser`)。
+                if !isRadio {
+                    var cachedCopy = episode
+                    cachedCopy.audioUrl = resolved
+                    self.audioCache?.cache(cachedCopy, headers: BilibiliSource.streamHeaders)
+                }
+                self.attach(episode, url: stream, source: "网络", resumeMs: resumeMs,
+                            autoplay: autoplay, isRadio: isRadio,
+                            assetHeaders: BilibiliSource.streamHeaders,
+                            assetMime: BilibiliSource.streamMime)
+            }
+            return
+        }
+
         guard let url = local ?? URL(string: episode.audioUrl) else {
             Log.e("Player", "playEpisode 无效音频 URL id=\(episode.id) title=\"\(episode.title)\" audioUrl=\(episode.audioUrl)")
             playbackError = String(localized: "加载失败,请检查网络后重试")
             return
         }
-        let source = downloaded != nil ? "本地" : (cached != nil ? "缓存" : "网络")
-        Log.i("Player", "playEpisode id=\(episode.id) title=\"\(episode.title)\" feed=\"\(episode.podcastTitle)\" radio=\(isRadio) 源=\(source) resume=\(resumeMs)ms")
         // 只有真正在走流式时才排一次整集落缓存。电台那一路不缓存 —— 它是漫游,
         // 下一集由随机推荐决定;把每一集都留在盘上等于用 300 MB 换一份听不回去的清单。
         if local == nil && !isRadio { audioCache?.cache(episode) }
-        let item = AVPlayerItem(url: url)
+        attach(episode, url: url, source: source, resumeMs: resumeMs, autoplay: autoplay, isRadio: isRadio)
+    }
+
+    /// 装载并起播。抽出来是因为视频源的直链要**异步**现取(见 `playEpisode` 那条分支):
+    /// 取回来之后剩下的步骤与普通单集一模一样 —— 复制一份就意味着以后改起播逻辑要改两处。
+    ///
+    /// - Parameter url: 本地文件地址(下载件 / 缓存件)或流式地址,在这里统一成 `AVPlayerItem`
+    /// - Parameter assetHeaders: 取流要带的请求头。空 = 普通 RSS 单集,走默认 item
+    /// - Parameter assetMime: 出带 MIME(视频源的 `.m4s` 必需,见下)
+    private func attach(_ episode: Episode, url: URL, source: String, resumeMs: Int,
+                        autoplay: Bool, isRadio: Bool,
+                        assetHeaders: [String: String] = [:], assetMime: String? = nil) {
+        Log.i("Player", "playEpisode id=\(episode.id) title=\"\(episode.title)\" feed=\"\(episode.podcastTitle)\" radio=\(isRadio) 源=\(source) resume=\(resumeMs)ms")
+        // **视频源的直链只能这样交给 AVPlayer**,三样缺一不可(2026-10-28 本机逐条实测):
+        // ① `AVPlayerItem(url:)` 不带头 ⇒ AVPlayer 发自己的 `AppleCoreMedia/…` UA ⇒ CDN 403;
+        // ② 只注 `AVURLAssetHTTPHeaderFieldsKey` ⇒ item `failed`(`Cannot Open`)——
+        //    直链路径以 `.m4s` 结尾、响应头是 `application/octet-stream`,AVFoundation 认不出容器;
+        // ③ 再加 `AVURLAssetOutOfBandMIMETypeKey: "audio/mp4"` ⇒ readyToPlay,dur 正常。
+        // 本地文件那一路不要头也不要 MIME(缓存落盘时已改名 `.m4a`,见 `AudioCacheManager.fileName`)。
+        let item: AVPlayerItem
+        if assetHeaders.isEmpty && assetMime == nil {
+            item = AVPlayerItem(url: url)
+        } else {
+            var options: [String: Any] = [:]
+            if !assetHeaders.isEmpty { options["AVURLAssetHTTPHeaderFieldsKey"] = assetHeaders }
+            if let assetMime { options["AVURLAssetOutOfBandMIMETypeKey"] = assetMime }
+            item = AVPlayerItem(asset: AVURLAsset(url: url, options: options))
+        }
         // 观察加载状态:失败(常见于睡眠唤醒后网络栈短暂异常)自动重试,仍失败则给出可见提示,避免静默卡死
         itemStatusObserver = item.publisher(for: \.status)
             .receive(on: RunLoop.main)

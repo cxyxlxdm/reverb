@@ -172,7 +172,13 @@ export class AppContainer {
       return this.audioCache.localPathForPlay(e.id, e.audioUrl);
     };
     // 走网络起播时排一次「整集落缓存」(fire-and-forget,不影响这次起播)
-    this.player.networkPlayNotice = (e: Episode) => { this.audioCache.cache(e); };
+    this.player.networkPlayNotice = (e: Episode, headers: Record<string, string> | null) => {
+      this.audioCache.cache(e, headers);
+    };
+    // 视频源的伪地址在起播前现取直链。注入的是**同一个** `bilibili` 实例(repository 里那一个),
+    // 候选流缓存与探活游标都在它身上 —— 换实例等于每次起播重新摸一遍 PCDN。
+    this.player.resolvePseudoUrl = (url: string): Promise<string | null> =>
+      this.repository.bilibili.resolvePlayback(url);
     this.player.bindListen(
       (e: Episode, delta: number) => { this.listenStats.add(e, delta); },
       () => { this.listenStats.flush(); });

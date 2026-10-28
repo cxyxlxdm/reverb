@@ -14,6 +14,9 @@ final class PodcastRepository {
     private let seed = SeedCatalog()
     // 频道详情(解析后的 RSS)缓存:详情页秒开,且断网时仍能看已访问过的频道
     let feedCache = FeedCacheStore()
+    /// 视频当播客听。播放前解析也走它(见 `PlayerController.resolvePseudoUrl`)——
+    /// 播放层与检索**共用这一个实例**,候选流缓存与探活游标才有意义。
+    let bilibili = BilibiliSource()
 
     init() {
         charts = AppleChartsSource(itunes: itunes)
@@ -51,6 +54,17 @@ final class PodcastRepository {
         // 三个 Source 层各抄一份必然各抄各的,现在它们与这里共用同一个函数。
         let words = Log.wordCount(q)
         Log.i("Repo", "search queryWords=\(words) region=\(region.isEmpty ? "-" : region)")
+        // 视频页地址(BV 号本体 / 完整 URL / 短链)排在最前:它既是「用户点名的那一条」,
+        // 也永远解析不出 RSS —— 先跑 RSS 只会白等一次超时。粘链接不是「下拉就能翻到的目录」,
+        // 与关键词检索不是一回事(Android / 鸿蒙同一支、同一口径)。
+        if BilibiliSource.looksLikeVideo(q) {
+            if let result = await bilibili.resolveInput(q) {
+                Log.i("Repo", "搜索经视频站直连命中 parts=\(result.episodes.count)")
+                return ([result.podcast], "Bilibili")
+            }
+            Log.w("Repo", "视频链接解析失败")
+            return ([], "")
+        }
         if q.hasPrefix("http://") || q.hasPrefix("https://") {
             if let result = await rss.fetch(q) {
                 return ([result.podcast], "RSS")
@@ -76,7 +90,12 @@ final class PodcastRepository {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return [] }
         if q.hasPrefix("http://") || q.hasPrefix("https://") { return [] }
-        return await itunes.searchEpisodes(q, country: region)
+        let apple = await itunes.searchEpisodes(q, country: region)
+        // 视频的「一条视频」与「一集」是同一粒度,直接并进这一路。视频站搜寻失败不拖垮整列 ——
+        // 上面的 Apple 结果照常返回。完整 URL 那支在上面已提前返回,所以这里不会拿地址当关键词。
+        let video = await bilibili.searchEpisodes(q)
+        Log.i("Repo", "searchEpisodes 命中 \(apple.count + video.count) 条 (视频 \(video.count))")
+        return apple + video
     }
 
     // MARK: - 榜单缓存
@@ -134,6 +153,13 @@ final class PodcastRepository {
     /// 解析订阅源。成功则回写磁盘缓存;失败返回 nil(旧缓存保留,由调用方决定是否用)。
     /// 与 cachedFeed 配合成「先缓存秒开、再后台刷新、刷新失败退回缓存」。
     func feed(_ feedUrl: String) async -> FeedResult? {
+        // 视频源的 feedUrl 是 `bilibili://video/<bvid>` 这种伪地址:RSS 解析器拿它会当场失败,
+        // 所以在这里分叉。落盘缓存照写 —— 存的同样只有伪地址,不含会过期的直链。
+        if BilibiliSource.isPseudo(feedUrl) {
+            let result = await bilibili.feedOf(feedUrl)
+            if let result, !result.episodes.isEmpty { feedCache.put(feedUrl, result) }
+            return result
+        }
         let result = await rss.fetch(feedUrl)
         if let result, !result.episodes.isEmpty {
             feedCache.put(feedUrl, result)

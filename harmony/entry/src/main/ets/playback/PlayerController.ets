@@ -8,6 +8,7 @@ import { HistoryStore } from '../store/Stores';
 import { SettingsStore } from '../store/SettingsStore';
 import { PlaybackStateStore } from '../store/PlaybackStateStore';
 import { PlaybackClock } from './PlaybackClock';
+import { BilibiliSource } from '../net/BilibiliSource';
 import { Log } from '../util/Logger';
 
 /// 播放请求的 User-Agent。与 Http.ets 的 UA 同一形态 —— 不少播客 CDN 会按 UA 拒绝请求。
@@ -56,6 +57,22 @@ function onlyFallback(mode: PlayMode): Map<string, PlayMode> {
   const m = new Map<string, PlayMode>();
   m.set('', mode);
   return m;
+}
+
+/**
+ * 换掉 `audioUrl` 的副本。ArkTS 不支持对象展开,只能逐字段抄 —— 当前端口的
+ * `Episode` 就这十一个字段,加字段时**这里漏抄会静默丢**。
+ *
+ * 只在通知缓存时用:缓存模块拿 `audioUrl` 去下载,而视频集身上是 `bilibili://…` 伪地址,
+ * 拉不下来(见 `playEpisode` 的解析段)。
+ */
+function withAudioUrl(e: Episode, audioUrl: string): Episode {
+  return {
+    id: e.id, title: e.title, description: e.description, audioUrl: audioUrl,
+    artworkUrl: e.artworkUrl, podcastTitle: e.podcastTitle, durationSec: e.durationSec,
+    pubDate: e.pubDate, feedUrl: e.feedUrl,
+    transcriptUrl: e.transcriptUrl, transcriptType: e.transcriptType
+  };
 }
 
 /**
@@ -152,7 +169,15 @@ export class PlayerController {
    * 这是**播过即缓存的唯一触发点**:放在这里而不是列表/详情页,因为只有这一处代表
    * 用户真的要听这一集 —— 否则"扫一眼列表"就会拉几十 MB。
    */
-  networkPlayNotice: ((e: Episode) => void) | null = null;
+  networkPlayNotice: ((e: Episode, headers: Record<string, string> | null) => void) | null = null;
+  /**
+   * 伪地址 → 一条现取的直链(视频源专用,闭包注入,与上面同一解耦风格)。
+   *
+   * 注入的是 `PodcastRepository.bilibili.resolvePlayback` 的**同一个实例** —— 候选流缓存
+   * 与探活游标在那一侧,换实例就等于每次起播都重新摸一遍 PCDN。
+   * 没绑上时视频集只能报加载失败,普通播客完全不受影响。
+   */
+  resolvePseudoUrl: ((url: string) => Promise<string | null>) | null = null;
   /// 播放状态变化回调(供 AVSession 同步)
   onStateChanged: (() => void) | null = null;
 
@@ -217,6 +242,16 @@ export class PlayerController {
   private failedGeneration = -1;
   private retryTimer = -1;
   private loadTask: Promise<void> = Promise.resolve();
+  /**
+   * 在途的「伪地址 → 直链」解析(视频源)。
+   *
+   * 为什么需要一道作废闸:解析是一次网络往返(接口 + 探活,最坏十几秒),而它**排在
+   * `loadTask` 这条串行链里** —— 不打断的话,死网络下用户接着点的那一集要等它走完才轮到
+   * (Android 那边是独立协程,没这个问题)。同时它也保证"点一下看看、随即划走"不会把
+   * 前一集的声音抢回来:旧解析回来时代次已变。
+   */
+  private resolveSeq = 0;
+  private resolveAbort: (() => void) | null = null;
   private playerCreation: Promise<media.AVPlayer | null> | null = null;
   private released = false;
   /// 本地播放时打开的文件句柄(AVPlayer 的 url 只收 fd:// 或网络地址,本地必须走 fdSrc)
@@ -399,6 +434,40 @@ export class PlayerController {
     this.playQueue(queue.length > 0 ? queue : [e], idx, tag);
   }
 
+  /** 作废在途的直链解析(下一次起播一进来就调)。 */
+  private cancelPseudoResolve(): void {
+    this.resolveSeq += 1;
+    const abort = this.resolveAbort;
+    this.resolveAbort = null;
+    if (abort !== null) abort();
+  }
+
+  /**
+   * 伪地址 → 现取直链。被新一代起播打断或解析失败都回 null。
+   *
+   * `Promise.race` 的那一条 `aborted` 是"可中断"的全部实现:ArkTS 没有取消协程的手段,
+   * 请求本身带自己的超时(`BilibiliSource` 里 10s + 探活 8s),我们能做的是**不再等它**。
+   * 回来的旧结果由 `resolveSeq` 判掉 —— 两道闸都要:前者让串行链立刻放行,后者防旧值覆盖。
+   */
+  private async resolvePseudoAudio(url: string): Promise<string | null> {
+    const resolver = this.resolvePseudoUrl;
+    if (resolver === null) return null;
+    const seq = this.resolveSeq;
+    const aborted = new Promise<string | null>((resolve: (v: string | null) => void) => {
+      this.resolveAbort = (): void => resolve(null);
+    });
+    try {
+      const task = resolver(url).catch((err: Error): string | null => {
+        Log.w('Player', `解析直链异常 ${err.message}`);
+        return null;
+      });
+      const v = await Promise.race([task, aborted]);
+      return seq === this.resolveSeq ? v : null;
+    } finally {
+      if (seq === this.resolveSeq) this.resolveAbort = null;
+    }
+  }
+
   /**
    * 装载某一集。
    *
@@ -410,6 +479,8 @@ export class PlayerController {
    */
   private startEpisode(e: Episode, resetRetries: boolean, autoplay: boolean = true): void {
     if (this.released) return;
+    // 作废上一次在途的直链解析:它回来时已经不属于任何一次起播(见 `resolveAbort` 注释)
+    this.cancelPseudoResolve();
     this.cancelLoadRetry();
     if (resetRetries) {
       this.loadRetries = 0;
@@ -479,6 +550,29 @@ export class PlayerController {
       this.notify();
       return;
     }
+    /**
+     * 视频源(伪地址)的最后一跳是**现取直链**:模型里存的是 `bilibili://audio/<bvid>/<cid>`
+     * 这个坐标,不是地址 —— 那条直链的 `deadline` 是取链时刻 +2 小时(实测),而 Episode 会进
+     * 历史、进待播、进播放态快照,甚至进备份,存直链等于第二天点开必然"这一集播不了"。
+     *
+     * 本地有下载件或缓存件时(useLocal),视频集与普通单集没有任何区别,所以只在流式这一路解析。
+     */
+    let streamUrl = e.audioUrl;
+    if (!useLocal && BilibiliSource.isPseudo(e.audioUrl)) {
+      streamUrl = await this.resolvePseudoAudio(e.audioUrl) ?? '';
+      // 等待往返期间用户可能点了别的集:这次起播已作废(见 `resolveSeq`)
+      if (generation !== this.loadGeneration) return;
+      if (streamUrl.length === 0) {
+        Log.w('Player', `解析直链失败 id=${e.id}`);
+        this.loading = false;
+        this.playbackDesiredPlaying = false;
+        this.playbackError = L.s('playback_load_failed');
+        this.deactivateAudioSession();
+        this.notify();
+        return;
+      }
+      Log.i('Player', `解析直链成功 id=${e.id}`);
+    }
     Log.i('Player', `播放 "${e.title}" 源=${useLocal ? '本地' : '网络'} resume=${resumeMs}ms generation=${generation}`);
     /**
      * 走网络起播 → 通知缓存模块把整集拉一份(与 Android 的 `AudioCacheManager.cache` 同一触发点)。
@@ -486,8 +580,16 @@ export class PlayerController {
      * 电台那一路**不缓存**:`radioMode` 为真时是"无限随机换台",每台都会触发一次几十 MB 的
      * 整集拉取,用户听着玩一小时就能把预算刷爆。判据用 `radioMode` 而不是调用方参数,
      * 因为本端 startEpisode 没带电台标志;手动播放会先 stopRadio 再进来,那时它已是 false。
+     *
+     * 视频集传的是**换成直链的副本**:缓存模块拿 `audioUrl` 去下载,伪地址它拉不下来
+     * (会当成畸形 URL 立刻失败,账本里留一条永远下不完的条目)。与 Android
+     * `cache(episode.copy(audioUrl = resolved))` 同式。
      */
-    if (!useLocal && !this.radioMode && this.networkPlayNotice !== null) this.networkPlayNotice(e);
+    if (!useLocal && !this.radioMode && this.networkPlayNotice !== null) {
+      const isPseudo = BilibiliSource.isPseudo(e.audioUrl);
+      this.networkPlayNotice(isPseudo ? withAudioUrl(e, streamUrl) : e,
+        isPseudo ? BilibiliSource.streamHeaders() : null);
+    }
 
     try {
       const p = await this.ensurePlayer();
@@ -510,7 +612,8 @@ export class PlayerController {
         this.localFile = f;
         p.fdSrc = { fd: f.fd };
       } else {
-        await this.setNetworkSource(p, e.audioUrl);
+        await this.setNetworkSource(p, streamUrl,
+          BilibiliSource.isPseudo(e.audioUrl) ? BilibiliSource.streamHeaders() : null);
       }
       // prepare 在 stateChange 的 'initialized' 分支触发
     } catch (err) {
@@ -529,10 +632,14 @@ export class PlayerController {
    *
    * `createMediaSourceWithUrl` + `setMediaSource` 自 API 12 起提供。低版本或调用失败时
    * **回落到直接赋 url**,保持原行为,不至于因为这个增强反而放不出声。
+   *
+   * - Parameter headers: 整份替换要发的头。视频源传 `BilibiliSource.streamHeaders()`
+   *   (浏览器 UA + `Referer`,缺 Referer 的节点会 403);普通单集传 null 即本端 UA。
    */
-  private async setNetworkSource(p: media.AVPlayer, url: string): Promise<void> {
+  private async setNetworkSource(p: media.AVPlayer, url: string,
+                                 headers: Record<string, string> | null = null): Promise<void> {
     try {
-      const src = media.createMediaSourceWithUrl(url, { 'User-Agent': PLAYER_UA });
+      const src = media.createMediaSourceWithUrl(url, headers ?? { 'User-Agent': PLAYER_UA });
       await p.setMediaSource(src);
       return;
     } catch (err) {

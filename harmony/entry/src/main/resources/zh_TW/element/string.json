@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "搜尋節目、單集,或貼上 RSS 網址"
+      "value": "搜尋節目、單集,或貼上 RSS 網址 / 影片連結"
     },
     {
       "name": "discover_daily_hot",
@@ -1081,6 +1081,10 @@
       "value": "已下載，點擊刪除"
     },
     {
+      "name": "a11y_download_disabled",
+      "value": "下載不可用"
+    },
+    {
       "name": "subs_layout_toggle",
       "value": "切換排列方式"
     },
@@ -1254,11 +1258,11 @@
     },
     {
       "name": "search_hint_url",
-      "value": "貼上播客 RSS 位址"
+      "value": "貼上 RSS 網址或影片連結"
     },
     {
       "name": "search_url_only",
-      "value": "請輸入播客的 RSS 位址（以 http 開頭）"
+      "value": "請輸入 RSS 網址或影片連結"
     },
     {
       "name": "recommended_opml_url",

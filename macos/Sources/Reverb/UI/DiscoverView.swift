@@ -93,7 +93,7 @@ struct DiscoverView: View {
         }
         .navigationTitle("余音")
         .searchable(text: $searchText, placement: .toolbar,
-                    prompt: "搜索节目、单集或粘贴 RSS 链接")
+                    prompt: "搜索节目、单集，或粘贴 RSS 地址 / 视频链接")
         .onSubmit(of: .search) { runSearch() }
         .onChange(of: searchText) { v in
             if v.trimmingCharacters(in: .whitespaces).isEmpty {
