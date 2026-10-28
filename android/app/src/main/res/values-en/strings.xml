@@ -56,7 +56,7 @@
     <string name="loading">Listening in…</string>
     <string name="size_calculating">Calculating…</string>
 
-    <string name="search_hint">Search podcasts · or paste an RSS URL</string>
+    <string name="search_hint">Search podcasts · or paste an RSS or video link</string>
     <string name="search_tab_episodes">Episodes</string>
     <string name="search_tab_shows">Shows</string>
     <string name="search_empty_episodes">No matching episodes</string>
@@ -91,8 +91,8 @@
     <string name="import_none">Nothing to import</string>
     <string name="import_failed">Import failed — check your connection</string>
     <string name="starter_have_subs">%1$d subscriptions — manage them in Library</string>
-    <string name="search_hint_url">Paste a podcast RSS address</string>
-    <string name="search_url_only">Enter a podcast RSS address (starting with http)</string>
+    <string name="search_hint_url">Paste an RSS address or a video link</string>
+    <string name="search_url_only">Enter an RSS address or a video link</string>
     <string name="recommended_opml_url">https://cxyxl.cn/reverb/recommended.opml</string>
     <string name="set_privacy">Privacy policy</string>
     <string name="set_privacy_sub">How your data is handled</string>
@@ -208,6 +208,7 @@
     <string name="a11y_skip_fwd">Forward %d sec</string>
     <string name="a11y_downloaded">Downloaded — tap to delete</string>
     <string name="a11y_download">Download</string>
+    <string name="a11y_download_disabled">Download unavailable</string>
 
     <string name="settings">Settings</string>
     <string name="sec_content">Content</string>

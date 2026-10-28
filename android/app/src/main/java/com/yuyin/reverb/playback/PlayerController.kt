@@ -15,6 +15,7 @@ import androidx.media3.session.SessionToken
 import com.yuyin.reverb.data.local.HistoryStore
 import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.data.remote.BilibiliSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -61,6 +62,7 @@ object PlayerController {
     private var pending: Episode? = null
     private var history: HistoryStore? = null
     private var settings: SettingsStore? = null
+    private var bilibiliSource: BilibiliSource? = null
     private var listenStats: com.yuyin.reverb.data.local.ListenStatsStore? = null
     private var stateStore: com.yuyin.reverb.data.local.PlaybackStateStore? = null
     // 累计收听时长的基线：仅统计“同一集、播放中、合理正向增量”的内容毫秒
@@ -408,6 +410,12 @@ object PlayerController {
     val sleepEndOfEpisode: StateFlow<Boolean> = _sleepEndOfEpisode
 
     fun bindHistory(h: HistoryStore) { history = h }
+
+    /**
+     * 视频源(播放前现取直链)。没绑上时视频集只能报「取不到」,
+     * 普通播客完全不受影响 —— 所以启动期少绑一行不会把整个播放页搞挂。
+     */
+    fun bindBilibili(source: BilibiliSource) { bilibiliSource = source }
 
     fun bindListenStats(s: com.yuyin.reverb.data.local.ListenStatsStore) { listenStats = s }
 
@@ -800,8 +808,65 @@ object PlayerController {
         // **电台那一路不缓存**:它是"无限随机换台",每一台都触发一次几十 MB 的整集拉取,
         // 用户听着玩一小时就能把预算刷爆。判据用调用点传进来的 isRadio,而不是 _radioMode,
         // 因为手动播放会先 stopRadio 再进来 —— 到这儿时那个字段已经是 false。
+        // **视频源的最后一步是"现取直链"**,而它要联网 —— 所以只在流式这一路分叉:
+        // 本地有下载件或缓存件时,它与普通单集没有任何区别。
+        //
+        // 为什么不能把直链在检索时就算好存进 Episode:那条链的 `deadline` 是取链时刻
+        // **+2 小时**(实测),而 Episode 会进历史、进待播、进播放态快照,甚至进备份 ——
+        // 存直链等于第二天点开必然「这一集播不了」,且用户没有任何线索知道要重新搜一次。
+        // 所以模型里存的是 `bilibili://audio/<bvid>/<cid>` 这个坐标,见 BilibiliSource。
+        if (local == null && BilibiliSource.isPseudo(episode.audioUrl)) {
+            val src = bilibiliSource
+            if (src == null) {
+                log.e(TAG, "bilibili source not bound id=${episode.id}")
+                _playbackError.value = PlaybackError(
+                    episode.id, PlaybackException.ERROR_CODE_IO_UNSPECIFIED, "resolve-unbound", false, errorRetries
+                )
+                return
+            }
+            val expectId = episode.id
+            scope.launch {
+                val resolved = src.resolvePlayback(episode.audioUrl)
+                // 解析期间用户点了别的集:这次作废。不能省 —— 起播只差一次网络往返,
+                // 而"点一下看看、随即划走"正好落在这个时长里,不拦就会把前一集的声音抢回来。
+                if (_current.value?.id != expectId) {
+                    log.i(TAG, "resolve dropped id=$expectId")
+                    return@launch
+                }
+                if (resolved == null) {
+                    log.w(TAG, "resolve failed id=$expectId")
+                    _playbackError.value = PlaybackError(
+                        episode.id, PlaybackException.ERROR_CODE_IO_UNSPECIFIED, "resolve-failed", false, errorRetries
+                    )
+                    return@launch
+                }
+                // 缓存必须在解析之后:AudioCacheManager 拿的是 `audioUrl`,伪地址它拉不下来
+                // (会当成一个畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
+                if (!isRadio) AudioCacheManager.cache(episode.copy(audioUrl = resolved))
+                startEpisode(c, episode, resolved, autoplay)
+            }
+            return
+        }
+
         if (local == null && !isRadio) AudioCacheManager.cache(episode)
-        val uri = if (local != null) Uri.fromFile(File(local)) else Uri.parse(episode.audioUrl)
+        startEpisode(c, episode, if (local != null) null else episode.audioUrl, autoplay, local)
+    }
+
+    /**
+     * 装载并起播。抽出来是因为视频源的直链要**异步**现取([playEpisode] 那条分支),
+     * 取回来之后剩下的步骤与普通单集一模一样 —— 复制一份就意味着以后改起播逻辑要改两处。
+     *
+     * @param streamUrl 流式地址;`null` 表示走本地文件
+     * @param localPath 本地文件路径(下载件或缓存件),与 [streamUrl] 二选一
+     */
+    private fun startEpisode(
+        c: MediaController,
+        episode: Episode,
+        streamUrl: String?,
+        autoplay: Boolean,
+        localPath: String? = null
+    ) {
+        val uri = if (localPath != null) Uri.fromFile(File(localPath)) else Uri.parse(streamUrl)
 
         val item = MediaItem.Builder()
             .setUri(uri)

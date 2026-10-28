@@ -104,6 +104,7 @@ import com.yuyin.reverb.data.local.InboxStore
 import com.yuyin.reverb.data.model.DownloadStatus
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.Podcast
+import com.yuyin.reverb.data.remote.BilibiliSource
 import com.yuyin.reverb.playback.PlayMode
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.ui.theme.CeladonDim
@@ -582,6 +583,22 @@ fun EpisodeListItem(
     downloadStatus: DownloadStatus? = null,
     onDownload: (() -> Unit)? = null,
     onDeleteDownload: (() -> Unit)? = null,
+    /**
+     * 这颗下载键**置灰但留着**(而不是传 null 让整格消失)。
+     *
+     * 只有一个调用方会传 true:视频源(见 `BilibiliSource`)。那里的音频直链带 2 小时
+     * `deadline`,**不能落盘当资产**;而"下载"在别处承诺的正是「长期留在盘上、进备份、
+     * 由清除下载打理」。两者语义冲突,所以不给这个动作。自动缓存(network 层那套 300 MB
+     * 预算)仍然保留 —— 那是浏览器缓存同性质的东西,且撑着现有播放性能设计。
+     *
+     * 为什么不传 null:null 会让整格消失,同一列表里各行的键位就错开了(用户 2026-10-28
+     * 拍的口径是「置灰」,不是「隐藏」)。
+     *
+     * 默认值从 `audioUrl` 自己判,而不是让每个调用方传 —— 这条规矩是**集子自己的属性**
+     * (地址会不会过期),不是页面的口味;搜索结果/历史/待播/收藏里都可能有视频源的单集,
+     * 逐个调用点传就一定会漏一处。
+     */
+    downloadDisabled: Boolean = BilibiliSource.isPseudo(episode.audioUrl),
     showPodcastTitle: Boolean = false, // 搜索结果里同列多个不同播客的单集，需标出所属频道
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
@@ -812,7 +829,7 @@ fun EpisodeListItem(
             }
         }
         if (!selectionMode && (onDownload != null || onDeleteDownload != null)) {
-            DownloadControl(downloadStatus, onDownload, onDeleteDownload)
+            DownloadControl(downloadStatus, onDownload, onDeleteDownload, downloadDisabled)
         }
     }
         if (hasMenu) {
@@ -991,7 +1008,8 @@ fun EpisodeBatchBar(
 private fun DownloadControl(
     status: DownloadStatus?,
     onDownload: (() -> Unit)?,
-    onDelete: (() -> Unit)?
+    onDelete: (() -> Unit)?,
+    disabled: Boolean = false
 ) {
     when (status) {
         is DownloadStatus.Completed -> IconButton(onClick = { onDelete?.invoke() }) {
@@ -1012,7 +1030,19 @@ private fun DownloadControl(
         DownloadStatus.Queued -> Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
             CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.primary)
         }
-        else -> IconButton(onClick = { onDownload?.invoke() }) {
+        // 禁用态**只落在这一支**:已完成 / 下载中 / 排队中都是真实进度,置灰它们反而像按钮坏了。
+        // 也只有视频源会传 true,而它永远不会有那三种状态 —— 这条限制让「禁用」只有一种读法。
+        else -> if (disabled) {
+            Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                Icon(
+                    Icons.Rounded.Download,
+                    contentDescription = stringResource(R.string.a11y_download_disabled),
+                    // 用 Material 的 disabled 惯例值(38%),不是随便挑的透明度:
+                    // 与系统控件置灰的观感一致,将来换主题也不会跑偏。
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                )
+            }
+        } else IconButton(onClick = { onDownload?.invoke() }) {
             Icon(
                 Icons.Rounded.Download,
                 contentDescription = stringResource(R.string.a11y_download),

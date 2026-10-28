@@ -28,6 +28,8 @@ class PodcastRepository(
     private val gpodder = GpodderSource(client)
     private val charts = AppleChartsSource(client, itunes)
     private val rss = RssParser(client)
+    /** 视频当播客听。播放前解析也走它(见 [com.yuyin.reverb.playback.PlayerController])。 */
+    val bilibili = BilibiliSource(client)
 
     private val log = com.yuyin.reverb.util.Logger
     private val TAG = "Repo"
@@ -47,7 +49,17 @@ class PodcastRepository(
         val words = q.split(Regex("\\s+")).count { it.isNotEmpty() }
         log.i(TAG, "search queryWords=$words region='$region'")
 
-        // 0) 直接是订阅源地址
+        // 0) 视频页地址(BV 号本体 / 完整 URL / b23.tv 短链)排在最前:它既是「用户点名的那一条」,
+        //    也永远解析不出 RSS —— 先跑 RSS 只会白等一次超时。
+        //    这一步**不受 CATALOG 闸管** —— 粘链接不是"下拉就能翻到的目录",与关键词检索不是一回事。
+        if (BilibiliSource.looksLikeVideo(q)) {
+            bilibili.resolveInput(q)?.let {
+                log.i(TAG, "search via Bilibili ok parts=${it.episodes.size}")
+                return SearchOutcome(listOf(it.podcast), "Bilibili")
+            }
+        }
+
+        // 1) 直接是订阅源地址
         if (q.startsWith("http://", true) || q.startsWith("https://", true)) {
             rss.fetch(q)?.let {
                 log.i(TAG, "search via RSS ok title='${it.podcast.title}'")
@@ -89,7 +101,15 @@ class PodcastRepository(
         val q = query.trim()
         if (q.isBlank() || q.startsWith("http", true)) return emptyList()
         log.i(TAG, "searchEpisodes queryWords=${q.split(Regex("\\s+")).count { it.isNotEmpty() }} region='$region'")
-        return itunes.searchEpisodes(q, region).also { log.i(TAG, "searchEpisodes count=${it.size}") }
+        val out = ArrayList<Episode>(itunes.searchEpisodes(q, region))
+        // B 站的视频粒度和「单集」是同一件事,直接并进这一路。**受 CATALOG 闸管**:
+        // 关键词检索拿到的是动态目录,与 Apple/fyyd/gpodder 同一口径(见 search() 里的那段注释)。
+        // 搜索失败不拖垮整列 —— 上面的 Apple 结果照常返回。
+        runCatching { bilibili.searchEpisodes(q) }
+            .onSuccess { out.addAll(it) }
+            .onFailure { log.w(TAG, "bilibili searchEpisodes failed") }
+        log.i(TAG, "searchEpisodes count=${out.size}")
+        return out
     }
 
     // 发现页热门推荐：磁盘缓存(按 地区+分类) + 每日刷新。cachedPopular 立即返回上次结果，refreshPopular 走网络并回写。
@@ -132,7 +152,10 @@ class PodcastRepository(
      * 与 [cachedFeed] 配合成「先缓存秒开、再后台刷新、刷新失败退回缓存」。
      */
     suspend fun feed(feedUrl: String): FeedResult? =
-        rss.fetch(feedUrl).also {
+        // 视频源不走 RSS 解析器:它的 feedUrl 是 `bilibili://video/<bvid>` 这种伪地址,
+        // 交给 OkHttp 会当场抛 IllegalArgumentException(不是「解析失败」)。
+        // 频道页因此要在这里分叉,而不是让它在下面统一落进 rss.fetch。
+        (if (BilibiliSource.isPseudo(feedUrl)) bilibili.feedOf(feedUrl) else rss.fetch(feedUrl)).also {
             if (it == null) log.w(TAG, "feed empty/failed url=$feedUrl")
             else {
                 log.i(TAG, "feed ok episodes=${it.episodes.size} title='${it.podcast.title}' url=$feedUrl")

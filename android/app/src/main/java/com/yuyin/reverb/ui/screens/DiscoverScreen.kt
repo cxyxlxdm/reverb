@@ -97,6 +97,7 @@ import com.yuyin.reverb.R
 import android.content.Context
 import androidx.compose.material3.Button
 import com.yuyin.reverb.AppContainer
+import com.yuyin.reverb.data.remote.BilibiliSource
 import com.yuyin.reverb.data.remote.OpmlSupport
 import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.ReverbApp
@@ -225,9 +226,13 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             keyboardActions = KeyboardActions(onSearch = {
                 keyboard?.hide()
                 // 关掉内容目录那一档**不做关键词检索** —— 关键词返回的是节目列表,同样构成动态目录。
-                // 只接受 http(s) 的 RSS 地址;输入别的就提示一句,不发请求。
+                // 只接受 http(s) 的 RSS 地址或一条视频地址(完整链接 / 短链 / BV 号);输入别的就提示一句,不发请求。
+                // 视频地址放行的理由与 `PodcastRepository.search` 里那段相同:粘链接是用户点名的那一条,
+                // 不是"下拉就能翻到的目录"。
                 val q = vm.query.trim()
-                if (!BuildConfig.CATALOG && !q.startsWith("http://", true) && !q.startsWith("https://", true)) {
+                if (!BuildConfig.CATALOG && !q.startsWith("http://", true) &&
+                    !q.startsWith("https://", true) && !BilibiliSource.looksLikeVideo(q)
+                ) {
                     if (q.isNotEmpty()) Toast.makeText(context, R.string.search_url_only, Toast.LENGTH_SHORT).show()
                 } else {
                     vm.search(region)

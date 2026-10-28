@@ -58,7 +58,7 @@
     <string name="size_calculating">计算中…</string>
 
     <!-- 发现 -->
-    <string name="search_hint">搜索播客 · 或粘贴 RSS 地址</string>
+    <string name="search_hint">搜索播客 · 或粘贴 RSS 地址 / 视频链接</string>
     <string name="search_tab_episodes">单集</string>
     <string name="search_tab_shows">节目</string>
     <string name="search_empty_episodes">没有找到相关单集</string>
@@ -93,8 +93,8 @@
     <string name="import_none">没有可导入的订阅</string>
     <string name="import_failed">导入失败，请检查网络后重试</string>
     <string name="starter_have_subs">当前已有 %1$d 个订阅，可在「音阁 · 订阅」管理</string>
-    <string name="search_hint_url">粘贴播客 RSS 地址</string>
-    <string name="search_url_only">请输入播客的 RSS 地址（以 http 开头）</string>
+    <string name="search_hint_url">粘贴 RSS 地址或视频链接</string>
+    <string name="search_url_only">请输入 RSS 地址或视频链接</string>
     <string name="recommended_opml_url">https://cxyxl.cn/reverb/recommended.opml</string>
     <string name="set_privacy">隐私政策</string>
     <string name="set_privacy_sub">我们如何处理你的数据</string>
@@ -216,6 +216,7 @@
     <string name="a11y_skip_fwd">快进 %d 秒</string>
     <string name="a11y_downloaded">已下载，点击删除</string>
     <string name="a11y_download">下载</string>
+    <string name="a11y_download_disabled">下载不可用</string>
 
     <!-- 设置 -->
     <string name="settings">设置</string>
