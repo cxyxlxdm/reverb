@@ -15,10 +15,17 @@ export class SettingsStore {
    *
    * 变更历史:
    *   1 = 首个版本(2026-08)。
+   *   2 = 2026-10(应随 1.0.5 与另两端同步**未跟进**,本端实际一直停在 1 —— 见下)。
+   *   3 = 2026-10-29(随 1.0.6)。新增网络访问地址:视频站公开接口 `api.bilibili.com`、
+   *       其内容分发网络(`*.bilivideo.com` / `*.bilivideo.cn` 等,含第三方 CDN 节点)、
+   *       封面图地址与短链 `b23.tv`;同意页多一段「视频链接」自述。
+   *       ⚠️ 本端从 1 直接跳到 3 不是漏改,是**补上落后的那一档**:Android / macOS 在 1.0.5
+   *       已升到 2(应用内更新带来的新地址),本端当时既没有那个功能、也没跟着 +1。
+   *       这次一起算,免得鸿蒙用户连跳两级却只被重问一次、而看到的条款增量对不上。
    *
    * 改这个数之后**必须重新打包两端**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
    */
-  static readonly PRIVACY_VERSION: number = 1;
+  static readonly PRIVACY_VERSION: number = 3;
 
   /// 0 跟随系统 / 1 浅色(宣纸) / 2 深色(水墨) / 3 纯白
   /// **默认 2(水墨)**,与 Android `theme_mode` 的默认值一致 —— 品牌主观感是水墨,

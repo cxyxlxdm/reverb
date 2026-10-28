@@ -93,18 +93,23 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                         // (整棵树在 ReverbTheme 内)。
                         //
                         /**
-                         * 正文之后追加四段能力说明:「节目检索」「离线语音转文字」
-                         * 「真实频谱(麦克风)」「应用内更新」。
+                         * 正文之后追加五段能力说明:「节目检索」「视频链接」「应用内更新」
+                         * 「离线语音转文字」「真实频谱(麦克风)」。
                          *
                          * 合并前这四条按渠道分成两份(default 有内容、store 覆盖成空串不渲染),
                          * 理由是「可见声明要与包内权限一致」—— 商店那份既不声明 RECORD_AUDIO、
                          * 也没有 api.github.com 与 REQUEST_INSTALL_PACKAGES(见 H70)。
                          * 2026-10-18 只有一份包之后这四样都在包里,四段也就只有一份文案(见 H205):
                          * 同意门对所有分发都出,而它说的每一句都对应包内真实存在的能力。
+                         *
+                         * 「视频链接」是 1.0.6 追加的第五段:它带来的是**新的网络访问地址**
+                         * (视频站接口与它的 CDN),按本仓库的口径要进同意页,并且 PRIVACY_VERSION 要 +1
+                         * 让老用户重看一次(见 `SettingsStore.PRIVACY_VERSION` 的历史表)。
                          */
                         listOf(
                             stringResource(R.string.privacy_consent_body),
                             stringResource(R.string.privacy_consent_catalog),
+                            stringResource(R.string.privacy_consent_video),
                             stringResource(R.string.privacy_consent_update),
                             stringResource(R.string.privacy_consent_asr),
                             stringResource(R.string.privacy_consent_mic)

@@ -196,9 +196,13 @@ class SettingsStore(context: Context) {
          *       为一次性的重问引入两套版本号更容易漂。
          *       ⚠️ **2026-10-18 两 flavor 合成一份包**(H205)之后这段前提变了:那三样现在进唯一的包,
          *       所有用户看到的都是同一份自述。上面的记的是当时为什么只有一个版本号 —— 不改写。
+         *   3 = 2026-10-29(随 1.0.6)。新增网络访问地址:视频站公开接口 `api.bilibili.com`、
+         *       它的内容分发网络(`*.bilivideo.com` / `*.bilivideo.cn` 等,含第三方 CDN 节点)、
+         *       封面图地址与短链 `b23.tv`;同意页多一段「视频链接」自述。
+         *       ⚠️ 与「应用内更新」那次一样,这是**新功能 + 新地址**两件事同时发生,纯措辞润色不构成 +1。
          *
          * 改这个数之后**必须重新打包**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
          */
-        const val PRIVACY_VERSION = 2
+        const val PRIVACY_VERSION = 3
     }
 }
