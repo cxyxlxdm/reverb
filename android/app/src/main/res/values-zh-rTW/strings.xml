@@ -56,7 +56,7 @@
     <string name="loading">正在循聲…</string>
     <string name="size_calculating">計算中…</string>
 
-    <string name="search_hint">搜尋播客 · 或貼上 RSS 位址</string>
+    <string name="search_hint">搜尋播客 · 或貼上 RSS 位址 / 影片連結</string>
     <string name="search_tab_episodes">單集</string>
     <string name="search_tab_shows">節目</string>
     <string name="search_empty_episodes">沒有找到相關單集</string>
@@ -91,8 +91,8 @@
     <string name="import_none">沒有可匯入的訂閱</string>
     <string name="import_failed">匯入失敗，請檢查網路後重試</string>
     <string name="starter_have_subs">目前已有 %1$d 個訂閱，可在「音閣 · 訂閱」管理</string>
-    <string name="search_hint_url">貼上播客 RSS 位址</string>
-    <string name="search_url_only">請輸入播客的 RSS 位址（以 http 開頭）</string>
+    <string name="search_hint_url">貼上 RSS 位址或影片連結</string>
+    <string name="search_url_only">請輸入 RSS 位址或影片連結</string>
     <string name="recommended_opml_url">https://cxyxl.cn/reverb/recommended.opml</string>
     <string name="set_privacy">隱私政策</string>
     <string name="set_privacy_sub">我們如何處理你的資料</string>
@@ -208,6 +208,7 @@
     <string name="a11y_skip_fwd">快進 %d 秒</string>
     <string name="a11y_downloaded">已下載，點擊刪除</string>
     <string name="a11y_download">下載</string>
+    <string name="a11y_download_disabled">下載不可用</string>
 
     <string name="settings">設定</string>
     <string name="sec_content">內容</string>

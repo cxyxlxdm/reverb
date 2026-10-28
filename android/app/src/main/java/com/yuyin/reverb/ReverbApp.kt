@@ -107,6 +107,9 @@ class ReverbApp : Application(), Configuration.Provider {
         // 真正拉音频要等用户点播放,那时门早已过了。
         AudioCacheManager.init(this, container.httpClient, container.audioCacheStore, container.settingsStore)
         PlayerController.bindHistory(container.historyStore)
+        // 视频源的直链要现取(2 小时失效),所以播放层要握着一个能联网的对象;
+        // 与 repo 共用同一个 client,不另建连接池。
+        PlayerController.bindBilibili(container.repository.bilibili)
         PlayerController.bindSettings(container.settingsStore)
         PlayerController.bindListenStats(container.listenStatsStore)
         PlayerController.bindState(container.playbackStateStore)

@@ -292,6 +292,10 @@ object AudioCacheManager {
             url.contains(".aac", true) -> ".aac"
             url.contains(".ogg", true) -> ".ogg"
             url.contains(".wav", true) -> ".wav"
+            // 视频源(dash 音轨)给的是 `.m4s`:内容是**分片 MP4**(ftyp/moov/sidx/moof),
+            // 落成 `.mp3` 只是改个名字、播放层按内容嗅探照样能播,但盘上那份文件从此
+            // 名不副实 —— 任何人(包括我们自己 adb 进去看)都会以为那是一集 MP3。
+            url.contains(".m4s", true) -> ".m4s"
             else -> ".mp3"
         }
         // 前缀与下载分开(dl_ / ca_):两个目录本来就分家,再加一层肉眼可辨,
