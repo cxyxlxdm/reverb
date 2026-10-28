@@ -4,6 +4,7 @@ import { Episode } from '../model/Models';
 import { AudioCacheStore, AudioCacheItem } from '../store/AudioCacheStore';
 import { SettingsStore } from '../store/SettingsStore';
 import { blockedByCellular as cellularGateBlocked } from '../util/CellularGate';
+import { BilibiliSource } from '../net/BilibiliSource';
 import { Log } from '../util/Logger';
 
 /**
@@ -82,13 +83,18 @@ export class AudioCacheManager {
    *    而且 `cache()` 见账上有记录不会重下 —— 只是这一集离线不受益,不会出错,也不会反复白下。
    * 注意 id 撞名那种错位这里看不出来(两条各记各的 url),真正拦住它的是写盘前的
    * `uniqueName()` 探测,见 `fileName()` 的注释。
+   *
+   * **视频集的伪地址(`bilibili://…`)必须豁免这道回验。** 账本里存的一定是当次解析出来的
+   * 直链(缓存必须在解析之后,见 `PlayerController.playEpisode`),而调用方手上永远是伪地址 ——
+   * 两者不可能相等,不豁免就变成"缓存永远不命中、每次都要重新联网",正是这条路要避免的。
+   * 身份稳定性由 id 承担:伪地址里带着 cid,同一集永远同一个 id。
    */
   localPathForPlay(id: string, url: string): string | null {
     if (this.store === null) return null;
     const p = this.known.get(id);
     if (p === undefined) return null;
     const item = this.store.get(id);
-    if (item !== null && url.length > 0 && item.url !== url) {
+    if (item !== null && url.length > 0 && item.url !== url && !BilibiliSource.isPseudo(url)) {
       Log.w('AudioCache', `缓存 url 与本次要播的地址不符,判为未命中 id=${id}`);
       return null;
     }
@@ -151,8 +157,11 @@ export class AudioCacheManager {
   /**
    * 首播走网络时排一次「整集落缓存」。幂等且不排队:已缓存 / 正在下这一集的直接返回。
    * 由 PlayerController 的 networkPlayHook 调用(见 AppContainer 的注入)。
+   *
+   * - Parameter headers: 取流要带的请求头。视频源那一族必须给(CDN 认 UA + `Referer`,
+   *   缺了 403,见 `BilibiliSource.streamHeaders`),普通 RSS 单集传 null 即用本端 UA。
    */
-  cache(e: Episode): void {
+  cache(e: Episode, headers: Record<string, string> | null = null): void {
     const store = this.store;
     if (store === null || this.dir.length === 0) return;
     if (e.id.length === 0 || e.audioUrl.length === 0) return;
@@ -162,7 +171,7 @@ export class AudioCacheManager {
     this.destroyInFlight();          // 单飞:挤掉上一个
     this.inFlightId = e.id;
     // fire-and-forget:结果只影响下次起播走哪条路,不能让它出现在播放链路的 await 上
-    this.fetch(e.id, e.audioUrl).then((bytes: number) => {
+    this.fetch(e.id, e.audioUrl, headers).then((bytes: number) => {
       if (bytes > 0) {
         Log.i('AudioCache', `缓存完成 "${e.title}" ${Math.round(bytes / 1024)}KB`);
         this.evict(e.id);
@@ -172,7 +181,8 @@ export class AudioCacheManager {
     });
   }
 
-  private async fetch(id: string, url: string): Promise<number> {
+  private async fetch(id: string, url: string,
+                      headers: Record<string, string> | null): Promise<number> {
     const store = this.store;
     if (store === null) return 0;
     if (await this.blockedByCellular()) {
@@ -203,9 +213,12 @@ export class AudioCacheManager {
             .catch((err: Error) => { writeFailed = err.message; });
         });
       });
+      // ArkTS 不给 `??` 里的对象字面量推类型(`arkts-no-untyped-obj-literals`),先落到声明过的变量
+      const reqHeader: Record<string, string> =
+        headers !== null ? headers : { 'User-Agent': 'Reverb/1.0 (HarmonyOS podcast client)' };
       const code = await req.requestInStream(url, {
         method: http.RequestMethod.GET,
-        header: { 'User-Agent': 'Reverb/1.0 (HarmonyOS podcast client)' },
+        header: reqHeader,
         connectTimeout: 15000,
         readTimeout: 120000
       });
@@ -364,7 +377,11 @@ export class AudioCacheManager {
     const name = `ca_${h < 0 ? `n${-h}` : `${h}`}`;
     const lower = url.toLowerCase();
     let ext = '.mp3';
-    if (lower.indexOf('.m4a') >= 0) ext = '.m4a';
+    // 视频源的音频是 `.m4s`(分片 MP4)。**落盘要改名 `.m4a`**:扩展名是播放器认容器的依据,
+    // 而 macOS 那端实测同一份内容 `.m4s` 打不开、`.m4a` 可播(AVFoundation 按扩展名判),
+    // 本端 AVPlayer 同理不可赌,统一存成「它就是 MP4 音频」这个事实。
+    if (lower.indexOf('.m4s') >= 0) ext = '.m4a';
+    else if (lower.indexOf('.m4a') >= 0) ext = '.m4a';
     else if (lower.indexOf('.aac') >= 0) ext = '.aac';
     else if (lower.indexOf('.ogg') >= 0) ext = '.ogg';
     else if (lower.indexOf('.wav') >= 0) ext = '.wav';

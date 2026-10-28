@@ -61,7 +61,10 @@ final class AudioCacheManager: @unchecked Sendable {
 
     /// 首播走流式时排一次「整集落缓存」。幂等且**不排队**:
     /// 已缓存 / 正在下这一集 / 内置引导音频一律直接返回。
-    func cache(_ episode: Episode) {
+    ///
+    /// - Parameter headers: 取流要带的请求头。只有视频源那一族用得上(CDN 要 UA + `Referer`,
+    ///   缺了 403),普通 RSS 单集传空即走会话默认头。
+    func cache(_ episode: Episode, headers: [String: String] = [:]) {
         let id = episode.id
         let urlText = episode.audioUrl
         guard !id.isEmpty, !urlText.isEmpty else { return }
@@ -79,7 +82,7 @@ final class AudioCacheManager: @unchecked Sendable {
         inFlightId = id
         let task = Task.detached(priority: .utility) { [weak self] in
             guard let self else { return }
-            await self.fetch(id: id, urlText: urlText, gen: gen)
+            await self.fetch(id: id, urlText: urlText, headers: headers, gen: gen)
         }
         inFlightTask = task
         lock.unlock()
@@ -125,15 +128,11 @@ final class AudioCacheManager: @unchecked Sendable {
     // MARK: - 下载
 
     /// 0 = 成功;被取消/失败都走同一批收尾(`.part` 删掉、认领清掉)。
-    private func fetch(id: String, urlText: String, gen: Int) async {
+    private func fetch(id: String, urlText: String, headers: [String: String], gen: Int) async {
         defer {
             clearInFlight(id)
             // 正常路径 rename 之后 `.part` 已不存在,这是空操作;失败/取消都靠它收尾。
             try? FileManager.default.removeItem(at: partURL(for: id, urlText: urlText))
-        }
-        guard let url = URL(string: urlText) else {
-            Log.w(Self.category, "cache 无效 URL id=\(id)")
-            return
         }
         let name = Self.fileName(id: id, url: urlText)
         let target = dir.appendingPathComponent(name)
@@ -142,7 +141,14 @@ final class AudioCacheManager: @unchecked Sendable {
         do {
             // 先下到系统临时文件:整个传输期间正式名与 `.part` 都不存在,
             // 所以"半截文件冒充完整缓存"这件事在结构上不可能发生。
-            let (tmp, response) = try await HTTP.session.download(from: url)
+            guard let (tmp, response) = await HTTP.download(urlText, headers: headers) else {
+                if Task.isCancelled {
+                    Log.i(Self.category, "cache cancelled id=\(id)")
+                } else {
+                    Log.w(Self.category, "cache 传输失败 id=\(id)")
+                }
+                return
+            }
             guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
                 let code = (response as? HTTPURLResponse)?.statusCode ?? -1
                 Log.w(Self.category, "cache http \(code) id=\(id)")
@@ -267,7 +273,12 @@ final class AudioCacheManager: @unchecked Sendable {
         let hex = String(h, radix: 16)
         let lower = url.lowercased()
         let ext: String
-        if lower.contains(".m4a") { ext = ".m4a" }
+        // 视频源的音频流是 `.m4s`(分片 MP4)。**落盘必须改名成 `.m4a`**:
+        // 2026-10-28 本机实测同一份内容,`.m4s` 交给 AVPlayer 是 `Cannot Open`,
+        // 换成 `.m4a` / `.mp4` 立刻可播(dur 174.1s)—— AVFoundation 按扩展名认容器,
+        // 不认识就直接放弃。所以这里存的是「它就是 MP4 音频」这个事实,不是原始后缀。
+        if lower.contains(".m4s") { ext = ".m4a" }
+        else if lower.contains(".m4a") { ext = ".m4a" }
         else if lower.contains(".aac") { ext = ".aac" }
         else if lower.contains(".ogg") { ext = ".ogg" }
         else if lower.contains(".wav") { ext = ".wav" }

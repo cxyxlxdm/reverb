@@ -36,7 +36,7 @@
 "30 秒 · 内置音频，不联网也能播" = "30 s · intégré, hors ligne";
 "随应用内置的 30 秒引导音频，无需联网即可播放。" = "Introduction de 30 secondes intégrée. Lecture sans connexion.";
 "暂无内容" = "Aucun contenu";
-"搜索节目、单集或粘贴 RSS 链接" = "Rechercher des émissions, épisodes ou coller un lien RSS";
+"搜索节目、单集，或粘贴 RSS 地址 / 视频链接" = "Rechercher des émissions, épisodes ou coller une URL RSS ou une vidéo";
 "搜索中…" = "Recherche…";
 "没有找到「%@」" = "Aucun résultat pour « %@ »";
 "节目" = "Émissions";
@@ -104,6 +104,7 @@
 "已订阅" = "Abonné";
 "已下载 · 点击删除" = "Téléchargé · cliquer pour supprimer";
 "下载中" = "Téléchargement…";
+"下载不可用" = "Téléchargement indisponible";
 
 /* Settings */
 "外观" = "Apparence";

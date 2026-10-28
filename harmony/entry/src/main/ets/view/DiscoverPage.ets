@@ -7,6 +7,7 @@ import { Podcast, Episode, SearchOutcome, HistoryEntry } from '../model/Models';
 import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/Genres';
 import { AppContainer } from '../AppContainer';
 import { FeedProbeState } from '../net/PodcastRepository';
+import { BilibiliSource } from '../net/BilibiliSource';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
 import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, LIST_MENU_LONG_PRESS_MS } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
@@ -310,9 +311,12 @@ export struct DiscoverPage {
   private async runSearch(): Promise<void> {
     const q = this.query.trim();
     const generation = ++this.searchGeneration;
-    // CATALOG=false 的降级包只接受 RSS 地址;输入别的就提示一句,不发请求。
+    // CATALOG=false 的降级包按「只接受地址」处理:http(s) 的订阅源,或一条视频地址
+    // (完整链接 / 短链 / BV 号)。视频地址放行的理由与 `PodcastRepository.search` 那支相同 ——
+    // 粘链接是用户点名的那一条,不是"下拉就能翻到的目录",不构成动态目录。
     if (!Features.CATALOG && q.length > 0
-      && !q.startsWith('http://') && !q.startsWith('https://')) {
+      && !q.startsWith('http://') && !q.startsWith('https://')
+      && !BilibiliSource.looksLikeVideo(q)) {
       this.searchingPodcasts = false;
       this.searchingEpisodes = false;
       this.searched = false;
@@ -356,7 +360,11 @@ export struct DiscoverPage {
     if (generation !== this.searchGeneration || this.query.trim() !== q) return;
     this.searchPodcasts = outcome.podcasts;
     this.searchLabel = outcome.sourceLabel;
-    this.searchRssFailed = outcome.failed && (q.startsWith('http://') || q.startsWith('https://'));
+    // 视频地址解析失败**不是**「RSS 导入失败」——那条文案讲的是订阅源地址无效(与 Android
+    // 同一口径:它那边也只是一句「没有找到相关节目」)。所以这一档只留给纯 RSS 地址。
+    this.searchRssFailed = outcome.failed
+      && (q.startsWith('http://') || q.startsWith('https://'))
+      && !BilibiliSource.looksLikeVideo(q);
     this.searchingPodcasts = false;
     Log.i('Discover', `节目搜索完成 count=${outcome.podcasts.length} 源=${outcome.sourceLabel}`);
     await this.probeSearchPodcasts(outcome.podcasts, q, generation);

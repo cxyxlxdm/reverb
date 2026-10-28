@@ -39,6 +39,10 @@ final class AppEnvironment: ObservableObject {
         listenStats.seedFromHistory(history.history)   // 首启用历史近似种子(仅当无既有统计)
         player.localFileProvider = { [downloads] ep in downloads.localURL(ep.id) }
         player.bindAudioCache(audioCache)
+        // 视频源的伪地址在起播前现取直链。注入的是**同一个** `BilibiliSource`(仓库里那一个),
+        // 候选流缓存与探活游标都在它身上 —— 换实例等于每次起播重新摸一遍 PCDN。
+        let repo = repository
+        player.resolvePseudoUrl = { url in await repo.bilibili.resolvePlayback(url) }
         player.bindState(playbackState)
         // 恢复排在**依赖都绑好之后**:预载要能命中本地下载文件(优先本地源),
         // 续播起点要从历史读。它内部只在「当前没有在播的」时执行,重复调用是安全的。

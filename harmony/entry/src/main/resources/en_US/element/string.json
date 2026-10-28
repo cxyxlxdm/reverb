@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "Search shows, episodes, or paste an RSS URL"
+      "value": "Search shows, episodes, or paste an RSS or video link"
     },
     {
       "name": "discover_daily_hot",
@@ -1081,6 +1081,10 @@
       "value": "Downloaded — tap to delete"
     },
     {
+      "name": "a11y_download_disabled",
+      "value": "Download unavailable"
+    },
+    {
       "name": "subs_layout_toggle",
       "value": "Toggle layout"
     },
@@ -1254,11 +1258,11 @@
     },
     {
       "name": "search_hint_url",
-      "value": "Paste a podcast RSS address"
+      "value": "Paste an RSS address or a video link"
     },
     {
       "name": "search_url_only",
-      "value": "Enter a podcast RSS address (starting with http)"
+      "value": "Enter an RSS address or a video link"
     },
     {
       "name": "recommended_opml_url",

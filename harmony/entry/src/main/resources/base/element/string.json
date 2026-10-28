@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "搜索节目、单集,或粘贴 RSS 地址"
+      "value": "搜索节目、单集,或粘贴 RSS 地址 / 视频链接"
     },
     {
       "name": "discover_daily_hot",
@@ -1081,6 +1081,10 @@
       "value": "已下载，点击删除"
     },
     {
+      "name": "a11y_download_disabled",
+      "value": "下载不可用"
+    },
+    {
       "name": "subs_layout_toggle",
       "value": "切换排列方式"
     },
@@ -1254,11 +1258,11 @@
     },
     {
       "name": "search_hint_url",
-      "value": "粘贴播客 RSS 地址"
+      "value": "粘贴 RSS 地址或视频链接"
     },
     {
       "name": "search_url_only",
-      "value": "请输入播客的 RSS 地址（以 http 开头）"
+      "value": "请输入 RSS 地址或视频链接"
     },
     {
       "name": "recommended_opml_url",

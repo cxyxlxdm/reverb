@@ -6,6 +6,7 @@ import { Artwork, SquareArtwork, Glyph, Sym } from './Widgets';
 import { formatPubDate } from '../util/DateParse';
 import { TapGuard } from '../util/TapGuard';
 import { DownloadState } from '../playback/DownloadManager';
+import { BilibiliSource } from '../net/BilibiliSource';
 import { PlayMode, PlayerController } from '../playback/PlayerController';
 
 /// 列表/网格通用条目。对应 Android `ui/components/Components.kt`。
@@ -622,10 +623,31 @@ export struct EpisodeListItem {
               .onTouch((event: TouchEvent) => event.stopPropagation())
               .onClick(() => this.onDeleteDownload())
           } else if (this.downloadState >= 0) {
-            Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
-              .accessibilityText(L.s('action_download'))
-              .onTouch((event: TouchEvent) => event.stopPropagation())
-              .onClick(() => this.onDownload())
+            /**
+             * 视频源(伪地址)这颗键**置灰但留着**,不是整格消失。
+             *
+             * 「下载」在别处承诺的是「长期留在盘上、进备份、由清除下载打理」,而视频集的音频
+             * 直链带 2 小时 `deadline`,不能当资产存(H 条目:视频源直链时效)。两者语义冲突,
+             * 所以不给这个动作;自动缓存(300 MB 预算那一套)仍然保留 —— 那是浏览器缓存同性质
+             * 的东西,且撑着现有播放性能设计。
+             *
+             * 不隐藏的理由:同一列表里各行的键位会错开(用户 2026-10-28 拍的口径是「置灰」)。
+             * 判据从**集子自己**的 audioUrl 推,不由调用方传 —— 搜索结果/历史/待播/收藏里都
+             * 可能有视频源的单集,逐个调用点传就一定会漏一处。
+             *
+             * 禁用态**只落在这一支**:已完成/进行中都是真实进度,灰掉反而像按钮坏了;而视频集
+             * 永远不会有那两种状态,所以这条限制只有一种读法。38% 是置灰的惯例值。
+             */
+            if (BilibiliSource.isPseudo(this.episode.audioUrl)) {
+              Glyph({ symbol: Sym.download, dim: 20,
+                color: withAlpha(this.scheme.onSurfaceVariant, 0.38) })
+                .accessibilityText(L.s('a11y_download_disabled'))
+            } else {
+              Glyph({ symbol: Sym.download, dim: 20, color: this.scheme.onSurfaceVariant })
+                .accessibilityText(L.s('action_download'))
+                .onTouch((event: TouchEvent) => event.stopPropagation())
+                .onClick(() => this.onDownload())
+            }
           }
         }
       }

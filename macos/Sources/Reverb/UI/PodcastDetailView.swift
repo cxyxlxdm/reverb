@@ -244,7 +244,19 @@ struct EpisodeDownloadButton: View {
 
     var body: some View {
         Group {
-            if downloads.contains(episode.id) {
+            if BilibiliSource.isPseudo(episode.audioUrl) {
+                // 视频集的音频直链带 2 小时 `deadline`,存不住,而「下载」在别处承诺的正是
+                // 「长期留在盘上」⇒ 这个动作对视频集不成立。**置灰但留着**:同一列表里各行的
+                // 键位不该错开(用户 2026-10-28 拍的口径是「置灰」,不是隐藏)。
+                // 判据从**集子自己**的 audioUrl 推、不由调用方传 —— 搜索结果 / 历史 / 待播 /
+                // 收藏里都可能有视频源的单集,逐个调用点传就一定会漏一处。
+                // 自动缓存(300 MB 预算那一套)仍然保留:它是浏览器缓存同性质的东西。
+                Image(systemName: "arrow.down.circle")
+                    .foregroundStyle(.secondary)
+                    .opacity(0.4)
+                    .help("下载不可用")
+                    .accessibilityLabel(Text("下载不可用"))
+            } else if downloads.contains(episode.id) {
                 Button { confirmDelete = true } label: {
                     Image(systemName: "checkmark.circle.fill").foregroundStyle(accent)
                 }

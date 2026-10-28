@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "Busca programas, episodios o pega una URL RSS"
+      "value": "Busca programas, episodios o pega una URL RSS o un enlace de vídeo"
     },
     {
       "name": "discover_daily_hot",
@@ -1081,6 +1081,10 @@
       "value": "Descargado — toca para eliminar"
     },
     {
+      "name": "a11y_download_disabled",
+      "value": "Descarga no disponible"
+    },
+    {
       "name": "subs_layout_toggle",
       "value": "Cambiar disposición"
     },
@@ -1254,11 +1258,11 @@
     },
     {
       "name": "search_hint_url",
-      "value": "Pega una dirección RSS de pódcast"
+      "value": "Pega una dirección RSS o un enlace de vídeo"
     },
     {
       "name": "search_url_only",
-      "value": "Introduce una dirección RSS (empieza por http)"
+      "value": "Introduce una dirección RSS o un enlace de vídeo"
     },
     {
       "name": "recommended_opml_url",
