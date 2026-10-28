@@ -842,7 +842,8 @@ object PlayerController {
                 }
                 // 缓存必须在解析之后:AudioCacheManager 拿的是 `audioUrl`,伪地址它拉不下来
                 // (会当成一个畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
-                if (!isRadio) AudioCacheManager.cache(episode.copy(audioUrl = resolved))
+                // 头也要一起给:CDN 缺 UA/Referer 一律 403,而本类默认那个 UA 里就含 `Android`。
+                if (!isRadio) AudioCacheManager.cache(episode.copy(audioUrl = resolved), BilibiliSource.streamHeaders())
                 startEpisode(c, episode, resolved, autoplay)
             }
             return
