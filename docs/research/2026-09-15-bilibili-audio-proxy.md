@@ -1,6 +1,6 @@
 # B 站视频转播客(RSS / App 收听)—— 方案调研
 
-> **状态:已拍板并开工(1.0.6)。走的是「App 内直连」,不建任何后端。**
+> **状态:已实现(1.0.6,三端代码齐;Android 已真机六步验过,鸿蒙与 macOS 只过编译门)。走的是「App 内直连」,不建任何后端。**
 > 2026-10-18 登记时判「撞约束一,默认不做」(任务 #205);2026-10-28 实测复核后整体翻面,
 > 因为**建 Worker 这个结论本身是为一个不存在的问题付代价**——详见下面「实测复核」。
 > **原文照抄在「调研原文」分隔线之后;本节是提炼出来的可执行结论。**
@@ -24,7 +24,7 @@
 | playurl 需 wbi + `buvid3` | `x/player/playurl?fnval=16` → `code 0`,给 3 条音轨 |
 | 匿名只有默认码率 | 30216(43.9 kbps)/ 30232(102.9 kbps)/ 30280(203.8 kbps)三档齐全,`audio/mp4` `mp4a.40.2` |
 | 直链「几小时」过期 | `deadline` = 请求时刻 **+2.0 小时**(逐秒核过两次) |
-| 需要 Referer 才能拉流 | `Range: bytes=0-2047` → **206**,带不带 Referer 都是 206 |
+| 需要 Referer 才能拉流 | `Range: bytes=0-2047` → **206**,带不带 Referer 都是 206 ⚠️ **这一格只在当时候选到的那个节点上成立**:后来实测 `upos-*` 镜像缺 Referer 或 UA 含 `Android` 一律 403,而 `*.mcdn.bilivideo.cn:8082` 这类 PCDN 节点确实什么都不查 —— 也就是「不带 Referer 也能拉」取决于 host,见 H218 / H219 |
 | App 端不直连是为了 CORS / Referer | 原生 App 没有 CORS;Referer 也不需要 |
 | `GET /videos/:uid` 是最轻的端点 | **写反了**:`x/space/wbi/arc/search` → `-352 风控校验失败`;legacy 版第 6 次起 `-799 请求过于频繁`,无 Referer 直接 HTTP **412** |
 
@@ -66,7 +66,9 @@ Episode.audioUrl = bilibili://audio/<bvid>/<cid>    ← 播放前解析成真直
 - B 站接口非官方开放,**风控升级就可能整体失效**。降级要求:失败只退化为「这一集暂时取不到」,
   不能崩、不能拖垮其它源;失效时靠发版修,这正是直连方案接受的代价。
 - `docs/PRIVACY.md` 需在主机表补 `api.bilibili.com` / `*.hdslb.com` / `*.bilivideo.com`,
-  并升 `PRIVACY_VERSION`;第 75 行的承诺文字本身不用改。
+  并升 `PRIVACY_VERSION`;那句「不转存或代理节目内容」的承诺文字本身不用改。
+  ✅ **已做(2026-10-29)**:主机表新增 `api.bilibili.com`、`b23.tv` / `bili2233.cn`、
+  CDN 与封面三行,`PRIVACY_VERSION` 三端一起升到 **3**,同意页多一段「视频链接」;官网 `privacy.html` 同日同步。
 
 ---
 

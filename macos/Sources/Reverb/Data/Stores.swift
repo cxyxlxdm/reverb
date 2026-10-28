@@ -348,7 +348,10 @@ enum AppSupport {
     ///
     /// 门控在 `ReverbApp` 的 `PrivacyGate`:未同意时主界面树**根本不构建**,
     /// 发现页那些 `.task` 也就不会去请求 iTunes / fyyd / gpodder(与 Android 同一条理由)。
-    static let privacyVersion = 2
+    ///
+    /// 变更历史:1 = 首个版本;2 = 1.0.5(应用内更新带来的 `api.github.com`,桌面端没有这套机制,
+    /// 但与手机端同一个数);3 = 1.0.6(视频站接口 `api.bilibili.com`、其 CDN、封面地址与短链)。
+    static let privacyVersion = 3
     @Published private(set) var privacyAccepted: Bool
     /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。
     @Published var language: String {

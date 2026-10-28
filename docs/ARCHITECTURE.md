@@ -131,6 +131,35 @@ HTTP 层各用平台原生:Android **OkHttp**、macOS **URLSession**、鸿蒙 **
 鸿蒙没有协程,所以整段(取 + 解析)进 `taskpool` 子线程 —— 否则大源的同步解析会占住
 UI 线程近两秒(见第十节与 H65)。
 
+### 视频来源的音频(1.0.6)
+
+「粘贴视频链接当单集听」看着像加了一个源,实际只用了两个公开接口 + 一条取流约定,
+三端各写一份 `BilibiliSource`(Android `data/remote/`、鸿蒙 `net/`、macOS `Data/`),
+形状刻意对齐:都只暴露「解析一条链接 / 取音频候选 / 取流头」三件事。
+
+| 环节 | 事实 | 为什么这样写 |
+|---|---|---|
+| 元数据 | `x/web-interface/view?bvid=` 给标题、封面、时长、UP 主名、`cid` | 单集需要的字段一次拿全,不必再请求 |
+| 音频地址 | `x/player/playurl?bvid=&cid=&fnval=16` 给 `dash.audio[]`,三档码率 × 每档两条 `backupUrl` | 取最高档;备份地址是对方给的镜像,**失败时按序重试**,不要自己拼 |
+| 请求头 | 两个接口都**必须**带 `Referer: https://www.bilibili.com/`,UA 用**浏览器身份**(三端统一 iPhone Safari 17_5 串) | 缺 Referer 一律 403;**搜索接口对桌面 Chrome UA 软拦**——`code=0` 但带 `v_voucher`、结果为空,看上去像"没搜到",其实是没给播放权限 |
+| 时效 | 直链带 `deadline` = 请求时刻 + 2 小时 | 所以持久化的**不是直链**,而是伪地址 `bilibili://audio/<bvid>/<cid>`;每次起播前解析一次(与 RSS 的直链口径是两条路) |
+| 付费内容 | 只给 `durl` 且 `is_upower_exclusive` 时,那是约 30 秒试看 | 直接报错,不把它当整集播——否则用户会以为一集只有三十秒 |
+| 下载 | 视频来源的单集不允许下载(UI 置灰),自动缓存照旧 | 见 `FEATURES.md` 六;缓存与下载是两本账,不必为一件事连坐 |
+
+**取流头的注入点三端完全不同,这是这块最容易写错的地方:**
+Android 用 Media3 1.3.1,它的 `DefaultHttpDataSource.Factory` 默认 UA 是 **null**,
+而工厂设的 UA 是在 `DataSpec` 自带头**之后**应用的(会覆盖掉),所以正确做法是
+`ResolvingDataSource.Factory` 在 `resolveDataSpec` 里补 `DataSpec.Builder.setHttpRequestHeaders`
+——既让头跟着这一路请求走,又不会像 `setDefaultRequestProperties` 那样把 Referer 泄漏给所有播客主机;
+缓存那一路是 OkHttp,自己带头。鸿蒙是 `createMediaSourceWithUrl(url, headers)`(API 12+);
+macOS 要 **`AVURLAssetHTTPHeaderFieldsKey` + `AVURLAssetOutOfBandMIMETypeKey: "audio/mp4"` 两条都给**。
+
+踩过的四个坑各有编号,不要在这里重复结论,直接看:
+UA 与接口的矩阵(H218)、「不带头也能播」的假绿(H219)、Media3 的覆盖顺序(H220)、
+鸿蒙的 `CONTAINER_ERR` 其实是 403(H221)、直链两小时失效(H222)、macOS 缓存必须 `.m4a`(H223)。
+
+鸿蒙与 macOS 这两份实现只过了编译门,运行验收未做(见 `ROADMAP.md`)。
+
 ---
 
 ## 五、持久化与备份
