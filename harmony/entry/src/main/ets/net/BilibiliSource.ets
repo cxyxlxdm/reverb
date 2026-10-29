@@ -341,18 +341,25 @@ export class BilibiliSource {
 
     // 从游标处开始**逐个探通**:排第一的 PCDN 节点会回 503(类注释第 4 条)。
     // 探测只用 1 字节 Range,代价一次 RTT;不探的代价是用户点开一集没反应。
+    //
+    // 每个候选的码都打出来(三端同口径,见 H225):只记「全失败」时,探针本身坏掉
+    // 与节点真的不给流在日志里长得一样。
     const start = (this.cursor.get(key) ?? 0) % urls.length;
     this.cursor.set(key, (start + 1) % urls.length);
+    const codes: number[] = [];
     for (let i = 0; i < urls.length; i++) {
       const candidate = urls[(start + i) % urls.length];
-      if (await this.probe(candidate)) {
-        if (i > 0) Log.i('Bilibili', `probe fell back to #${i}`);
+      const code = await this.probe(candidate);
+      codes.push(code);
+      if (code === 200 || code === 206) {
+        Log.i('Bilibili', `probe ok #${i} code=${code}${i > 0 ? ' fell back' : ''}`);
         return candidate;
       }
+      Log.w('Bilibili', `probe #${i} code=${code}`);
     }
     // 全部探不通也让第一条去试:探测本身可能被网络抖动误伤,而播放器至少还会走一次
     // 自动重投(见 PlayerController 的重试口径)。
-    Log.w('Bilibili', 'all candidates probe failed, using #0');
+    Log.w('Bilibili', `all candidates probe failed, using #0 codes=${JSON.stringify(codes)}`);
     return urls.length > 0 ? urls[0] : null;
   }
 
@@ -383,9 +390,12 @@ export class BilibiliSource {
     return new Candidates(urls, expiryOf(urls[0]));
   }
 
-  /** 1 字节 Range 探活。只认 200/206 —— 503/403 都说明这个节点这会儿不给流。 */
-  private async probe(url: string): Promise<boolean> {
-    return await Http.probeOk(url, {
+  /**
+   * 1 字节 Range 探活。只认 200/206 —— 503/403 都说明这个节点这会儿不给流。
+   * 回状态码而不是 boolean:日志里要能看见码(见 H225)。
+   */
+  private async probe(url: string): Promise<number> {
+    return await Http.probeCode(url, {
       'User-Agent': BilibiliSource.UA_BROWSER,
       'Referer': BilibiliSource.REFERER,
       'Range': 'bytes=0-0'

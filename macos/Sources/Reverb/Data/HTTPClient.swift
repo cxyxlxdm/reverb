@@ -103,22 +103,30 @@ enum HTTP {
         }
     }
 
-    /// 1 字节 `Range` 探活:只认 200/206(503/403 都说明这个节点这会儿不给流)。
+    /// 1 字节 `Range` 探活:**返回服务端状态码**,拿不到返回 0(调用方按 200/206 判通)。
+    ///
+    /// 状态码必须回给调用方(见 H225):只回 Bool 时,「探针恒失败」与「节点真的不给流」
+    /// 在日志里长得一模一样,macOS 因此白跑了一整轮 PCDN 轮换保护。
     ///
     /// 拿到响应头就取消,不读 body:有些 CDN 无视 Range 回 200 + 整段音频,
     /// 读下去等于为了探活用一次探针付掉整集流量(Android 侧也是拿到响应就 close)。
-    static func probeOk(_ urlString: String, headers: [String: String],
-                        timeout: TimeInterval = 8) async -> Bool {
-        guard var req = request(urlString, headers: headers, timeout: timeout) else { return false }
+    ///
+    /// ⚠️ **必须用 `dataTask(with:)` 驱动,不能用 `session.data(for:)`**(H225 的根因):
+    /// 后者建出来的任务自带 completion handler,`URLSession` 于是**不再回调
+    /// `URLSessionDataDelegate` 的数据投递方法** —— `didReceive response` 永不触发,
+    /// `code` 恒 0,于是三条候选全判失败、轮换形同不存在(而 task 级的
+    /// `willPerformHTTPRedirection` 照常回调,所以 `redirectProbe` 那套没中这个坑)。
+    static func probeCode(_ urlString: String, headers: [String: String],
+                          timeout: TimeInterval = 8) async -> Int {
+        guard var req = request(urlString, headers: headers, timeout: timeout) else { return 0 }
         req.setValue("bytes=0-0", forHTTPHeaderField: "Range")
         let probe = HeaderProbe()
         let cfg = URLSessionConfiguration.ephemeral
         cfg.timeoutIntervalForRequest = timeout
         let probeSession = URLSession(configuration: cfg, delegate: probe, delegateQueue: nil)
         defer { probeSession.invalidateAndCancel() }
-        _ = try? await probeSession.data(for: req)
-        let code = probe.code
-        return code == 200 || code == 206
+        probeSession.dataTask(with: req).resume()
+        return await probe.wait()
     }
 
     /// 短链跟随探查:**不跟随**,只把 `Location` 与正文各兜一遍。
@@ -192,21 +200,52 @@ struct RedirectProbe {
 
 /// 只收响应头、拿到就取消。放在文件级是因为 `URLSessionDelegate` 不能是嵌套类型里的
 /// 静态实例(会话会把 delegate 强持有到 invalidate),每次调用各建一个最省心。
+///
+/// 两个出口各自都要 resume 一次(`didReceive` 拿到码、`didComplete` 没拿到码),所以用
+/// `finished` 判重 —— continuation 被 resume 两次会直接崩进程。见 H225。
 private final class HeaderProbe: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private var stored = 0
-    var code: Int {
-        lock.lock(); defer { lock.unlock() }
-        return stored
+    private var finished = false
+    private var continuation: CheckedContinuation<Int, Never>?
+
+    /// 等状态码。没拿到响应头(超时 / 连接失败)回 0,由调用方与 403/503 一起判失败。
+    func wait() async -> Int {
+        await withCheckedContinuation { c in
+            lock.lock()
+            if finished {
+                let v = stored
+                lock.unlock()
+                c.resume(returning: v)
+                return
+            }
+            continuation = c
+            lock.unlock()
+        }
+    }
+
+    private func finish(_ code: Int) {
+        lock.lock()
+        if finished { lock.unlock(); return }
+        finished = true
+        stored = code
+        let c = continuation
+        continuation = nil
+        lock.unlock()
+        c?.resume(returning: code)
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask,
                     didReceive response: URLResponse,
                     completionHandler: @escaping (URLSession.ResponseDisposition) -> Void) {
-        lock.lock()
-        stored = (response as? HTTPURLResponse)?.statusCode ?? -1
-        lock.unlock()
+        let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+        // 先取消再交结果:取消会触发 didComplete,那里会撞上 finished 判重。
         completionHandler(.cancel)
+        finish(code)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        finish(stored)
     }
 }
 

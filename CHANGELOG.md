@@ -190,6 +190,17 @@
   **鸿蒙与 macOS 只到编译门,一帧没跑** —— 两端各有一次机会被"能不能出错"挡住的路径
   (鸿蒙 `CONTAINER_ERR` 不携带 HTTP 状态、macOS 缓存命中要连播两遍才看得出),判据都在 H221 / H223。
   这一块踩到的六个反直觉点(H218–H223)已按「现象/根因/修法/教训」入库。
+- **macOS 的取流探针一直是坏的,2026-10-29 修掉**(H225):`HTTP.probeOk` 用 `session.data(for:)` 建任务,
+  而那种任务自带 completion handler,`URLSessionDataDelegate` 的**数据投递**回调整个不会被调 ——
+  于是不管节点通不通都判"探不通",日志只说一句「all candidates probe failed」然后退回第一条去试。
+  同一批真实取流地址在宿主机上做差分:**旧形状 `delegateFired=false code=0`,新形状 `code=206`**。
+  改成 `dataTask(with:).resume()` + continuation 等 delegate 报告,并让三端的探针都**把状态码打出来**
+  (`probe ok #0 code=206` / `probe #i code=503` / 全部失败时带上整串 `codes=[…]`)。
+  改后真机读数:macOS「`resolve candidates=3` → `probe ok #0 code=206` → 缓存 8 683 265 B 整集落盘」、
+  Android debug 包同一批(`view ok` → `resolve candidates=3` → `probe ok #0 code=206` → `state READY` → 同一字节数)。
+  **`redirectProbe` 不受影响**(它用的是 `URLSessionTaskDelegate`,任务级回调照常);一并按本地 302 服务复验过。
+  **仍未跑的**:鸿蒙那端的运行读数(设备锁屏),以及"第一条探不通、真的走到第 2/3 条"这条换路路径
+  —— 本轮三次读数都命中最前面那一条,`fell back` 那一支只有代码侧证据。
 
 ---
 
