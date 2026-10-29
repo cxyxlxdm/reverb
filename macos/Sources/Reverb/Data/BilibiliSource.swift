@@ -69,6 +69,21 @@ final class BilibiliSource {
     private struct Track {
         let urls: [String]
         let expiresAt: Date
+        let durationSec: Int
+    }
+
+    /// 一次解析的结果:探通的直链 + **这一 P 的真实时长(秒)**。
+    ///
+    /// 为什么要把时长一起带出来:搜索接口给的 `duration` 对**多 P 视频是整条视频的总和**
+    /// (实测 `BV1MN4dewEQZ`:26 个 P,搜索回 `457:6` = 27 426 秒),而播放这一路只解析
+    /// **P1**(1 127 秒,缓存下来的音频 `afinfo` 也是 1126 s)。本端那个数还被
+    /// `PlayerController.attach` 当成「显式跳转的上限」(`metaMs - 2000`),放大 24 倍等于
+    /// 给了一个 7.6 小时的上限 —— 落在真实片尾之外的跳点再也拦不住。
+    /// `playurl` 的 `dash.duration`(秒)/ `timelength`(毫秒)给的正是**这个 cid** 的长度。
+    /// 见 H226。
+    struct ResolvedStream {
+        let url: String
+        let durationSec: Int
     }
 
     private var tracks: [String: Track] = [:]
@@ -242,7 +257,8 @@ final class BilibiliSource {
             if bvid.isEmpty { continue }
             out.append(Episode(
                 // 搜索结果是「一个视频」,分 P 要等进频道页才知道 ⇒ id 先用 bvid 占位。
-                // 播放路径不靠 id 认视频(它解析 audioUrl),所以这个 id 只需要稳。
+                // 播放路径不靠 id 认视频(它解析 audioUrl);但它与频道页的 `scheme:bvid:cid`
+                // 不是同一个 id —— 同一视频两个入口各播一次会留两条历史、两份缓存(见 H226 教训④)。
                 id: "\(Self.scheme):search:\(bvid)",
                 title: Fmt.plainText(Self.str(o, "title")),
                 description: Fmt.plainText(Self.str(o, "description")),
@@ -252,6 +268,10 @@ final class BilibiliSource {
                 audioUrl: Self.videoUri(bvid),
                 artworkUrl: Self.https(Self.str(o, "pic")),
                 podcastTitle: Fmt.plainText(Self.str(o, "author")),
+                // ⚠️ 多 P 视频这个数是**整条视频的总和**(实测 `BV1MN4dewEQZ`:26 个 P,
+                // 这里回 `457:6` = 27 426 秒),而点开播放只给 P1(1 127 秒)。搜索接口
+                // 没有任何字段能分辨多 P(`episode_count_text` 对它们也是空),所以列表
+                // 这一行只能照它显示;真值的纠正发生在解析处(见 `ResolvedStream`)。
                 durationSec: Self.hhmmToSec(Self.str(o, "duration")),
                 pubDate: Self.dateOf(Self.num(o, "pubdate")),
                 feedUrl: Self.videoUri(bvid),
@@ -263,40 +283,51 @@ final class BilibiliSource {
 
     // MARK: - 播放前解析
 
-    /// `bilibili://audio/<bvid>/<cid>` → 一条**已经探通**的音频直链;失败回 nil。
+    /// `bilibili://audio/<bvid>/<cid>` → 一条**已经探通**的音频直链 + 这一 P 的真实时长;失败回 nil。
     ///
     /// 失败不在这里重试:播放器的重投由 `PlayerController` 统一管,两处各自重试会变成
     /// 「用户在等,两边都在等」。
-    func resolvePlayback(_ audioUrl: String) async -> String? {
+    func resolvePlayback(_ audioUrl: String) async -> ResolvedStream? {
         // 搜索结果的 audioUrl 是 `bilibili://video/<bvid>`(那时还拿不到 cid)。用户直接在
         // 搜索结果里点播放走的就是这条 —— 这里必须自己补一次 view,否则表现是
         // 「搜索结果点播放永远失败」,而列表看起来完全正常。
+        //
+        // 顺带接住 view 里那条**准确的**分 P 时长(搜索给多 P 视频的是整条总和,见
+        // `ResolvedStream`)。
+        var hint = 0
         var ref = Self.parseAudioUri(audioUrl)
         if ref == nil {
             guard let id = Self.videoIdOf(audioUrl),
                   let feed = await view(id),
                   let first = feed.episodes.first,
                   let parsed = Self.parseAudioUri(first.audioUrl) else { return nil }
+            hint = first.durationSec
             ref = parsed
         }
         guard let (bvid, cid) = ref else { return nil }
         let key = "\(bvid):\(cid)"
         let now = Date()
         let urls: [String]
+        let fetchedDuration: Int
         if let cached = tracks[key], cached.expiresAt > now {
             urls = cached.urls
+            fetchedDuration = cached.durationSec
         } else {
             guard let found = await fetchCandidates(bvid, cid) else {
                 Log.w("Bilibili", "resolve failed bvid=\(bvid) cid=\(cid)")
                 return nil
             }
             urls = found.urls
-            tracks[key] = Track(urls: found.urls, expiresAt: found.expiresAt)
+            fetchedDuration = found.durationSec
+            tracks[key] = Track(urls: found.urls, expiresAt: found.expiresAt, durationSec: found.durationSec)
             // 缓存条数不设上限没有意义:只有正在听的那几集才可能被重试,而条目本身很小。
             if tracks.count > 64 { tracks.removeAll() }
             Log.i("Bilibili", "resolve candidates=\(found.urls.count) ttlMin="
                 + "\(Int(found.expiresAt.timeIntervalSince(now) / 60))")
         }
+        // 直链接口没给时长时退到 view 那条(同样是「这一 P」的口径);都没有就留 0,
+        // 由调用方保留原元数据 —— 不猜。
+        let durationSec = fetchedDuration > 0 ? fetchedDuration : hint
 
         // 从游标处开始**逐个探通**:排第一的 PCDN 节点会回 503(类注释第 4 条)。
         // 探测只用 1 字节 Range,代价一次 RTT;不探的代价是用户点开一集没反应。
@@ -312,17 +343,19 @@ final class BilibiliSource {
             codes.append(code)
             if code == 200 || code == 206 {
                 Log.i("Bilibili", "probe ok #\(i) code=\(code)" + (i > 0 ? " fell back" : ""))
-                return candidate
+                return ResolvedStream(url: candidate, durationSec: durationSec)
             }
             Log.w("Bilibili", "probe #\(i) code=\(code)")
         }
         // 全部探不通也让第一条去试:探测本身可能被网络抖动误伤,
         // 而播放器至少还会走一次自动重投。
         Log.w("Bilibili", "all candidates probe failed, using #0 codes=\(codes)")
-        return urls.first
+        guard let first = urls.first else { return nil }
+        return ResolvedStream(url: first, durationSec: durationSec)
     }
 
-    private func fetchCandidates(_ bvid: String, _ cid: Int) async -> (urls: [String], expiresAt: Date)? {
+    private func fetchCandidates(_ bvid: String, _ cid: Int)
+        async -> (urls: [String], expiresAt: Date, durationSec: Int)? {
         let url = "\(Self.api)/player/playurl?bvid=\(bvid)&cid=\(cid)&fnval=16&fnver=0&fourk=0"
         guard let root = await getJson(url),
               let data = Self.obj(root, "data"),
@@ -344,7 +377,11 @@ final class BilibiliSource {
             if let b = raw as? String, !b.isEmpty { urls.append(b) }
         }
         guard let first = urls.first else { return nil }
-        return (urls, Self.expiryOf(first))
+        // 这一段(这个 cid)的真实时长:`dash.duration` 秒 / `timelength` 毫秒,实测一致
+        // (`BV1MN4dewEQZ` P1:1127 / 1126143)。优先取秒,免得四舍五入。
+        let dashSec = Self.num(dash, "duration")
+        let durationSec = dashSec > 0 ? dashSec : Self.num(data, "timelength") / 1000
+        return (urls, Self.expiryOf(first), durationSec)
     }
 
     /// 1 字节 Range 探活。只认 200/206 —— 503/403 都说明这个节点这会儿不给流。

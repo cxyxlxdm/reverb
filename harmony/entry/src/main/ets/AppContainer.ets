@@ -21,6 +21,7 @@ import { SpeechTranscriber } from './playback/SpeechTranscriber';
 import { DownloadManager } from './playback/DownloadManager';
 import { AudioCacheManager } from './playback/AudioCacheManager';
 import { PodcastRepository } from './net/PodcastRepository';
+import { BilibiliSource, ResolvedStream } from './net/BilibiliSource';
 import { Episode } from './model/Models';
 import { PlayerController } from './playback/PlayerController';
 import { AvSessionBridge } from './playback/AvSessionBridge';
@@ -177,7 +178,8 @@ export class AppContainer {
     };
     // 视频源的伪地址在起播前现取直链。注入的是**同一个** `bilibili` 实例(repository 里那一个),
     // 候选流缓存与探活游标都在它身上 —— 换实例等于每次起播重新摸一遍 PCDN。
-    this.player.resolvePseudoUrl = (url: string): Promise<string | null> =>
+    // 回来的是 `{ url, durationSec }`:时长是**这一次解析的那个 cid** 的真值,见 `ResolvedStream`。
+    this.player.resolvePseudoUrl = (url: string): Promise<ResolvedStream | null> =>
       this.repository.bilibili.resolvePlayback(url);
     this.player.bindListen(
       (e: Episode, delta: number) => { this.listenStats.add(e, delta); },

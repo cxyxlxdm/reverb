@@ -843,8 +843,25 @@ object PlayerController {
                 // 缓存必须在解析之后:AudioCacheManager 拿的是 `audioUrl`,伪地址它拉不下来
                 // (会当成一个畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
                 // 头也要一起给:CDN 缺 UA/Referer 一律 403,而本类默认那个 UA 里就含 `Android`。
-                if (!isRadio) AudioCacheManager.cache(episode.copy(audioUrl = resolved), BilibiliSource.streamHeaders())
-                startEpisode(c, episode, resolved, autoplay)
+                //
+                // 解析结果里还带着**这一 P 的真实时长**:搜索给多 P 视频的是整条总和
+                // (见 `BilibiliSource.ResolvedStream`)。它得在起播前落进这一集的元数据,
+                // 否则历史行与播放态快照里存的是那个大了几十倍的数。
+                val ep = if (resolved.durationSec > 0 && resolved.durationSec != episode.durationSec) {
+                    episode.copy(durationSec = resolved.durationSec)
+                } else episode
+                if (!isRadio) AudioCacheManager.cache(ep.copy(audioUrl = resolved.url), BilibiliSource.streamHeaders())
+                if (ep !== episode) {
+                    // 上面那次 record 写的是旧元数据(h.durationMs 那半本来就来自播放器,是对的;
+                    // 错的只有 episode.durationSec)。同 id 再记一次 = 原地换掉那份载荷、进度不动。
+                    history?.record(ep, System.currentTimeMillis())
+                    _current.value = ep
+                    // 快照也要重写:它在 playEpisode 开头、解析之前就落过一次盘了,
+                    // 那一版存的是旧的 durationSec。
+                    persistState()
+                    log.i(TAG, "duration corrected ${episode.durationSec}s -> ${ep.durationSec}s id=$expectId")
+                }
+                startEpisode(c, ep, resolved.url, autoplay)
             }
             return
         }

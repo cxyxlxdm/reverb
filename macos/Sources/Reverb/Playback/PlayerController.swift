@@ -109,7 +109,7 @@ final class PlayerController: ObservableObject {
     private var audioCache: AudioCacheManager?
     /// 视频源(伪地址)的最后一跳是**现取直链**。注入的是仓库里那**同一个** `BilibiliSource` ——
     /// 候选流缓存与探活游标都在它身上,换实例等于每次起播重新摸一遍 PCDN。
-    var resolvePseudoUrl: ((String) async -> String?)?
+    var resolvePseudoUrl: ((String) async -> BilibiliSource.ResolvedStream?)?
     /// 起播代号:伪地址解析要一次网络往返,等待期间用户可能换了集 —— 旧结果回来必须自弃。
     private var playGeneration = 0
 
@@ -528,21 +528,36 @@ final class PlayerController: ObservableObject {
                     Log.i("Player", "解析结果作废 id=\(episode.id)")
                     return
                 }
-                guard let resolved, let stream = URL(string: resolved) else {
+                guard let resolved, let stream = URL(string: resolved.url) else {
                     Log.w("Player", "解析直链失败 id=\(episode.id)")
                     self.playbackError = String(localized: "加载失败,请检查网络后重试")
                     return
                 }
-                Log.i("Player", "解析直链成功 id=\(episode.id)")
+                Log.i("Player", "解析直链成功 id=\(episode.id) 时长=\(resolved.durationSec)s")
+                // 解析结果里还带着**这一 P 的真实时长**:搜索给多 P 视频的是整条总和
+                // (见 `BilibiliSource.ResolvedStream`)。它必须在起播前落进这一集的元数据,
+                // 否则 `attach` 里那个「显式跳转上限」和历史行都建立在一个人为放大的数上。
+                var ep = episode
+                if resolved.durationSec > 0 && resolved.durationSec != episode.durationSec {
+                    ep.durationSec = resolved.durationSec
+                    self.current = ep
+                    // 上面那次 record 写的是旧元数据。同 id 再记一次 = 原地换掉那份载荷、
+                    // 进度与顺序都不动(HistoryStore.record 保留既有 position)。
+                    if !GuideEpisode.isGuide(ep.id) {
+                        self.history?.record(ep, at: Date().timeIntervalSince1970)
+                    }
+                    self.persistState()
+                    Log.i("Player", "时长更正 \(episode.durationSec)s -> \(ep.durationSec)s id=\(episode.id)")
+                }
                 // 缓存必须在解析之后:缓存模块拿的是 `audioUrl`,伪地址它拉不下来
                 // (会当成畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
                 // 头也要一起给:CDN 认 UA + `Referer`,缺一个 403(见 `BilibiliSource.uaBrowser`)。
                 if !isRadio {
-                    var cachedCopy = episode
-                    cachedCopy.audioUrl = resolved
+                    var cachedCopy = ep
+                    cachedCopy.audioUrl = resolved.url
                     self.audioCache?.cache(cachedCopy, headers: BilibiliSource.streamHeaders)
                 }
-                self.attach(episode, url: stream, source: "网络", resumeMs: resumeMs,
+                self.attach(ep, url: stream, source: "网络", resumeMs: resumeMs,
                             autoplay: autoplay, isRadio: isRadio,
                             assetHeaders: BilibiliSource.streamHeaders,
                             assetMime: BilibiliSource.streamMime)

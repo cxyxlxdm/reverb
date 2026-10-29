@@ -10,6 +10,7 @@ import { FeedCacheStore } from '../store/FeedCacheStore';
 import { Log } from '../util/Logger';
 import { CatalogFeedFilter } from './CatalogFeedFilter';
 import { BilibiliSource } from './BilibiliSource';
+import { Features } from '../Features';
 
 export enum FeedProbeState {
   UNCHECKED = 0,
@@ -95,6 +96,13 @@ export class PodcastRepository {
       return { podcasts: [], sourceLabel: 'RSS', failed: true };
     }
 
+    // `CATALOG=false` 的降级档到此为止:关键词检索返回的是节目列表,同样构成动态目录。
+    // 与 Android `PodcastRepository.search` 同址同判据(那里是 `BuildConfig.CATALOG`,
+    // 编译期常量 → R8 连三个数据源一起剔掉;本端没有 DCE,**代码仍在包里** ——
+    // 要"真的没有"只能把整支移出编译树,见硬规矩 2)。上面两条(粘视频链接 / 粘 RSS 地址)
+    // 在闸前返回,它们不是"下拉就能翻到的目录"。
+    if (!Features.CATALOG) return { podcasts: [], sourceLabel: '', failed: true };
+
     const apple = CatalogFeedFilter.keepPodcasts(await ITunesSource.search(q, region));
     if (apple.length > 0) {
       Log.i('Repo', `搜索经 Apple 命中 ${apple.length} 条`);
@@ -119,6 +127,8 @@ export class PodcastRepository {
 
   /// 按关键词搜索单集;URL 输入只参与频道 RSS 直连,不额外请求目录。
   async searchEpisodes(query: string, region: string): Promise<Episode[]> {
+    // 与 Android `PodcastRepository.searchEpisodes` 同址同判据(那里是 BuildConfig.CATALOG)
+    if (!Features.CATALOG) return [];
     const q = query.trim();
     if (q.length === 0 || q.startsWith('http://') || q.startsWith('https://')) return [];
     const episodes = CatalogFeedFilter.keepEpisodes(await ITunesSource.searchEpisodes(q, region));
