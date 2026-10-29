@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "搜尋節目、單集,或貼上 RSS 網址 / 影片連結"
+      "value": "搜尋播客/影片或貼上 RSS 網址/影片連結"
     },
     {
       "name": "discover_daily_hot",
@@ -115,6 +115,14 @@
     {
       "name": "search_from",
       "value": "來自 %s"
+    },
+    {
+      "name": "search_source_video",
+      "value": "B 站"
+    },
+    {
+      "name": "search_source_apple",
+      "value": "Apple"
     },
     {
       "name": "search_no_shows",

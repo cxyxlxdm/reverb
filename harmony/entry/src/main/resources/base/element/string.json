@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "搜索节目、单集,或粘贴 RSS 地址 / 视频链接"
+      "value": "搜索播客/视频或粘贴 RSS 地址/视频链接"
     },
     {
       "name": "discover_daily_hot",
@@ -115,6 +115,14 @@
     {
       "name": "search_from",
       "value": "来自 %s"
+    },
+    {
+      "name": "search_source_video",
+      "value": "B 站"
+    },
+    {
+      "name": "search_source_apple",
+      "value": "Apple"
     },
     {
       "name": "search_no_shows",

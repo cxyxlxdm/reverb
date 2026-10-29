@@ -600,6 +600,17 @@ fun EpisodeListItem(
      */
     downloadDisabled: Boolean = BilibiliSource.isPseudo(episode.audioUrl),
     showPodcastTitle: Boolean = false, // 搜索结果里同列多个不同播客的单集，需标出所属频道
+    /**
+     * 这一条**来自哪个目录**(只有搜索结果传,null = 不画)。
+     *
+     * 单集搜索是两路结果拼起来的(见 `PodcastRepository.searchEpisodes`:Apple 在前、
+     * 视频源在后),列表头部最多只能标一个来源 —— 用户 2026-10-29 反馈"看不出这条是哪来的"
+     * 就是这个结构造成的。所以来源落在**行上**,随滚动一直在。
+     *
+     * 判据由调用方给(它知道这一列拼了哪几路),这里只负责画:
+     * 视频源那路的 `feedUrl` 是 `bilibili://…` 伪地址,调用方用 `BilibiliSource.isPseudo` 分。
+     */
+    sourceTag: String? = null,
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
     played: Boolean = false,            // 已播完:标题变暗 + 打勾
@@ -776,12 +787,33 @@ fun EpisodeListItem(
                 val name = episode.podcastTitle
                 val shown = if (name.length > 10) name.take(9) + "…" else name
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        shown,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1
-                    )
+                    // 来源标签 + 频道名一起占左侧,meta 仍贴右缘 —— 三者同行时先让频道名收缩,
+                    // 不给标签换行(标签很短,换行反而把它和名字拆成两行,行高就变了)
+                    Row(
+                        Modifier.weight(1f, fill = false),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (sourceTag != null) {
+                            Text(
+                                sourceTag,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                        }
+                        Text(
+                            shown,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     if (meta.isNotBlank()) {
                         Text(
                             meta,

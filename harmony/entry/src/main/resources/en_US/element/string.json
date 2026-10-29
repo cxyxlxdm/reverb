@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "Search shows, episodes, or paste an RSS or video link"
+      "value": "Search podcasts/videos or paste an RSS/video link"
     },
     {
       "name": "discover_daily_hot",
@@ -115,6 +115,14 @@
     {
       "name": "search_from",
       "value": "from %s"
+    },
+    {
+      "name": "search_source_video",
+      "value": "Bilibili"
+    },
+    {
+      "name": "search_source_apple",
+      "value": "Apple"
     },
     {
       "name": "search_no_shows",

@@ -163,6 +163,10 @@ export struct EpisodeListItem {
   @Prop isPlaying: boolean = false;
   @Prop played: boolean = false;
   @Prop showPodcastTitle: boolean = false;
+  /// 这一条**来自哪个目录**。只有搜索结果传(空串 = 不画)。
+  /// 单集搜索是两路结果拼起来的(Apple 在前、视频站在后),一个表头装不下两个来源,
+  /// 所以来源落在**行上** —— 滚到哪一条都看得见它来自哪儿。判据由调用方给。
+  @Prop sourceTag: string = '';
   /// 下载态:-1 不显示下载入口 / 0 排队 / 1 进行中 / 2 已完成 / 3 失败
   @Prop downloadState: number = -1;
   onPlay: () => void = () => {};
@@ -548,11 +552,27 @@ export struct EpisodeListItem {
           // 不显示节目名的场景(频道详情页)退化成日期·时长单独居左,与 Android 同。
           if (this.showsPodcastTitle()) {
             Row() {
+              // 来源标签:与 Android 的 sourceTag 同形(强调色左边一小块灰底)
+              if (this.sourceTag.length > 0) {
+                Text(this.sourceTag)
+                  .fontSize(TypeScale.caption * this.fontScale)
+                  .letterSpacing(Tracking.caption)
+                  .fontColor(this.scheme.onSurfaceVariant)
+                  .backgroundColor(this.scheme.surfaceVariant)
+                  .borderRadius(4)
+                  .padding({ left: 4, right: 4, top: 1, bottom: 1 })
+                  .margin({ right: 6 })
+                  .maxLines(1)
+                  // 标签很短;让它先不被压缩,收缩让给频道名(Android 侧同一条理由)
+                  .flexShrink(0)
+              }
               Text(this.shortPodcastTitle())
                 .fontSize(TypeScale.caption * this.fontScale)
                 .letterSpacing(Tracking.caption)
                 .fontColor(this.scheme.primary)
                 .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .flexShrink(1)
               Blank()
               if (this.meta().length > 0) {
                 Text(this.meta())

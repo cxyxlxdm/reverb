@@ -11128,3 +11128,27 @@ debug 之所以"全绿"是 native 任务**增量 up-to-date 跳过了清理段**
 ② 平台用扩展名认容器时,**扩展名就是协议的一部分**,不是命名习惯。改名前先问"谁在读这个文件名"。
 ③ 这类"第二次才坏"的问题,验收时必须连播两遍(第一遍流式、第二遍缓存命中),
    单次验收一定漏。与 H222 的"隔一小时再点"是同一条思路:**把时间/次数当成验收维度**。
+
+### H224. Android 搜索框的 placeholder 自己折成两行,光标看着像"两行居中" —— `singleLine = true` 管不到它
+
+**现象**:搜索框的输入提示改成「搜索播客/视频或粘贴 RSS 地址/视频链接」之后,Android 端提示占了两行,
+一输入,光标停在两行提示的正中间,看着像这个框是多行输入框(而实际输入内容只有一行)。
+
+**根因**:`OutlinedTextField(singleLine = true)` 约束的是**输入内容**,而 `placeholder` 是另外传进去的
+一个 composable,不受 `singleLine` 管辖。提示文案一长,placeholder 的 `Text` 自己换行,
+decoration box 的高度取的是测量结果,于是被撑成两行高;一行高的输入内容在这个 box 里垂直居中,
+光标就落在"两行之间"。另两端的搜索框没有这个问题:鸿蒙是原生 `TextInput`(本来就单行),
+macOS 是系统 `.searchable` 的工具栏搜索框。
+
+**修法**:把单行约束补在 placeholder 的 `Text` 上 —— `style = bodySmall`(字号降一档)、
+`maxLines = 1`、`softWrap = false`、`overflow = Ellipsis`。新提示在五个语种下都只占一行;
+换到更长的语种(法/西)时超宽部分省略,不折行。同一批还把搜索结果的来源标到了行上
+(见 `docs/FEATURES.md` 搜索一行),那部分是新功能,不是本条的修法。
+
+**教训与可复用的规律**:
+① **`singleLine` 这类参数只作用于它自己的那个控件,不是对整棵子树生效。** 传进 slot 的子 composable
+   要各自把约束补上 —— 换成 `maxLines`、`softWrap`、`overflow` 也一样,别假设外层会传下来。
+② "光标怎么居中不对"是**布局尺寸**问题,不是光标对齐问题:先问 decoration box 的高度从哪来的
+   (placeholder 折行撑高的),别去调 cursor。
+③ 提示文案改长时按**最窄屏 + 最长语种**核宽度。这次在 Pixel 3 / 12sp 下五个语种都能一行放下;
+   再长的文案靠 ellipsis 兜底,而不是回头去改输入框高度。

@@ -56,7 +56,9 @@
     <string name="loading">正在循聲…</string>
     <string name="size_calculating">計算中…</string>
 
-    <string name="search_hint">搜尋播客 · 或貼上 RSS 位址 / 影片連結</string>
+    <string name="search_hint">搜尋播客/影片或貼上 RSS 網址/影片連結</string>
+    <string name="search_source_video">B 站</string>
+    <string name="search_source_apple">Apple</string>
     <string name="search_tab_episodes">單集</string>
     <string name="search_tab_shows">節目</string>
     <string name="search_empty_episodes">沒有找到相關單集</string>
