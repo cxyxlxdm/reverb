@@ -275,7 +275,9 @@ export class BilibiliSource {
       const author = htmlToText(J.str(o, 'author'));
       out.push({
         // 搜索结果是"一个视频",分 P 要等进频道页才知道 ⇒ id 先用 bvid 占位。
-        // 播放路径不靠 id 认视频(它解析 audioUrl),所以这个 id 只需要稳。
+        // 播放路径不靠 id 认视频(它解析 audioUrl),所以这个 id 稳定就够;但它与频道页的
+        // `bilibili:<bvid>:<cid>` **不是同一个 id** —— 同一视频两个入口各播一次会留两条历史、
+        // 两份缓存(见 H226 教训④与 ROADMAP 技术债)。
         id: `bilibili:search:${bvid}`,
         title: htmlToText(J.str(o, 'title')),
         description: htmlToText(J.str(o, 'description')),
@@ -285,6 +287,11 @@ export class BilibiliSource {
         audioUrl: BilibiliSource.videoUri(bvid),
         artworkUrl: https(J.str(o, 'pic')),
         podcastTitle: author,
+        // ⚠️ 多 P 视频这个数是**整条视频的总和**(实测 `BV1MN4dewEQZ`:26 个 P,这里回
+        // `457:6` = 27426 秒),而点开播放只给 P1(1127 秒)。搜索接口没有任何字段能
+        // 分辨多 P(`episode_count_text` 对它们也是空),所以列表这一行只能照它显示;
+        // 真值的纠正发生在解析处 —— `resolvePlayback` 会把那个 cid 的时长带回来
+        // 覆盖掉它(见 `ResolvedStream`)。
         durationSec: hhmmToSec(J.str(o, 'duration')),
         pubDate: dateOf(J.num(o, 'pubdate')),
         feedUrl: BilibiliSource.videoUri(bvid),
@@ -299,21 +306,26 @@ export class BilibiliSource {
   // ---------------------------------------------------------------- 播放前解析
 
   /**
-   * `bilibili://audio/<bvid>/<cid>` → 一条**已经探通**的音频直链;失败回 null。
+   * `bilibili://audio/<bvid>/<cid>` → 一条**已经探通**的音频直链 + 这一 P 的真实时长;
+   * 失败回 null。
    *
    * 失败不在这里重试:播放器的重投由 `PlayerController` 统一管,两处各自重试会变成
    * "用户在等,两边都在等"。
    */
-  async resolvePlayback(audioUrl: string): Promise<string | null> {
+  async resolvePlayback(audioUrl: string): Promise<ResolvedStream | null> {
     // 搜索结果的 audioUrl 是 `bilibili://video/<bvid>`(那时还拿不到 cid)。用户直接在
     // 搜索结果里点播放走的就是这条 —— 这里必须自己补一次 view,否则表现是
     // "搜索结果点播放永远失败",而列表看起来完全正常。
+    //
+    // 顺带接住 view 里那条**准确的**分 P 时长:搜索给多 P 视频的是整条总和,见 `ResolvedStream`。
+    let hint = 0;
     let ref = BilibiliSource.parseAudioUri(audioUrl);
     if (ref === null) {
       const id = BilibiliSource.videoIdOf(audioUrl);
       if (id.length === 0) return null;
       const feed = await this.view(id);
       if (feed === null || feed.episodes.length === 0) return null;
+      hint = feed.episodes[0].durationSec;
       ref = BilibiliSource.parseAudioUri(feed.episodes[0].audioUrl);
       if (ref === null) return null;
     }
@@ -322,9 +334,11 @@ export class BilibiliSource {
     const key = `${bvid}:${cid}`;
     const now = Date.now();
     let urls: string[] = [];
+    let fetchedDuration = 0;
     const cached = this.tracks.get(key);
     if (cached !== undefined && cached.expiresAt > now) {
       urls = cached.urls;
+      fetchedDuration = cached.durationSec;
     } else {
       const found = await this.fetchCandidates(bvid, cid);
       if (found === null) {
@@ -332,12 +346,16 @@ export class BilibiliSource {
         return null;
       }
       urls = found.urls;
-      this.tracks.set(key, new Track(found.urls, found.expiresAt));
+      fetchedDuration = found.durationSec;
+      this.tracks.set(key, new Track(found.urls, found.expiresAt, found.durationSec));
       // 缓存条数不设上限没有意义:只有正在听的那几集才可能被重试,而条目本身很小。
       if (this.tracks.size > 64) this.tracks.clear();
       Log.i('Bilibili',
         `resolve candidates=${found.urls.length} ttlMin=${Math.round((found.expiresAt - now) / 60000)}`);
     }
+    // 直链接口没给时长时退到 view 那条(它同样是"这一 P"的口径);都没有就留 0,
+    // 由调用方保留原元数据 —— 不猜。
+    const durationSec = fetchedDuration > 0 ? fetchedDuration : hint;
 
     // 从游标处开始**逐个探通**:排第一的 PCDN 节点会回 503(类注释第 4 条)。
     // 探测只用 1 字节 Range,代价一次 RTT;不探的代价是用户点开一集没反应。
@@ -353,14 +371,14 @@ export class BilibiliSource {
       codes.push(code);
       if (code === 200 || code === 206) {
         Log.i('Bilibili', `probe ok #${i} code=${code}${i > 0 ? ' fell back' : ''}`);
-        return candidate;
+        return { url: candidate, durationSec: durationSec };
       }
       Log.w('Bilibili', `probe #${i} code=${code}`);
     }
     // 全部探不通也让第一条去试:探测本身可能被网络抖动误伤,而播放器至少还会走一次
     // 自动重投(见 PlayerController 的重试口径)。
     Log.w('Bilibili', `all candidates probe failed, using #0 codes=${JSON.stringify(codes)}`);
-    return urls.length > 0 ? urls[0] : null;
+    return urls.length > 0 ? { url: urls[0], durationSec: durationSec } : null;
   }
 
   private async fetchCandidates(bvid: string, cid: number): Promise<Candidates | null> {
@@ -387,7 +405,11 @@ export class BilibiliSource {
       if (b.length > 0) urls.push(b);
     }
     if (urls.length === 0) return null;
-    return new Candidates(urls, expiryOf(urls[0]));
+    // 这一段(这个 cid)的真实时长:`dash.duration` 秒 / `timelength` 毫秒,实测一致
+    // (`BV1MN4dewEQZ` P1:1127 / 1126143)。优先取秒,免得四舍五入。
+    const dashSec = J.num(J.obj(data, 'dash'), 'duration');
+    const durationSec = dashSec > 0 ? dashSec : Math.floor(J.num(data, 'timelength') / 1000);
+    return new Candidates(urls, expiryOf(urls[0]), durationSec);
   }
 
   /**
@@ -430,21 +452,38 @@ class AudioRef {
 class Track {
   readonly urls: string[];
   readonly expiresAt: number;
+  readonly durationSec: number;
 
-  constructor(urls: string[], expiresAt: number) {
+  constructor(urls: string[], expiresAt: number, durationSec: number) {
     this.urls = urls;
     this.expiresAt = expiresAt;
+    this.durationSec = durationSec;
   }
 }
 
 class Candidates {
   readonly urls: string[];
   readonly expiresAt: number;
+  readonly durationSec: number;
 
-  constructor(urls: string[], expiresAt: number) {
+  constructor(urls: string[], expiresAt: number, durationSec: number) {
     this.urls = urls;
     this.expiresAt = expiresAt;
+    this.durationSec = durationSec;
   }
+}
+
+/**
+ * 一次解析的结果:探通的直链 + **这一 P 的真实时长(秒)**。
+ *
+ * 为什么要把时长一起带出来:搜索接口给的 `duration` 对**多 P 视频是整条视频的总和**
+ * (实测 `BV1MN4dewEQZ`:26 个 P,搜索回 `457:6` = 27426 秒),而播放这一路只解析
+ * **P1**(1127 秒)。这个数还进历史行、进批注的位置上限。`playurl` 的 `dash.duration`
+ * (秒)/ `timelength`(毫秒)给的正是**这个 cid** 的长度。见 H226。
+ */
+export interface ResolvedStream {
+  url: string;
+  durationSec: number;
 }
 
 /**

@@ -57,11 +57,24 @@ class BilibiliSource(private val client: OkHttpClient) {
     private val TAG = "Bilibili"
 
     /** 一次解析出来的候选流地址 + 它的失效时刻(毫秒)。只在内存里,不落盘。 */
-    private class Track(val urls: List<String>, val expiresAt: Long)
+    private class Track(val urls: List<String>, val expiresAt: Long, val durationSec: Long)
 
     private val tracks = ConcurrentHashMap<String, Track>()
     /** 每集下次从第几个候选开始试。重试(换一个 503 的 PCDN 节点)靠它生效。 */
     private val cursor = ConcurrentHashMap<String, Int>()
+
+    /**
+     * 一次解析的结果:探通的直链 + **这一 P 的真实时长(秒)**。
+     *
+     * 为什么要把时长一起带出来:搜索接口给的 `duration` 对**多 P 视频是整条视频的总和**
+     * (实测 `BV1MN4dewEQZ`:26 个 P,搜索回 `457:6` = 27 426 秒),而播放这一路只解析
+     * **P1**(1 127 秒)—— 元数据里那个数于是比真正在放的东西大 24 倍。它不止是列表上
+     * 一个数字:macOS 拿它当「显式跳转的上限」、三端的批注拿它当位置上限、历史行拿它当
+     * 「这一集的长度」。`playurl` 的 `data.dash.duration`(秒)与 `data.timelength`(毫秒)
+     * 给的正是**这个 cid** 的长度 ⇒ 解析处是唯一能同时知道「播哪一段」与「它多长」的地方。
+     * 见 H226。
+     */
+    data class ResolvedStream(val url: String, val durationSec: Long)
 
     // ---------------------------------------------------------------- 伪地址
 
@@ -320,7 +333,9 @@ class BilibiliSource(private val client: OkHttpClient) {
             out.add(
                 Episode(
                     // 搜索结果是「一个视频」,分 P 要等进频道页才知道 ⇒ id 先用 bvid 占位。
-                    // 播放路径不靠 id 认视频(它解析 audioUrl),所以这个 id 只需要稳。
+                    // 播放路径不靠 id 认视频(它解析 audioUrl),所以稳定性够用;但它与频道页的
+                    // `$SCHEME:$bvid:$cid` **不是同一个 id** —— 同一视频两个入口各播一次会留两条
+                    // 历史、两份缓存(见 H226 教训④与 ROADMAP 技术债)。
                     id = "$SCHEME:search:$bvid",
                     title = stripTags(o.optString("title")),
                     description = stripTags(o.optString("description")),
@@ -329,6 +344,11 @@ class BilibiliSource(private val client: OkHttpClient) {
                     audioUrl = videoUri(bvid),
                     artworkUrl = cover,
                     podcastTitle = author,
+                    // ⚠️ 多 P 视频这个数是**整条视频的总和**(实测 `BV1MN4dewEQZ`:26 个 P,
+                    // 这里回 `457:6` = 27 426 秒),而点开播放只给 P1(1 127 秒)。
+                    // 搜索接口没有任何字段能分辨多 P(`episode_count_text` 对它们也是空),
+                    // 所以列表这一行只能照它显示;真值的纠正发生在解析处 ——
+                    // `resolvePlayback` 会把那个 cid 的时长带回来覆盖掉它(见 [ResolvedStream])。
                     durationSec = HHMM_RE.find(o.optString("duration"))?.let { m ->
                         m.groupValues[1].toLong() * 60 + m.groupValues[2].toLong()
                     } ?: 0L,
@@ -344,35 +364,45 @@ class BilibiliSource(private val client: OkHttpClient) {
     // ---------------------------------------------------------------- 播放前解析
 
     /**
-     * `bilibili://audio/<bvid>/<cid>` → 一条**已经探通**的音频直链。
+     * `bilibili://audio/<bvid>/<cid>` → 一条**已经探通**的音频直链 + 这一 P 的真实时长。
      *
      * 失败返回 null,由调用方走播放页那条错误状态行 —— 不要在这里重试:
      * 播放器的重投由 [com.yuyin.reverb.playback.PlayerController] 统一管,
      * 两处各自重试会变成「用户在等,两边都在等」。
      *
-     * @return 可直接交给播放器的地址;解析不出来(下架、地区、风控)时为 null
+     * @return 可直接交给播放器的地址与这一段的长秒数;解析不出来(下架、地区、风控)时为 null
      */
-    suspend fun resolvePlayback(audioUrl: String): String? = withContext(Dispatchers.IO) {
+    suspend fun resolvePlayback(audioUrl: String): ResolvedStream? = withContext(Dispatchers.IO) {
         // 搜索结果的 audioUrl 是 `bilibili://video/<bvid>`(那时还拿不到 cid)。
         // 用户直接在搜索结果里点播放走的就是这个分支 —— 这里必须自己补一次 view,
         // 否则表现是「搜索结果点播放永远失败」,而列表看起来完全正常。
+        //
+        // 顺带接住 view 里那条**准确的**分 P 时长:搜索接口给多 P 视频的是整条总和,
+        // 而这里只播 P1(见 [ResolvedStream] 的注释)。
+        var hint = 0L
         val (bvid, cid) = parseAudioUri(audioUrl) ?: run {
             val id = videoIdOf(audioUrl) ?: return@withContext null
             val first = view(id)?.episodes?.firstOrNull() ?: return@withContext null
+            hint = first.durationSec
             parseAudioUri(first.audioUrl) ?: return@withContext null
         }
         val key = "$bvid:$cid"
         val now = System.currentTimeMillis()
         val cached = tracks[key]?.takeIf { it.expiresAt > now }
-        val urls = cached?.urls ?: fetchCandidates(bvid, cid)?.also { found ->
-            tracks[key] = Track(found.urls, found.expiresAt)
+        val fetched = if (cached == null) fetchCandidates(bvid, cid)?.also {
+            tracks[key] = Track(it.urls, it.expiresAt, it.durationSec)
             // 缓存条数不设上限没有意义:用户在听的那几集才可能被重试,而条目本身很小。
             if (tracks.size > 64) tracks.clear()
-            com.yuyin.reverb.util.Logger.i(TAG, "resolve candidates=${found.urls.size} ttlMin=${(found.expiresAt - now) / 60000}")
-        }?.urls ?: run {
+            com.yuyin.reverb.util.Logger.i(TAG, "resolve candidates=${it.urls.size} ttlMin=${(it.expiresAt - now) / 60000}")
+        } else null
+        val urls = cached?.urls ?: fetched?.urls
+        if (urls == null) {
             com.yuyin.reverb.util.Logger.w(TAG, "resolve failed bvid=$bvid cid=$cid")
             return@withContext null
         }
+        // 直链接口没给时长时退到 view 那条(它同样是「这一 P」的口径);都没有就留 0,
+        // 由调用方保留原元数据 —— 不猜。
+        val durationSec = (cached?.durationSec ?: fetched?.durationSec ?: 0L).takeIf { it > 0 } ?: hint
 
         // 从游标处开始**逐个探通**:实测排第一的 PCDN 节点会回 503(见类注释第 3 条)。
         // 探测只用 1 字节的 Range,代价是一次 RTT;不探的代价是用户点开一集没反应。
@@ -388,17 +418,17 @@ class BilibiliSource(private val client: OkHttpClient) {
             codes.add(code)
             if (code == 200 || code == 206) {
                 com.yuyin.reverb.util.Logger.i(TAG, "probe ok #$i code=$code" + if (i > 0) " fell back" else "")
-                return@withContext candidate
+                return@withContext ResolvedStream(candidate, durationSec)
             }
             com.yuyin.reverb.util.Logger.w(TAG, "probe #$i code=$code")
         }
         // 全部探不通也让第一条去试:探测本身可能被网络抖动误伤,
         // 而播放器至少还会走一次自动重投(见 PlaybackController 的重试口径)。
         com.yuyin.reverb.util.Logger.w(TAG, "all candidates probe failed, using #0 codes=$codes")
-        urls.firstOrNull()
+        urls.firstOrNull()?.let { ResolvedStream(it, durationSec) }
     }
 
-    private class Candidates(val urls: List<String>, val expiresAt: Long)
+    private class Candidates(val urls: List<String>, val expiresAt: Long, val durationSec: Long)
 
     private fun fetchCandidates(bvid: String, cid: Long): Candidates? {
         val data = getJson("$API/player/playurl?bvid=$bvid&cid=$cid&fnval=16&fnver=0&fourk=0")
@@ -420,7 +450,11 @@ class BilibiliSource(private val client: OkHttpClient) {
             for (i in 0 until bu.length()) bu.optString(i).takeIf { it.isNotBlank() }?.let(urls::add)
         }
         if (urls.isEmpty()) return null
-        return Candidates(urls, expiryOf(urls.first()))
+        // 这一段(这个 cid)的真实时长:`dash.duration` 是秒,`timelength` 是毫秒;
+        // 实测两者一致(`BV1MN4dewEQZ` P1:1127 / 1126143)。优先取秒,免得四舍五入。
+        val durationSec = data.optJSONObject("dash")?.optLong("duration", 0L)?.takeIf { it > 0 }
+            ?: (data.optLong("timelength", 0L) / 1000L)
+        return Candidates(urls, expiryOf(urls.first()), durationSec)
     }
 
     /**

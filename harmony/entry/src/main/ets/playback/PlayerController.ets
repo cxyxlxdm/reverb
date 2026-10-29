@@ -8,7 +8,7 @@ import { HistoryStore } from '../store/Stores';
 import { SettingsStore } from '../store/SettingsStore';
 import { PlaybackStateStore } from '../store/PlaybackStateStore';
 import { PlaybackClock } from './PlaybackClock';
-import { BilibiliSource } from '../net/BilibiliSource';
+import { BilibiliSource, ResolvedStream } from '../net/BilibiliSource';
 import { Log } from '../util/Logger';
 
 /// 播放请求的 User-Agent。与 Http.ets 的 UA 同一形态 —— 不少播客 CDN 会按 UA 拒绝请求。
@@ -70,6 +70,20 @@ function withAudioUrl(e: Episode, audioUrl: string): Episode {
   return {
     id: e.id, title: e.title, description: e.description, audioUrl: audioUrl,
     artworkUrl: e.artworkUrl, podcastTitle: e.podcastTitle, durationSec: e.durationSec,
+    pubDate: e.pubDate, feedUrl: e.feedUrl,
+    transcriptUrl: e.transcriptUrl, transcriptType: e.transcriptType
+  };
+}
+
+/**
+ * 复制一集并换掉时长。解析处拿到的**这一 P** 的真值要落回元数据(见 `ResolvedStream`)。
+ * 不直接改 `e.durationSec`:搜索结果的 Episode 对象还被那块列表引用着,原地改会让列表
+ * 与历史各说一套;换成副本,只影响这一路播放与历史里那一条。
+ */
+function withDuration(e: Episode, durationSec: number): Episode {
+  return {
+    id: e.id, title: e.title, description: e.description, audioUrl: e.audioUrl,
+    artworkUrl: e.artworkUrl, podcastTitle: e.podcastTitle, durationSec: durationSec,
     pubDate: e.pubDate, feedUrl: e.feedUrl,
     transcriptUrl: e.transcriptUrl, transcriptType: e.transcriptType
   };
@@ -171,13 +185,13 @@ export class PlayerController {
    */
   networkPlayNotice: ((e: Episode, headers: Record<string, string> | null) => void) | null = null;
   /**
-   * 伪地址 → 一条现取的直链(视频源专用,闭包注入,与上面同一解耦风格)。
+   * 伪地址 → 一条现取的直链 + **这一 P** 的真时长(视频源专用,闭包注入,与上面同一解耦风格)。
    *
    * 注入的是 `PodcastRepository.bilibili.resolvePlayback` 的**同一个实例** —— 候选流缓存
    * 与探活游标在那一侧,换实例就等于每次起播都重新摸一遍 PCDN。
    * 没绑上时视频集只能报加载失败,普通播客完全不受影响。
    */
-  resolvePseudoUrl: ((url: string) => Promise<string | null>) | null = null;
+  resolvePseudoUrl: ((url: string) => Promise<ResolvedStream | null>) | null = null;
   /// 播放状态变化回调(供 AVSession 同步)
   onStateChanged: (() => void) | null = null;
 
@@ -449,15 +463,15 @@ export class PlayerController {
    * 请求本身带自己的超时(`BilibiliSource` 里 10s + 探活 8s),我们能做的是**不再等它**。
    * 回来的旧结果由 `resolveSeq` 判掉 —— 两道闸都要:前者让串行链立刻放行,后者防旧值覆盖。
    */
-  private async resolvePseudoAudio(url: string): Promise<string | null> {
+  private async resolvePseudoAudio(url: string): Promise<ResolvedStream | null> {
     const resolver = this.resolvePseudoUrl;
     if (resolver === null) return null;
     const seq = this.resolveSeq;
-    const aborted = new Promise<string | null>((resolve: (v: string | null) => void) => {
+    const aborted = new Promise<ResolvedStream | null>((resolve: (v: ResolvedStream | null) => void) => {
       this.resolveAbort = (): void => resolve(null);
     });
     try {
-      const task = resolver(url).catch((err: Error): string | null => {
+      const task = resolver(url).catch((err: Error): ResolvedStream | null => {
         Log.w('Player', `解析直链异常 ${err.message}`);
         return null;
       });
@@ -559,10 +573,10 @@ export class PlayerController {
      */
     let streamUrl = e.audioUrl;
     if (!useLocal && BilibiliSource.isPseudo(e.audioUrl)) {
-      streamUrl = await this.resolvePseudoAudio(e.audioUrl) ?? '';
+      const resolved = await this.resolvePseudoAudio(e.audioUrl);
       // 等待往返期间用户可能点了别的集:这次起播已作废(见 `resolveSeq`)
       if (generation !== this.loadGeneration) return;
-      if (streamUrl.length === 0) {
+      if (resolved === null || resolved.url.length === 0) {
         Log.w('Player', `解析直链失败 id=${e.id}`);
         this.loading = false;
         this.playbackDesiredPlaying = false;
@@ -571,7 +585,26 @@ export class PlayerController {
         this.notify();
         return;
       }
-      Log.i('Player', `解析直链成功 id=${e.id}`);
+      streamUrl = resolved.url;
+      /**
+       * 用**这一 P** 的真时长换掉元数据里的那个(见 `ResolvedStream`)。
+       *
+       * 上面那次 `history.record` 与 `persistState` 写的是解析之前的载荷 —— 搜索接口给的
+       * `duration` 对多 P 视频是**整条**的总长(实测 `457:6` = 27426 s,而正在播的 P1
+       * 只有 1127 s)。时长错了会让历史行写着 7:37:06、播放器里却 18:47 到底。
+       * 同 id 再记一次 = 原地换掉那一条的载荷,进度不动(与 Android 那次 `history?.record(ep,…)`
+       * 同一手法)。`audioUrl` 仍是伪地址,不是直链 —— 直链只活在这次起播里。
+       */
+      if (resolved.durationSec > 0 && resolved.durationSec !== e.durationSec) {
+        const before = e.durationSec;
+        const corrected = withDuration(e, resolved.durationSec);
+        e = corrected;
+        this.current = corrected;
+        if (!isGuide && this.history !== null) this.history.record(corrected, Date.now());
+        this.persistState();
+        Log.i('Player', `时长更正 ${before}s -> ${resolved.durationSec}s id=${e.id}`);
+      }
+      Log.i('Player', `解析直链成功 id=${e.id} duration=${resolved.durationSec}s`);
     }
     Log.i('Player', `播放 "${e.title}" 源=${useLocal ? '本地' : '网络'} resume=${resumeMs}ms generation=${generation}`);
     /**
@@ -632,6 +665,7 @@ export class PlayerController {
    *
    * `createMediaSourceWithUrl` + `setMediaSource` 自 API 12 起提供。低版本或调用失败时
    * **回落到直接赋 url**,保持原行为,不至于因为这个增强反而放不出声。
+   * **但带自定义头的调用方(视频流)不回落** —— 那条路丢了头就是必然 403,见函数里的注释。
    *
    * - Parameter headers: 整份替换要发的头。视频源传 `BilibiliSource.streamHeaders()`
    *   (浏览器 UA + `Referer`,缺 Referer 的节点会 403);普通单集传 null 即本端 UA。
@@ -643,7 +677,12 @@ export class PlayerController {
       await p.setMediaSource(src);
       return;
     } catch (err) {
-      Log.w('Player', `setMediaSource 不可用,回落直接赋 url:${(err as Error).message}`);
+      Log.w('Player', `setMediaSource 不可用:${(err as Error).message}`);
+      // 视频流**不能**回落到 `p.url = url`:那条路只剩 AVPlayer 的默认请求头,上面那份
+      // UA + Referer 全丢,upos 节点对缺 Referer 的请求直接 403(见 `streamHeaders` 的注释)。
+      // 回落等于把"能放"换成一个必然失败、且日志里只剩一句泛泛加载失败的结局;
+      // 抛出去交给调用方的 catch 走 `handleLoadFailure`,报出来的才是真实原因。
+      if (headers !== null) throw err as Error;
     }
     p.url = url;
   }
