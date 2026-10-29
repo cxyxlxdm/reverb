@@ -376,18 +376,25 @@ class BilibiliSource(private val client: OkHttpClient) {
 
         // 从游标处开始**逐个探通**:实测排第一的 PCDN 节点会回 503(见类注释第 3 条)。
         // 探测只用 1 字节的 Range,代价是一次 RTT;不探的代价是用户点开一集没反应。
+        //
+        // 每个候选的码都打出来(三端同口径,见 H225):只记「全失败」时,探针本身坏掉
+        // 与节点真的不给流在日志里长得一样。
         val start = (cursor[key] ?: 0) % urls.size
         cursor[key] = (start + 1) % urls.size
+        val codes = ArrayList<Int>(urls.size)
         for (i in urls.indices) {
             val candidate = urls[(start + i) % urls.size]
-            if (probe(candidate)) {
-                if (i > 0) com.yuyin.reverb.util.Logger.i(TAG, "probe fell back to #$i")
+            val code = probe(candidate)
+            codes.add(code)
+            if (code == 200 || code == 206) {
+                com.yuyin.reverb.util.Logger.i(TAG, "probe ok #$i code=$code" + if (i > 0) " fell back" else "")
                 return@withContext candidate
             }
+            com.yuyin.reverb.util.Logger.w(TAG, "probe #$i code=$code")
         }
         // 全部探不通也让第一条去试:探测本身可能被网络抖动误伤,
         // 而播放器至少还会走一次自动重投(见 PlaybackController 的重试口径)。
-        com.yuyin.reverb.util.Logger.w(TAG, "all candidates probe failed, using #0")
+        com.yuyin.reverb.util.Logger.w(TAG, "all candidates probe failed, using #0 codes=$codes")
         urls.firstOrNull()
     }
 
@@ -429,8 +436,14 @@ class BilibiliSource(private val client: OkHttpClient) {
         return if (at - now > 10 * 60 * 1000) at - 5 * 60 * 1000 else now + 60 * 1000
     }
 
-    /** 1 字节 Range 探活。只认 200/206 —— 503/403 都说明这个节点这会儿不给流。 */
-    private fun probe(url: String): Boolean = try {
+    /**
+     * 1 字节 Range 探活,**返回状态码**;拿不到(超时 / 连接失败)回 0,由调用方按 200/206 判通
+     * —— 503/403 都说明这个节点这会儿不给流。
+     *
+     * 回码不回 Bool 是为了日志能读出「节点给了什么」(见 H225)。本端这条路本身没中那个坑
+     * —— OkHttp 的 `execute()` 自己就带码,macOS 用的是 `URLSession` 的 async 便利方法。
+     */
+    private fun probe(url: String): Int = try {
         val req = Request.Builder()
             .url(url)
             .header("User-Agent", UA)
@@ -439,10 +452,11 @@ class BilibiliSource(private val client: OkHttpClient) {
             .build()
         client.newCall(req).execute().use { resp ->
             // 有些 CDN 对 HEAD/小 Range 回 200 + 整个 body,所以这里必须 close 而不是读完
-            resp.code == 200 || resp.code == 206
+            resp.code
         }
     } catch (e: Exception) {
-        false
+        com.yuyin.reverb.util.Logger.w(TAG, "probe exception ${e.javaClass.simpleName}: ${e.message}")
+        0
     }
 
     // ---------------------------------------------------------------- 底层

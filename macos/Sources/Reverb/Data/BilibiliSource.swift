@@ -300,18 +300,25 @@ final class BilibiliSource {
 
         // 从游标处开始**逐个探通**:排第一的 PCDN 节点会回 503(类注释第 4 条)。
         // 探测只用 1 字节 Range,代价一次 RTT;不探的代价是用户点开一集没反应。
+        //
+        // 每个候选的码都打出来(H225):这条链以前只回 Bool,而 macOS 的探针拿不到码、
+        // 恒判失败,日志里「轮换没生效」和「节点真的不给流」是同一句话,查不出来。
         let start = (cursor[key] ?? 0) % urls.count
         cursor[key] = (start + 1) % urls.count
+        var codes: [Int] = []
         for i in 0..<urls.count {
             let candidate = urls[(start + i) % urls.count]
-            if await probe(candidate) {
-                if i > 0 { Log.i("Bilibili", "probe fell back to #\(i)") }
+            let code = await probe(candidate)
+            codes.append(code)
+            if code == 200 || code == 206 {
+                Log.i("Bilibili", "probe ok #\(i) code=\(code)" + (i > 0 ? " fell back" : ""))
                 return candidate
             }
+            Log.w("Bilibili", "probe #\(i) code=\(code)")
         }
         // 全部探不通也让第一条去试:探测本身可能被网络抖动误伤,
         // 而播放器至少还会走一次自动重投。
-        Log.w("Bilibili", "all candidates probe failed, using #0")
+        Log.w("Bilibili", "all candidates probe failed, using #0 codes=\(codes)")
         return urls.first
     }
 
@@ -341,8 +348,9 @@ final class BilibiliSource {
     }
 
     /// 1 字节 Range 探活。只认 200/206 —— 503/403 都说明这个节点这会儿不给流。
-    private func probe(_ url: String) async -> Bool {
-        await HTTP.probeOk(url, headers: Self.headers, timeout: Self.probeTimeout)
+    /// 回状态码而不是 Bool:日志里要能看见码(见 H225)。
+    private func probe(_ url: String) async -> Int {
+        await HTTP.probeCode(url, headers: Self.headers, timeout: Self.probeTimeout)
     }
 
     // MARK: - 底层

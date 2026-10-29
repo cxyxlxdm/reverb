@@ -97,14 +97,17 @@ export class Http {
   }
 
   /**
-   * 1 字节探活:只认 **200 / 206**,其余(403 / 503 / 超时)都判为此刻取不到流。
+   * 1 字节探活,**返回服务端状态码**;拿不到(超时 / 连接失败)回 0,由调用方按 200/206 判通。
+   *
+   * 回码不回 boolean 是为了日志能读出「节点给了什么」(见 H225):只回 Bool 时,
+   * 「探针坏了」与「节点真的不给流」在日志里是同一句话。
    *
    * 调用方自己把 `Range: bytes=0-0` 放进 headers,不在这里替它加 —— 有的 CDN 对小 Range
    * 回 200 + 整个 body,而这是"通不通"的探针,不是取数据。所以拿到响应码就立刻 destroy,
    * 正文不读。与 `text()` 的硬超时同一个口径:Promise 不保证按时结束,这里靠请求超时 + catch。
    */
-  static async probeOk(url: string, headers: Record<string, string>,
-    timeoutMs: number = 8000): Promise<boolean> {
+  static async probeCode(url: string, headers: Record<string, string>,
+    timeoutMs: number = 8000): Promise<number> {
     const req = http.createHttp();
     try {
       const resp: http.HttpResponse = await req.request(url, {
@@ -114,9 +117,9 @@ export class Http {
         readTimeout: timeoutMs,
         expectDataType: http.HttpDataType.STRING
       });
-      return resp.responseCode === 200 || resp.responseCode === 206;
+      return resp.responseCode;
     } catch (_e) {
-      return false;
+      return 0;
     } finally {
       try {
         req.destroy();

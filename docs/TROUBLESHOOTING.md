@@ -11072,8 +11072,8 @@ debug 之所以"全绿"是 native 任务**增量 up-to-date 跳过了清理段**
 于是报的是自己这一侧的解析错误,**错误码不携带 HTTP 状态**。也就是说:
 头没给对与文件真的坏了,在这一端是同一个错误码。
 
-**修法**:起播前先用 `Http.probeOk(url, headers)` 拿一次状态码(只认 200/206,取到码即 destroy,
-不读正文),失败时按候选列表换下一条;真正把 URL 交给 `createMediaSourceWithUrl(url, headers)`
+**修法**:起播前先用 `Http.probeCode(url, headers)` 拿一次状态码(只认 200/206,取到码即 destroy,
+不读正文;该函数 2026-10-29 之前叫 `probeOk`、只回 boolean,改名的理由见 H225),失败时按候选列表换下一条;真正把 URL 交给 `createMediaSourceWithUrl(url, headers)`
 时**必须把头一起带上**(这个 API 自 API 12 起支持第二个参数,不传就是不带头)。
 
 **教训与可复用的规律**:
@@ -11152,3 +11152,63 @@ macOS 是系统 `.searchable` 的工具栏搜索框。
    (placeholder 折行撑高的),别去调 cursor。
 ③ 提示文案改长时按**最窄屏 + 最长语种**核宽度。这次在 Pixel 3 / 12sp 下五个语种都能一行放下;
    再长的文案靠 ellipsis 兜底,而不是回头去改输入框高度。
+
+### H225. macOS:`URLSession.data(for:)` 建出来的任务**不回调** `URLSessionDataDelegate` 的数据投递方法 —— 探针恒失败,而日志只会说"节点探不通"
+
+**现象**:macOS 上播视频来源的单集,日志每次都是
+
+```
+[Bilibili] resolve candidates=3 ttlMin=114
+[Bilibili] all candidates probe failed, using #0
+```
+
+而那条 `#0` 直链紧接着就**正常拉完了整集 8.68 MB**、`readyToPlay`、能出声。
+用 curl 带同一组头(`User-Agent` = iOS 串、`Referer: https://www.bilibili.com/`、
+`Range: bytes=0-0`)打同一条直链是 **206**。也就是说"三条候选全不通"这个读数是假的,
+PCDN 候选轮换那层保护**从上线起就没执行过一次**。
+
+**根因**:探针用 `HeaderProbe`(`URLSessionDataDelegate`)拿状态码,却用
+`probeSession.data(for: req)` 驱动这次请求。**带 completion handler 的任务不把响应
+交给 delegate 的数据投递方法** —— `didReceive response` 一次都不来,`code` 停在 0,
+于是恒判失败。把同一段代码单独抽出来跑,同一批直链上读数是:
+
+```
+#0 api.data(for:)  bytes=1 respCode=206 delegateFired=false delegateCode=0
+   delegate-only:  fired=true code=206          ← 换成 dataTask(with:)+resume()
+```
+
+同文件里的 `redirectProbe` 没中这个坑:它用的 `willPerformHTTPRedirection` 是 **task 级**
+回调,`data(for:)` 照样会转给 delegate(实测 `code=302 loc=…` 正常)。
+**只有"数据投递"这一类(didReceive response / data / complete)在带 completion handler 时不回调。**
+
+**修法**:探针改回 delegate 驱动 —— `dataTask(with: req).resume()`,在
+`didReceive response` 里 `completionHandler(.cancel)` 后 resume 一个 continuation;
+`didCompleteWithError` 兜"没拿到响应头"(回 0),两个出口都用 `finished` 判重
+(continuation 被 resume 两次会直接崩进程)。
+
+⚠️ **不能图省事改成"读 `data(for:)` 的返回码"**:delegate 存在的意义是**拿到响应头就取消**,
+因为有的 CDN 无视 `Range` 回 200 + 整段 body —— 那样一次探针就付掉整集流量,
+这正是原注释里写过的理由。修的是驱动方式,不是判据。
+同一批改动还把探针改成**回状态码**、三端都把每个候选的码打进日志(见教训 ③)。
+
+**验收读数**(2026-10-29,三端同一集 `BV1MN4dewEQZ`):
+
+| 端 | 修前 | 修后 |
+|---|---|---|
+| macOS | `all candidates probe failed, using #0`(每次都这样) | `resolve candidates=3 ttlMin=115` → `probe ok #0 code=206` → `cache done bytes=8683265` |
+| Android(debug 包) | 同左(只记全失败) | `resolve candidates=3 ttlMin=102` → `probe ok #0 code=206` → `cache done bytes=8683265` |
+
+**教训与可复用的规律**:
+① **"异步 API 返回了结果"不等于"delegate 也收到了"。** 两个世界:completion-handler / async
+   便利方法,与 delegate 回调。混用时先问一句"这类回调在带 completion handler 的任务上还会不会来"
+   —— task 级(重定向、鉴权挑战)会,数据投递级不会。
+② **一个恒为真的读数,要当成"测量仪器坏了"来查。** `all candidates probe failed` 连着出现、
+   而紧接着又用"没探通"的那条链接播成功了,这两句自相矛盾 —— 矛盾本身就是判据。
+   排除顺序:同参数在宿主机上复现(curl 206)⇒ 服务端无辜;把端内这段抽成最小程序独立跑 ⇒ 本地无辜;
+   换驱动方式再跑 ⇒ 定位。
+③ **只记"全失败"的日志等于没日志。** 探针这种"三选一"的判定,必须把**每个候选的码**都打出来,
+   否则"探针坏了"与"节点真的不给流"在日志里是同一句话。本条从发现到定位花的时间,
+   全部来自这个不可分辨性 —— 修法里顺手把三端都改成 `probe #i code=…` / `probe ok #i code=…`。
+④ **同端同一份"短请求"代码可能有两条驱动方式**(`probeOk` 与 `redirectProbe`),
+   一致地坏反而更容易被怀疑成外部原因。看到两个同形的工具一个正常一个恒失败时,
+   先去比"它们各自用了哪种回调"。
