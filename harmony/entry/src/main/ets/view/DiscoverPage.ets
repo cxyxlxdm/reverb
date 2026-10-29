@@ -447,6 +447,14 @@ export struct DiscoverPage {
     return '';
   }
 
+  /// 节目表头用的来源短名。仓储那层给的是 `Bilibili` / `Apple Podcasts` 这种**内部标识**,
+  /// 而单集行上标的是「B 站」/「Apple」—— 同一个屏幕上两种写法会显得像两个源,这里统一收口。
+  private searchSourceLabel(): string {
+    if (this.searchLabel === 'Bilibili') return L.s('search_source_video');
+    if (this.searchLabel.indexOf('Apple') === 0) return L.s('search_source_apple');
+    return this.searchLabel;
+  }
+
   private clearSearchResults(): void {
     this.searchGeneration += 1;
     this.searchingPodcasts = false;
@@ -1165,8 +1173,9 @@ export struct DiscoverPage {
         this.searchTabChip(L.s('tab_shows'), this.searchPodcasts.length, 0)
         this.searchTabChip(L.s('tab_episodes'), this.searchEpisodes.length, 1)
         Blank()
-        if (this.searchLabel.length > 0) {
-          Text(L.f('search_from', this.searchLabel))
+        // 表头只在「节目」这一格有意义:单集的来源逐行标(两路拼起来的,表头装不下)
+        if (this.searchTab === 0 && this.searchLabel.length > 0) {
+          Text(L.f('search_from', this.searchSourceLabel()))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
         }
@@ -1218,6 +1227,10 @@ export struct DiscoverPage {
                 EpisodeListItem({
                   scheme: this.scheme, fontScale: this.fontScale, episode: e,
                   showPodcastTitle: true,
+                  // 来源逐行标:单集是两路拼起来的(Apple 在前、视频站在后),表头装不下两个来源。
+                  // 判据与 Android 同一条 —— 视频源的 feedUrl 是 `bilibili://…` 伪地址。
+                  sourceTag: BilibiliSource.isPseudo(e.feedUrl)
+                    ? L.s('search_source_video') : L.s('search_source_apple'),
                   // 正在播的那一集要高亮(标题转强调色、封面上的图标变暂停)。
                   // 这两个此前漏传,搜索结果里点播后看不出播的是哪一条 —— Android 一直是传的。
                   isCurrent: this.player.current !== null && this.player.current.id === e.id,

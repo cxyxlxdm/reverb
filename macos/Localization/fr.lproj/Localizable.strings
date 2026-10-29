@@ -36,7 +36,9 @@
 "30 秒 · 内置音频，不联网也能播" = "30 s · intégré, hors ligne";
 "随应用内置的 30 秒引导音频，无需联网即可播放。" = "Introduction de 30 secondes intégrée. Lecture sans connexion.";
 "暂无内容" = "Aucun contenu";
-"搜索节目、单集，或粘贴 RSS 地址 / 视频链接" = "Rechercher des émissions, épisodes ou coller une URL RSS ou une vidéo";
+"搜索播客/视频或粘贴 RSS 地址/视频链接" = "Rechercher podcasts/vidéos ou coller un lien RSS ou vidéo";
+"来自 %@" = "via %@";
+"B 站" = "Bilibili";
 "搜索中…" = "Recherche…";
 "没有找到「%@」" = "Aucun résultat pour « %@ »";
 "节目" = "Émissions";

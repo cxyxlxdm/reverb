@@ -282,6 +282,10 @@ struct RoomyEpisodeRow: View {
     var showDate: Bool = false      // 「最新」等场景在频道名之外再显示发布日期
     var played: Bool = false
     var accent: Color = .accentColor
+    /// 这一条**来自哪个目录**。只有搜索结果传(nil = 不画)。
+    /// 单集搜索是两路结果拼起来的(Apple 在前、视频站在后),一个表头装不下两个来源,
+    /// 所以来源落在**行上** —— 滚到哪一条都看得见它来自哪儿。
+    var sourceTag: String? = nil
     /// 封面是否可点进频道页(见 `EpisodeArtworkLink`);频道详情页传 false。
     var coverOpensChannel: Bool = true
     /// 选择模式:整行的点击语义由调用方改成"勾选"(行自身不存这份状态 ——
@@ -346,11 +350,24 @@ struct RoomyEpisodeRow: View {
                         .lineLimit(2)
                         .foregroundStyle(titleColor)
                 }
-                if !meta.isEmpty {
-                    Text(meta)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                if sourceTag != nil || !meta.isEmpty {
+                    HStack(spacing: 6) {
+                        if let tag = sourceTag {
+                            Text(tag)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.secondary.opacity(0.15),
+                                            in: RoundedRectangle(cornerRadius: 4))
+                        }
+                        if !meta.isEmpty {
+                            Text(meta)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)

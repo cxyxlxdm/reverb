@@ -56,7 +56,9 @@
     <string name="loading">Escuchando…</string>
     <string name="size_calculating">Calculando…</string>
 
-    <string name="search_hint">Buscar · o pega una URL RSS o un enlace de vídeo</string>
+    <string name="search_hint">Buscar podcasts/vídeos o pegar un enlace RSS o de vídeo</string>
+    <string name="search_source_video">Bilibili</string>
+    <string name="search_source_apple">Apple</string>
     <string name="search_tab_episodes">Episodios</string>
     <string name="search_tab_shows">Programas</string>
     <string name="search_empty_episodes">Sin episodios relacionados</string>

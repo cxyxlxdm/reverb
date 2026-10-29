@@ -88,6 +88,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
@@ -207,7 +208,16 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             placeholder = {
-                Text(stringResource(if (BuildConfig.CATALOG) R.string.search_hint else R.string.search_hint_url))
+                // `singleLine = true` 只管输入内容,管不到 placeholder —— 它是一个独立的 Text,
+                // 长了会自己折行,把 decoration box 撑成两行高,于是光标看着像"两行居中"。
+                // 见 H224:所以这里要把那层限制补在 Text 上,而不只是写在外层参数里。
+                Text(
+                    stringResource(if (BuildConfig.CATALOG) R.string.search_hint else R.string.search_hint_url),
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
             },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = {
@@ -945,6 +955,10 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
     val history by container.historyStore.history.collectAsStateWithLifecycle()
     // 默认停在「单集」；若本次无单集则落到「节目」，避免进来一片空白
     var tab by remember(s) { mutableIntStateOf(if (s.episodes.isNotEmpty()) 0 else 1) }
+    // 单集这一列是两路拼起来的(Apple 在前、B 站在后),一个表头装不下两个来源,
+    // 所以来源落在每一行上 —— 滚到哪一条都看得见它来自哪儿。
+    val videoTag = stringResource(R.string.search_source_video)
+    val appleTag = stringResource(R.string.search_source_apple)
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -978,6 +992,8 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
                             isPlaying = isPlaying,
                             onPlay = { PlayerController.playOrToggle(ep, s.episodes) },
                             showPodcastTitle = true,
+                            // 视频来源的行内伪地址是 `bilibili://…`,其余都是 Apple 那一路的单集
+                            sourceTag = if (BilibiliSource.isPseudo(ep.feedUrl)) videoTag else appleTag,
                             played = played,
                             // 同样不给「标记已播完」(2026-10-17 两端口径统一):搜索结果是一堆
                             // 不相干的集,标完这一列不重排、行内只把标题压暗,而没播过的集压根
@@ -993,7 +1009,15 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
                 EmptyHint(stringResource(R.string.search_empty_shows))
             } else {
                 PodcastResultList(
-                    header = stringResource(R.string.discover_source, s.source),
+                    // 表头也走同一套短名:同一个屏幕上「B 站」与「Bilibili」两种写法会显得像两个源
+                    header = stringResource(
+                        R.string.discover_source,
+                        when {
+                            s.source.startsWith("Bilibili") -> videoTag
+                            s.source.startsWith("Apple") -> appleTag
+                            else -> s.source
+                        }
+                    ),
                     podcasts = s.podcasts,
                     onOpen = onOpen
                 )

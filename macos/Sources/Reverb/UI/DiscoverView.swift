@@ -73,6 +73,8 @@ struct DiscoverView: View {
     @State private var submittedQuery = ""
     @State private var searchPodcasts: [Podcast] = []
     @State private var searchEpisodes: [Episode] = []
+    /// 节目那一路的来源短名(`Bilibili` / `Apple Podcasts` / …),仓储层给的原始标识。
+    @State private var searchSource = ""
     @State private var searching = false
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
@@ -93,13 +95,14 @@ struct DiscoverView: View {
         }
         .navigationTitle("余音")
         .searchable(text: $searchText, placement: .toolbar,
-                    prompt: "搜索节目、单集，或粘贴 RSS 地址 / 视频链接")
+                    prompt: "搜索播客/视频或粘贴 RSS 地址/视频链接")
         .onSubmit(of: .search) { runSearch() }
         .onChange(of: searchText) { v in
             if v.trimmingCharacters(in: .whitespaces).isEmpty {
                 submittedQuery = ""
                 searchPodcasts = []
                 searchEpisodes = []
+                searchSource = ""
             }
         }
         .toolbar {
@@ -293,7 +296,15 @@ struct DiscoverView: View {
                 VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
                     if !searchPodcasts.isEmpty {
                         VStack(alignment: .leading, spacing: 16) {
-                            Text("节目").font(.title3).fontWeight(.semibold)
+                            HStack(spacing: 8) {
+                                Text("节目").font(.title3).fontWeight(.semibold)
+                                if !searchSource.isEmpty {
+                                    Text(String(format: NSLocalizedString("来自 %@", comment: ""),
+                                                searchSourceLabel))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
                             LazyVGrid(columns: columns, spacing: Metrics.gridSpacing) {
                                 ForEach(searchPodcasts) { p in
                                     NavigationLink(value: p) { PodcastCard(podcast: p) }
@@ -314,6 +325,10 @@ struct DiscoverView: View {
                                     showPodcast: true,
                                     played: env.history.isPlayed(ep.id),
                                     accent: accent,
+                                    // 单集是两路拼起来的(Apple 在前、视频站在后),表头装不下两个来源,
+                                    // 所以来源落在行上。判据与另两端同一条:`bilibili://` 伪地址。
+                                    sourceTag: BilibiliSource.isPseudo(ep.audioUrl)
+                                        ? NSLocalizedString("B 站", comment: "") : "Apple",
                                     onPlay: { player.playOrToggle(ep, queue: searchEpisodes) })
                                     .episodeContextMenu(ep)
                             }
@@ -329,6 +344,14 @@ struct DiscoverView: View {
         }
     }
 
+    /// 节目那一路的来源短名。仓储给的是 `Bilibili` / `Apple Podcasts` 这种内部标识,
+    /// 而单集行上标的是「B 站」/「Apple」—— 同一个屏幕上两种写法会显得像两个源,这里统一收口。
+    private var searchSourceLabel: String {
+        if searchSource.hasPrefix("Bilibili") { return NSLocalizedString("B 站", comment: "") }
+        if searchSource.hasPrefix("Apple") { return "Apple" }
+        return searchSource
+    }
+
     private func runSearch() {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
@@ -341,6 +364,7 @@ struct DiscoverView: View {
             let eps = await epsTask
             guard submittedQuery == q else { return }
             searchPodcasts = pods.podcasts
+            searchSource = pods.source
             searchEpisodes = eps
             searching = false
         }

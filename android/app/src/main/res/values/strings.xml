@@ -58,7 +58,9 @@
     <string name="size_calculating">计算中…</string>
 
     <!-- 发现 -->
-    <string name="search_hint">搜索播客 · 或粘贴 RSS 地址 / 视频链接</string>
+    <string name="search_hint">搜索播客/视频或粘贴 RSS 地址/视频链接</string>
+    <string name="search_source_video">B 站</string>
+    <string name="search_source_apple">Apple</string>
     <string name="search_tab_episodes">单集</string>
     <string name="search_tab_shows">节目</string>
     <string name="search_empty_episodes">没有找到相关单集</string>

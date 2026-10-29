@@ -36,7 +36,9 @@
 "30 秒 · 内置音频，不联网也能播" = "30 sec · bundled, plays offline";
 "随应用内置的 30 秒引导音频，无需联网即可播放。" = "A 30-second bundled intro. Plays without a network connection.";
 "暂无内容" = "No content";
-"搜索节目、单集，或粘贴 RSS 地址 / 视频链接" = "Search shows, episodes, or paste an RSS or video link";
+"搜索播客/视频或粘贴 RSS 地址/视频链接" = "Search podcasts/videos or paste an RSS/video link";
+"来自 %@" = "from %@";
+"B 站" = "Bilibili";
 "搜索中…" = "Searching…";
 "没有找到「%@」" = "No results for \"%@\"";
 "节目" = "Shows";
