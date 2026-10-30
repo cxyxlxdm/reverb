@@ -233,6 +233,9 @@
   `build-release.sh` 的 `debugKey` 断言未命中)、`macos/dist/余音-Reverb-1.0.6-universal.dmg` 4 966 107 B @22:47:47
   (`sha256 16b0848a…ccae8aa`,架构断言 `x86_64 arm64`)。三端 `find <源码> -newer <产物>` 均为 0 ——
   其中鸿蒙那份是在搜索提示字号改完之后重打的(改码时间早于包),不存在"包比码旧"。
+  **分发侧资产名是 `reverb.apk` 与 `Reverb.dmg`**:GitHub 会**吃掉**文件名里的非 ASCII 字符,
+  带中文的本地名传上去首传变成了 `-Reverb-1.0.6-universal.dmg`(见 H230),改用 1.0.1 / 1.0.2
+  已在用的 `Reverb.dmg`;两个资产的 `digest` 都与本地 `shasum -a 256` 相等。
 - **商店截图整套重拍(硬规矩 20)**:三端界面都动过,Android 与鸿蒙各 8 张在 10-30 重拍;
   官网 `site/reverb/shots/` 的 `01-discover` / `03-player` / `09-settings` 由同一批母版导出,
   `10-licenses` 经 `git log --since=2026-10-17 -- LicensesPage.ets AboutPage.ets` 确认为空(页面未变),
