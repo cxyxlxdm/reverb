@@ -600,6 +600,15 @@ export class PlayerController {
         const corrected = withDuration(e, resolved.durationSec);
         e = corrected;
         this.current = corrected;
+        // **队列与待播里那两份也得换掉**。`persistState` 写的是 `this.queue` / `this.userQueue`,
+        // 只改 `current` 会留下「快照里 current=1127s、context=27426s」—— 冷启动恢复队列、
+        // 队列面板里那条错数会重新冒出来(Android 先验出来的,见 H228)。用 id 守一道:
+        // 解析是一次网络往返,期间用户可能已经切走,照着位置盖下去就是改错人。
+        if (this.queueIndex >= 0 && this.queueIndex < this.queue.length &&
+          this.queue[this.queueIndex].id === corrected.id) {
+          this.queue[this.queueIndex] = corrected;
+        }
+        this.userQueue = this.userQueue.map((x: Episode) => x.id === corrected.id ? corrected : x);
         if (!isGuide && this.history !== null) this.history.record(corrected, Date.now());
         this.persistState();
         Log.i('Player', `时长更正 ${before}s -> ${resolved.durationSec}s id=${e.id}`);

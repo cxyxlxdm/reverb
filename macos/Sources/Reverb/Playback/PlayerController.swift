@@ -541,6 +541,17 @@ final class PlayerController: ObservableObject {
                 if resolved.durationSec > 0 && resolved.durationSec != episode.durationSec {
                     ep.durationSec = resolved.durationSec
                     self.current = ep
+                    // **队列与待播里那两份也得换掉**。`persistState` 写的是 `queue` / `userQueue`,
+                    // 只改 `current` 会留下「快照里 current=1127s、context=27426s」——
+                    // 冷启动恢复队列、队列面板里那条错数会重新冒出来(Android 先验出来的,见 H228)。
+                    // 用 id 守一道:解析是一次网络往返,期间用户可能已经切走。
+                    if self.queueIndex >= 0, self.queueIndex < self.queue.count,
+                       self.queue[self.queueIndex].id == ep.id {
+                        self.queue[self.queueIndex] = ep
+                    }
+                    if let i = self.userQueue.firstIndex(where: { $0.id == ep.id }) {
+                        self.userQueue[i] = ep
+                    }
                     // 上面那次 record 写的是旧元数据。同 id 再记一次 = 原地换掉那份载荷、
                     // 进度与顺序都不动(HistoryStore.record 保留既有 position)。
                     if !GuideEpisode.isGuide(ep.id) {

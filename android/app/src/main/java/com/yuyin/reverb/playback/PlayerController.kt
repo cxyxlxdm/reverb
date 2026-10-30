@@ -856,6 +856,16 @@ object PlayerController {
                     // 错的只有 episode.durationSec)。同 id 再记一次 = 原地换掉那份载荷、进度不动。
                     history?.record(ep, System.currentTimeMillis())
                     _current.value = ep
+                    // **队列里那一份也得换掉**。`persistState` 写的是 `queue`(不可变 List),
+                    // 只改 `_current` 会留下「快照里 current=1127s、context=27426s」——
+                    // 冷启动恢复队列、队列面板里那条错数会重新冒出来(真机验出的,见 H228)。
+                    // 用 id 守一道:解析是一次网络往返,期间用户可能已经切走,那时 queueIndex
+                    // 指着的已是别的集了,照着位置盖下去就是改错人。
+                    if (queue.getOrNull(queueIndex)?.id == ep.id) {
+                        queue = queue.toMutableList().also { it[queueIndex] = ep }
+                    }
+                    // 待播列表是用户自己排的,同一集可能正躺在里面 —— 它的载荷同样是旧时长。
+                    _userQueue.value = _userQueue.value.map { if (it.id == ep.id) ep else it }
                     // 快照也要重写:它在 playEpisode 开头、解析之前就落过一次盘了,
                     // 那一版存的是旧的 durationSec。
                     persistState()
