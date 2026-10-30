@@ -127,8 +127,12 @@
   `PodcastRepository.search` / `searchEpisodes` 补上 `Features.CATALOG` 闸 —— 与 Android 同址同判据,
   此前那句"受目录闸管"只写在注释里(H227)。
   **验收边界**:三端编译门全绿(Android `compileReleaseKotlin` / 鸿蒙 `assembleHap` /
-  macOS `swift build -c release`);**运行侧一条没跑** —— 时长更正在真机上还没看到过那行日志;
-  降级档(`CATALOG=false`)也**没有出包**,按硬规矩 1 的"包里没有"尚未取证。
+  macOS `swift build -c release`)。**运行侧两台真机都跑完了**(2026-10-30,均 debug 包):
+  Android(Pixel 3)/ 鸿蒙(Mate 60)各打出一条 `时长更正 27426s -> 1127s`(英文端为
+  `duration corrected`),`playback_state.json` 的 `current` 与 `context[0]` **双双** 1127,
+  历史行显示 `18:47` —— 队列副本那一份是这轮自检才发现也要换的(H228)。**macOS 只有编译门**,
+  运行验收仍挂在另一台机器上。降级档(`CATALOG=false`)也**没有出包**,
+  按硬规矩 1 的"包里没有"尚未取证。
 - **一条遗留口径(登记在 `ROADMAP.md`)**:同一个视频在搜索结果里播一次、再从它的频道页播一次,
   会留两条历史(两个 id:`bilibili:search:<bvid>` 与 `bilibili:<bvid>:<cid>`),缓存也各存一份整集。
   同一 id 内不会重复下载(`AudioCacheManager.cache` 见账即返回)。

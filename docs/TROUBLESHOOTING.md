@@ -11286,3 +11286,54 @@ PCDN 候选轮换那层保护**从上线起就没执行过一次**。
    而现象上两者都是"播不了"。宁可不回落、把原始异常抛出去 —— 至少日志里是真的原因。
 ③ 降级档的正确验收不是"界面上点不到",是**解包 grep**(硬规矩 1)。本轮只过了编译门,
    **没有出降级包**,所以"包里没有"这条尚未取证。
+
+### H228. 时长更正只改了「正在播的那一份」,队列里那一份还是旧数 —— 快照里 `current` 1127s、`context` 27426s
+
+**现象**(H226 修完之后第一次真机验证抓到):播放态快照里两边打架 ——
+
+```
+"current":  { "id": "bilibili:search:BV1MN4dewEQZ", "durationSec": 1127 }
+"context":[ { "id": "bilibili:search:BV1MN4dewEQZ", "durationSec": 27426 } ]
+```
+
+日志与历史都是对的(`duration corrected 27426s -> 1127s`、`history.json` 里 `durationSec:1127`),
+界面上播放器也是 18:47 —— **只有快照的队列那一侧留着 7:37:06**。后果是冷启动恢复队列、
+队列面板里那一行重新显示错误时长,而用户刚看到历史行写的是 18:47。
+
+**根因**:同一条 `Episode` 在播放器里**有好几份副本**,而更正只替换了其中一份。
+`persistState()` 落盘时写的是四个东西:`current`、`context`(队列 `List<Episode>`)、
+`queueIndex`、`upNext`(待播)。更正块当时只手写了 `_current.value = ep`,
+`queue` 是**不可变 List**,里面躺着更正前的那个对象;`_userQueue` 同理没人动。
+于是「内存里 current 是新的、队列是旧的」这件事被原样存进了快照。
+
+**修法**:更正块里把**另外两份也按 id 换掉**,再 `persistState()`(三端同构):
+
+- Android:`queue.getOrNull(queueIndex)?.id == ep.id` 才 `queue = queue.toMutableList().also { it[queueIndex] = ep }`;
+  `_userQueue.value = _userQueue.value.map { if (it.id == ep.id) ep else it }`。
+- 鸿蒙:`this.queue[this.queueIndex] = corrected`(同一道 index/id 守),`userQueue` 走 `map`。
+- macOS:`self.queue[self.queueIndex] = ep` + `self.userQueue.firstIndex(where:)` 定位后赋值。
+
+**为什么用 id 守而不是直接按位置盖**:解析直链是一次网络往返(实测 80~250 ms),
+`playEpisode` 开头 `_current` 已经被设成这一集、快照也落过一次盘了 —— 期间用户点了别的集,
+`queueIndex` 就指到别人身上了。按位置硬盖会把**另一集**的元数据改坏,而它不会有任何报错。
+
+**验收**(真机,不是"编译过了"):两端的证据链一致 ——
+
+| 判据 | Android(Pixel 3,debug) | 鸿蒙(Mate 60,debug hap) |
+|---|---|---|
+| 日志 | `duration corrected 27426s -> 1127s` | `时长更正 27426s -> 1127s` |
+| `playback_state.json` `current` | 1127 | 1127 |
+| `playback_state.json` `context[0]` | **1127**(修前是 27426) | **1127** |
+| `history.json` | `durationSec:1127 / durationMs:1126079` | 同 |
+| 历史行渲染 | `Fri, 20 Sep 2024 · 18:47`(截图) | 同(布局 dump 取到 `·  18:47`) |
+
+macOS 这一轮**只过了 `swift build -c release`**,没有跑界面 —— 桌面端的运行验收边界没变。
+
+**教训与可复用的规律**:
+① **一条数据在内存里有几份副本,是改它之前必须先数清楚的事。** 这次是 `current` / `queue[queueIndex]` /
+   `userQueue` 三份,而落盘读的是**后两份**。判据:去读那个 `save(...)` 的实参,不要凭"我改过 current 了"。
+② 「快照里两个字段打架」是这类漏改的**最好判据** —— 同一个 id 的同一个字段出现两个值,
+   说明有多份副本没同步,而且**错误那份正是界面会读到的那份**(队列面板 / 冷启动恢复)。
+   真机验证时要**逐字段比对**,只核 `current` 会放过它。
+③ 异步更正块里的按位置写入一律要带 id 守:位置(尤其是 index)在等待期间可能已经失效,
+   而失效时按位置写不会报错、只会改错人。
