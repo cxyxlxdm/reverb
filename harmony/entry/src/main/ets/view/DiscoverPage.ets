@@ -976,6 +976,11 @@ export struct DiscoverPage {
         .placeholderColor(this.scheme.onSurfaceVariant)
         .fontColor(this.scheme.onBackground)
         .fontSize(TypeScale.bodyLarge * this.fontScale)
+        // placeholder 单独收一档(= Android 的 `bodySmall`):1.0.6 把提示语改长之后,
+        // 16fp 在这台(逻辑宽 374vp)差一两个字放不下,尾部直接出省略号,而 "视频链接" 恰好是
+        // 这一版最要紧的那半句。**只改 placeholder,输入文字仍保持 bodyLarge** —— 输入的字要跟
+        // 列表正文同号,提示只是提示。见 H229。
+        .placeholderFont({ size: TypeScale.label * this.fontScale })
         .backgroundColor(Color.Transparent)
         .borderRadius(0)
         .padding(0)

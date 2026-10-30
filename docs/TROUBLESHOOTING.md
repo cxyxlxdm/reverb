@@ -11337,3 +11337,48 @@ macOS 这一轮**只过了 `swift build -c release`**,没有跑界面 —— 桌
    真机验证时要**逐字段比对**,只核 `current` 会放过它。
 ③ 异步更正块里的按位置写入一律要带 id 守:位置(尤其是 index)在等待期间可能已经失效,
    而失效时按位置写不会报错、只会改错人。
+
+### H229. 鸿蒙搜索提示的末尾两个字被省略号吃掉 —— `TextInput` 里 placeholder 和输入文字**共用** `.fontSize`,而 Android 那边是两段独立的文字
+
+**现象**(1.0.6 把提示语改长之后,同一台 Mate 60 上读到的形状):
+
+```
+改前:  搜索播客/视频或粘贴 RSS 地址/视频…        ← 最后两个字「链接」没了
+改后:  搜索播客/视频或粘贴 RSS 地址/视频链接      ← 一行装下,行高与左端位置都没动
+```
+
+丢掉的恰好是「视频链接」这半句 —— 这一版新增的那条通路。**编译门、`assembleHap` 都不报错**,
+只有真机截图能看见;而 Android 那边同一句话是完整的(H224 已经把它的 placeholder 收到 `bodySmall`)。
+
+**根因**:两端的"placeholder 是谁在排"根本不是一回事。
+Android 的 placeholder 是**另外传进去的一个 composable**,可以单独给 `style = bodySmall`;
+鸿蒙的 `TextInput` 只有一个 `.fontSize()`,**同时作用于输入文字与 placeholder**(两者默认同一档),
+要分开只能另给 `.placeholderFont({ size })`。1.0.6 那次改文案只搬了字符串,没搬字号约束,
+于是鸿蒙的 placeholder 留在 `bodyLarge`(16fp × `fontScale`),比 Android 的 `bodySmall`(12sp)大四号。
+这台机逻辑宽 374vp,18 个汉字加一段拉丁串,16fp 下差的就是最后两个字;
+ArkUI 的单行输入不折行,超宽部分直接出省略号。
+
+**修法**:只给 placeholder 补一档字号,输入文字一行不动(见 `DiscoverPage.ets` 搜索框那一处):
+
+```ts
+.fontSize(TypeScale.bodyLarge * this.fontScale)          // 输入文字:与列表正文同号
+.placeholderFont({ size: TypeScale.label * this.fontScale })  // 提示:12fp,= Android 的 bodySmall
+```
+
+`TypeScale.label` = 12,与 Android 的 `bodySmall` 同档。没有加 `maxLines` / `overflow`:
+TextInput 天生单行,这里要解决的只是"太宽"。
+
+**验收**(真机,同一台机器、同一个 debug hap 覆盖安装前后各一帧):两帧的提示行高、左端起点、
+搜索框高度逐像素一致,右端从 `视频…` 变成 `视频链接`;改后那帧同时是 1.0.6 的 `01-start` 商店图母版。
+输入文字的字号**没有改**(`.fontSize` 那一行未动),所以"输入的字仍与正文同号"是读代码即可判定的,
+不在这次截图取证的范围里。
+
+**教训与可复用的规律**:
+① **跨端搬文案时,要核的是"这段文字在对方那端由谁排版",不是"我把字符串换了"。**
+   同一个视觉元素在两端可能一个是独立控件、一个是同一控件的另一个属性 ——
+   Compose 的 placeholder 可单独设 `style`,ArkUI 的 placeholder 只能靠 `.placeholderFont()` 分开。
+   这类差异不会报错,只会静静地少两个字。
+② **长文案改完要在"最窄的屏 + 最大字号档"真机看一眼。** 省略号既不进编译门,也不进任何一条构建告警,
+   截断只发生在渲染侧 —— 要核这句话只能靠截图(同 H224 那条"dump 里有节点 ≠ 屏幕可见")。
+③ 修的时候**只动该动的那一半**:顺手把 `.fontSize` 降下来会让用户输入的字比列表正文小一号,
+   而 placeholder 只是提示,字号本来就该比输入文字低一档。
