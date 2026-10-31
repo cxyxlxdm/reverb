@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -126,6 +127,9 @@ class BilibiliSource(private val client: OkHttpClient) {
                 "(KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
         private val BV_RE = Regex("BV[0-9A-Za-z]{10}")
         private val HHMM_RE = Regex("^(\\d+):(\\d+)$")
+        /** 见 [getJson]:只有**快于这个数**的失败才补一次。慢失败(真超时)重试等于把等待翻倍。 */
+        private const val RETRY_FAST_MS = 3000L
+        private const val RETRY_DELAY_MS = 400L
 
         /** 这一集是不是需要播放前解析。三端同口径(鸿蒙/ macOS 用同一个前缀判断)。 */
         fun isPseudo(url: String): Boolean = url.startsWith("$SCHEME://")
@@ -406,7 +410,7 @@ class BilibiliSource(private val client: OkHttpClient) {
      * 取不到一律返回 false(**放行**):一次超时或风控不该把一条正常视频从结果里抹掉;
      * 漏过滤的代价只是回到修之前那个「切条 + 报错」,可看见、可重试。只缓存判定出来的结论。
      */
-    private fun isCharging(bvid: String): Boolean {
+    private suspend fun isCharging(bvid: String): Boolean {
         charging[bvid]?.let { return it }
         val data = getJson("$API/web-interface/view?bvid=$bvid")?.optJSONObject("data") ?: return false
         val exclusive = data.optBoolean("is_upower_exclusive", false)
@@ -485,7 +489,7 @@ class BilibiliSource(private val client: OkHttpClient) {
 
     private class Candidates(val urls: List<String>, val expiresAt: Long, val durationSec: Long)
 
-    private fun fetchCandidates(bvid: String, cid: Long): Candidates? {
+    private suspend fun fetchCandidates(bvid: String, cid: Long): Candidates? {
         val data = getJson("$API/player/playurl?bvid=$bvid&cid=$cid&fnval=16&fnver=0&fourk=0")
             ?.optJSONObject("data") ?: return null
         val audio = data.optJSONObject("dash")?.optJSONArray("audio")
@@ -550,7 +554,44 @@ class BilibiliSource(private val client: OkHttpClient) {
 
     // ---------------------------------------------------------------- 底层
 
-    private fun getJson(url: String): JSONObject? = try {
+    /**
+     * 接口族的统一 GET。**网络层快速失败补一次**(见 H233)。
+     *
+     * 一次瞬时的拒连不该被判成「这一集播不了」:2026-10-31 的同形现场在鸿蒙那台
+     * (`view` 在 14 / 17ms 里被网络栈拒掉),而 H232 已经把「解析失败」改成不提交、
+     * 只提示一句 ⇒ 用户点几次几次播不了,看起来像功能坏了。
+     *
+     * 三个边界:
+     *  - **只在快失败时补**:超过 [RETRY_FAST_MS] 的失败通常是真的超时,再等一轮只会让
+     *    「播放页转圈」翻倍;
+     *  - **`code≠0` 不补**:那是接口在说话(下架 / 风控),再来一次不会变;
+     *  - 重试的这一次也受 [API_TIMEOUT_MS] 约束,失败后照样回 null,由播放层提示。
+     */
+    private suspend fun getJson(url: String): JSONObject? {
+        for (attempt in 0 until 2) {
+            val startedAt = System.currentTimeMillis()
+            val json = getJsonOnce(url)
+            if (json != null) {
+                val code = json.optInt("code", 0)
+                if (code != 0) {
+                    com.yuyin.reverb.util.Logger.w(TAG, "api code=$code msg='${json.optString("message")}'")
+                    return null
+                }
+                return json
+            }
+            val elapsed = System.currentTimeMillis() - startedAt
+            if (attempt == 1 || elapsed >= RETRY_FAST_MS) return null
+            com.yuyin.reverb.util.Logger.w(
+                TAG,
+                "retry after fast failure elapsed=${elapsed}ms endpoint=${com.yuyin.reverb.util.Logger.endpoint(url)}"
+            )
+            delay(RETRY_DELAY_MS)
+        }
+        return null
+    }
+
+    /** 单次请求:非 200 / 空体 / 传输异常都回 null,是否补一次由 [getJson] 决定。 */
+    private fun getJsonOnce(url: String): JSONObject? = try {
         val req = Request.Builder()
             .url(url)
             .header("User-Agent", UA)
@@ -570,12 +611,7 @@ class BilibiliSource(private val client: OkHttpClient) {
                 )
                 null
             } else {
-                val json = JSONObject(body)
-                val code = json.optInt("code", 0)
-                if (code != 0) {
-                    com.yuyin.reverb.util.Logger.w(TAG, "api code=$code msg='${json.optString("message")}'")
-                    null
-                } else json
+                JSONObject(body)
             }
         }
     } catch (e: Exception) {

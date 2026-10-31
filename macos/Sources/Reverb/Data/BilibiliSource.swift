@@ -55,6 +55,10 @@ final class BilibiliSource {
     private static let apiTimeout: TimeInterval = 10
     private static let probeTimeout: TimeInterval = 8
 
+    /// 见 `getJson`:只有**快于这个数**的失败才补一次。慢失败(真超时)重试等于把等待翻倍。
+    private static let retryFast: TimeInterval = 3
+    private static let retryDelayNanos: UInt64 = 400_000_000
+
     private static var headers: [String: String] {
         ["User-Agent": uaBrowser, "Referer": referer]
     }
@@ -447,16 +451,35 @@ final class BilibiliSource {
 
     // MARK: - 底层
 
+    /// 接口族的统一 GET。**网络层快速失败补一次**(见 H233)。
+    ///
+    /// 一次瞬时的拒连不该被判成「这一集播不了」:2026-10-31 的同形现场在鸿蒙那台
+    /// (`view` 在 14 / 17ms 里被网络栈拒掉),而 H232 已经把「解析失败」改成不提交、
+    /// 只提示一句 ⇒ 用户点几次几次播不了,看起来像功能坏了。
+    ///
+    /// 三个边界:
+    ///  - **只在快失败时补**:超过 `retryFast` 的失败通常是真的超时,再等一轮只会让
+    ///    「播放页转圈」翻倍;
+    ///  - **`code≠0` 不补**:那是接口在说话(下架 / 风控),再来一次不会变;
+    ///  - 重试的这一次也受 `apiTimeout` 约束,失败后照样回 nil,由播放层提示。
     private func getJson(_ url: String) async -> [String: Any]? {
-        guard let root = await HTTP.json(url, headers: Self.headers, timeout: Self.apiTimeout) else {
-            return nil
+        for attempt in 0..<2 {
+            let startedAt = Date()
+            if let root = await HTTP.json(url, headers: Self.headers, timeout: Self.apiTimeout) {
+                let code = Self.num(root, "code")
+                if code != 0 {
+                    Log.w("Bilibili", "api code=\(code) msg='\(Self.str(root, "message"))'")
+                    return nil
+                }
+                return root
+            }
+            let elapsed = Date().timeIntervalSince(startedAt)
+            if attempt == 1 || elapsed >= Self.retryFast { return nil }
+            Log.w("Bilibili", "retry after fast failure elapsed=\(Int(elapsed * 1000))ms"
+                  + " endpoint=\(Log.endpoint(url))")
+            try? await Task.sleep(nanoseconds: Self.retryDelayNanos)
         }
-        let code = Self.num(root, "code")
-        if code != 0 {
-            Log.w("Bilibili", "api code=\(code) msg='\(Self.str(root, "message"))'")
-            return nil
-        }
-        return root
+        return nil
     }
 
     // MARK: - 取值 / 归一

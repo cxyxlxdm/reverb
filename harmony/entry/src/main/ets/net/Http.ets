@@ -1,4 +1,5 @@
 import http from '@ohos.net.http';
+import { BusinessError } from '@ohos.base';
 import { Log } from '../util/Logger';
 
 /// 统一 HTTP 封装(仿 macOS `HTTPClient.swift`,替代 Android 侧 5 处重复的 get())。
@@ -39,7 +40,12 @@ export class Http {
     return await new Promise<string | null>((resolve: (value: string | null) => void) => {
       let settled = false;
       let timerId: number = -1;
-      const finish = (value: string | null, stage: string): void => {
+      /**
+       * @param detail 失败原因的**系统侧读数**(`code=… msg=…`)。只打 `阶段` 时,
+       *   「网络栈拒连」与「对端拒绝」在日志里是同一句话 —— 2026-10-31 那次
+       *   `阶段=请求异常 耗时=14ms` 就是这么失去根因的(见 H233)。
+       */
+      const finish = (value: string | null, stage: string, detail?: string): void => {
         if (settled) return;
         settled = true;
         if (timerId >= 0) clearTimeout(timerId);
@@ -49,7 +55,8 @@ export class Http {
           // destroy 只负责释放系统请求；即使系统已先行回收,也不能影响 Promise 收尾。
         }
         const elapsed = Date.now() - startedAt;
-        if (value === null) Log.w('Http', `host=${host} 阶段=${stage} 耗时=${elapsed}ms`);
+        const tail = detail === undefined ? '' : ` ${detail}`;
+        if (value === null) Log.w('Http', `host=${host} 阶段=${stage} 耗时=${elapsed}ms${tail}`);
         else Log.d('Http', `host=${host} 阶段=${stage} 耗时=${elapsed}ms`);
         resolve(value);
       };
@@ -73,7 +80,9 @@ export class Http {
             return;
           }
           finish(body, '完成');
-        }).catch(() => { finish(null, '请求异常'); });
+        }).catch((e: BusinessError) => {
+          finish(null, '请求异常', `code=${e.code} msg=${e.message}`);
+        });
       } catch (_e) {
         finish(null, '启动异常');
       }
@@ -118,7 +127,11 @@ export class Http {
         expectDataType: http.HttpDataType.STRING
       });
       return resp.responseCode;
-    } catch (_e) {
+    } catch (e) {
+      // 探针本来就是"回码不回 Bool"的判据:拿不到码时也要说清是**哪一层**拿不到,
+      // 否则「探针被网络栈拒了」与「节点真的不给流」都是 0(见 H233)。
+      const err = e as BusinessError;
+      Log.w('Http', `探活失败 host=${Http.host(url)} code=${err.code} msg=${err.message}`);
       return 0;
     } finally {
       try {
