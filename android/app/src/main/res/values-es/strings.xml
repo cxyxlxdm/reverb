@@ -190,6 +190,7 @@
     <string name="player_not_playing">Nada en reproducción</string>
     <string name="player_err_retrying">Reproducción interrumpida. Reintento automático (intento %1$d)</string>
     <string name="player_err_failed">Reproducción fallida. Toca para reintentar</string>
+    <string name="player_err_unplayable">Este episodio no se puede reproducir ahora</string>
     <string name="shownotes">Notas del episodio</string>
     <string name="shownotes_empty">Sin notas</string>
     <string name="note_add">Escribir una anotación</string>

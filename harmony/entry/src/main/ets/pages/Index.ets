@@ -32,6 +32,7 @@ import { LicensesPage } from '../view/LicensesPage';
 import { PlayerController } from '../playback/PlayerController';
 import { Podcast, Episode, emptyPodcast } from '../model/Models';
 import { Log } from '../util/Logger';
+import { L } from '../util/L';
 import type common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import window from '@ohos.window';
@@ -135,6 +136,8 @@ struct Index {
    */
   private myStateHandler: (() => void) | null = null;
   private chainedStateHandler: (() => void) | null = null;
+  /// 「这一集播不了」那层回调(见 aboutToAppear)。同样要能在销毁时摘掉,理由与上一对相同。
+  private myRefuseHandler: (() => void) | null = null;
   /// 长按菜单开着(以及刚关掉那一瞬)—— 整屏盖一层「误触盾」,见 TapGuard。
   @StorageLink('tapShield') tapShield: boolean = false;
 
@@ -156,6 +159,15 @@ struct Index {
     };
     this.myStateHandler = handler;
     app.player.onStateChanged = handler;
+    // 「这一集播不了」的一次性提示(2026-10-31,见 H232)。
+    // 为什么挂在外壳而不是 PlayerController 里直接弹:PlayerController 只拿得到
+    // `UIAbilityContext`,而 showToast 在 UIContext 上 —— 数据层不该反过来去找界面。
+    // 判据在 notifyUnplayable 那一侧(只有用户主动点播时才回调,冷启动恢复不弹)。
+    const refuse = (): void => {
+      this.getUIContext().getPromptAction().showToast({ message: L.s('play_refused') });
+    };
+    this.myRefuseHandler = refuse;
+    app.player.onPlayRefused = refuse;
     this.readInsets();
     this.applySystemBar();
     this.applyColorMode();
@@ -179,6 +191,11 @@ struct Index {
       Log.i('UI', '外壳销毁,退掉刷界面那一层播放状态监听');
     }
     this.myStateHandler = null;
+    // 摘法与上面同理:只摘自己挂的那个,别人后来挂上去的别动
+    if (this.myRefuseHandler !== null && p.onPlayRefused === this.myRefuseHandler) {
+      p.onPlayRefused = null;
+    }
+    this.myRefuseHandler = null;
   }
 
   /**

@@ -71,6 +71,16 @@ final class PlayerController: ObservableObject {
     @Published private(set) var sleepRemainingMs: Int = 0
     @Published private(set) var sleepEndOfEpisode = false
     @Published private(set) var playbackError: String?   // 加载失败提示(nil=正常)
+    /**
+     一次性「这一集暂时播不了」提示,由 `RootView` 顶部的 `TopToast` 显示(桌面没有 Toast)。
+
+     为什么不能复用 [playbackError]:那条提示挂的是「**当前这一集**」,而视频源解析失败时
+     `current` 还是上一集(见 H232 的「先解析、后提交」)—— 写成它会被播放页按 id 挡掉,
+     等于静默失败。这一条与当前一集无关,只说明「刚才点的那一集起不来」。
+     */
+    @Published private(set) var notice: String?
+    /// 自动清空 [notice] 的代次:连着点两次播不了时,前一条的定时器不能把后一条提前抹掉。
+    private var noticeToken = 0
 
     let speedSteps: [Double] = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0]
 
@@ -455,16 +465,89 @@ final class PlayerController: ObservableObject {
 
     /// - Parameter autoplay: `false` = 预载(冷启动恢复用)。装上 item、跳到续播点、把进度与
     ///   Now Playing 画出来,但**不 play()** —— 启动即出声是用户没要求的动作(见 `restoreState()`)。
+    /// **先解析、后提交**(2026-10-31,见 H232;Android `PlayerController.kt` 同序):
+    /// 视频源的伪地址要先联网换直链,而这一步会失败。原先的写法是先 `current = episode` 再解析,
+    /// 一旦失败,播放条与播放页已经切到新的一集、声音却还是原来那一集,而且没有任何失败提示的
+    /// 落点 —— `playbackError` 按「当前这一集」挂,当前集恰好就是那一集错的(见 H232)。
+    /// 现在起播的一切可见后果(`current` / 历史 / 播放态快照 / 播放器 item)都在**直链到手之后**
+    /// 才发生;解析失败只弹一条提示,当前一集与它的声音原样不动。
     private func playEpisode(_ episode: Episode, isRadio: Bool = false, autoplay: Bool = true) {
-        // 每次起播都换代号:伪地址要先解析直链,而解析回来时用户可能已经点了别的集
-        // (见下面那条分支里的比对)。非伪地址的起播不读它,但它必须递增,否则
-        // 「上一集晚到的解析结果」会把自己的代次判成当前这次。
+        // 每次起播都换代号:伪地址要先解析直链,而解析回来时用户可能已经点了别的集。
+        // **判据只能是代号** —— 提交已经挪到解析之后,解析期间 `current` 还是上一集,
+        // 拿 `current?.id` 比对会把每一次解析结果都判成"作废"。
         playGeneration += 1
         let generation = playGeneration
+
+        // 选源三级,与 Android `PlayerController.kt` 同序:**下载 > 缓存 > 流式**。
+        // 下载是用户点名留的那份;缓存是本类上一条流式播完之后自己攒的。
+        // 缓存命中要记一次访问 —— 淘汰只看「最后一次从缓存起播」,不记的话常听的那集会
+        // 因为写入时间太早而被先挤掉,预算就白设了(见 AudioCacheStore.touch)。
+        let downloaded = localFileProvider?(episode)
+        let cached = downloaded == nil ? audioCache?.localURL(episode.id) : nil
+        let local = downloaded ?? cached
+
+        // **视频源的最后一步是「现取直链」**,而它要联网 —— 所以只在流式这一路分叉:
+        // 本地有下载件或缓存件时,它与普通单集没有任何区别(缓存里存的是当次解析出的直链)。
+        //
+        // 为什么不能把直链在检索时就算好存进 Episode:那条链的 `deadline` 是取链时刻
+        // **+2 小时**(实测),而 Episode 会进历史、进待播、进播放态快照,甚至进备份 ——
+        // 存直链等于第二天点开必然「这一集播不了」,且用户没有任何线索知道要重新搜一次。
+        // 所以模型里存的是 `bilibili://audio/<bvid>/<cid>` 这个坐标,见 `BilibiliSource`。
+        if local == nil && BilibiliSource.isPseudo(episode.audioUrl) {
+            guard let resolve = resolvePseudoUrl else {
+                Log.e("Player", "bilibili 解析器未绑定 id=\(episode.id)")
+                notifyUnplayable(episode, userInitiated: autoplay)
+                return
+            }
+            Log.i("Player", "解析直链开始 id=\(episode.id)")
+            Task { @MainActor [weak self] in
+                let resolved = await resolve(episode.audioUrl)
+                guard let self else { return }
+                // 解析期间用户点了别的集:这次作废。不能省 —— 起播只差一次网络往返,
+                // 而「点一下看看、随即划走」正好落在这个时长里,不拦就会把前一集的声音抢回来。
+                guard self.playGeneration == generation else {
+                    Log.i("Player", "解析结果作废 id=\(episode.id)")
+                    return
+                }
+                guard let resolved, let stream = URL(string: resolved.url) else {
+                    Log.w("Player", "解析直链失败,保持当前一集 id=\(episode.id)")
+                    self.notifyUnplayable(episode, userInitiated: autoplay)
+                    return
+                }
+                Log.i("Player", "解析直链成功 id=\(episode.id) 时长=\(resolved.durationSec)s")
+                self.commitAndPlay(episode, url: stream, source: "网络", isRadio: isRadio,
+                                   autoplay: autoplay, downloaded: nil, cached: nil, resolved: resolved)
+            }
+            return
+        }
+
+        guard let url = local ?? URL(string: episode.audioUrl) else {
+            Log.e("Player", "playEpisode 无效音频 URL id=\(episode.id) title=\"\(episode.title)\" audioUrl=\(episode.audioUrl)")
+            notifyUnplayable(episode, userInitiated: autoplay)
+            return
+        }
+        commitAndPlay(episode, url: url,
+                      source: downloaded != nil ? "本地" : (cached != nil ? "缓存" : "网络"),
+                      isRadio: isRadio, autoplay: autoplay,
+                      downloaded: downloaded, cached: cached, resolved: nil)
+    }
+
+    /// 可播放的地址到手之后**提交这次起播**,再做剩下的装载。
+    /// 抽出来是因为视频源的直链要异步现取(见 `playEpisode`),取回来之后的步骤与普通单集
+    /// 一模一样 —— 复制一份就意味着以后改起播逻辑要改两处。
+    ///
+    /// - Parameter url: 本地文件地址(下载件 / 缓存件)或流式地址,交给 `attach` 统一成 `AVPlayerItem`
+    /// - Parameter resolved: 非空 = 这一集是视频源、地址刚解析出来(时长更正与缓存走这条)
+    private func commitAndPlay(_ episode: Episode, url: URL, source: String,
+                               isRadio: Bool, autoplay: Bool,
+                               downloaded: URL?, cached: URL?,
+                               resolved: BilibiliSource.ResolvedStream?) {
+        // 电台的退出放在**提交之后**:解析失败时用户听着的那一台不该被顺手停掉
         if !isRadio && radioMode { stopRadio() }
         lastIsRadio = isRadio
         lastAutoplay = autoplay
         playbackError = nil
+        notice = nil   // 新一集真的起播了,上一条「播不了」就该收掉
         current = episode
         // 与 Android 同位置:**换集就落一次盘**,不等播放器就绪 —— 冷启动要恢复的是
         // 「上次在播哪一集」,而那一集恰恰可能是这次没加载成功的那一集。
@@ -495,96 +578,74 @@ final class PlayerController: ObservableObject {
         lastCountedEpId = episode.id
         lastCountedPosMs = resumeMs
 
-        // 选源三级,与 Android `PlayerController.kt` 同序:**下载 > 缓存 > 流式**。
-        // 下载是用户点名留的那份;缓存是本类上一条流式播完之后自己攒的。
-        // 缓存命中要记一次访问 —— 淘汰只看「最后一次从缓存起播」,不记的话常听的那集会
-        // 因为写入时间太早而被先挤掉,预算就白设了(见 AudioCacheStore.touch)。
-        let downloaded = localFileProvider?(episode)
-        let cached = downloaded == nil ? audioCache?.localURL(episode.id) : nil
-        if cached != nil { audioCache?.touch(episode.id) }
         let local = downloaded ?? cached
-        let source = downloaded != nil ? "本地" : (cached != nil ? "缓存" : "网络")
+        if cached != nil { audioCache?.touch(episode.id) }
 
-        // **视频源的最后一步是「现取直链」**,而它要联网 —— 所以只在流式这一路分叉:
-        // 本地有下载件或缓存件时,它与普通单集没有任何区别(缓存里存的是当次解析出的直链)。
-        //
-        // 为什么不能把直链在检索时就算好存进 Episode:那条链的 `deadline` 是取链时刻
-        // **+2 小时**(实测),而 Episode 会进历史、进待播、进播放态快照,甚至进备份 ——
-        // 存直链等于第二天点开必然「这一集播不了」,且用户没有任何线索知道要重新搜一次。
-        // 所以模型里存的是 `bilibili://audio/<bvid>/<cid>` 这个坐标,见 `BilibiliSource`。
-        if local == nil && BilibiliSource.isPseudo(episode.audioUrl) {
-            guard let resolve = resolvePseudoUrl else {
-                Log.e("Player", "bilibili 解析器未绑定 id=\(episode.id)")
-                playbackError = String(localized: "加载失败,请检查网络后重试")
-                return
+        if let resolved {
+            // 解析结果里还带着**这一 P 的真实时长**:搜索给多 P 视频的是整条总和
+            // (见 `BilibiliSource.ResolvedStream`)。它必须在起播前落进这一集的元数据,
+            // 否则 `attach` 里那个「显式跳转上限」和历史行都建立在一个人为放大的数上。
+            var ep = episode
+            if resolved.durationSec > 0 && resolved.durationSec != episode.durationSec {
+                ep.durationSec = resolved.durationSec
+                current = ep
+                // **队列与待播里那两份也得换掉**。`persistState` 写的是 `queue` / `userQueue`,
+                // 只改 `current` 会留下「快照里 current=1127s、context=27426s」——
+                // 冷启动恢复队列、队列面板里那条错数会重新冒出来(Android 先验出来的,见 H228)。
+                // 用 id 守一道:解析是一次网络往返,期间用户可能已经切走。
+                if queueIndex >= 0, queueIndex < queue.count, queue[queueIndex].id == ep.id {
+                    queue[queueIndex] = ep
+                }
+                if let i = userQueue.firstIndex(where: { $0.id == ep.id }) {
+                    userQueue[i] = ep
+                }
+                // 上面那次 record 写的是旧元数据。同 id 再记一次 = 原地换掉那份载荷、
+                // 进度与顺序都不动(HistoryStore.record 保留既有 position)。
+                if !GuideEpisode.isGuide(ep.id) {
+                    history?.record(ep, at: Date().timeIntervalSince1970)
+                }
+                persistState()
+                Log.i("Player", "时长更正 \(episode.durationSec)s -> \(ep.durationSec)s id=\(episode.id)")
             }
-            Log.i("Player", "解析直链开始 id=\(episode.id)")
-            Task { @MainActor [weak self] in
-                let resolved = await resolve(episode.audioUrl)
-                guard let self else { return }
-                // 解析期间用户点了别的集:这次作废。不能省 —— 起播只差一次网络往返,
-                // 而「点一下看看、随即划走」正好落在这个时长里,不拦就会把前一集的声音抢回来。
-                guard self.playGeneration == generation, self.current?.id == episode.id else {
-                    Log.i("Player", "解析结果作废 id=\(episode.id)")
-                    return
-                }
-                guard let resolved, let stream = URL(string: resolved.url) else {
-                    Log.w("Player", "解析直链失败 id=\(episode.id)")
-                    self.playbackError = String(localized: "加载失败,请检查网络后重试")
-                    return
-                }
-                Log.i("Player", "解析直链成功 id=\(episode.id) 时长=\(resolved.durationSec)s")
-                // 解析结果里还带着**这一 P 的真实时长**:搜索给多 P 视频的是整条总和
-                // (见 `BilibiliSource.ResolvedStream`)。它必须在起播前落进这一集的元数据,
-                // 否则 `attach` 里那个「显式跳转上限」和历史行都建立在一个人为放大的数上。
-                var ep = episode
-                if resolved.durationSec > 0 && resolved.durationSec != episode.durationSec {
-                    ep.durationSec = resolved.durationSec
-                    self.current = ep
-                    // **队列与待播里那两份也得换掉**。`persistState` 写的是 `queue` / `userQueue`,
-                    // 只改 `current` 会留下「快照里 current=1127s、context=27426s」——
-                    // 冷启动恢复队列、队列面板里那条错数会重新冒出来(Android 先验出来的,见 H228)。
-                    // 用 id 守一道:解析是一次网络往返,期间用户可能已经切走。
-                    if self.queueIndex >= 0, self.queueIndex < self.queue.count,
-                       self.queue[self.queueIndex].id == ep.id {
-                        self.queue[self.queueIndex] = ep
-                    }
-                    if let i = self.userQueue.firstIndex(where: { $0.id == ep.id }) {
-                        self.userQueue[i] = ep
-                    }
-                    // 上面那次 record 写的是旧元数据。同 id 再记一次 = 原地换掉那份载荷、
-                    // 进度与顺序都不动(HistoryStore.record 保留既有 position)。
-                    if !GuideEpisode.isGuide(ep.id) {
-                        self.history?.record(ep, at: Date().timeIntervalSince1970)
-                    }
-                    self.persistState()
-                    Log.i("Player", "时长更正 \(episode.durationSec)s -> \(ep.durationSec)s id=\(episode.id)")
-                }
-                // 缓存必须在解析之后:缓存模块拿的是 `audioUrl`,伪地址它拉不下来
-                // (会当成畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
-                // 头也要一起给:CDN 认 UA + `Referer`,缺一个 403(见 `BilibiliSource.uaBrowser`)。
-                if !isRadio {
-                    var cachedCopy = ep
-                    cachedCopy.audioUrl = resolved.url
-                    self.audioCache?.cache(cachedCopy, headers: BilibiliSource.streamHeaders)
-                }
-                self.attach(ep, url: stream, source: "网络", resumeMs: resumeMs,
-                            autoplay: autoplay, isRadio: isRadio,
-                            assetHeaders: BilibiliSource.streamHeaders,
-                            assetMime: BilibiliSource.streamMime)
+            // 缓存必须在解析之后:缓存模块拿的是 `audioUrl`,伪地址它拉不下来
+            // (会当成畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
+            // 头也要一起给:CDN 认 UA + `Referer`,缺一个 403(见 `BilibiliSource.uaBrowser`)。
+            if !isRadio {
+                var cachedCopy = ep
+                cachedCopy.audioUrl = resolved.url
+                audioCache?.cache(cachedCopy, headers: BilibiliSource.streamHeaders)
             }
+            attach(ep, url: url, source: source, resumeMs: resumeMs,
+                   autoplay: autoplay, isRadio: isRadio,
+                   assetHeaders: BilibiliSource.streamHeaders,
+                   assetMime: BilibiliSource.streamMime)
             return
         }
 
-        guard let url = local ?? URL(string: episode.audioUrl) else {
-            Log.e("Player", "playEpisode 无效音频 URL id=\(episode.id) title=\"\(episode.title)\" audioUrl=\(episode.audioUrl)")
-            playbackError = String(localized: "加载失败,请检查网络后重试")
-            return
-        }
         // 只有真正在走流式时才排一次整集落缓存。电台那一路不缓存 —— 它是漫游,
         // 下一集由随机推荐决定;把每一集都留在盘上等于用 300 MB 换一份听不回去的清单。
         if local == nil && !isRadio { audioCache?.cache(episode) }
         attach(episode, url: url, source: source, resumeMs: resumeMs, autoplay: autoplay, isRadio: isRadio)
+    }
+
+    /**
+     「刚才点的那一集起不来」——只说不做:当前一集、播放器、历史、快照全都不动。
+
+     - Parameter userInitiated: 是否用户主动点播。冷启动恢复(`autoplay == false`)失败不提示:
+       那时用户没做任何动作,弹一条只会莫名其妙;而 `lastAutoplay` 那条"恢复现场不恢复意图"
+       的口径在这里同样适用。
+     */
+    private func notifyUnplayable(_ episode: Episode, userInitiated: Bool) {
+        Log.w("Player", "播不了,保持当前一集 id=\(episode.id) title=\"\(episode.title)\" user=\(userInitiated)")
+        guard userInitiated else { return }
+        noticeToken += 1
+        let token = noticeToken
+        notice = String(localized: "这一集暂时播不了")
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            guard let self, self.noticeToken == token else { return }
+            self.notice = nil
+        }
     }
 
     /// 装载并起播。抽出来是因为视频源的直链要**异步**现取(见 `playEpisode` 那条分支):
@@ -841,12 +902,15 @@ final class PlayerController: ObservableObject {
     /// 重试同样按 `current?.id` 守卫自弃。`cancelSleep` 与 `stopRadio` 与两端同口径显式调。
     func close() {
         Log.i("Player", "close id=\(current?.id ?? "-")")
+        // 作废在途的直链解析:否则那条 Task 回来时会把用户已经关掉的这一集重新装上(H232)
+        playGeneration += 1
         if radioMode { stopRadio() }
         cancelSleep()
         current = nil
         player.pause()
         isPlaying = false
         playbackError = nil
+        notice = nil
         loadRetries = 0
         queue = []
         queueIndex = 0

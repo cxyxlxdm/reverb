@@ -305,6 +305,10 @@
       "value": "載入失敗,請檢查網路後重試"
     },
     {
+      "name": "play_refused",
+      "value": "這一集暫時播不了"
+    },
+    {
       "name": "player_init_failed",
       "value": "播放器初始化失敗"
     },

@@ -305,6 +305,10 @@
       "value": "加载失败,请检查网络后重试"
     },
     {
+      "name": "play_refused",
+      "value": "这一集暂时播不了"
+    },
+    {
       "name": "player_init_failed",
       "value": "播放器初始化失败"
     },

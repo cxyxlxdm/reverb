@@ -305,6 +305,10 @@
       "value": "Error al cargar, revisa la red y reintenta"
     },
     {
+      "name": "play_refused",
+      "value": "Este episodio no se puede reproducir ahora"
+    },
+    {
       "name": "player_init_failed",
       "value": "El reproductor no se pudo inicializar"
     },

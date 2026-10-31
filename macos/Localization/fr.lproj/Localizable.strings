@@ -192,6 +192,7 @@
 "分享" = "Partager";
 "保存" = "Enregistrer";
 "加载失败,请检查网络后重试" = "Échec du chargement. Vérifiez le réseau et réessayez.";
+"这一集暂时播不了" = "Cet épisode ne peut pas être lu pour le moment";
 "加载失败,点击重试" = "Échec — cliquez pour réessayer";
 
 /* 顶部三格 / 音阁分段 / 追更页 (M6, 2026-10-25) */
