@@ -143,8 +143,12 @@
 > `probe ok #0 code=206`、`state READY`、`media_session state=PLAYING position=15514`(真的在走),
 > 关键词搜索 `search count=17`(不再 `v_voucher`);鸿蒙 `assembleHap` / macOS `swift build -c release`
 > 各 exit 0(两端的真机 / 运行验收仍按既有缺口记)。
-> ⚠️ **这一条还没进任何 `dist/` 包**(三个端都是),GitHub Release `1.0.6` 的资产仍是 18:21 那批 ——
-> 重打要另拍板(先归档在架那份的 mapping)。
+> ⚠️ **~~这一条还没进任何 `dist/` 包~~ ▶ 2026-10-31 19:0x–19:10 已三端重出并发布**:
+> Android `reverb.apk` 65,061,444 B、macOS `Reverb.dmg` 4,989,893 B、鸿蒙 `reverb.app` 1,157,634 B
+> (+ `reverb-symbol.zip` 668,735 B),三端 `find -newer` 全 0、解包判据词 `frontend/finger/spi` 各命中;
+> GitHub Release `1.0.6` 的 apk / dmg 已覆盖(digest 与本地逐字相同,`latest` 仍 = 1.0.6),
+> 两套提审 kit 同批换好。**版本号没变** ⇒ 已装 1.0.6 的设备不会收到提示,要重新下载覆盖安装;
+> 商店后台的同码重传接受度仍未验。
 
 ---
 
