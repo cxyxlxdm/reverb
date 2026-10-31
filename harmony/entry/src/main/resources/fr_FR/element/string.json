@@ -305,6 +305,10 @@
       "value": "Échec du chargement, vérifiez le réseau puis réessayez"
     },
     {
+      "name": "play_refused",
+      "value": "Cet épisode ne peut pas être lu pour le moment"
+    },
+    {
       "name": "player_init_failed",
       "value": "Échec d'initialisation du lecteur"
     },

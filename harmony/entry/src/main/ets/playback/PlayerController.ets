@@ -192,6 +192,13 @@ export class PlayerController {
    * 没绑上时视频集只能报加载失败,普通播客完全不受影响。
    */
   resolvePseudoUrl: ((url: string) => Promise<ResolvedStream | null>) | null = null;
+  /**
+   * 「这一集播不了」的提示口(闭包注入,与上面同一解耦风格)。
+   *
+   * 为什么要有它:视频源解析失败时**不切 current**(见 H232),于是 `playbackError` 那条
+   * 按「当前这一集」挂的提示用不上 —— 没有可见的落点就等于静默失败。壳层把它接到 toast 上。
+   */
+  onPlayRefused: (() => void) | null = null;
   /// 播放状态变化回调(供 AVSession 同步)
   onStateChanged: (() => void) | null = null;
 
@@ -513,7 +520,49 @@ export class PlayerController {
       });
   }
 
+  /**
+   * 起播前半段:**先把视频源的直链解析出来,再提交**。
+   *
+   * ⚠️ 顺序是修过的(2026-10-31,见 H232):原先先把 `current` 切过去、再 `await` 解析,
+   * 解析失败就留下「播放条/播放页是新的一集、耳朵里还是上一集」—— 用户读到的是播放器坏了。
+   * 现在解析失败**什么都不提交**,只提示一句,旧的一集继续播。
+   */
   private async playEpisode(e: Episode, generation: number): Promise<void> {
+    if (generation !== this.loadGeneration) return;
+    const local = this.localFileProvider === null ? null : this.localFileProvider(e);
+    const useLocal = local !== null && local.length > 0;
+    /**
+     * 视频源(伪地址)的最后一跳是**现取直链**:模型里存的是 `bilibili://audio/<bvid>/<cid>`
+     * 这个坐标,不是地址 —— 那条直链的 `deadline` 是取链时刻 +2 小时(实测),而 Episode 会进
+     * 历史、进待播、进播放态快照,甚至进备份,存直链等于第二天点开必然"这一集播不了"。
+     *
+     * 本地有下载件或缓存件时(useLocal),视频集与普通单集没有任何区别,所以只在流式这一路解析。
+     */
+    let streamUrl = e.audioUrl;
+    let resolvedDuration = 0;
+    if (!useLocal && BilibiliSource.isPseudo(e.audioUrl)) {
+      const resolved = await this.resolvePseudoAudio(e.audioUrl);
+      // 等待往返期间用户可能点了别的集:这次起播已作废(见 `resolveSeq`)
+      if (generation !== this.loadGeneration) return;
+      if (resolved === null || resolved.url.length === 0) {
+        Log.w('Player', `解析直链失败,保持当前一集 id=${e.id}`);
+        this.notifyUnplayable(e);
+        return;
+      }
+      streamUrl = resolved.url;
+      resolvedDuration = resolved.durationSec;
+      Log.i('Player', `解析直链成功 id=${e.id} duration=${resolved.durationSec}s`);
+    }
+    await this.commitAndPlay(e, generation, useLocal, local, streamUrl, resolvedDuration);
+  }
+
+  /**
+   * 真正提交成「正在播」并装载。抽出来是为了让 [playEpisode] 只剩「解析直链」一条主干,
+   * 而"切 current / 记历史 / 写快照"这些提交动作集中在一处(与 Android 的 `commitAndPlay` 同形)。
+   */
+  private async commitAndPlay(e: Episode, generation: number, useLocal: boolean,
+                              local: string | null, streamUrl: string,
+                              resolvedDuration: number): Promise<void> {
     if (generation !== this.loadGeneration) return;
     this.current = e;
     // 换集即重新计数:见 `playbackStarted` 那道地闸的注释
@@ -554,8 +603,6 @@ export class PlayerController {
     this.clock.countedEpId = e.id;
     this.clock.countedPosMs = resumeMs;
 
-    const local = this.localFileProvider === null ? null : this.localFileProvider(e);
-    const useLocal = local !== null && local.length > 0;
     if (!useLocal && e.audioUrl.length === 0) {
       this.loading = false;
       this.playbackDesiredPlaying = false;
@@ -565,55 +612,31 @@ export class PlayerController {
       return;
     }
     /**
-     * 视频源(伪地址)的最后一跳是**现取直链**:模型里存的是 `bilibili://audio/<bvid>/<cid>`
-     * 这个坐标,不是地址 —— 那条直链的 `deadline` 是取链时刻 +2 小时(实测),而 Episode 会进
-     * 历史、进待播、进播放态快照,甚至进备份,存直链等于第二天点开必然"这一集播不了"。
+     * 用**这一 P** 的真时长换掉元数据里的那个(见 `ResolvedStream`)。
      *
-     * 本地有下载件或缓存件时(useLocal),视频集与普通单集没有任何区别,所以只在流式这一路解析。
+     * 上面那次 `history.record` 与 `persistState` 写的是解析之前的载荷 —— 搜索接口给的
+     * `duration` 对多 P 视频是**整条**的总长(实测 `457:6` = 27426 s,而正在播的 P1
+     * 只有 1127 s)。时长错了会让历史行写着 7:37:06、播放器里却 18:47 到底。
+     * 同 id 再记一次 = 原地换掉那一条的载荷,进度不动(与 Android 那次 `history?.record(ep,…)`
+     * 同一手法)。`audioUrl` 仍是伪地址,不是直链 —— 直链只活在这次起播里。
      */
-    let streamUrl = e.audioUrl;
-    if (!useLocal && BilibiliSource.isPseudo(e.audioUrl)) {
-      const resolved = await this.resolvePseudoAudio(e.audioUrl);
-      // 等待往返期间用户可能点了别的集:这次起播已作废(见 `resolveSeq`)
-      if (generation !== this.loadGeneration) return;
-      if (resolved === null || resolved.url.length === 0) {
-        Log.w('Player', `解析直链失败 id=${e.id}`);
-        this.loading = false;
-        this.playbackDesiredPlaying = false;
-        this.playbackError = L.s('playback_load_failed');
-        this.deactivateAudioSession();
-        this.notify();
-        return;
+    if (resolvedDuration > 0 && resolvedDuration !== e.durationSec) {
+      const before = e.durationSec;
+      const corrected = withDuration(e, resolvedDuration);
+      e = corrected;
+      this.current = corrected;
+      // **队列与待播里那两份也得换掉**。`persistState` 写的是 `this.queue` / `this.userQueue`,
+      // 只改 `current` 会留下「快照里 current=1127s、context=27426s」—— 冷启动恢复队列、
+      // 队列面板里那条错数会重新冒出来(Android 先验出来的,见 H228)。用 id 守一道:
+      // 参考真实时长要一次网络往返,期间用户可能已经切走,照着位置盖下去就是改错人。
+      if (this.queueIndex >= 0 && this.queueIndex < this.queue.length &&
+        this.queue[this.queueIndex].id === corrected.id) {
+        this.queue[this.queueIndex] = corrected;
       }
-      streamUrl = resolved.url;
-      /**
-       * 用**这一 P** 的真时长换掉元数据里的那个(见 `ResolvedStream`)。
-       *
-       * 上面那次 `history.record` 与 `persistState` 写的是解析之前的载荷 —— 搜索接口给的
-       * `duration` 对多 P 视频是**整条**的总长(实测 `457:6` = 27426 s,而正在播的 P1
-       * 只有 1127 s)。时长错了会让历史行写着 7:37:06、播放器里却 18:47 到底。
-       * 同 id 再记一次 = 原地换掉那一条的载荷,进度不动(与 Android 那次 `history?.record(ep,…)`
-       * 同一手法)。`audioUrl` 仍是伪地址,不是直链 —— 直链只活在这次起播里。
-       */
-      if (resolved.durationSec > 0 && resolved.durationSec !== e.durationSec) {
-        const before = e.durationSec;
-        const corrected = withDuration(e, resolved.durationSec);
-        e = corrected;
-        this.current = corrected;
-        // **队列与待播里那两份也得换掉**。`persistState` 写的是 `this.queue` / `this.userQueue`,
-        // 只改 `current` 会留下「快照里 current=1127s、context=27426s」—— 冷启动恢复队列、
-        // 队列面板里那条错数会重新冒出来(Android 先验出来的,见 H228)。用 id 守一道:
-        // 解析是一次网络往返,期间用户可能已经切走,照着位置盖下去就是改错人。
-        if (this.queueIndex >= 0 && this.queueIndex < this.queue.length &&
-          this.queue[this.queueIndex].id === corrected.id) {
-          this.queue[this.queueIndex] = corrected;
-        }
-        this.userQueue = this.userQueue.map((x: Episode) => x.id === corrected.id ? corrected : x);
-        if (!isGuide && this.history !== null) this.history.record(corrected, Date.now());
-        this.persistState();
-        Log.i('Player', `时长更正 ${before}s -> ${resolved.durationSec}s id=${e.id}`);
-      }
-      Log.i('Player', `解析直链成功 id=${e.id} duration=${resolved.durationSec}s`);
+      this.userQueue = this.userQueue.map((x: Episode) => x.id === corrected.id ? corrected : x);
+      if (!isGuide && this.history !== null) this.history.record(corrected, Date.now());
+      this.persistState();
+      Log.i('Player', `时长更正 ${before}s -> ${resolvedDuration}s id=${e.id}`);
     }
     Log.i('Player', `播放 "${e.title}" 源=${useLocal ? '本地' : '网络'} resume=${resumeMs}ms generation=${generation}`);
     /**
@@ -662,6 +685,19 @@ export class PlayerController {
       Log.e('Player', `装载失败 ${(err as Error).message}`);
       this.handleLoadFailure(e, generation);
     }
+  }
+
+  /**
+   * 这一集拿不到可播的地址:**什么都不提交**,只在界面上说一句。
+   *
+   * 不用 `playbackError`:那条提示挂的是「当前这一集」,而当前这一集还是上一集 ——
+   * 写成它会被界面按 id 挡掉,等于静默失败。
+   */
+  private notifyUnplayable(e: Episode): void {
+    Log.w('Player', `播不了,保持当前一集 id=${e.id} title="${e.title}"`);
+    // 冷启动恢复(`autoplay=false`)失败不提示:那时用户没做任何动作,弹一条只会莫名其妙
+    if (!this.playbackDesiredPlaying) return;
+    if (this.onPlayRefused !== null) this.onPlayRefused();
   }
 
   /**

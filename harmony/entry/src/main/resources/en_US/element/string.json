@@ -305,6 +305,10 @@
       "value": "Failed to load, check your network and retry"
     },
     {
+      "name": "play_refused",
+      "value": "This episode can't be played right now"
+    },
+    {
       "name": "player_init_failed",
       "value": "Player failed to initialize"
     },

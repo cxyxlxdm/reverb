@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import androidx.core.content.ContextCompat
+import com.yuyin.reverb.R
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -60,6 +61,13 @@ object PlayerController {
     private var controller: MediaController? = null
     private val handler = Handler(Looper.getMainLooper())
     private var pending: Episode? = null
+    /**
+     * 每次 [playEpisode] 递增。视频源的直链要**先解析、后提交**(见 H232),解析回来时靠它
+     * 判断"这次起播还算不算数" —— 解析只差一次网络往返,而用户可能已经点了别的集或关了播放条。
+     */
+    private var playSeq = 0
+    /** 只给 [notifyUnplayable] 用:那条提示要一个能起 Toast 的 Context([init] 里拿到)。 */
+    private var appContext: Context? = null
     private var history: HistoryStore? = null
     private var settings: SettingsStore? = null
     private var bilibiliSource: BilibiliSource? = null
@@ -451,6 +459,7 @@ object PlayerController {
     fun init(context: Context) {
         if (controller != null) return
         val appCtx = context.applicationContext
+        appContext = appCtx
         val token = SessionToken(appCtx, ComponentName(appCtx, PlaybackService::class.java))
         val future = MediaController.Builder(appCtx, token).buildAsync()
         future.addListener({
@@ -752,9 +761,70 @@ object PlayerController {
         }
     }
 
+    /**
+     * 播放某一集。**先解析、后提交**(2026-10-31,见 H232)。
+     *
+     * 视频源(伪地址)的直链要现取,而取不回来时上一集还在响。原先这里先把 `_current` 切过去
+     * 再解析,解析失败就留下「播放条/播放页是这一集、耳朵里还是上一集」—— 用户读到的是播放器坏了。
+     * 现在只在解析**成功之后**才提交,失败就保持原样、提示一句。
+     */
     private fun playEpisode(episode: Episode, isRadio: Boolean = false, autoplay: Boolean = true) {
         log.i(TAG, "play id=${episode.id} title='${episode.title}' radio=$isRadio auto=$autoplay")
-        // 手动播放任意单集即退出电台;电台内部续播/换台传 isRadio=true 保持在台
+        // 作废在途的解析:下面那条 coroutine 回来时若代次已变,说明用户又点了别的集(或关了播放条)
+        val seq = ++playSeq
+        // 选源三级:**下载 > 缓存 > 流式**。这里先查一次只是为了判断"要不要先解析直链",
+        // 三件都是纯查询;真正的取用与记账都在 [commitAndPlay] 里。
+        val downloaded = DownloadManager.localPath(episode.id)?.takeIf { File(it).exists() }
+        val cached = if (downloaded == null) AudioCacheManager.localPath(episode.id) else null
+        if (controller != null && downloaded == null && cached == null &&
+            BilibiliSource.isPseudo(episode.audioUrl)
+        ) {
+            val src = bilibiliSource
+            if (src == null) {
+                log.e(TAG, "bilibili source not bound id=${episode.id}")
+                notifyUnplayable(episode, autoplay)
+                return
+            }
+            scope.launch {
+                val resolved = src.resolvePlayback(episode.audioUrl)
+                // 解析期间用户点了别的集:这次作废。不能省 —— 起播只差一次网络往返,
+                // 而"点一下看看、随即划走"正好落在这个时长里,不拦就会把前一集的声音抢回来。
+                if (seq != playSeq) {
+                    log.i(TAG, "resolve dropped id=${episode.id}")
+                    return@launch
+                }
+                if (resolved == null) {
+                    log.w(TAG, "resolve failed, keep current id=${episode.id}")
+                    notifyUnplayable(episode, autoplay)
+                    return@launch
+                }
+                commitAndPlay(episode, isRadio, autoplay, downloaded = null, cached = null, resolved)
+            }
+            return
+        }
+        commitAndPlay(episode, isRadio, autoplay, downloaded, cached, null)
+    }
+
+    /**
+     * 把这一集提交成「正在播」:切 `_current`、记历史、写播放态、装载起播。
+     *
+     * 抽出来是因为视频源的直链要**异步**现取([playEpisode] 那条分支),取回来之前的**一切**
+     * 提交都得推迟 —— 那正是 H232 的修法。复制一份就意味着以后改起播逻辑要改两处。
+     *
+     * @param resolved 非空 = 视频源已解析出的直链。与 [downloaded] / [cached] 天然互斥:
+     *   解析只发生在"本地没有可用文件"那一路。
+     */
+    private fun commitAndPlay(
+        episode: Episode,
+        isRadio: Boolean,
+        autoplay: Boolean,
+        downloaded: String?,
+        cached: String?,
+        resolved: BilibiliSource.ResolvedStream?
+    ) {
+        // 手动播放任意单集即退出电台;电台内部续播/换台传 isRadio=true 保持在台。
+        // 放在提交这一侧(而不是 [playEpisode] 开头)是为了「解析失败、其实什么都没发生」时
+        // 电台继续放着 —— 否则电台被关掉、又没起播,表现成忽然没声了。
         if (!isRadio && _radioMode.value) stopRadio()
         _current.value = episode
         // 起**新一集**才清失败计数与失败态。口径必须是"换集",不能是"调用 playEpisode":
@@ -799,8 +869,6 @@ object PlayerController {
         // 下载排在最前是因为它是用户点名留下的那一份,语义上比 App 自作主张的缓存更"该被用"。
         // 落到流式那一路才排后台整集缓存 —— 这里是「播过就不要再联网」的唯一触发点,
         // 放在播放而不是列表/详情页,是因为只有这一处代表用户真的要听这一集。
-        val downloaded = DownloadManager.localPath(episode.id)?.takeIf { File(it).exists() }
-        val cached = if (downloaded == null) AudioCacheManager.localPath(episode.id) else null
         val local = downloaded ?: cached
         log.d(TAG, "source ${if (local != null) if (downloaded != null) "local" else "cache" else "stream"} " +
             "seekTo=$pendingSeekMs id=${episode.id}")
@@ -808,76 +876,71 @@ object PlayerController {
         // **电台那一路不缓存**:它是"无限随机换台",每一台都触发一次几十 MB 的整集拉取,
         // 用户听着玩一小时就能把预算刷爆。判据用调用点传进来的 isRadio,而不是 _radioMode,
         // 因为手动播放会先 stopRadio 再进来 —— 到这儿时那个字段已经是 false。
+        //
         // **视频源的最后一步是"现取直链"**,而它要联网 —— 所以只在流式这一路分叉:
-        // 本地有下载件或缓存件时,它与普通单集没有任何区别。
+        // 本地有下载件或缓存件时,它与普通单集没有任何区别。解析发生在 [playEpisode] 里,
+        // 到这里时 `resolved` 已经是拿到的直链(或 null = 不是视频源 / 走本地)。
         //
         // 为什么不能把直链在检索时就算好存进 Episode:那条链的 `deadline` 是取链时刻
         // **+2 小时**(实测),而 Episode 会进历史、进待播、进播放态快照,甚至进备份 ——
         // 存直链等于第二天点开必然「这一集播不了」,且用户没有任何线索知道要重新搜一次。
         // 所以模型里存的是 `bilibili://audio/<bvid>/<cid>` 这个坐标,见 BilibiliSource。
-        if (local == null && BilibiliSource.isPseudo(episode.audioUrl)) {
-            val src = bilibiliSource
-            if (src == null) {
-                log.e(TAG, "bilibili source not bound id=${episode.id}")
-                _playbackError.value = PlaybackError(
-                    episode.id, PlaybackException.ERROR_CODE_IO_UNSPECIFIED, "resolve-unbound", false, errorRetries
-                )
-                return
+        if (resolved != null) {
+            // 缓存必须在解析之后:AudioCacheManager 拿的是 `audioUrl`,伪地址它拉不下来
+            // (会当成一个畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
+            // 头也要一起给:CDN 缺 UA/Referer 一律 403,而本类默认那个 UA 里就含 `Android`。
+            //
+            // 解析结果里还带着**这一 P 的真实时长**:搜索给多 P 视频的是整条总和
+            // (见 `BilibiliSource.ResolvedStream`)。它得在起播前落进这一集的元数据,
+            // 否则历史行与播放态快照里存的是那个大了几十倍的数。
+            val ep = if (resolved.durationSec > 0 && resolved.durationSec != episode.durationSec) {
+                episode.copy(durationSec = resolved.durationSec)
+            } else episode
+            if (!isRadio) AudioCacheManager.cache(ep.copy(audioUrl = resolved.url), BilibiliSource.streamHeaders())
+            if (ep !== episode) {
+                // 上面那次 record 写的是旧元数据(h.durationMs 那半本来就来自播放器,是对的;
+                // 错的只有 episode.durationSec)。同 id 再记一次 = 原地换掉那份载荷、进度不动。
+                history?.record(ep, System.currentTimeMillis())
+                _current.value = ep
+                // **队列里那一份也得换掉**。`persistState` 写的是 `queue`(不可变 List),
+                // 只改 `_current` 会留下「快照里 current=1127s、context=27426s」——
+                // 冷启动恢复队列、队列面板里那条错数会重新冒出来(真机验出的,见 H228)。
+                // 用 id 守一道:换集只差一次网络往返,期间用户可能已经切走,那时 queueIndex
+                // 指着的已是别的集了,照着位置盖下去就是改错人。
+                if (queue.getOrNull(queueIndex)?.id == ep.id) {
+                    queue = queue.toMutableList().also { it[queueIndex] = ep }
+                }
+                // 待播列表是用户自己排的,同一集可能正躺在里面 —— 它的载荷同样是旧时长。
+                _userQueue.value = _userQueue.value.map { if (it.id == ep.id) ep else it }
+                // 快照也要重写:它在提交那一刻、拿到时长之前落过一次盘了,那一版存的是旧的 durationSec。
+                persistState()
+                log.i(TAG, "duration corrected ${episode.durationSec}s -> ${ep.durationSec}s id=${ep.id}")
             }
-            val expectId = episode.id
-            scope.launch {
-                val resolved = src.resolvePlayback(episode.audioUrl)
-                // 解析期间用户点了别的集:这次作废。不能省 —— 起播只差一次网络往返,
-                // 而"点一下看看、随即划走"正好落在这个时长里,不拦就会把前一集的声音抢回来。
-                if (_current.value?.id != expectId) {
-                    log.i(TAG, "resolve dropped id=$expectId")
-                    return@launch
-                }
-                if (resolved == null) {
-                    log.w(TAG, "resolve failed id=$expectId")
-                    _playbackError.value = PlaybackError(
-                        episode.id, PlaybackException.ERROR_CODE_IO_UNSPECIFIED, "resolve-failed", false, errorRetries
-                    )
-                    return@launch
-                }
-                // 缓存必须在解析之后:AudioCacheManager 拿的是 `audioUrl`,伪地址它拉不下来
-                // (会当成一个畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
-                // 头也要一起给:CDN 缺 UA/Referer 一律 403,而本类默认那个 UA 里就含 `Android`。
-                //
-                // 解析结果里还带着**这一 P 的真实时长**:搜索给多 P 视频的是整条总和
-                // (见 `BilibiliSource.ResolvedStream`)。它得在起播前落进这一集的元数据,
-                // 否则历史行与播放态快照里存的是那个大了几十倍的数。
-                val ep = if (resolved.durationSec > 0 && resolved.durationSec != episode.durationSec) {
-                    episode.copy(durationSec = resolved.durationSec)
-                } else episode
-                if (!isRadio) AudioCacheManager.cache(ep.copy(audioUrl = resolved.url), BilibiliSource.streamHeaders())
-                if (ep !== episode) {
-                    // 上面那次 record 写的是旧元数据(h.durationMs 那半本来就来自播放器,是对的;
-                    // 错的只有 episode.durationSec)。同 id 再记一次 = 原地换掉那份载荷、进度不动。
-                    history?.record(ep, System.currentTimeMillis())
-                    _current.value = ep
-                    // **队列里那一份也得换掉**。`persistState` 写的是 `queue`(不可变 List),
-                    // 只改 `_current` 会留下「快照里 current=1127s、context=27426s」——
-                    // 冷启动恢复队列、队列面板里那条错数会重新冒出来(真机验出的,见 H228)。
-                    // 用 id 守一道:解析是一次网络往返,期间用户可能已经切走,那时 queueIndex
-                    // 指着的已是别的集了,照着位置盖下去就是改错人。
-                    if (queue.getOrNull(queueIndex)?.id == ep.id) {
-                        queue = queue.toMutableList().also { it[queueIndex] = ep }
-                    }
-                    // 待播列表是用户自己排的,同一集可能正躺在里面 —— 它的载荷同样是旧时长。
-                    _userQueue.value = _userQueue.value.map { if (it.id == ep.id) ep else it }
-                    // 快照也要重写:它在 playEpisode 开头、解析之前就落过一次盘了,
-                    // 那一版存的是旧的 durationSec。
-                    persistState()
-                    log.i(TAG, "duration corrected ${episode.durationSec}s -> ${ep.durationSec}s id=$expectId")
-                }
-                startEpisode(c, ep, resolved.url, autoplay)
-            }
+            startEpisode(c, ep, resolved.url, autoplay)
             return
         }
 
         if (local == null && !isRadio) AudioCacheManager.cache(episode)
         startEpisode(c, episode, if (local != null) null else episode.audioUrl, autoplay, local)
+    }
+
+    /**
+     * 这一集解析不出可播的地址:**什么都不提交**,只在界面上说一句就结束。
+     *
+     * 不走 [PlaybackError]:那条状态行挂在「当前这一集」上(`PlayerScreen` 按 id 判),
+     * 而现在当前这一集还是上一集 —— 写成它会被 id 判据挡掉,等于静默失败(那正是 H231 里
+     * 「播放条切走 + 报错」的另一半:界面说切了、声音没切)。
+     *
+     * @param userInitiated 用户点的播放 = 要提示;冷启动恢复(`autoplay=false`)失败不提示 ——
+     *   那时用户没做任何动作,弹一条只会莫名其妙。
+     */
+    private fun notifyUnplayable(episode: Episode, userInitiated: Boolean) {
+        log.w(TAG, "unplayable id=${episode.id} title='${episode.title}' user=$userInitiated")
+        if (!userInitiated) return
+        val ctx = appContext ?: return
+        handler.post {
+            android.widget.Toast.makeText(ctx, R.string.player_err_unplayable, android.widget.Toast.LENGTH_SHORT).show()
+        }
     }
 
     /**
@@ -998,6 +1061,8 @@ object PlayerController {
      */
     fun close() {
         log.i(TAG, "close id=${_current.value?.id}")
+        // 作废在途的直链解析:关掉播放条之后它回来,不该把声音重新拉起来
+        playSeq += 1
         if (_radioMode.value) stopRadio()
         cancelSleep()
         val c = controller
