@@ -282,6 +282,8 @@
     <string name="set_about">關於餘音</string>
     <string name="set_licenses">開源授權</string>
     <string name="set_version">版本</string>
+    <string name="set_check_update">檢查更新</string>
+    <string name="set_check_update_sub">到 GitHub 查一次有沒有新的安裝包；行動網路會先問一句再下載</string>
 
     <string name="dlg_region_title">選擇地區</string>
     <string name="dlg_theme_title">主題</string>
@@ -408,4 +410,8 @@
     <string name="update_action_install">立即安裝</string>
     <string name="update_action_later">以後再說</string>
     <string name="update_action_retry">重試</string>
+    <string name="update_checking">正在檢查…</string>
+    <string name="update_is_latest">已是最新版本 %1$s</string>
+    <string name="update_check_failed">檢查失敗，看看網路之後再試一次</string>
+    <string name="update_title_repack">這個版本重新發布過安裝包 %1$s</string>
 </resources>
