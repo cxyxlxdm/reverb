@@ -9,6 +9,10 @@ import Foundation
 /// 四条实测结论(2026-10-28,Android 侧匿名请求、无 Cookie;本端接口形状一致):
 ///  1. `x/web-interface/view` 与 `x/player/playurl` 都不需要签名、不需要 Cookie。
 ///     `x/web-interface/wbi/search/type` 路径里带 `wbi` 但**也不校验签名**,它要的是 Referer。
+///     ⚠️ **`view` 现在要 Cookie**(2026-10-31 复测,见 H236):不带 `buvid3` 会被风控回
+///     **HTTP 412**,而用户看到的就是「这一集暂时播不了」。见 `ensureCookie()`。
+///     ⚠️ 但**搜索反而不能带**:同一天同一个出口的对照里,带上就从 20 条变成
+///     `v_voucher` 零条 ⇒ 风控是**按端点分别判的**,别推成一条通则。
 ///  2. 直链的 `deadline` 是**请求时刻 + 2 小时** ⇒ **绝不能把直链持久化**。
 ///     历史、待播、播放态快照、备份里存的都是 `bilibili://` 伪地址,播放前才解析。
 ///  3. ⚠️ **搜索必须带 `Referer: https://www.bilibili.com/`**,缺了会被风控软拦:
@@ -101,6 +105,12 @@ final class BilibiliSource {
     /// bvid → 是不是「充电专属」。只缓存**判定了的**结论(取不到就放行、不落缓存),
     /// 只在内存里、有上限 —— 它是搜索结果过滤的中间结果,不是持久数据。见 H231。
     private var charging: [String: Bool] = [:]
+    /// `view` 要带的 `buvid3` / `buvid4`。见 `ensureCookie()` 与 H236。
+    ///
+    /// 只放内存、不落盘:重启换一个没有任何副作用,而落盘会白白在用户设备上留一个用不上的标识。
+    private var cookie: String?
+    /// 正在取 Cookie 的那一次请求。搜索一进来就是 20 条并发的 `isCharging`,不合并会发 20 次 spi。
+    private var cookieTask: Task<String?, Never>?
 
     // MARK: - 伪地址
 
@@ -179,7 +189,7 @@ final class BilibiliSource {
     /// 单 P 视频就是「一集」;多 P 把每一 P 拆成一集(各有自己的 cid,而 playurl 按 cid 取)。
     /// 合集(season)不做 —— 那要 space 接口,见类注释。
     func view(_ bvid: String) async -> FeedResult? {
-        let root = await getJson("\(Self.api)/web-interface/view?bvid=\(bvid)")
+        let root = await getJson("\(Self.api)/web-interface/view?bvid=\(bvid)", withCookie: true)
         guard let data = Self.obj(root, "data") else {
             Log.w("Bilibili", "view failed bvid=\(bvid)")
             return nil
@@ -332,7 +342,7 @@ final class BilibiliSource {
     private func isCharging(_ bvid: String) async -> Bool {
         if let cached = charging[bvid] { return cached }
         guard let data = Self.obj(
-            await getJson("\(Self.api)/web-interface/view?bvid=\(bvid)"), "data") else { return false }
+            await getJson("\(Self.api)/web-interface/view?bvid=\(bvid)", withCookie: true), "data") else { return false }
         let exclusive = Self.bool(data, "is_upower_exclusive")
         // 条目本身很小(bvid + 一个布尔),但搜索是长期入口:不设上限迟早堆起来。
         if charging.count > 512 { charging.removeAll() }
@@ -451,6 +461,47 @@ final class BilibiliSource {
 
     // MARK: - 底层
 
+    /// 取一次 `buvid3` / `buvid4` 并留在 `cookie` 里。**这是 `view` 现在能不能用的前置条件**(H236)。
+    ///
+    /// 2026-10-31 的现场:装了最新包的手机点开一集,`view` 回 **HTTP 412**,界面上就是
+    /// 「这一集暂时播不了」,而同一条视频几秒后又能成功 ⇒ 不是视频坏了,是接口在被风控。
+    /// 同一台手机、同一个出口的受控实验(只换请求头):UA 换成 Chrome / iPhone 都不改变结论,
+    /// **带不带 `buvid3`/`buvid4` 才改变** —— 不带 412,带上 200。
+    /// `x/frontend/finger/spi` 自己不拦匿名请求(实测 200),所以先取它、再拿回下发的值当 Cookie。
+    ///
+    /// ⚠️ **只给 `view` 带,别给搜索带**:Android 那边的第一版是「一律带」,结果搜索当场变成
+    /// `v_voucher` 软拦、零条;同一台手机上的 curl / Chrome 用同一组头却是 20 条。
+    /// 判据是**端点**,不是「顺手」。
+    ///
+    /// 失败(超时 / 接口变了)回 nil,调用方照旧不带 Cookie 发,让真正的失败原因露出来。
+    private func ensureCookie() async -> String? {
+        if let cached = cookie { return cached }
+        if let running = cookieTask { return await running.value }
+        let task = Task { await fetchCookie() }
+        cookieTask = task
+        defer { cookieTask = nil }
+        return await task.value
+    }
+
+    private func fetchCookie() async -> String? {
+        guard let root = await HTTP.json("\(Self.api)/frontend/finger/spi",
+                                          headers: Self.headers, timeout: Self.apiTimeout),
+              let data = Self.obj(root, "data") else { return nil }
+        let b3 = Self.str(data, "b_3")
+        let b4 = Self.str(data, "b_4")
+        guard !b3.isEmpty else { return nil }
+        let value = b4.isEmpty ? "buvid3=\(b3)" : "buvid3=\(b3); buvid4=\(b4)"
+        cookie = value
+        return value
+    }
+
+    /// 接口头。`withCookie` 只在 `view` 打开 —— 搜索带上它反而被软拦(见 `ensureCookie()`）。
+    private func apiHeaders(withCookie: Bool) async -> [String: String] {
+        var h = Self.headers
+        if withCookie, let c = await ensureCookie() { h["Cookie"] = c }
+        return h
+    }
+
     /// 接口族的统一 GET。**网络层快速失败补一次**(见 H233)。
     ///
     /// 一次瞬时的拒连不该被判成「这一集播不了」:2026-10-31 的同形现场在鸿蒙那台
@@ -462,10 +513,11 @@ final class BilibiliSource {
     ///    「播放页转圈」翻倍;
     ///  - **`code≠0` 不补**:那是接口在说话(下架 / 风控),再来一次不会变;
     ///  - 重试的这一次也受 `apiTimeout` 约束,失败后照样回 nil,由播放层提示。
-    private func getJson(_ url: String) async -> [String: Any]? {
+    private func getJson(_ url: String, withCookie: Bool = false) async -> [String: Any]? {
         for attempt in 0..<2 {
             let startedAt = Date()
-            if let root = await HTTP.json(url, headers: Self.headers, timeout: Self.apiTimeout) {
+            let headers = await apiHeaders(withCookie: withCookie)
+            if let root = await HTTP.json(url, headers: headers, timeout: Self.apiTimeout) {
                 let code = Self.num(root, "code")
                 if code != 0 {
                     Log.w("Bilibili", "api code=\(code) msg='\(Self.str(root, "message"))'")

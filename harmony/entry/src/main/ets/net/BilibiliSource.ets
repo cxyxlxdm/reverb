@@ -13,6 +13,10 @@ import { Log } from '../util/Logger';
  * 三条实测结论(2026-10-28,Android 侧匿名请求、无 Cookie;本端接口形状一致):
  *  1. `x/web-interface/view` 与 `x/player/playurl` 都不需要签名、不需要 Cookie。
  *     `x/web-interface/wbi/search/type` 路径里带 `wbi` 但**也不校验签名**,它要的是 Referer(第 3 条)。
+ *     ⚠️ **`view` 现在要 Cookie**(2026-10-31 复测,见 H236):不带 `buvid3` 会被风控回
+ *     **HTTP 412**,而用户看到的就是「这一集暂时播不了」。见 `ensureCookie`。
+ *     ⚠️ 但**搜索反而不能带**:同一天三端同一个出口的对照里,带上就从 20 条变成
+ *     `v_voucher` 零条 ⇒ 风控是**按端点分别判的**,别推成一条通则。
  *  2. 直链的 `deadline` 是**请求时刻 + 2 小时** ⇒ **绝不能把直链持久化**。
  *     历史、队列、播放态快照、备份里存的都是 `bilibili://` 伪地址,播放前才解析。
  *  3. ⚠️ **搜索必须带 `Referer: https://www.bilibili.com/`**,缺了会被风控软拦:
@@ -82,6 +86,16 @@ export class BilibiliSource {
    * 只在内存里、有上限 —— 它是搜索结果过滤的中间结果,不是持久数据。见 H231。
    */
   private charging: Map<string, boolean> = new Map<string, boolean>();
+
+  /**
+   * `view` 要带的 `buvid3` / `buvid4`。见 [ensureCookie] 与 H236。
+   *
+   * 只放内存、不落盘:进程重启后换一个新的没有任何副作用,而落盘会白白在用户设备上
+   * 留一个用不上的标识。
+   */
+  private cookie: string = '';
+  /** 正在取 Cookie 的那一次请求。搜索一进来就是 20 条并发的 `isCharging`,不合并就会发 20 次 spi。 */
+  private cookieFetching: Promise<string> | null = null;
 
   // ---------------------------------------------------------------- 伪地址
 
@@ -181,7 +195,7 @@ export class BilibiliSource {
    * 合集(season)不做 —— 那要 space 接口,见类注释。
    */
   async view(bvid: string): Promise<FeedResult | null> {
-    const root = await this.getJson(`${BilibiliSource.API}/web-interface/view?bvid=${bvid}`);
+    const root = await this.getJson(`${BilibiliSource.API}/web-interface/view?bvid=${bvid}`, true);
     const data = J.obj(root, 'data');
     if (data === null) {
       Log.w('Bilibili', `view failed bvid=${bvid}`);
@@ -282,7 +296,7 @@ export class BilibiliSource {
       // 风控软拦的指纹是 `v_voucher`(code 仍是 0,没有 result)。单独报一句,否则日志里
       // 只剩 "search failed",下一个人会去怀疑关键词或网络(见类注释第 3 条)。
       if (data !== null && data['v_voucher'] !== undefined) {
-        Log.w('Bilibili', 'search soft-blocked (v_voucher) — 检查 Referer');
+        Log.w('Bilibili', 'search soft-blocked (v_voucher) — 检查 Referer(且确认这里没带 Cookie)');
       } else {
         Log.w('Bilibili', 'search failed');
       }
@@ -349,7 +363,7 @@ export class BilibiliSource {
     const cached = this.charging.get(bvid);
     if (cached !== undefined) return cached;
     const data = J.obj(await this.getJson(
-      `${BilibiliSource.API}/web-interface/view?bvid=${bvid}`), 'data');
+      `${BilibiliSource.API}/web-interface/view?bvid=${bvid}`, true), 'data');
     if (data === null) return false;
     const exclusive = J.bool(data, 'is_upower_exclusive');
     // 条目本身很小(bvid + 一个布尔),但搜索是长期入口:不设上限迟早堆起来。
@@ -482,6 +496,56 @@ export class BilibiliSource {
   // ---------------------------------------------------------------- 底层
 
   /**
+   * 取一次 `buvid3` / `buvid4` 并留在 [cookie] 里。**这是 `view` 现在能不能用的前置条件**(H236)。
+   *
+   * 2026-10-31 的现场:装了最新包的手机点开一集,`view` 回 **HTTP 412**,界面上就是
+   * 「这一集暂时播不了」,而同一条视频几秒后又能成功 ⇒ 不是视频坏了,是接口在被风控。
+   * 同一台手机、同一个出口的受控实验(只换请求头):UA 换成 Chrome / iPhone 都不改变结论,
+   * **带不带 `buvid3`/`buvid4` 才改变** —— 不带 412,带上 200。
+   * `x/frontend/finger/spi` 自己不拦匿名请求(实测 200),所以先取它、再拿回下发的值当 Cookie。
+   *
+   * ⚠️ **只给 `view` 带,别给搜索带**:Android 那边的第一版是"一律带",结果搜索当场变成
+   * `v_voucher` 软拦、零条;同一台手机上的 curl / Chrome 用同一组头却是 20 条。
+   * 判据是**端点**,不是"顺手"。
+   *
+   * 失败(超时 / 接口变了)回空串,调用方照旧不带 Cookie 发,让真正的失败原因露出来。
+   */
+  private async ensureCookie(): Promise<string> {
+    if (this.cookie.length > 0) return this.cookie;
+    if (this.cookieFetching !== null) return await this.cookieFetching;
+    this.cookieFetching = this.fetchCookie();
+    try {
+      return await this.cookieFetching;
+    } finally {
+      this.cookieFetching = null;
+    }
+  }
+
+  private async fetchCookie(): Promise<string> {
+    const root = await Http.json(
+      `${BilibiliSource.API}/frontend/finger/spi`,
+      BilibiliSource.API_TIMEOUT_MS, BilibiliSource.headers());
+    if (root === null) return '';
+    const data = J.obj(root, 'data');
+    if (data === null) return '';
+    const b3 = J.str(data, 'b_3');
+    const b4 = J.str(data, 'b_4');
+    if (b3.length === 0) return '';
+    this.cookie = b4.length === 0 ? `buvid3=${b3}` : `buvid3=${b3}; buvid4=${b4}`;
+    return this.cookie;
+  }
+
+  /** 接口头。`withCookie` 只在 `view` 打开 —— 搜索带上它反而被软拦(见 [ensureCookie])。 */
+  private async apiHeaders(withCookie: boolean): Promise<Record<string, string>> {
+    const h = BilibiliSource.headers();
+    if (!withCookie) return h;
+    const c = await this.ensureCookie();
+    if (c.length === 0) return h;
+    h['Cookie'] = c;
+    return h;
+  }
+
+  /**
    * 接口族的统一 GET。**网络层快速失败补一次**(见 H233)。
    *
    * 2026-10-31 的现场:队列里唯一一集,`view` 在 **14ms / 17ms** 里被网络栈拒掉,
@@ -496,11 +560,12 @@ export class BilibiliSource {
    *  - 补的这一次**也**走 [API_TIMEOUT_MS],总等待上限约 20 秒,由调用方的 generation
    *    判据兜住"用户已经切走了"那种情况。
    */
-  private async getJson(url: string): Promise<Record<string, Object> | null> {
+  private async getJson(url: string, withCookie: boolean = false): Promise<Record<string, Object> | null> {
     let root: Record<string, Object> | null = null;
     for (let attempt = 0; attempt < 2; attempt++) {
       const startedAt = Date.now();
-      root = await Http.json(url, BilibiliSource.API_TIMEOUT_MS, BilibiliSource.headers());
+      const headers = await this.apiHeaders(withCookie);
+      root = await Http.json(url, BilibiliSource.API_TIMEOUT_MS, headers);
       if (root !== null) {
         const code = J.num(root, 'code');
         if (code !== 0) {
