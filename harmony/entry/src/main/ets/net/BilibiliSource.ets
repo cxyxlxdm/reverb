@@ -55,6 +55,9 @@ export class BilibiliSource {
   /// 超时该判失败让用户重试,而不是让播放页转 20 秒。
   private static readonly API_TIMEOUT_MS: number = 10000;
   private static readonly PROBE_TIMEOUT_MS: number = 8000;
+  /// 见 [getJson]:只有**快于这个数**的失败才补一次。慢失败(真超时)重试等于把等待翻倍。
+  private static readonly RETRY_FAST_MS: number = 3000;
+  private static readonly RETRY_DELAY_MS: number = 400;
 
   private static headers(): Record<string, string> {
     return { 'User-Agent': BilibiliSource.UA_BROWSER, 'Referer': BilibiliSource.REFERER };
@@ -478,15 +481,40 @@ export class BilibiliSource {
 
   // ---------------------------------------------------------------- 底层
 
+  /**
+   * 接口族的统一 GET。**网络层快速失败补一次**(见 H233)。
+   *
+   * 2026-10-31 的现场:队列里唯一一集,`view` 在 **14ms / 17ms** 里被网络栈拒掉,
+   * H232 又已经把"解析失败"改成不提交、只提示一句 ⇒ 用户看到的是「这一集暂时播不了」,
+   * 点几次几次播不了;而同一个 bvid 几分钟后正常起播(406 秒)。
+   * 一次瞬时拒连不该被判成永久失败,所以这里补一次。
+   *
+   * 三个边界:
+   *  - **只在快失败时补**:超过 [RETRY_FAST_MS] 的失败通常是真的超时,再等一轮只会把
+   *    播放页的转圈翻倍;
+   *  - **`code≠0` 不补**:那是接口在说话(下架 / 风控),再来一次不会变,反而可能加重风控;
+   *  - 补的这一次**也**走 [API_TIMEOUT_MS],总等待上限约 20 秒,由调用方的 generation
+   *    判据兜住"用户已经切走了"那种情况。
+   */
   private async getJson(url: string): Promise<Record<string, Object> | null> {
-    const root = await Http.json(url, BilibiliSource.API_TIMEOUT_MS, BilibiliSource.headers());
-    if (root === null) return null;
-    const code = J.num(root, 'code');
-    if (code !== 0) {
-      Log.w('Bilibili', `api code=${code} msg='${J.str(root, 'message')}'`);
-      return null;
+    let root: Record<string, Object> | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const startedAt = Date.now();
+      root = await Http.json(url, BilibiliSource.API_TIMEOUT_MS, BilibiliSource.headers());
+      if (root !== null) {
+        const code = J.num(root, 'code');
+        if (code !== 0) {
+          Log.w('Bilibili', `api code=${code} msg='${J.str(root, 'message')}'`);
+          return null;
+        }
+        return root;
+      }
+      const elapsed = Date.now() - startedAt;
+      if (attempt === 1 || elapsed >= BilibiliSource.RETRY_FAST_MS) return null;
+      Log.w('Bilibili', `retry after fast failure elapsed=${elapsed}ms endpoint=${Log.endpoint(url)}`);
+      await sleep(BilibiliSource.RETRY_DELAY_MS);
     }
-    return root;
+    return null;
   }
 }
 
@@ -576,4 +604,11 @@ function dateOf(epochSec: number): string {
   const d = new Date(epochSec * 1000);
   const p = (n: number): string => n < 10 ? `0${n}` : `${n}`;
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
+/// 重试前的等待(见 [BilibiliSource.getJson])。ArkTS 没有现成的 sleep。
+function sleep(ms: number): Promise<void> {
+  return new Promise<void>((resolve: () => void) => {
+    setTimeout(() => { resolve(); }, ms);
+  });
 }
