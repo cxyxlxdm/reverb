@@ -161,9 +161,11 @@ object SelfUpdate {
         _state.value = UpdateState.Checking
         val rel = fetchLatest()
         if (rel == null) {
-            // 自动那一轮静默(检测失败不打扰用户,原因在日志里);主动点的那一轮必须给个说法
+            // 自动那一轮静默(检测失败不打扰用户,原因在日志里);主动点的那一轮必须给个说法。
+            // 两条路都必须有落点:自动轮失败若把状态留在 Checking,checkNow 的防重入闸会把
+            // 之后所有手动点击吞到进程重启为止(H235) —— "静默"是回到 Idle,不是停在一个中间态。
             Logger.w(TAG, "update check got nothing manual=$manual")
-            if (manual) _state.value = UpdateState.CheckFailed
+            _state.value = if (manual) UpdateState.CheckFailed else UpdateState.Idle
             return
         }
         val local = BuildConfig.VERSION_NAME
