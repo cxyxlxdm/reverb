@@ -36,7 +36,7 @@ trap 'rm -rf "$WORK"' EXIT
 # 类别约束由 verify-bundle.sh 自己执行,而它对类别的自检是下面那条「配置错」变异(变异 8)。
 # 词的字节数别乱改 —— 9~15 字节的字面量在真 release 包里会被拆成两条立即数,整词 grep 恒 0,
 # 那种词在这里能过、在真包上永远过不了(见 H209)。
-WORDS='SHUFFLE repeat.1 批注 square.and.pencil playModeByTag setPlayMode NoteStore EpisodeNote noteComposer'
+WORDS='SHUFFLE repeat.1 批注 square.and.pencil playModeByTag setPlayMode NoteStore EpisodeNote retry after fast failure elapsed= noteComposer'
 LANGS=(en es fr zh-Hant)   # 五语里 zh-Hans 是基础语言(键即简体原文),所以 .lproj 只有四套
 
 printf 'static const char *w = "%s";\nint main(void){return 0;}\nconst char *getw(void){return w;}\n' \

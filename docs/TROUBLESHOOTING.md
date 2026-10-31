@@ -11588,7 +11588,9 @@ H231 只在**搜索出口**挡掉了已知必败的充电视频;凡是漏过那�
 - Android 侧 `getJson` 因此要变 `suspend`,连带 `fetchCandidates` / `isCharging`(它在
   `coroutineScope` 里被 `async {}` 调)一起改 —— 编译门第一次就是被这条链挡下的。
 
-**实测**(2026-10-31,鸿蒙 Mate 60,debug hap 覆盖安装、数据保留):
+**实测**(三端分三次做,判据是同两条:成功链 + 「快失败要补」的阳性对照):
+
+**① 鸿蒙**(2026-10-31,Mate 60,debug hap 覆盖安装、数据保留):
 - **正向**(点一条**没缓存过**的 B 站单集,12:39:21):`view ok parts=1` → `resolve candidates=3 ttlMin=115`
   → `probe ok #0 code=206` → `解析直链成功 id=bilibili:search:BV1NGfoBmEpp duration=115s`
   → `播放 "微型增高架是陷阱？" 源=网络 resume=0ms` → `state=prepared` → `state=playing`,无 `播不了`。
@@ -11606,8 +11608,46 @@ H231 只在**搜索出口**挡掉了已知必败的充电视频;凡是漏过那�
   ```
   两次请求、中间隔 410ms ⇒ 重试确实跑了一次;`code=2300007 msg=…` 进日志 ⇒ 新加的诊断确实可读。
   随后**改回真实 API、重打、重装**,再跑上面那条正向 —— 代码里不留夹具。
-- **Android / macOS**:只过编译门(`:app:compileReleaseKotlin` exit 0、`swift build -c release` Build complete)。
-  Android 本轮**没有装机复跑**(装新包要 release 签名、要先做完整备份),重试分支在这两端未取证。
+- **Android**(2026-10-31 补,Pixel 3 真机,`com.yuyin.reverb.android.debug` 覆盖安装 ——
+  debug 变体带 `.debug` 后缀,与在架那份并排装,**不动 `dist/`、不卸载、不涉及备份**):
+  - **正向**:在搜索结果的 19 条 B 站单集里挑**没缓存过**的两条点下去,整条链都在:
+    `view ok mid=… parts=1` → `resolve candidates=3 ttlMin=102` → `probe ok #0 code=206` →
+    `落盘播放态` → `source stream` → `READY dur=789973`(BV1D7411a77v;后台整集落盘
+    `bytes=31507977`),第二条 `READY dur=958293` / `bytes=38220276`(BV1hE411v7K4)。无 `播不了`。
+  - **阳性对照**:`svc wifi disable; svc data disable`(`dumpsys connectivity` 读到
+    `Active default network: none`)后点一条 ——
+    `http error` → **`retry after fast failure elapsed=7ms endpoint=https://api.bilibili.com`** →
+    第二次 `http error` → `view failed bvid=BV19z4y1d77r` → `resolve failed, keep current` →
+    `unplayable … user=true`。**恰好两次请求、中间补了一次**,且 H232 的"失败不切条"仍然成立。
+  - ⚠️ 两条取证坑记一下:①`adb logcat -s Reverb` 读出来是 **0 行**假阴性 —— `Logger` 镜像到
+    logcat 的 tag 是 `Reverb/<分类>` 不是 `Reverb`,要用 `logcat -d | grep -a 'Reverb/'`
+    (本轮先打印处理量 42 行再报命中);②`adb shell input text` 粘 B 站链接会被中文拼音输入法吃掉
+    (打进去成了「安州牧」),但歪掉的关键词照样搜出真实 B 站结果,反而更像正常用户路径。
+- **macOS**(2026-10-31 补,主机端探针:把产品源码 `Models/Log/HTTPClient/BilibiliSource` +
+  `Theme.swift` 里切出的 `Fmt` 那一节编成临时可执行文件,形状照 `macos/tools/cache-probe/run.sh`;
+  探针只调 `BilibiliSource.view()`,不绕开任何一层判据):
+  - **正向**(真实网络、真实接口):`view ok parts=1` → `case end view=ok episodes=1
+    title=【官方 MV】Never Gonna Give You Up - Rick Astley`,exit 0。
+  - **阳性对照(快失败要补)**:把**编译进 /tmp 那份拷贝**的 `api` 常量指向 `http://127.0.0.1:9/x`
+    (产品源码与工作区全程未改):
+    ```
+    [E] [HTTP] 传输失败 http://127.0.0.1  (NSURLErrorDomain Code=-1004 Could not connect)
+    [W] [Bilibili] retry after fast failure elapsed=16ms endpoint=http://127.0.0.1
+    [E] [HTTP] 传输失败 http://127.0.0.1
+    [W] [Bilibili] view failed bvid=BV1GJ411x7h7
+    ```
+    13:28:15.507 → 13:28:15.936,间隔 429ms ⇒ 补的那一次真的跑了。
+  - **另一头也要证**(慢失败**不该**补):把同一常量指向 `http://10.255.255.1:80/x`(不可路由,
+    等满 10s 超时)。结果**只有一行** `传输失败 … The request timed out.`、**没有** `retry` 行,
+    `real 10.02` 秒 ⇒ 一次尝试就放手,没有把等待翻倍。这一条是把 `retryFast` 阈值本身验了,
+    光看快失败那组证不到。
+  - **夹具没进产品源码**:改完之后 `git diff --exit-code -- macos/Sources` 干净、全仓
+    `git status --porcelain` 0 条;复扫按 H206 写法(清单落盘 + `xargs … < list`,不用 BSD 没有的 `-a`),
+    处理量 **48 个文件 / 555,624 字节**,`127.0.0.1` / `10.255.255.1` / `9/x` 各 **0 命中**,
+    同一形状的阳性对照 `api.bilibili.com` **3 个文件命中** ⇒ 扫描确实跑过。探针已清理。
+  - ⚠️ 这一轮 macOS 验的是**接口层重试分支**,**不是**整条播放链在桌面上跑起来:探针进不去
+    `PlayerController`(它拖整个 UI 层),所以 macOS 的「点一条 B 站单集真的出声」仍属
+    `docs/ROADMAP.md` 三-A 的运行验收缺口(#59),别把这两件事混着报。
 
 **残余与边界**:
 - 重试只在**接口层**(`getJson`)。CDN 探活(`probe`)与播放器取流本身仍按原口径:探活是逐个候选轮询,

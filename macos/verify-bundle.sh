@@ -92,6 +92,10 @@ fi
 #   sym   :标识符(类型/属性/方法名)—— 在符号表与反射元数据里,与字面量编码无关
 # 每个词都单独做过负控制(归档包 dist/余音-Reverb-1.0.2-arm64.dmg,那批功能还不存在):
 # 下面这些词在那个包里**全部为 0**(2026-10-24 逐词重跑),所以这里报非 0 才算数。
+# ⚠️ **新加的词要自己补一次负控制,别蹭 10-24 那批的结论。** `retry after fast failure elapsed=`
+# 是 2026-10-31 随 H233 加的,同日在 1.0.2 那份里量过:= 0(处理量 4 443 392 B / arm64 单架构,
+# 阳性对照 `TranscriptStore` 234 处)。顺带一个读数能说明为什么 0 是真的:**同一份包里
+# `api.bilibili.com` 与 `playurl` 也都是 0** —— B 站那条源在 1.0.2 根本不存在,不是扫不动。
 # ⚠️ sym 类依赖二进制没被 strip。哪天真加了 strip,这几条会一起变 0 —— 那是「换成 lit16 词」的信号,
 #    不是「功能没进包」;别照着 0 去查源码。
 # 中文必须用 LC_ALL=C grep -a 搜原始字节(硬规矩 1);**必须带 -F**:`repeat.1` / `square.and.pencil`
@@ -105,6 +109,7 @@ WORDS=(
   sym:setPlayMode
   sym:NoteStore
   sym:EpisodeNote
+  'lit16:retry after fast failure elapsed='
   sym:noteComposer
 )
 echo "   判据词(${#WORDS[@]} 个,期望全部非 0):"

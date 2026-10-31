@@ -59,11 +59,22 @@
 
 > **工程要点**:重试加在三端的 `BilibiliSource.getJson`(接口层),不在 CDN 探活与播放器取流那两层。
 > 阈值 `RETRY_FAST_MS = 3s` / 间隔 400ms 三端同值。Android 那侧 `getJson` 因此变 `suspend`,
-> 连带 `fetchCandidates` / `isCharging` 一起改。**验收只到鸿蒙真机**:正向(点一条没缓存的 B 站单集,
-> `view ok` → `probe ok #0 code=206` → `解析直链成功` → `源=网络` → `state=playing`)与阳性对照
-> (临时把接口指向死端口,日志里确实出现两行 `请求异常` + 一行 `retry after fast failure`)都跑过;
-> Android / macOS 本轮只过编译门,重试分支在这两端未取证。
-> ⚠️ **三端 `dist/` 未因这一条重打** —— 上一条"同版本号重出包"那批产物**不含**本轮改动,要不要再出一次归维护者拍。
+> 连带 `fetchCandidates` / `isCharging` 一起改。**三端都取过证**(逐条日志见 H233 实测一节):
+> 鸿蒙真机跑整条链(点一条没缓存的 B 站单集,`view ok` → `probe ok #0 code=206` → `解析直链成功` →
+> `源=网络` → `state=playing`);Android 用 `.debug` 包覆盖装真机跑同一条链(不碰 `dist/`、不卸载),
+> 关网后日志里出现 `retry after fast failure elapsed=7ms` + 恰好两次请求;
+> macOS 用主机端探针把产品源码编成临时可执行文件,除了快失败要补(16ms 补一次、间隔 429ms),
+> 还补了**另一头**:指向不可路由地址造真超时 ⇒ 只有一次尝试、没有 retry,证明"慢失败不补"这条边界成立。
+> ⚠️ macOS 探针验的是**接口层重试**,不是桌面端整条链出声 —— 后者仍记在运行验收缺口(#59)。
+
+> ✅ **2026-10-31 14:31–14:33 三端 `dist/` 已因这一条第三次重打**(维护者拍板:「dist 怎么不更新?
+> 还有 GitHub 1.0.6 的 tag 也要更新」)。解包 grep 各端都取过正/负控制(新包非 0、上一批在架那份 0):
+> Android dex `retry after fast failure` **1**(阳性对照 `playurl` 1)、鸿蒙 `entry-default.hap` 内
+> `.abc` **1**(对照 `api.bilibili.com` / `playurl` 各 1)、macOS dmg 内二进制 **2**
+> (判据词 `lit16:retry after fast failure elapsed=`,33 B;负控制打在 09:55 归档那批 = 0)。
+> **代价与上一条同**:版本号仍是 `1.0.6` / `versionCode 7` / 鸿蒙 `1000006` / macOS build `3`,
+> 所以已装 1.0.6 的人**仍收不到应用内更新提示**(H203),要手动覆盖安装才拿到这一条。
+> 新字节与 SHA-256 见各端 kit 的 `store-copy.txt` 产物表;GitHub Release `1.0.6` 那两个资产已 `--clobber` 覆盖。
 
 ---
 
