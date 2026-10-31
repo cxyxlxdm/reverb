@@ -291,6 +291,8 @@
     <string name="set_about">关于余音</string>
     <string name="set_licenses">开源许可</string>
     <string name="set_version">版本</string>
+    <string name="set_check_update">检查更新</string>
+    <string name="set_check_update_sub">到 GitHub 查一次有没有新的安装包；蜂窝网络会先问一句再下载</string>
 
     <!-- 设置对话框标题 -->
     <string name="dlg_region_title">选择地区</string>
@@ -424,4 +426,9 @@
     <string name="update_action_install">立即安装</string>
     <string name="update_action_later">以后再说</string>
     <string name="update_action_retry">重试</string>
+    <!-- 手动「检查更新」的三种读数,以及同版本号重出包的那句标题(见 H234) -->
+    <string name="update_checking">正在检查…</string>
+    <string name="update_is_latest">已是最新版本 %1$s</string>
+    <string name="update_check_failed">检查失败，看看网络之后再试一次</string>
+    <string name="update_title_repack">这个版本重新发布过安装包 %1$s</string>
 </resources>

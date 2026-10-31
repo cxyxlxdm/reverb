@@ -64,6 +64,7 @@ import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.playback.asr.AsrFactory
 import com.yuyin.reverb.ui.REGION_OPTIONS
+import com.yuyin.reverb.update.SelfUpdate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -104,6 +105,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     val wordHighlight by settings.wordHighlight.collectAsStateWithLifecycle()
     val contextualRadio by settings.contextualRadio.collectAsStateWithLifecycle()
     val regionOverride by regionStore.override.collectAsStateWithLifecycle()
+    // 应用内更新的状态机(SelfUpdate.state)。这一行只**读**它,不写:
+    // 需要用户决定的状态由 SelfUpdateHost 的弹窗承担,这里只留「读数」。
+    val updateState by SelfUpdate.state.collectAsStateWithLifecycle()
 
     // 录音权限申请:仅在用户主动开启「真实频谱」时触发;授权成功才落地开关
     val recordAudioLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -368,6 +372,25 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             }
             SettingRow(stringResource(R.string.set_licenses), onClick = onOpenLicenses)
             SettingRow(stringResource(R.string.set_version), value = BuildConfig.VERSION_NAME)
+            // 「检查更新」这一行是**主动查**的唯一入口。冷启动那轮自动检测是静默的(问不到东西就什么也不说),
+            // 于是"我到底是不是最新"在界面上一句都读不出来 —— 这一行补的就是那句读数。
+            // 副标题在没结果时写"去哪儿查、什么时候才会下载"(与隐私同意页那段同口径),
+            // 有结果时换成结果本身;弹窗负责所有需要用户决定的状态。见 SelfUpdate.checkNow。
+            SettingRow(
+                stringResource(R.string.set_check_update),
+                subtitle = when (val u = updateState) {
+                    SelfUpdate.UpdateState.Checking -> stringResource(R.string.update_checking)
+                    is SelfUpdate.UpdateState.UpToDate ->
+                        stringResource(R.string.update_is_latest, u.tag)
+                    SelfUpdate.UpdateState.CheckFailed -> stringResource(R.string.update_check_failed)
+                    is SelfUpdate.UpdateState.Downloading -> stringResource(R.string.update_downloading, u.percent)
+                    else -> stringResource(R.string.set_check_update_sub)
+                },
+                trailing = if (updateState is SelfUpdate.UpdateState.Checking) {
+                    { CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp)) }
+                } else null,
+                onClick = { SelfUpdate.checkNow(context) }
+            )
             Spacer(Modifier.height(24.dp))
         }
     }

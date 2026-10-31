@@ -282,6 +282,8 @@
     <string name="set_about">Acerca de Reverb</string>
     <string name="set_licenses">Licencias de código abierto</string>
     <string name="set_version">Versión</string>
+    <string name="set_check_update">Buscar actualizaciones</string>
+    <string name="set_check_update_sub">Consulta GitHub por si hay un paquete más nuevo; con datos móviles pregunta antes de descargar</string>
 
     <string name="dlg_region_title">Elegir región</string>
     <string name="dlg_theme_title">Tema</string>
@@ -408,4 +410,8 @@
     <string name="update_action_install">Instalar ahora</string>
     <string name="update_action_later">Más tarde</string>
     <string name="update_action_retry">Reintentar</string>
+    <string name="update_checking">Comprobando…</string>
+    <string name="update_is_latest">Ya tienes la versión %1$s</string>
+    <string name="update_check_failed">No se pudo comprobar. Revisa la conexión y vuelve a intentarlo.</string>
+    <string name="update_title_repack">El paquete de %1$s se volvió a publicar</string>
 </resources>

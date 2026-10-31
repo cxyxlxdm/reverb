@@ -26,11 +26,16 @@ fun SelfUpdateHost() {
     val state by SelfUpdate.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     when (val s = state) {
-        SelfUpdate.UpdateState.Idle -> Unit
+        // 这三条不是弹窗:它们是设置页「检查更新」那一行的读数(检查中 / 已最新 / 没问到)。
+        // 主动查的反馈写在行下面比弹一个只有「知道了」的窗更省事,而且不打断正在做的事。
+        SelfUpdate.UpdateState.Idle,
+        SelfUpdate.UpdateState.Checking,
+        is SelfUpdate.UpdateState.UpToDate,
+        SelfUpdate.UpdateState.CheckFailed -> Unit
 
         is SelfUpdate.UpdateState.AskCellular -> AlertDialog(
             onDismissRequest = { SelfUpdate.dismiss(s.rel) },
-            title = { Text(stringResource(R.string.update_title, s.rel.tag)) },
+            title = { Text(updateTitle(s.rel)) },
             text = { Text(stringResource(R.string.update_ask_cellular, sizeText(s.rel.size))) },
             confirmButton = {
                 TextButton(onClick = { SelfUpdate.beginDownload(s.rel) }) {
@@ -47,7 +52,7 @@ fun SelfUpdateHost() {
         is SelfUpdate.UpdateState.Downloading -> AlertDialog(
             // 下载中不给"点外部就取消":误触一次就白下几十 MB,只有明确按「以后再说」才停
             onDismissRequest = { },
-            title = { Text(stringResource(R.string.update_title, s.rel.tag)) },
+            title = { Text(updateTitle(s.rel)) },
             text = {
                 Text(stringResource(R.string.update_downloading, s.percent))
                 LinearProgressIndicator(progress = { s.percent / 100f })
@@ -61,7 +66,7 @@ fun SelfUpdateHost() {
 
         is SelfUpdate.UpdateState.Ready -> AlertDialog(
             onDismissRequest = { SelfUpdate.dismiss(s.rel) },
-            title = { Text(stringResource(R.string.update_title, s.rel.tag)) },
+            title = { Text(updateTitle(s.rel)) },
             text = { Text(stringResource(R.string.update_ready, sizeText(s.file.length()))) },
             confirmButton = {
                 TextButton(onClick = {
@@ -102,6 +107,20 @@ fun SelfUpdateHost() {
         )
     }
 }
+
+/**
+ * 标题按「是不是同版本重出包」分两句话。
+ *
+ * 原来只有「发现新版本 %1$s」一句,而 digest 那条判据引进来之后会出现**版本名与本机相同**的更新,
+ * 那时照原句念出来就是「发现新版本 1.0.6」而用户手里正是 1.0.6 —— 一句看起来自相矛盾的话。
+ * 这句改成「这一版有新的安装包」,把"字节换过"这件事说清楚,而不是假装版本号动了。
+ */
+@Composable
+private fun updateTitle(rel: SelfUpdate.Release): String = stringResource(
+    if (rel.republished) R.string.update_title_repack else R.string.update_title,
+    rel.tag
+)
+
 
 /// 只在自更新弹窗里用,所以不共用设置页那个 `private human`。
 private fun sizeText(bytes: Long): String {

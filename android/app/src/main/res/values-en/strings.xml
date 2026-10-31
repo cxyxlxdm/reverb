@@ -282,6 +282,8 @@
     <string name="set_about">About Reverb</string>
     <string name="set_licenses">Open-source licenses</string>
     <string name="set_version">Version</string>
+    <string name="set_check_update">Check for updates</string>
+    <string name="set_check_update_sub">Look on GitHub for a newer package; on a cellular network it asks before downloading</string>
 
     <string name="dlg_region_title">Choose region</string>
     <string name="dlg_theme_title">Theme</string>
@@ -408,4 +410,8 @@
     <string name="update_action_install">Install now</string>
     <string name="update_action_later">Later</string>
     <string name="update_action_retry">Retry</string>
+    <string name="update_checking">Checking…</string>
+    <string name="update_is_latest">You already have %1$s</string>
+    <string name="update_check_failed">Could not check. Check your connection and try again.</string>
+    <string name="update_title_repack">The package for %1$s was republished</string>
 </resources>
