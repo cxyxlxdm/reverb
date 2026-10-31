@@ -22,6 +22,11 @@ import { Log } from '../util/Logger';
  *     (一轮 #0 通、备份 403;另一轮 #0 直接 503)。所以解析后必须**探活**再交给播放器,
  *     并按游标轮换起点,否则表现是"点了没反应"。
  *  5. 音频流是 `.m4s` 分片 MP4,`Range` 回 206 ⇒ 播放器按普通渐进流处理、拖动可用。
+ *  6. ⚠️ **充电专属视频没有 `dash.audio`**:playurl 对它们只回旧的 `durl`(混流
+ *     `video/mp4`),`fetchCandidates` 拿到空数组 ⇒ 解析必然失败。而**搜索接口不带任何
+ *     标记**(实测两条确认的充电视频:`is_charge_video=0`、`badgepay` / `corner` 全空),
+ *     唯一判据是 `view` 的 `data.is_upower_exclusive` ⇒ 只能在搜到之后补一次 view 再筛,
+ *     见 `isCharging` 与 H231。
  *
  * ⚠️ `x/space/<mid>/arc/search`(UP 主投稿列表)是整条链路上唯一被风控挡住的部分
  * (`-352` / `-412` / `-799`),所以**「订阅 UP 主」不做**(2026-10-28 拍板)。这里没有
@@ -69,6 +74,11 @@ export class BilibiliSource {
   private tracks: Map<string, Track> = new Map<string, Track>();
   /** 每集下次从第几个候选开始试。重试(换一个 503 的 PCDN 节点)靠它生效。 */
   private cursor: Map<string, number> = new Map<string, number>();
+  /**
+   * bvid → 是不是「充电专属」。只缓存**判定了的**结论(取不到就放行、不落缓存),
+   * 只在内存里、有上限 —— 它是搜索结果过滤的中间结果,不是持久数据。见 H231。
+   */
+  private charging: Map<string, boolean> = new Map<string, boolean>();
 
   // ---------------------------------------------------------------- 伪地址
 
@@ -174,6 +184,15 @@ export class BilibiliSource {
       Log.w('Bilibili', `view failed bvid=${bvid}`);
       return null;
     }
+    // 充电专属视频没有可播的音频流:playurl 对它们只回旧的 `durl`(混流 video/mp4),
+    // `dash.audio` 是空的 ⇒ 播放必然失败。放它进来只会变成"播放条切走了、报错、
+    // 重试也不会好"。频道页、粘贴链接、以及搜索结果点播放的兜底(见 `resolvePlayback`)
+    // 都从这里过 ⇒ 这是唯一需要设闸的地方。见 H231。
+    if (J.bool(data, 'is_upower_exclusive')) {
+      this.charging.set(bvid, true);
+      Log.w('Bilibili', `view skip charging bvid=${bvid}`);
+      return null;
+    }
     const title = J.str(data, 'title');
     const owner = J.obj(data, 'owner');
     const upName = J.str(owner, 'name');
@@ -267,12 +286,14 @@ export class BilibiliSource {
       return [];
     }
     const out: Episode[] = [];
+    const bvids: string[] = [];
     for (let i = 0; i < arr.length; i++) {
       const o = J.asObj(arr[i]);
       if (o === null) continue;
       const bvid = J.str(o, 'bvid');
       if (bvid.length === 0) continue;
       const author = htmlToText(J.str(o, 'author'));
+      bvids.push(bvid);
       out.push({
         // 搜索结果是"一个视频",分 P 要等进频道页才知道 ⇒ id 先用 bvid 占位。
         // 播放路径不靠 id 认视频(它解析 audioUrl),所以这个 id 稳定就够;但它与频道页的
@@ -299,8 +320,39 @@ export class BilibiliSource {
         transcriptType: ''
       });
     }
-    Log.i('Bilibili', `search count=${out.length}`);
-    return out;
+    // 充电专属视频要在这里就剔掉(见类注释第 6 条):用户点它只会看到播放条切走、
+    // 然后「播放失败」,而重试永远不会成功 —— 看起来完全是播放器的 bug。
+    // 搜索接口不带判据,只能逐条补一次 view(`isCharging` 有内存缓存,同一视频不重复问)。
+    // 并发发、顺序收:20 条约 0.5 s,实测没有触发风控;一条失败就放行,不误删正常视频。
+    const flags: boolean[] = await Promise.all(
+      bvids.map((bv: string): Promise<boolean> => this.isCharging(bv)));
+    const kept: Episode[] = out.filter((e: Episode, i: number): boolean => !flags[i]);
+    const dropped = out.length - kept.length;
+    Log.i('Bilibili',
+      `search count=${kept.length}` + (dropped > 0 ? ` dropped_charge=${dropped}` : ''));
+    return kept;
+  }
+
+  /**
+   * 这条视频是不是「充电专属」(UP 主设了付费门槛)。见类注释第 6 条与 H231。
+   *
+   * 只认 `view` 的 `data.is_upower_exclusive`:搜索接口对这类视频**不带任何标记**
+   * (实测 `is_charge_video` 恒 0,`badgepay` / `corner` 全空)。
+   *
+   * 取不到一律返回 false(**放行**):一次超时或风控不该把一条正常视频从结果里抹掉;
+   * 漏过滤的代价只是回到修之前那个「切条 + 报错」,可看见、可重试。只缓存判定出来的结论。
+   */
+  private async isCharging(bvid: string): Promise<boolean> {
+    const cached = this.charging.get(bvid);
+    if (cached !== undefined) return cached;
+    const data = J.obj(await this.getJson(
+      `${BilibiliSource.API}/web-interface/view?bvid=${bvid}`), 'data');
+    if (data === null) return false;
+    const exclusive = J.bool(data, 'is_upower_exclusive');
+    // 条目本身很小(bvid + 一个布尔),但搜索是长期入口:不设上限迟早堆起来。
+    if (this.charging.size > 512) this.charging.clear();
+    this.charging.set(bvid, exclusive);
+    return exclusive;
   }
 
   // ---------------------------------------------------------------- 播放前解析

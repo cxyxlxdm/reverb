@@ -238,6 +238,14 @@ export class J {
     return 0;
   }
 
+  /// 只认真正的 boolean。接口偶尔给 0/1,这里**不**把它们当真假 ——
+  /// 判据必须严格(见 BilibiliSource 的充电过滤:把 0 当 false 没问题,但把"缺字段"
+  /// 猜成 true 会把正常视频全删掉)。
+  static bool(src: Record<string, Object> | null, key: string): boolean {
+    if (src === null) return false;
+    return src[key] === true;
+  }
+
   static asObj(v: Object): Record<string, Object> | null {
     if (v === undefined || v === null) return null;
     return Array.isArray(v) ? null : v as Record<string, Object>;

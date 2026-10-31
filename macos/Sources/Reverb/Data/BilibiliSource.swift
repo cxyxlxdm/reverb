@@ -16,6 +16,11 @@ import Foundation
 ///     view / playurl 带不带 Referer 都通,但这里**一律带**,省掉逐接口分叉。
 ///  4. `dash.audio` 排第一的那条常落在 PCDN 上,同一视频换一轮取链,三条候选的可用性会**互换**。
 ///     所以解析后必须**探活**再交给播放器,并按游标轮换起点,否则表现是「点了没反应」。
+///  5. ⚠️ **充电专属视频没有 `dash.audio`**:playurl 对它们只回旧的 `durl`(混流
+///     `video/mp4`),`fetchCandidates` 拿到空数组 ⇒ 解析必然失败。而**搜索接口不带任何
+///     标记**(实测两条确认的充电视频:`is_charge_video=0`、`badgepay` / `corner` 全空),
+///     唯一判据是 `view` 的 `data.is_upower_exclusive` ⇒ 只能在搜到之后补一次 view 再筛,
+///     见 `isCharging` 与 H231。
 ///
 /// ⚠️ `x/space/<mid>/arc/search`(UP 主投稿列表)是整条链路上唯一被风控挡住的部分
 /// (`-352` / `-412` / `-799`),所以**「订阅 UP 主」不做**(2026-10-28 拍板)。
@@ -89,6 +94,9 @@ final class BilibiliSource {
     private var tracks: [String: Track] = [:]
     /// 每集下次从第几个候选开始试。重试(换一个 503 的 PCDN 节点)靠它生效。
     private var cursor: [String: Int] = [:]
+    /// bvid → 是不是「充电专属」。只缓存**判定了的**结论(取不到就放行、不落缓存),
+    /// 只在内存里、有上限 —— 它是搜索结果过滤的中间结果,不是持久数据。见 H231。
+    private var charging: [String: Bool] = [:]
 
     // MARK: - 伪地址
 
@@ -172,6 +180,15 @@ final class BilibiliSource {
             Log.w("Bilibili", "view failed bvid=\(bvid)")
             return nil
         }
+        // 充电专属视频没有可播的音频流:playurl 对它们只回旧的 `durl`(混流 video/mp4),
+        // `dash.audio` 是空的 ⇒ 播放必然失败。放它进来只会变成「播放条切走了、报错、
+        // 重试也不会好」。频道页、粘贴链接、以及搜索结果点播放的兜底(见 `resolvePlayback`)
+        // 都从这里过 ⇒ 这是唯一需要设闸的地方。见 H231。
+        if Self.bool(data, "is_upower_exclusive") {
+            charging[bvid] = true
+            Log.w("Bilibili", "view skip charging bvid=\(bvid)")
+            return nil
+        }
         let title = Self.str(data, "title")
         let owner = Self.obj(data, "owner")
         let upName = Self.str(owner, "name")
@@ -251,10 +268,12 @@ final class BilibiliSource {
             return []
         }
         var out: [Episode] = []
+        var bvids: [String] = []
         for raw in arr {
             guard let o = raw as? [String: Any] else { continue }
             let bvid = Self.str(o, "bvid")
             if bvid.isEmpty { continue }
+            bvids.append(bvid)
             out.append(Episode(
                 // 搜索结果是「一个视频」,分 P 要等进频道页才知道 ⇒ id 先用 bvid 占位。
                 // 播放路径不靠 id 认视频(它解析 audioUrl);但它与频道页的 `scheme:bvid:cid`
@@ -277,8 +296,44 @@ final class BilibiliSource {
                 feedUrl: Self.videoUri(bvid),
                 transcriptUrl: "", transcriptType: ""))
         }
-        Log.i("Bilibili", "search count=\(out.count)")
-        return out
+        // 充电专属视频要在这里就剔掉(见类注释第 5 条):用户点它只会看到播放条切走、
+        // 然后「播放失败」,而重试永远不会成功 —— 看起来完全是播放器的 bug。
+        // 搜索接口不带判据,只能逐条补一次 view(`isCharging` 有内存缓存,同一视频不重复问)。
+        // 并发发、按索引收(组里按完成顺序交付,不能直接 append):20 条约 0.5 s,
+        // 实测没有触发风控;一条失败就放行,不误删正常视频。
+        var flags = [Bool](repeating: false, count: bvids.count)
+        await withTaskGroup(of: (Int, Bool).self) { group in
+            for (i, bv) in bvids.enumerated() {
+                group.addTask { (i, await self.isCharging(bv)) }
+            }
+            for await (i, isCharge) in group { flags[i] = isCharge }
+        }
+        var kept: [Episode] = []
+        var dropped = 0
+        for (i, ep) in out.enumerated() {
+            if flags[i] { dropped += 1 } else { kept.append(ep) }
+        }
+        Log.i("Bilibili", "search count=\(kept.count)"
+              + (dropped > 0 ? " dropped_charge=\(dropped)" : ""))
+        return kept
+    }
+
+    /// 这条视频是不是「充电专属」(UP 主设了付费门槛)。见类注释第 5 条与 H231。
+    ///
+    /// 只认 `view` 的 `data.is_upower_exclusive`:搜索接口对这类视频**不带任何标记**
+    /// (实测 `is_charge_video` 恒 0,`badgepay` / `corner` 全空)。
+    ///
+    /// 取不到一律返回 false(**放行**):一次超时或风控不该把一条正常视频从结果里抹掉;
+    /// 漏过滤的代价只是回到修之前那个「切条 + 报错」,可看见、可重试。只缓存判定出来的结论。
+    private func isCharging(_ bvid: String) async -> Bool {
+        if let cached = charging[bvid] { return cached }
+        guard let data = Self.obj(
+            await getJson("\(Self.api)/web-interface/view?bvid=\(bvid)"), "data") else { return false }
+        let exclusive = Self.bool(data, "is_upower_exclusive")
+        // 条目本身很小(bvid + 一个布尔),但搜索是长期入口:不设上限迟早堆起来。
+        if charging.count > 512 { charging.removeAll() }
+        charging[bvid] = exclusive
+        return exclusive
     }
 
     // MARK: - 播放前解析
@@ -416,6 +471,14 @@ final class BilibiliSource {
         if let n = d?[k] as? NSNumber { return n.intValue }
         if let s = d?[k] as? String { return Int(s) ?? 0 }
         return 0
+    }
+
+    /// 只认真正的布尔。接口偶尔给 0/1 —— 判据必须严格:把「缺字段」猜成 true 会把
+    /// 正常视频全删掉(见 BilibiliSource 的充电过滤)。
+    private static func bool(_ d: [String: Any]?, _ k: String) -> Bool {
+        if let b = d?[k] as? Bool { return b }
+        if let n = d?[k] as? NSNumber { return n.boolValue }
+        return false
     }
 
     private static func firstBV(_ s: String) -> String? {
