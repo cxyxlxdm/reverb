@@ -26,11 +26,13 @@ import java.util.concurrent.ConcurrentHashMap
  * 这句已发布的承诺继续成立。原始调研(2026-09-15)想走 Cloudflare Worker,被否,
  * 理由与实测读数见 `docs/research/2026-09-15-bilibili-audio-proxy.md`。
  *
- * 三个实测结论决定了这里的写法(2026-10-28,匿名请求、无 Cookie):
- *  1. `x/web-interface/view` 与 `x/player/playurl` **都不需要签名**,也**不需要 Cookie**
- *     (早期调研说它们要 `buvid3` + wbi,实测不成立)。
- *     `x/web-interface/wbi/search/type` 的路径里带 `wbi`,但**也不校验签名**(实测:
- *     不带 `w_rid`、`wts` 随便填,照样 20 条)。它要的是**别的**东西,见第 4 条。
+ * 三个实测结论决定了这里的写法(2026-10-28 首测,2026-10-31 复测订正):
+ *  1. 三个接口**都不需要签名**:`x/web-interface/wbi/search/type` 的路径里带 `wbi`,
+ *     但**不校验签名**(实测:不带 `w_rid`、`wts` 随便填,照样 20 条)。
+ *     ⚠️ **但 `view` 现在要 Cookie**(H236):不带 `buvid3` 会被风控回 **HTTP 412**,
+ *     而 10-28 那句「不需要 Cookie」只对当时的出口成立。见 [ensureCookie]。
+ *     ⚠️ 而**搜索反而不能带**(同一天实测:带上就从 20 条变成 `v_voucher` 零条)——
+ *     这一条与第 4 条一起说明:这个接口族的风控是**按端点分别判的**,别推成一条通则。
  *  2. 直链的 `deadline` 参数是**请求时刻 + 2 小时**,比「几小时」还紧 ⇒
  *     **绝不能把直链持久化**(历史、队列、备份里存的都是 `bilibili://` 伪地址,播放前才解析)。
  *  3. `dash.audio` 里排第一的那条常常落在 PCDN 上,实测同一个视频换一轮取链,
@@ -76,6 +78,15 @@ class BilibiliSource(private val client: OkHttpClient) {
      * 只在内存里、有上限 —— 它是搜索结果过滤的中间结果,不是持久数据。见 H231。
      */
     private val charging = ConcurrentHashMap<String, Boolean>()
+
+    /**
+     * 接口请求要带的 `buvid3` / `buvid4`(B 站下发的匿名标识)。见 [ensureCookie] 与 H236。
+     *
+     * 只放内存、不落盘:进程重启后换一个新的没有任何副作用,而落盘会白白在用户设备上
+     * 留一个用不上的标识。
+     */
+    @Volatile private var cookie: String? = null
+    private val cookieLock = Any()
 
     /**
      * 一次解析的结果:探通的直链 + **这一 P 的真实时长(秒)**。
@@ -239,7 +250,7 @@ class BilibiliSource(private val client: OkHttpClient) {
      * 而 playurl 是按 cid 取的)。合集(season)不做 —— 那要 space 接口,见类注释。
      */
     suspend fun view(bvid: String): FeedResult? = withContext(Dispatchers.IO) {
-        val data = getJson("$API/web-interface/view?bvid=$bvid")?.optJSONObject("data") ?: run {
+        val data = getJson("$API/web-interface/view?bvid=$bvid", withCookie = true)?.optJSONObject("data") ?: run {
             com.yuyin.reverb.util.Logger.w(TAG, "view failed bvid=$bvid")
             return@withContext null
         }
@@ -412,7 +423,7 @@ class BilibiliSource(private val client: OkHttpClient) {
      */
     private suspend fun isCharging(bvid: String): Boolean {
         charging[bvid]?.let { return it }
-        val data = getJson("$API/web-interface/view?bvid=$bvid")?.optJSONObject("data") ?: return false
+        val data = getJson("$API/web-interface/view?bvid=$bvid", withCookie = true)?.optJSONObject("data") ?: return false
         val exclusive = data.optBoolean("is_upower_exclusive", false)
         // 条目本身很小(bvid + 一个布尔),但搜索是长期入口:不设上限迟早堆起来。
         if (charging.size > 512) charging.clear()
@@ -555,6 +566,45 @@ class BilibiliSource(private val client: OkHttpClient) {
     // ---------------------------------------------------------------- 底层
 
     /**
+     * 取一次 `buvid3` / `buvid4` 并留在 [cookie] 里。**这是 `view` 现在能不能用的前置条件**(H236)。
+     *
+     * 2026-10-31 现场:用户装了最新包,点搜索结果仍然一句「这一集暂时播不了」。日志里
+     * `view failed` 全配着 `http 412`,而同一条视频 3 秒后又成功了一次 ⇒ 视频没问题,
+     * 是接口在被风控。同一台手机、同一个出口做受控实验(Chrome 里只换请求头):
+     *
+     * | 请求头 | `view` |
+     * |---|---|
+     * | Chrome UA,无 Cookie | 412 |
+     * | iPhone UA,无 Cookie | 412 |
+     * | 两者任一 + buvid3/buvid4 | 200 |
+     *
+     * UA 不是变量,**Cookie 是**。`x/frontend/finger/spi` 自己**不拦匿名请求**(实测 200),
+     * 所以先取它、再拿回下发的两个值当 Cookie 用。10-28 那次「view 不需要 Cookie」的结论
+     * 只对当时的网络成立 —— 同一份代码从一个被风控盯上的出口出去就是另一回事。
+     *
+     * ⚠️ **只给 `view` 带,别给搜索带**(同一天的第二个发现)。第一版是"所有请求一律带",
+     * 结果搜索当场变成 `v_voucher` 软拦、零条;同一台手机上的 curl 与 Chrome 用**同一组
+     * 请求头**(iPhone UA + Referer + 同一份 buvid)却都是 20 条 ⇒ 变量不是 Cookie 本身,
+     * 是「OkHttp 指纹 + 浏览器式 Cookie」这个组合被搜索接口盯上了。所以带上它的判据是
+     * **端点**而不是"顺手":`view` 不带就 412,搜索带了就零条。见 [getJson] 的 `withCookie`。
+     *
+     * `synchronized` 是必要的:搜索一进来就是 20 条并发的 `isCharging`,不锁会同时发 20 次 spi。
+     * 失败(超时 / 接口变了)就照旧不带 Cookie 发,让调用方按原来的路径失败 ——
+     * 这里多一层错误处理只会把真正的失败原因埋掉。
+     */
+    private fun ensureCookie() {
+        if (cookie != null) return
+        synchronized(cookieLock) {
+            if (cookie != null) return
+            val data = getJsonOnce("$API/frontend/finger/spi")?.optJSONObject("data") ?: return
+            val b3 = data.optString("b_3")
+            val b4 = data.optString("b_4")
+            if (b3.isEmpty()) return
+            cookie = if (b4.isEmpty()) "buvid3=$b3" else "buvid3=$b3; buvid4=$b4"
+        }
+    }
+
+    /**
      * 接口族的统一 GET。**网络层快速失败补一次**(见 H233)。
      *
      * 一次瞬时的拒连不该被判成「这一集播不了」:2026-10-31 的同形现场在鸿蒙那台
@@ -566,11 +616,15 @@ class BilibiliSource(private val client: OkHttpClient) {
      *    「播放页转圈」翻倍;
      *  - **`code≠0` 不补**:那是接口在说话(下架 / 风控),再来一次不会变;
      *  - 重试的这一次也受 [API_TIMEOUT_MS] 约束,失败后照样回 null,由播放层提示。
+     *
+     * [withCookie] 默认关:**搜索带上它反而被软拦**(见 [ensureCookie] 与 H236),
+     * 所以只有需要它的那两条 `view` 调用显式传 true。
      */
-    private suspend fun getJson(url: String): JSONObject? {
+    private suspend fun getJson(url: String, withCookie: Boolean = false): JSONObject? {
+        ensureCookie()
         for (attempt in 0 until 2) {
             val startedAt = System.currentTimeMillis()
-            val json = getJsonOnce(url)
+            val json = getJsonOnce(url, withCookie)
             if (json != null) {
                 val code = json.optInt("code", 0)
                 if (code != 0) {
@@ -591,16 +645,18 @@ class BilibiliSource(private val client: OkHttpClient) {
     }
 
     /** 单次请求:非 200 / 空体 / 传输异常都回 null,是否补一次由 [getJson] 决定。 */
-    private fun getJsonOnce(url: String): JSONObject? = try {
+    private fun getJsonOnce(url: String, withCookie: Boolean = false): JSONObject? = try {
         val req = Request.Builder()
             .url(url)
             .header("User-Agent", UA)
             // Referer 对这个接口族**不是统一要求**,而是按端点分:
             //  - 搜索(type)**缺了就被风控软拦** —— 回 code=0 + `data:{"v_voucher":…}` + 零条,
             //    看起来"没搜到"(见类注释第 4 条);
-            //  - view / playurl 带不带都通(实测两种都 200)。
+            //  - view 现在**还要 Cookie**(见 [ensureCookie] 与 H236),只带 Referer 会 412。
             // 所以这里一律带上:省掉"哪个接口要哪个不要"的分叉,也少一条被当异常客户端的理由。
             .header("Referer", REFERER)
+            // Cookie 反过来**不能一律带**:搜索带上就是 v_voucher(见 [ensureCookie])。
+            .apply { if (withCookie) cookie?.let { header("Cookie", it) } }
             .build()
         client.newCall(req).execute().use { resp ->
             val body = resp.body?.string()
