@@ -4,6 +4,9 @@ import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.FeedResult
 import com.yuyin.reverb.data.model.Podcast
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -45,6 +48,11 @@ import java.util.concurrent.ConcurrentHashMap
  *     `docs/TROUBLESHOOTING.md`)。所以下面 [getJson] 对所有请求都带 Referer。
  *  5. 音频流是 `.m4s` 分片 MP4(`ftyp`/`moov`/`sidx`/`moof`/`mdat`,实测头部),
  *     `Range` 请求回 206 ⇒ 播放器按普通渐进流处理、拖动进度条可用。
+ *  6. ⚠️ **充电专属视频没有 `dash.audio`**:playurl 对它们只回旧的 `durl`(一个混流的
+ *     `video/mp4`),`fetchCandidates` 拿到空数组 ⇒ 解析必然失败。而**搜索接口不带任何
+ *     标记**(实测两条确认的充电视频:`is_charge_video=0`、`badgepay` / `corner` 全空),
+ *     唯一判据是 `view` 的 `data.is_upower_exclusive` ⇒ 只能在搜到之后补一次 view 再筛,
+ *     见 [isCharging] 与 H231。
  *
  * ⚠️ `x/space/<mid>/arc/search`(UP 主投稿列表)是另一件事:实测 `-352` / `-412` / `-799`,
  * 是整条链路上唯一被风控挡住的部分,所以**「订阅 UP 主」这个功能不做**(2026-10-28 拍板)。
@@ -62,6 +70,11 @@ class BilibiliSource(private val client: OkHttpClient) {
     private val tracks = ConcurrentHashMap<String, Track>()
     /** 每集下次从第几个候选开始试。重试(换一个 503 的 PCDN 节点)靠它生效。 */
     private val cursor = ConcurrentHashMap<String, Int>()
+    /**
+     * bvid → 是不是「充电专属」。只缓存**判定了的**结论(取不到就放行、不落缓存),
+     * 只在内存里、有上限 —— 它是搜索结果过滤的中间结果,不是持久数据。见 H231。
+     */
+    private val charging = ConcurrentHashMap<String, Boolean>()
 
     /**
      * 一次解析的结果:探通的直链 + **这一 P 的真实时长(秒)**。
@@ -226,6 +239,15 @@ class BilibiliSource(private val client: OkHttpClient) {
             com.yuyin.reverb.util.Logger.w(TAG, "view failed bvid=$bvid")
             return@withContext null
         }
+        // 充电专属视频没有可播的音频流:playurl 对它们只回旧的 `durl`(混流 video/mp4),
+        // `dash.audio` 是空的 ⇒ 播放必然失败。放它进来只会变成「播放条切走了、报错、
+        // 重试也不会好」。频道页、粘贴链接、以及搜索结果点播放的兜底(见 [resolvePlayback])
+        // 都从这里过 ⇒ 这是唯一需要设闸的地方。见 H231。
+        if (data.optBoolean("is_upower_exclusive", false)) {
+            charging[bvid] = true
+            com.yuyin.reverb.util.Logger.w(TAG, "view skip charging bvid=$bvid")
+            return@withContext null
+        }
         val title = data.optString("title")
         val owner = data.optJSONObject("owner")
         val mid = owner?.optString("mid").orEmpty()
@@ -324,12 +346,14 @@ class BilibiliSource(private val client: OkHttpClient) {
             return@withContext emptyList()
         }
         val out = ArrayList<Episode>(arr.length())
+        val bvids = ArrayList<String>(arr.length())
         for (i in 0 until arr.length()) {
             val o = arr.optJSONObject(i) ?: continue
             val bvid = o.optString("bvid")
             if (bvid.isBlank()) continue
             val cover = https(o.optString("pic"))
             val author = stripTags(o.optString("author"))
+            bvids.add(bvid)
             out.add(
                 Episode(
                     // 搜索结果是「一个视频」,分 P 要等进频道页才知道 ⇒ id 先用 bvid 占位。
@@ -357,8 +381,39 @@ class BilibiliSource(private val client: OkHttpClient) {
                 )
             )
         }
-        com.yuyin.reverb.util.Logger.i(TAG, "search count=${out.size}")
-        out
+        // 充电专属视频要在这里就剔掉(见类注释第 6 条):用户点它只会看到播放条切走、
+        // 然后「播放失败,点按重试」,而那个重试永远不会成功 —— 看起来完全是播放器的 bug。
+        // 搜索接口不带判据,只能逐条补一次 view(`isCharging` 有内存缓存,同一视频不重复问)。
+        // 并发发、顺序收:20 条实测约 0.5 s,且没有触发风控;一条失败就放行,不误删正常视频。
+        val flags = coroutineScope {
+            bvids.map { bv -> async { isCharging(bv) } }.awaitAll()
+        }
+        val kept = ArrayList<Episode>(out.size)
+        for (i in out.indices) if (!flags[i]) kept.add(out[i])
+        val dropped = out.size - kept.size
+        com.yuyin.reverb.util.Logger.i(
+            TAG, "search count=${kept.size}" + if (dropped > 0) " dropped_charge=$dropped" else ""
+        )
+        kept
+    }
+
+    /**
+     * 这条视频是不是「充电专属」(UP 主设了付费门槛)。见类注释第 6 条与 H231。
+     *
+     * 只认 `view` 的 `data.is_upower_exclusive`:搜索接口对这类视频**不带任何标记**
+     * (实测 `is_charge_video` 恒 0,`badgepay` / `corner` 全空)。
+     *
+     * 取不到一律返回 false(**放行**):一次超时或风控不该把一条正常视频从结果里抹掉;
+     * 漏过滤的代价只是回到修之前那个「切条 + 报错」,可看见、可重试。只缓存判定出来的结论。
+     */
+    private fun isCharging(bvid: String): Boolean {
+        charging[bvid]?.let { return it }
+        val data = getJson("$API/web-interface/view?bvid=$bvid")?.optJSONObject("data") ?: return false
+        val exclusive = data.optBoolean("is_upower_exclusive", false)
+        // 条目本身很小(bvid + 一个布尔),但搜索是长期入口:不设上限迟早堆起来。
+        if (charging.size > 512) charging.clear()
+        charging[bvid] = exclusive
+        return exclusive
     }
 
     // ---------------------------------------------------------------- 播放前解析
