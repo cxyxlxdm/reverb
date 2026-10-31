@@ -14,6 +14,12 @@
 
 ## 一、能力级缺口(两端有、macOS 没有)
 
+> **2026-10-31 补记**:应用内更新原先算在「桌面没有」那一侧(Android 自 1.0.5 有),
+> 现在已移植 —— `macos/Sources/Reverb/Update/SelfUpdate.swift`,入口是设置「更新 → 检查更新」
+> 与启动后一次自动查询;下载 dmg 后**由用户自己打开安装**,不自装。
+> **不检测「同版本重出包」**(dmg 与本机 `.app` 字节不可比),这是已知残余。
+> 下面 M1–M12 各行是 10-25 的读数,不因这次移植逐行改写。
+
 | # | 功能 | Android 落点 | 鸿蒙落点 | macOS 现状 | 成本 |
 |---|---|---|---|---|---|
 | M1 | **清空二次确认**(待播队列 / 播放历史) | `QueueScreen.kt` 清空走确认框、`LibraryScreen.kt` 历史同款(文案共用 `confirm_clear_history`) | `QueuePage.ets` / `LibraryPage.ets` 同口径 | **已对齐(2026-10-25)**:`UI/QueueView.swift` 的原「直连 `player.clearQueue()`」改成 `.confirmationDialog`(正文照抄 `confirm_clear_queue`「将清空待播队列中的全部单集，无法恢复。」),`UI/LibraryView.swift` 历史那颗同样补框(正文 `confirm_clear_history`)。简中串在代码里,另 4 套 `.strings` 已补 `清空播放队列?` / `清空播放历史?` 与两条正文 —— ⚠️ **一帧没跑过**:`swift build -c release` exit 0 只证类型,弹框的实际弹出/取消路径待桌面运行验收 | 已完成(代码侧) |

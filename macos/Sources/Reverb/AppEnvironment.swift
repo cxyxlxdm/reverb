@@ -16,6 +16,9 @@ final class AppEnvironment: ObservableObject {
     let player = PlayerController()
     let downloads = DownloadStore()
     let downloadManager: DownloadManager
+    /// 应用内更新。与 Android `SelfUpdate` 同一条口径(发布页列表 + 版本比较),落点改为
+    /// 下载 dmg 后由用户自己打开安装,见该类顶部注释。
+    let update = SelfUpdate()
     /// 播放缓存(整集音频)。与 `downloads` 是两份独立的账,见 `AudioCacheManager` 顶部。
     let audioCache = AudioCacheManager()
     // 转录:高频 append,不转发到 env(由 TranscriptPage 直接观察),避免整树重渲。

@@ -96,6 +96,11 @@ fi
 # 是 2026-10-31 随 H233 加的,同日在 1.0.2 那份里量过:= 0(处理量 4 443 392 B / arm64 单架构,
 # 阳性对照 `TranscriptStore` 234 处)。顺带一个读数能说明为什么 0 是真的:**同一份包里
 # `api.bilibili.com` 与 `playurl` 也都是 0** —— B 站那条源在 1.0.2 根本不存在,不是扫不动。
+# 应用内更新那三条(2026-10-31 macOS 移植)的负控制用的是**本机现成的上一份发布包**:
+# `dist/_backup-1.0.6-published-1030/…dmg` 里的二进制(12 438 992 B / universal),三条逐个 = 0;
+# 正向对照在同一份包里 `TranscriptStore` 非 0。挑这三条的理由:仓库路径与 UserDefaults 键都 ≥16 字节
+# (lit16,不会被 -O 拆成两条立即数),类名走符号表(sym);`api.github.com` 那 14 字节**在危险窗口里**,
+# 所以不用它。
 # ⚠️ sym 类依赖二进制没被 strip。哪天真加了 strip,这几条会一起变 0 —— 那是「换成 lit16 词」的信号,
 #    不是「功能没进包」;别照着 0 去查源码。
 # 中文必须用 LC_ALL=C grep -a 搜原始字节(硬规矩 1);**必须带 -F**:`repeat.1` / `square.and.pencil`
@@ -110,6 +115,9 @@ WORDS=(
   sym:NoteStore
   sym:EpisodeNote
   'lit16:retry after fast failure elapsed='
+  'lit16:repos/cxyxlxdm/revert-cast'
+  'lit16:update_skipped_tag'
+  sym:UpdateDownloader
   sym:noteComposer
 )
 echo "   判据词(${#WORDS[@]} 个,期望全部非 0):"

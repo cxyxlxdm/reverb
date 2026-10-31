@@ -96,6 +96,10 @@ struct RootView: View {
         // 「这一集暂时播不了」的一次性提示(H232)。挂在外壳而不是播放页:解析失败时
         // 播放页显示的仍是**上一集**,那条提示根本不该随它出现;桌面也没有 Toast 可用。
         .overlay(alignment: .top) { TopToast(text: player.notice) }
+        // 应用内更新:每次启动自动查询一次发布页(只在这一棵树里 —— 未同意隐私政策时
+        // `PrivacyGate` 根本不构建它,所以这条请求天然在同意之后)。`start()` 自带
+        // 「每次进程只跑一次」的闸,分段切换导致的重建不会重复请求。
+        .task { env.update.start() }
         // 全屏(尤其刘海屏)时用窗口底色铺满安全区,避免顶部菜单栏那条露出黑色背衬
         .background(Color(nsColor: .windowBackgroundColor).ignoresSafeArea())
         .tint(Theme.accent(settings.accentIndex))
