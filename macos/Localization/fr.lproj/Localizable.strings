@@ -337,3 +337,21 @@
 "阅读完整隐私政策" = "Lire la politique de confidentialité complète";
 "同意并继续" = "Accepter et continuer";
 "不同意并退出" = "Refuser et quitter";
+"应用内更新（可选）：本版本启动时会向 GitHub 的公开发布页接口（api.github.com）询问一次「最新版是哪个」；请求只包含本应用自己的公开仓库地址，不含账号、任何标识符、订阅列表或收听内容。你也可以在「设置 → 检查更新」里随时主动询问一次。只有那次回答里确实有更新版本时才会下载安装包，下载完由你自己打开磁盘映像安装，本应用不会自行安装。" = "Mises à jour intégrées (facultatif) : au démarrage, cette version demande une fois à l’API publique des versions de GitHub (api.github.com) quelle est la dernière version. La requête ne contient que l’adresse du dépôt public de cette application, sans compte, identifiant, liste d’abonnements ni contenu écouté. Vous pouvez aussi la lancer à tout moment dans Réglages → Rechercher des mises à jour. L’installateur n’est téléchargé que si la réponse indique effectivement une version plus récente ; une fois téléchargé, c’est vous qui ouvrez l’image disque pour installer, l’application n’installe jamais rien d’elle-même.";
+
+/* In-app update */
+"更新" = "Mise à jour";
+"检查更新" = "Rechercher des mises à jour";
+"到 GitHub 查一次有没有新的安装包" = "Interroger GitHub pour savoir si un nouvel installateur est disponible";
+"正在检查…" = "Vérification…";
+"已是最新版本 %@" = "Vous utilisez la dernière version %@";
+"检查失败，看看网络之后再试一次" = "Échec de la vérification. Vérifiez votre connexion et réessayez.";
+"正在下载新版本 %d%%" = "Téléchargement de la nouvelle version %d%%";
+"新版本 %@ 已下载完成" = "Nouvelle version %@ téléchargée";
+"发现新版本 %@" = "Nouvelle version %@ disponible";
+"新版本 %@ 已下载完成（约 %@），现在打开安装包？" = "La version %@ a été téléchargée (environ %@). Ouvrir l’installateur maintenant ?";
+"打开安装包" = "Ouvrir l’installateur";
+"以后再说" = "Plus tard";
+"更新下载失败" = "Échec du téléchargement de la mise à jour";
+"安装包没有下载成功。检查网络后重试，也可以选「以后再说」。" = "L’installateur n’a pas pu être téléchargé. Vérifiez votre connexion et réessayez, ou choisissez « Plus tard ».";
+"重试" = "Réessayer";

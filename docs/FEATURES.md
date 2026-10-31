@@ -428,7 +428,7 @@ macOS 侧 2026-10-07 才补上(见 **H159**):`saveWithPanel` 原先返回 `Void`
 
 ## 已知 / 未做
 
-- **应用内升级**:Android 自 1.0.5 起有(查 GitHub Releases 公开接口 → 下载 → 交系统安装器,默认只在 Wi-Fi 下自动下载);鸿蒙由应用市场负责;macOS 自行分发,没有这套机制。
+- **应用内升级**:Android 自 1.0.5 起有(查 GitHub Releases 公开接口 → 下载 → 交系统安装器,默认只在 Wi-Fi 下自动下载);macOS 自 1.0.6 起有同一条查询(下载 dmg 后由用户自己打开安装,不自装;只按版本名判新旧,同版本重出包不提示);鸿蒙由应用市场负责。
 - **macOS 真实频谱**:受平台限制无法像 Android 那样抓取系统混音做 FFT,故 macOS 一律用程序化水墨动效替代。
 - **鸿蒙真实频谱**:同样无对等手段 —— `SOURCE_TYPE_PLAYBACK_CAPTURE` 自 API 12 废弃,
   官方改用 native 的 `OH_AVScreenCapture`(需录屏授权),为一个封面动效索取录屏权限不成比例,

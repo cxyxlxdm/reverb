@@ -350,8 +350,15 @@ enum AppSupport {
     /// 发现页那些 `.task` 也就不会去请求 iTunes / fyyd / gpodder(与 Android 同一条理由)。
     ///
     /// 变更历史:1 = 首个版本;2 = 1.0.5(应用内更新带来的 `api.github.com`,桌面端没有这套机制,
-    /// 但与手机端同一个数);3 = 1.0.6(视频站接口 `api.bilibili.com`、其 CDN、封面地址与短链)。
-    static let privacyVersion = 3
+    /// 但与手机端同一个数);3 = 1.0.6(视频站接口 `api.bilibili.com`、其 CDN、封面地址与短链);
+    /// **4 = 1.0.6 macOS 补上应用内更新** —— 桌面端这时才真的开始请求 `api.github.com`,
+    /// 对 macOS 用户来说是新增的网络访问点,按合规口径要重新征求一次。
+    ///
+    /// ⚠️ 这是**唯一一次**桌面比手机先行:Android 自 1.0.5 起就在请求同一个接口,
+    /// 它的同意页早就写过这件事,所以 Android / 鸿蒙的 `PRIVACY_VERSION` 停在 3 不动 ——
+    /// 让手机用户为一件他们已经同意过的事再点一次同意,不是谨慎,是骚扰。
+    /// 下一次三端都有的实质变更再一起 +1(把这三行注释当作「为什么这里不同步」的凭据)。
+    static let privacyVersion = 4
     @Published private(set) var privacyAccepted: Bool
     /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。
     @Published var language: String {

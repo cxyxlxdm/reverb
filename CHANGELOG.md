@@ -150,6 +150,28 @@
 > 两套提审 kit 同批换好。**版本号没变** ⇒ 已装 1.0.6 的设备不会收到提示,要重新下载覆盖安装;
 > 商店后台的同码重传接受度仍未验。
 
+### macOS 也能在应用内检查更新(macOS,2026-10-31 落码)
+
+- 桌面端补上和 Android 同一条链路:**启动后自动向 GitHub 发布页问一次**,设置里也多了
+  「更新 → 检查更新」可以随时主动查,读数(检查中 / 已是最新 / 失败 / 下载百分比)写在那一行下面。
+- 发现新版本会自己下载磁盘映像(几 MB),下完问一句「现在打开安装包?」——
+  **打开之后由你自己把应用拖进「应用程序」**,与手机端交给系统安装器是同一个立场:应用不自行安装。
+  点「以后再说」后,这一版不会再自动问;主动点「检查更新」不受它限制。
+- **已知残余**:macOS 只按**版本名**判新旧。发布的是 dmg、本机装的是 `.app`,两者字节不可比,
+  所以「版本号没变、重新发布过安装包」这种情况桌面端不会主动提示(Android 靠资产摘要比得出来,见 H234)。
+- 同意页随新增的网络访问点补了一段说明,macOS 的 `privacyVersion` 3→4 会让现有用户重看一次;
+  Android / 鸿蒙早已在请求同一个接口,版本号不动(理由写在 `Stores.swift` 那条常量旁边)。
+
+> **工程要点**:`macOS/Sources/Reverb/Update/SelfUpdate.swift` —— 与 Android 同一个 release 列表接口
+> (`?per_page=20`,不用 `latest` 指针)、同一套「有 dmg 资产的最高版本」挑法;下载候选为
+> 「API 资产端点(带 `Accept: application/octet-stream`)→ 发布页直链」,302 的落地主机过白名单
+> (`api.github.com` / `github.com` / `objects.githubusercontent.com` / `release-assets.githubusercontent.com`),
+> 落盘后核字节数与资产自带的 sha256(CryptoKit),通过才从 `.part` 改名。
+> 落点在 `~/Library/Caches/Reverb/update/`,文件名带 tag;「已跳过」按 tag 存 UserDefaults。
+> 自动检测挂在 `RootView.task` 上 —— 同意门未过时这棵树不构建,所以请求天然在同意之后。
+> **验收**:`swift build -c release` 与 `./package.sh` 通过;**桌面运行验收仍按既有边界记在另一台机器**
+> (`docs/ROADMAP.md` 三-A),本机没有跑过界面与下载流程。
+
 ---
 
 ## 1.0.6 — 2026-10-30

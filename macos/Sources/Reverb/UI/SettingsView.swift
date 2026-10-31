@@ -6,7 +6,7 @@ import UniformTypeIdentifiers
 struct SettingsView: View {
     @EnvironmentObject var env: AppEnvironment
     var body: some View {
-        SettingsForm(env: env, settings: env.settings, player: env.player)
+        SettingsForm(env: env, settings: env.settings, player: env.player, update: env.update)
     }
 }
 
@@ -14,12 +14,14 @@ private struct SettingsForm: View {
     let env: AppEnvironment
     @ObservedObject var settings: SettingsStore
     @ObservedObject var player: PlayerController
+    @ObservedObject var update: SelfUpdate
     @ObservedObject var downloadStore: DownloadStore
 
-    init(env: AppEnvironment, settings: SettingsStore, player: PlayerController) {
+    init(env: AppEnvironment, settings: SettingsStore, player: PlayerController, update: SelfUpdate) {
         self.env = env
         self.settings = settings
         self.player = player
+        self.update = update
         self.downloadStore = env.downloads
     }
 
@@ -227,6 +229,32 @@ private struct SettingsForm: View {
                 }
             }
 
+            // 应用内更新(与 Android「设置 → 检查更新」同一个入口位置:关于之上)。
+            // 读数写在行内副标题里,不弹「已是最新」那种只有「知道了」的窗 —— 主动查询的反馈
+            // 放在原地比打断正在做的事更省事(Android 那一行同一条理由)。
+            Section("更新") {
+                Button { update.checkNow() } label: {
+                    HStack {
+                        Label {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("检查更新")
+                                Text(updateStatusText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        } icon: {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                        }
+                        Spacer()
+                        // 检测与下载都只给一个转圈:进度百分比已经写在副标题里,
+                        // 再加一条不定长进度条只会让这一行看起来有两处在动。
+                        if update.busy { ProgressView().controlSize(.small) }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .disabled(update.busy)
+            }
+
             // 四行的顺序与 Android `SettingsScreen.kt` 的同名分区逐项对应
             // (关于 → 隐私政策 → 开源许可 → 版本,M11)。隐私政策这一行**不能只在首启出现**:
             // 平台合规指引要求应用内随时可查,所以它在设置里常驻,指向官网那份完整政策。
@@ -353,6 +381,25 @@ private struct SettingsForm: View {
         // 在这里换成 alert 也不新增双端没有的文案,免得同一件事在三端读出三种话。
         .alert(prompt.title, isPresented: Binding(get: { prompt != .none }, set: { if !$0 { prompt = .none } })) {
             Button("好", role: .cancel) {}
+        }
+    }
+
+    /// 「检查更新」那一行的读数。六种状态与 Android 设置页同一套语义,只有文案按桌面改:
+    /// 桌面包没有蜂窝计费那一问,所以默认副标题不提网络类型。
+    private var updateStatusText: String {
+        switch update.state {
+        case .idle:
+            return String(localized: "到 GitHub 查一次有没有新的安装包")
+        case .checking:
+            return String(localized: "正在检查…")
+        case .upToDate(let tag):
+            return String(format: String(localized: "已是最新版本 %@"), tag)
+        case .checkFailed:
+            return String(localized: "检查失败，看看网络之后再试一次")
+        case .downloading(let pct):
+            return String(format: String(localized: "正在下载新版本 %d%%"), pct)
+        case .ready(let rel, _):
+            return String(format: String(localized: "新版本 %@ 已下载完成"), rel.tag)
         }
     }
 
