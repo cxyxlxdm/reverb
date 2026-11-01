@@ -76,6 +76,9 @@ struct DiscoverView: View {
     /// 节目那一路的来源短名(`Bilibili` / `Apple Podcasts` / …),仓储层给的原始标识。
     @State private var searchSource = ""
     @State private var searching = false
+    /// 用户粘的是一路直播流时它非空(见 `LiveStream`)。它与三个搜索结果数组互斥:
+    /// 直播流不是节目也不是单集,单独一条渲染。
+    @State private var liveEpisode: Episode?
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
@@ -95,7 +98,7 @@ struct DiscoverView: View {
         }
         .navigationTitle("余音")
         .searchable(text: $searchText, placement: .toolbar,
-                    prompt: "搜索播客/视频或粘贴 RSS 地址/视频链接")
+                    prompt: "搜索播客/视频或粘贴 RSS、直播流、视频链接")
         .onSubmit(of: .search) { runSearch() }
         .onChange(of: searchText) { v in
             if v.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -103,6 +106,7 @@ struct DiscoverView: View {
                 searchPodcasts = []
                 searchEpisodes = []
                 searchSource = ""
+                liveEpisode = nil
             }
         }
         .toolbar {
@@ -287,7 +291,30 @@ struct DiscoverView: View {
 
     private var searchContent: some View {
         ScrollView {
-            if searching {
+            if let live = liveEpisode, searchPodcasts.isEmpty && searchEpisodes.isEmpty {
+                // 直播流只有一条、也不是"节目/单集":不复用下面那两个分段,单独一段渲染。
+                // 放在 `searching` 之前:探针通常比目录检索先回来,而那一边对电台地址
+                // 要白等到超时 —— 让用户先看到这一条、点下去就能听。
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("直播流").font(.title3).fontWeight(.semibold)
+                    RoomyEpisodeRow(
+                        episode: live,
+                        isCurrent: player.current?.id == live.id,
+                        isPlaying: player.isPlaying,
+                        sourceTag: NSLocalizedString("直播", comment: ""),
+                        coverOpensChannel: false,
+                        onPlay: { player.playOrToggle(live, queue: [live]) }
+                    )
+                    Text("点一下开始收听。直播不记录播放进度,也不能快进或回看。")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: Metrics.contentMaxWidth, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, Metrics.pagePadding)
+                .padding(.top, Metrics.topPadding)
+                .padding(.bottom, Metrics.sectionSpacing)
+            } else if searching {
                 StateView(loading: true, text: "搜索中…").frame(minHeight: 360)
             } else if searchPodcasts.isEmpty && searchEpisodes.isEmpty {
                 StateView(symbol: "magnifyingglass",
@@ -357,6 +384,22 @@ struct DiscoverView: View {
         guard !q.isEmpty else { return }
         submittedQuery = q
         searching = true
+        liveEpisode = nil
+        // 上一轮的结果先清掉:下面直播那一支要拿「两个数组都空」当判据,
+        // 留着旧数据会让它一直等到目录检索回来才肯显示。
+        searchPodcasts = []
+        searchEpisodes = []
+        searchSource = ""
+        /// 直播探针与目录检索**并行发**:粘一条电台地址时目录那边会先把它当 RSS 去拉、
+        /// 一路白等到超时,串行等于让用户先干等十几秒。探针回来就先上屏,
+        /// 目录若真有结果,下面那条 `searching = false` 之后它自然盖过去。
+        if LiveStream.looksLikeStream(q) {
+            Task {
+                let live = await LiveStream.resolve(q)
+                guard submittedQuery == q else { return }
+                liveEpisode = live
+            }
+        }
         Task {
             async let podsTask = env.repository.search(q, region: env.region)
             async let epsTask = env.repository.searchEpisodes(q, region: env.region)

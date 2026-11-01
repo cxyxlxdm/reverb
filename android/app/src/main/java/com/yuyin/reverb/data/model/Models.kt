@@ -26,6 +26,15 @@ data class Episode(
     val pubDate: String = "",
     val feedUrl: String = "",  // 所属频道的 RSS 地址,用于从播放页跳转频道主页
     /**
+     * 直播流(用户直接粘进搜索框的音频流地址,**没有 RSS、没有时长、不可回退**)。
+     *
+     * 它不是"一集节目",只是一条正在播的流:缓存、下载、历史、收听时长、断点续播、
+     * 已播标记、队列自动跳过 —— **一律不参与**(见 PlayerController 里以 isLive 为闸的几处)。
+     * 落盘时也刻意不存 current(与电台同口径):流地址隔天多半已经失效,恢复出来只会是
+     * 一个点了没反应的迷你条。
+     */
+    val isLive: Boolean = false,
+    /**
      * 发布方**自己提供的逐字稿**地址(RSS 的 `podcast:transcript`,Podcasting 2.0)。
      *
      * 有它就不必本机识别:时间轴是发布方给的,又准又免费。空串表示这一集没有。

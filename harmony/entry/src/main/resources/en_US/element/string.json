@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "Search podcasts/videos or paste an RSS/video link"
+      "value": "Search podcasts/videos or paste an RSS, stream or video link"
     },
     {
       "name": "discover_daily_hot",
@@ -135,6 +135,22 @@
     {
       "name": "search_rss_failed",
       "value": "Couldn’t import this RSS feed. Check that the URL is reachable and valid."
+    },
+    {
+      "name": "live_tag",
+      "value": "Live"
+    },
+    {
+      "name": "live_result_header",
+      "value": "Live stream"
+    },
+    {
+      "name": "live_result_hint",
+      "value": "Tap to start listening. A live stream keeps no position and cannot be skipped."
+    },
+    {
+      "name": "live_on_air",
+      "value": "LIVE"
     },
     {
       "name": "search_probe_checking",
@@ -1274,11 +1290,11 @@
     },
     {
       "name": "search_hint_url",
-      "value": "Paste an RSS address or a video link"
+      "value": "Paste an RSS address, a stream address or a video link"
     },
     {
       "name": "search_url_only",
-      "value": "Enter an RSS address or a video link"
+      "value": "Enter an RSS address, a stream address or a video link"
     },
     {
       "name": "recommended_opml_url",

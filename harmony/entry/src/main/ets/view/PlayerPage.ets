@@ -103,7 +103,21 @@ export struct PlayerPage {
   private showTranscript(): boolean {
     const e = this.player.current;
     if (e === null) return false;
+    // 直播流不给第三页:逐字稿要么下载整段、要么转写整段,而直播没有"整段"这个边界 ——
+    // 挂上去就是一个永远转不完、也永远不落盘的任务(与 Android / macOS 同一条)。
+    if (e.isLive === true) return false;
     return (Features.LOCAL_ASR && this.settings.transcriptionEnabled) || e.transcriptUrl.length > 0;
+  }
+
+  /**
+   * 直播流没有时间轴:进度条与两端时间换成一句 LIVE。
+   *
+   * 判据是 `isLive && duration <= 0` 而不是只看 isLive —— 用户粘进来的也可能是一个**有限**的
+   * 音频文件,播放器一旦报出时长,进度条与快进快退就重新有意义,那时不该再装作是直播。
+   */
+  private liveNoTimeline(): boolean {
+    const e = this.player.current;
+    return e !== null && e.isLive === true && this.player.durationMs <= 0;
   }
 
   private pageDots(): number[] {
@@ -138,7 +152,10 @@ export struct PlayerPage {
           this.iconAction(() => Sym.queue,
             () => this.player.userQueue.length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant,
             L.s('queue_title'), 0, -2, () => this.onOpenQueue())
-          this.speedChip()
+          // 直播不给倍速:AVPlayer 对直播流回 `Operate Not Permit: The stream is live stream,
+          // not support rate` —— 发出去只会让界面写着 1.5× 而声音不变(见 H239)。
+          // 三端一起藏,L 形与 Android 同构。
+          if (!this.liveNoTimeline()) this.speedChip()
           this.sleepChip()
           this.favoriteChip()
           this.moreMenuChip()
@@ -188,15 +205,19 @@ export struct PlayerPage {
       .margin({ bottom: 10 })
 
       this.titleBlock()
-      // 进度条是独立组件:它自己轮询播放位置,于是进度更新不再重渲整个播放页(H64)
-      SeekBar({
-        scheme: this.scheme,
-        fontScale: this.fontScale,
-        durationMs: this.player.durationMs,
-        playing: this.player.isPlaying,
-        clock: this.player.clock,
-        onSeek: (ms: number) => { this.player.seekTo(ms); }
-      })
+      if (this.liveNoTimeline()) {
+        this.liveRow()
+      } else {
+        // 进度条是独立组件:它自己轮询播放位置,于是进度更新不再重渲整个播放页(H64)
+        SeekBar({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          durationMs: this.player.durationMs,
+          playing: this.player.isPlaying,
+          clock: this.player.clock,
+          onSeek: (ms: number) => { this.player.seekTo(ms); }
+        })
+      }
       this.controls()
       if (this.momentHint.length > 0) {
         Text(this.momentHint)
@@ -340,6 +361,23 @@ export struct PlayerPage {
     .margin({ bottom: 20 })
   }
 
+  /**
+   * 直播的「没有进度」一行:红点 + LIVE。高度与「进度条 + 两端时间」那一块相当,版面不跳
+   * (与 Android `PlayerScreen.kt` 的 liveNoTimeline 分支同形)。
+   */
+  @Builder
+  liveRow() {
+    Row({ space: 8 }) {
+      Circle().width(8).height(8).fill(this.scheme.error)
+      Text(L.s('live_on_air'))
+        .fontSize(TypeScale.labelLarge * this.fontScale)
+        .fontColor(this.scheme.error)
+    }
+    .justifyContent(FlexAlign.Center)
+    .width('100%')
+    .height(48)
+  }
+
   @Builder
   controls() {
     Column({ space: 10 }) {
@@ -359,9 +397,13 @@ export struct PlayerPage {
         .width('100%')
       }
       Row({ space: 22 }) {
-        this.iconBtn($r('sys.media.ohos_ic_public_play_last'), 22, () => this.player.hasPrev,
+        // 直播没有上一集/下一集,也没有可跳的时间轴:四颗键里只留主播放键
+        this.iconBtn($r('sys.media.ohos_ic_public_play_last'), 22,
+          () => !this.liveNoTimeline() && this.player.hasPrev,
           L.s('a11y_prev'), () => this.player.previous())
-        this.skipBtn(false)
+        if (!this.liveNoTimeline()) {
+          this.skipBtn(false)
+        }
         // 主播放键
         Stack() {
           Circle().width(72).height(72).fill(this.scheme.primary)
@@ -375,8 +417,11 @@ export struct PlayerPage {
         .width(72).height(72)
         .accessibilityText(L.s(this.player.isPlaying ? 'a11y_pause' : 'a11y_play'))
         .onClick(() => this.player.togglePlayPause())
-        this.skipBtn(true)
-        this.iconBtn($r('sys.media.ohos_ic_public_play_next'), 22, () => this.player.hasNext,
+        if (!this.liveNoTimeline()) {
+          this.skipBtn(true)
+        }
+        this.iconBtn($r('sys.media.ohos_ic_public_play_next'), 22,
+          () => !this.liveNoTimeline() && this.player.hasNext,
           L.s('a11y_next'), () => this.player.next())
       }
       .justifyContent(FlexAlign.Center)

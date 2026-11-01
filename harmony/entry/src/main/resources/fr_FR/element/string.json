@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "Rechercher podcasts/vidéos ou coller un lien RSS ou vidéo"
+      "value": "Rechercher podcasts/vidéos ou coller un lien RSS, de flux ou vidéo"
     },
     {
       "name": "discover_daily_hot",
@@ -135,6 +135,22 @@
     {
       "name": "search_rss_failed",
       "value": "Impossible d’importer ce flux RSS. Vérifiez que l’adresse est accessible et valide."
+    },
+    {
+      "name": "live_tag",
+      "value": "Direct"
+    },
+    {
+      "name": "live_result_header",
+      "value": "Flux en direct"
+    },
+    {
+      "name": "live_result_hint",
+      "value": "Touchez pour écouter. Un flux en direct ne mémorise pas la position et ne peut pas être avancé."
+    },
+    {
+      "name": "live_on_air",
+      "value": "EN DIRECT"
     },
     {
       "name": "search_probe_checking",
@@ -1274,11 +1290,11 @@
     },
     {
       "name": "search_hint_url",
-      "value": "Collez une adresse RSS ou un lien vidéo"
+      "value": "Collez une adresse RSS, une adresse de flux ou un lien vidéo"
     },
     {
       "name": "search_url_only",
-      "value": "Saisissez une adresse RSS ou un lien vidéo"
+      "value": "Saisissez une adresse RSS, une adresse de flux ou un lien vidéo"
     },
     {
       "name": "recommended_opml_url",

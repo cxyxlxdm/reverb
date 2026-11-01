@@ -30,6 +30,8 @@ class PodcastRepository(
     private val rss = RssParser(client)
     /** 视频当播客听。播放前解析也走它(见 [com.yuyin.reverb.playback.PlayerController])。 */
     val bilibili = BilibiliSource(client)
+    /** 直播流(A 档):粘一个音频流地址,直接当一路直播放。只在检索全部落空之后才探测。 */
+    val live = LiveStreamSource(client)
 
     private val log = com.yuyin.reverb.util.Logger
     private val TAG = "Repo"

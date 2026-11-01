@@ -346,6 +346,17 @@ object PlayerController {
     private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration
 
+    /**
+     * 播放器是否把当前媒体项判定为**直播**(HLS 滚动窗口、无边界流)。
+     *
+     * 为什么不复用 [duration]:Media3 对 HLS 直播会给一个**有限**的时长(TIME_UNSET 只在部分
+     * 清单上成立;实测某路电台的 `.m3u8` 报 `60000` —— 那是播放列表窗口长度,不是节目长度),
+     * 于是「时长未知」这条判据在 HLS 上失守,进度条以 `00:33 / 01:00` 的样子回来了,
+     * 而它永远不会走完。见 H238。
+     */
+    private val _liveStream = MutableStateFlow(false)
+    val liveStream: StateFlow<Boolean> = _liveStream
+
     private val _buffering = MutableStateFlow(false)
     val buffering: StateFlow<Boolean> = _buffering
 
@@ -440,8 +451,13 @@ object PlayerController {
      */
     private fun persistState() {
         val st = stateStore ?: return
-        if (_radioMode.value) st.save(null, "", emptyList(), 0, _userQueue.value)
-        else st.save(_current.value, _activeListTag.value, queue, queueIndex, _userQueue.value)
+        // 直播流与电台同属「没有可恢复的身份」:流地址隔天多半已经失效,恢复出来只会是
+        // 一个点了没反应的迷你条。up next 是用户自己排的,照旧保留。
+        if (_radioMode.value || _current.value?.isLive == true) {
+            st.save(null, "", emptyList(), 0, _userQueue.value)
+        } else {
+            st.save(_current.value, _activeListTag.value, queue, queueIndex, _userQueue.value)
+        }
     }
 
     fun bindSettings(s: SettingsStore) {
@@ -556,6 +572,7 @@ object PlayerController {
                 Player.STATE_IDLE -> log.d(TAG, "state IDLE")
             }
             if (c != null && c.duration > 0) _duration.value = c.duration
+            _liveStream.value = c?.isCurrentMediaItemLive == true
 
             if (playbackState == Player.STATE_READY && pendingSeekMs > 0 && c != null) {
                 val dur = c.duration
@@ -582,6 +599,13 @@ object PlayerController {
                 pendingSeekMs = 0
             }
             if (playbackState == Player.STATE_ENDED) {
+                // 直播流的"结束"只意味着这一路断了或停播了:**不记已播、不接下一集**。
+                // 否则用户本来在听电台,流一断就被换成队列里另一集,听感上像被偷换了台。
+                if (_current.value?.isLive == true) {
+                    log.i(TAG, "live ended, 不续播 id=${_current.value?.id}")
+                    listenStats?.flush()
+                    return
+                }
                 val stopAfterThis = _sleepEndOfEpisode.value // 睡眠「本集结束」优先于电台/队列续播
                 _sleepEndOfEpisode.value = false
                 // 自然听完:进度归零并标记已播完(引导音频除外 —— 它不进历史)
@@ -849,13 +873,15 @@ object PlayerController {
         // 内置引导音频不是一集真正的播客：不进历史、不计收听时长，
         // 否则"收听时长"榜首会是引导音频，「继续收听」里也会挂着它。
         val isGuide = com.yuyin.reverb.data.model.GuideEpisode.isGuide(episode.id)
-        if (!isGuide) history?.record(episode, System.currentTimeMillis())
+        // 直播流不是"一集节目":没有起止,也就没有"听到哪了"可记。进度、历史、统计三样全关
+        // (见 [saveProgress] / [countListening] / STATE_ENDED 三处同一条闸)。
+        if (!isGuide && !episode.isLive) history?.record(episode, System.currentTimeMillis())
         pendingSeekMs = if (startMsOverride >= 0) {
             val s = startMsOverride
             startMsOverride = -1L
             pendingSeekExplicit = true
             s
-        } else if (isGuide) {
+        } else if (isGuide || episode.isLive) {
             0L
         } else {
             pendingSeekExplicit = false
@@ -920,7 +946,7 @@ object PlayerController {
             return
         }
 
-        if (local == null && !isRadio) AudioCacheManager.cache(episode)
+        if (local == null && !isRadio && !episode.isLive) AudioCacheManager.cache(episode)
         startEpisode(c, episode, if (local != null) null else episode.audioUrl, autoplay, local)
     }
 
@@ -1142,6 +1168,12 @@ object PlayerController {
             return
         }
         log.d(TAG, "seekTo ${target}ms")
+        // 直播流没有可跳的时间轴:播放器还没报出时长时,duration 是 C.TIME_UNSET,
+        // 拖到任何位置都只会把进度线画到一个假坐标上。有进度(点了播客文件)才放行。
+        if (_current.value?.isLive == true && c.duration <= 0) {
+            log.i(TAG, "直播流无时间轴,忽略拖动 ${target}ms")
+            return
+        }
         c.seekTo(target)
         _position.value = target
     }
@@ -1156,6 +1188,11 @@ object PlayerController {
         }
         val target = (c.currentPosition + deltaMs)
             .coerceIn(0, if (c.duration > 0) c.duration else Long.MAX_VALUE)
+        // 同 [seekTo]:直播流没有时间轴,快进/快退没有落点
+        if (_current.value?.isLive == true && c.duration <= 0) {
+            log.i(TAG, "直播流无时间轴,忽略快进/快退 $deltaMs ms")
+            return
+        }
         log.d(TAG, "seekBy $deltaMs -> ${target}ms")
         c.seekTo(target)
         _position.value = target
@@ -1222,6 +1259,9 @@ object PlayerController {
         val ep = _current.value ?: return
         // 引导音频不写历史：playEpisode 已跳过 record，这里若还写就会又建出一条
         if (com.yuyin.reverb.data.model.GuideEpisode.isGuide(ep.id)) return
+        // 直播流不写进度:它的"位置"是这一路流自己的时间刻度,与用户听没听过无关,
+        // 写进历史还会让「继续收听」横条凭空多出一条永远"听到一半"的电台。
+        if (ep.isLive) return
         // **这一集在本会话里真的播出过声音,才允许回写进度。**
         // 冷启动预载(暂停态)会让"当前集"存在而播放器还没开始,此时 currentPosition 是 0
         // 或尚未落位的近似值,而 `onIsPlayingChanged(false)` 与退后台都可能触发这一次回写 ——
@@ -1238,6 +1278,7 @@ object PlayerController {
     private fun countListening() {
         val ep = _current.value ?: run { lastCountedEpId = ""; return }
         if (com.yuyin.reverb.data.model.GuideEpisode.isGuide(ep.id)) return   // 引导音频不计时长
+        if (ep.isLive) return   // 直播流同样不计:没有"内容长度"这个概念,累计只会是挂机时长
         val pos = _position.value
         if (ep.id == lastCountedEpId) {
             val delta = pos - lastCountedPosMs
@@ -1252,6 +1293,7 @@ object PlayerController {
         _isPlaying.value = c.isPlaying
         _position.value = c.currentPosition.coerceAtLeast(0)
         if (c.duration > 0) _duration.value = c.duration
+        _liveStream.value = c.isCurrentMediaItemLive
         if (c.isPlaying) startTicker()
     }
 
@@ -1269,6 +1311,7 @@ object PlayerController {
             val c = controller ?: return
             _position.value = c.currentPosition.coerceAtLeast(0)
             if (c.duration > 0) _duration.value = c.duration
+            _liveStream.value = c.isCurrentMediaItemLive
             countListening()
             tickCount++
             if (tickCount % 10 == 0) saveProgress() // 每约 5 秒落一次进度

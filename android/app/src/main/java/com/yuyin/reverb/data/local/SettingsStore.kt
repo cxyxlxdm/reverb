@@ -200,6 +200,9 @@ class SettingsStore(context: Context) {
          *       它的内容分发网络(`*.bilivideo.com` / `*.bilivideo.cn` 等,含第三方 CDN 节点)、
          *       封面图地址与短链 `b23.tv`;同意页多一段「视频链接」自述。
          *       ⚠️ 与「应用内更新」那次一样,这是**新功能 + 新地址**两件事同时发生,纯措辞润色不构成 +1。
+         *       **1.0.7 的直播流没有 +1**:它不引入任何有名有姓的第三方 —— 请求的就是用户
+         *       自己粘贴的那条流地址,与「粘 RSS」同一类,同意页正文第一段已写明
+         *       「直接请求发布方或托管方」。所以只改自述(docs/PRIVACY.md 与 privacy.html),不重问。
          *
          * 改这个数之后**必须重新打包**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
          */

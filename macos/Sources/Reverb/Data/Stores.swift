@@ -358,6 +358,8 @@ enum AppSupport {
     /// 它的同意页早就写过这件事,所以 Android / 鸿蒙的 `PRIVACY_VERSION` 停在 3 不动 ——
     /// 让手机用户为一件他们已经同意过的事再点一次同意,不是谨慎,是骚扰。
     /// 下一次三端都有的实质变更再一起 +1(把这三行注释当作「为什么这里不同步」的凭据)。
+    /// **1.0.7 的直播流没有 +1**:它不引入任何有名有姓的第三方 —— 请求的就是用户自己
+    /// 粘贴的那条流地址,与「粘 RSS」同一类,同意页正文早已写明「直接请求发布方或托管方」。
     static let privacyVersion = 4
     @Published private(set) var privacyAccepted: Bool
     /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。

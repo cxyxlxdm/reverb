@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "Buscar podcasts/vídeos o pegar un enlace RSS o de vídeo"
+      "value": "Buscar podcasts/vídeos o pegar un enlace RSS, de emisión o de vídeo"
     },
     {
       "name": "discover_daily_hot",
@@ -135,6 +135,22 @@
     {
       "name": "search_rss_failed",
       "value": "No se pudo importar este canal RSS. Comprueba que la URL sea accesible y válida."
+    },
+    {
+      "name": "live_tag",
+      "value": "En directo"
+    },
+    {
+      "name": "live_result_header",
+      "value": "Emisión en directo"
+    },
+    {
+      "name": "live_result_hint",
+      "value": "Toca para empezar a escuchar. Una emisión en directo no guarda la posición y no se puede avanzar."
+    },
+    {
+      "name": "live_on_air",
+      "value": "EN DIRECTO"
     },
     {
       "name": "search_probe_checking",
@@ -1274,11 +1290,11 @@
     },
     {
       "name": "search_hint_url",
-      "value": "Pega una dirección RSS o un enlace de vídeo"
+      "value": "Pega una dirección RSS, una dirección de emisión o un enlace de vídeo"
     },
     {
       "name": "search_url_only",
-      "value": "Introduce una dirección RSS o un enlace de vídeo"
+      "value": "Introduce una dirección RSS, una dirección de emisión o un enlace de vídeo"
     },
     {
       "name": "recommended_opml_url",

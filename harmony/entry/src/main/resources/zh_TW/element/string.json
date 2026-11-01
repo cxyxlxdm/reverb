@@ -82,7 +82,7 @@
     },
     {
       "name": "search_placeholder",
-      "value": "搜尋播客/影片或貼上 RSS 網址/影片連結"
+      "value": "搜尋播客/影片或貼上 RSS、直播串流、影片連結"
     },
     {
       "name": "discover_daily_hot",
@@ -135,6 +135,22 @@
     {
       "name": "search_rss_failed",
       "value": "RSS 匯入失敗，請確認網址可存取且內容有效"
+    },
+    {
+      "name": "live_tag",
+      "value": "直播"
+    },
+    {
+      "name": "live_result_header",
+      "value": "直播串流"
+    },
+    {
+      "name": "live_result_hint",
+      "value": "點一下開始收聽。直播不記錄播放進度，也不能快轉或回看。"
+    },
+    {
+      "name": "live_on_air",
+      "value": "直播中"
     },
     {
       "name": "search_probe_checking",
@@ -1274,11 +1290,11 @@
     },
     {
       "name": "search_hint_url",
-      "value": "貼上 RSS 網址或影片連結"
+      "value": "貼上 RSS 網址、直播串流網址或影片連結"
     },
     {
       "name": "search_url_only",
-      "value": "請輸入 RSS 網址或影片連結"
+      "value": "請輸入 RSS 網址、直播串流網址或影片連結"
     },
     {
       "name": "recommended_opml_url",

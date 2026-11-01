@@ -15,6 +15,7 @@ import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.local.CategoryStore
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.Podcast
+import com.yuyin.reverb.data.remote.LiveStreamSource
 import com.yuyin.reverb.data.remote.PodcastRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -31,6 +32,13 @@ sealed interface DiscoverState {
         val episodes: List<Episode>,
         val source: String
     ) : DiscoverState
+
+    /**
+     * 用户粘的是一路**直播流**:它既不是 RSS 也不是视频,解析不出任何节目/分集,
+     * 因此用单独一档把"这一条能播"这件事交给界面,而不是让它落进 [Empty] 里
+     * 被读成"没搜到/加载失败"。
+     */
+    data class Live(val episode: Episode) : DiscoverState
 }
 
 /** 发现页分类。key 为稳定标识(用于持久化/身份)，labelRes 为本地化显示名，genreId 对应 Apple 分类。 */
@@ -159,6 +167,21 @@ class DiscoverViewModel(
         val gen = ++searchGen
         viewModelScope.launch {
             state = DiscoverState.Loading
+            /**
+             * 直播探针与目录检索**并行发**。粘一条电台地址时 `repo.search` 会先把它当 RSS
+             * 直连去拉、一路白等到超时才算"空的",串行等于让用户先干等十几秒才看到
+             * "这就是那一路流"。探针先回来就先上屏 —— 但只在当前仍是 loading / empty 时落,
+             * 目录已经给出结果的话,直播不该反过来盖掉它。
+             */
+            if (LiveStreamSource.looksLikeStream(q)) {
+                viewModelScope.launch {
+                    val live = repo.live.resolve(q)
+                    if (gen == searchGen && live != null
+                        && (state is DiscoverState.Loading || state is DiscoverState.Empty)) {
+                        state = DiscoverState.Live(live)
+                    }
+                }
+            }
             // 频道与单集并行检索，切换分段时不再重复请求
             val outcome: PodcastRepository.SearchOutcome
             val episodes: List<Episode>
@@ -174,7 +197,8 @@ class DiscoverViewModel(
                 return@launch
             }
             state = if (outcome.podcasts.isEmpty() && episodes.isEmpty()) {
-                DiscoverState.Empty
+                // 探针可能已经上屏;还在路上的那一份回来时会自己落状态,这里保持不动即可。
+                if (state is DiscoverState.Live) state else DiscoverState.Empty
             } else {
                 DiscoverState.Success(outcome.podcasts, episodes, outcome.sourceLabel)
             }

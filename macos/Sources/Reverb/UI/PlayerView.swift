@@ -66,7 +66,9 @@ struct PlayerView: View {
     /// 与「要不要在这台机器上跑几分钟的识别」是两件事(对齐 Android `(AsrEngine && enabled) || transcriptUrl`)
     @available(macOS 14, *)
     private func carousel(_ ep: Episode) -> some View {
-        let showTranscript = env.settings.transcriptionEnabled || !ep.transcriptUrl.isEmpty
+        // 直播流不给第三页:逐字稿要么下载整段、要么转写整段,而直播没有"整段"这个边界 ——
+        // 挂上去就是一个永远转不完、也永远不落盘的任务。
+        let showTranscript = !ep.isLive && (env.settings.transcriptionEnabled || !ep.transcriptUrl.isEmpty)
         let count = showTranscript ? 3 : 2
         return VStack(spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
@@ -91,8 +93,8 @@ struct PlayerView: View {
             VStack(spacing: 28) {
                 artwork(ep)
                 titleBlock(ep)
-                seekBar
-                controls
+                seekBar(ep)
+                controls(ep)
                 actionRow(ep)
             }
             .padding(.horizontal, 36)
@@ -205,33 +207,47 @@ struct PlayerView: View {
 
     // MARK: - 进度
 
-    private var seekBar: some View {
-        VStack(spacing: 4) {
-            Slider(
-                value: Binding(
-                    get: { dragging ? dragValue : Double(player.positionMs) },
-                    set: { dragValue = $0 }
-                ),
-                in: 0...Double(max(1, player.durationMs)),
-                onEditingChanged: { editing in
-                    if editing { dragging = true }
-                    else { player.seek(toMs: Int(dragValue)); dragging = false }
+    /// 直播流没有时间轴:进度条与两端时间换成一行 LIVE。
+    ///
+    /// 判据是 `isLive && durationMs <= 0` 而不是只看 isLive —— 用户粘进来的也可能是一个**有限**的
+    /// 音频文件,播放器一旦报出时长,进度条与快进快退就重新有意义,那时不该再装作是直播。
+    private func seekBar(_ ep: Episode) -> some View {
+        Group {
+            if ep.isLive && player.durationMs <= 0 {
+                HStack(spacing: 8) {
+                    Circle().fill(.red).frame(width: 8, height: 8)
+                    Text("直播中").font(.callout).foregroundStyle(.red)
                 }
-            )
-            .pointingHandCursor()
-            HStack {
-                Text(timeText(dragging ? Int(dragValue) : player.positionMs))
-                Spacer()
-                Text(timeText(player.durationMs))
+                .frame(height: 40)
+            } else {
+                VStack(spacing: 4) {
+                    Slider(
+                        value: Binding(
+                            get: { dragging ? dragValue : Double(player.positionMs) },
+                            set: { dragValue = $0 }
+                        ),
+                        in: 0...Double(max(1, player.durationMs)),
+                        onEditingChanged: { editing in
+                            if editing { dragging = true }
+                            else { player.seek(toMs: Int(dragValue)); dragging = false }
+                        }
+                    )
+                    .pointingHandCursor()
+                    HStack {
+                        Text(timeText(dragging ? Int(dragValue) : player.positionMs))
+                        Spacer()
+                        Text(timeText(player.durationMs))
+                    }
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                }
             }
-            .font(.caption.monospacedDigit())
-            .foregroundStyle(.secondary)
         }
     }
 
     // MARK: - 传输控制
 
-    private var controls: some View {
+    private func controls(_ ep: Episode) -> some View {
         VStack(spacing: 14) {
             if let err = player.playbackError {
                 HStack(spacing: 10) {
@@ -240,16 +256,20 @@ struct PlayerView: View {
                     Button("重试") { player.retry() }.buttonStyle(.bordered).controlSize(.small)
                 }
             }
-            transportRow
+            transportRow(ep)
         }
     }
 
-    private var transportRow: some View {
+    /// 直播流只留中间那颗播放键:它没有可跳的时间轴,也没有"下一集"可去
+    /// (播完不续播,见 `PlayerController.observeEnd` 的直播分支)。
+    private func transportRow(_ ep: Episode) -> some View {
         HStack(spacing: 26) {
-            controlButton("gobackward.\(min(env.settings.skipBackSec, 30))", size: 22) { player.skipBackward() }
-                .help("快退")
+            if !ep.isLive {
+                controlButton("gobackward.\(min(env.settings.skipBackSec, 30))", size: 22) { player.skipBackward() }
+                    .help("快退")
+            }
             controlButton("backward.fill", size: 20) { player.previous() }
-                .disabled(!player.hasPrev)
+                .disabled(!player.hasPrev || ep.isLive)
             Button { player.togglePlayPause() } label: {
                 Image(systemName: player.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                     .font(.system(size: 58))
@@ -257,9 +277,11 @@ struct PlayerView: View {
             }
             .buttonStyle(.plain)
             controlButton("forward.fill", size: 20) { player.next() }
-                .disabled(!player.hasNext)
-            controlButton("goforward.\(min(env.settings.skipForwardSec, 60))", size: 22) { player.skipForward() }
-                .help("快进")
+                .disabled(!player.hasNext || ep.isLive)
+            if !ep.isLive {
+                controlButton("goforward.\(min(env.settings.skipForwardSec, 60))", size: 22) { player.skipForward() }
+                    .help("快进")
+            }
         }
     }
 
@@ -274,21 +296,24 @@ struct PlayerView: View {
 
     private func actionRow(_ ep: Episode) -> some View {
         HStack(spacing: 22) {
-            // 倍速
-            Menu {
-                ForEach(player.speedSteps, id: \.self) { s in
-                    Button {
-                        player.setSpeed(s)
-                    } label: {
-                        if abs(player.speed - s) < 0.001 { Label(speedText(s), systemImage: "checkmark") }
-                        else { Text(speedText(s)) }
+            // 倍速。直播不给:线性源没有"快进"这回事,鸿蒙的 AVPlayer 更是直接拒绝
+            // (`not support rate`,见 H239)—— 三端一起藏。
+            if !ep.isLive {
+                Menu {
+                    ForEach(player.speedSteps, id: \.self) { s in
+                        Button {
+                            player.setSpeed(s)
+                        } label: {
+                            if abs(player.speed - s) < 0.001 { Label(speedText(s), systemImage: "checkmark") }
+                            else { Text(speedText(s)) }
+                        }
                     }
+                } label: {
+                    Text(speedText(player.speed)).font(.callout.monospacedDigit())
                 }
-            } label: {
-                Text(speedText(player.speed)).font(.callout.monospacedDigit())
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
 
             // 收藏
             Button {

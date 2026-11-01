@@ -15,6 +15,7 @@ object EpisodeJson {
         .put("durationSec", e.durationSec)
         .put("pubDate", e.pubDate)
         .put("feedUrl", e.feedUrl)
+        .put("isLive", e.isLive)
         .put("transcriptUrl", e.transcriptUrl)
         .put("transcriptType", e.transcriptType)
 
@@ -30,6 +31,7 @@ object EpisodeJson {
         durationSec = o.optLong("durationSec"),
         pubDate = o.optString("pubDate"),
         feedUrl = o.optString("feedUrl"),
+        isLive = o.optBoolean("isLive"),
         transcriptUrl = o.optString("transcriptUrl"),
         transcriptType = o.optString("transcriptType")
     )

@@ -25,6 +25,12 @@ struct Episode: Codable, Identifiable, Hashable {
     var durationSec: Int = 0
     var pubDate: String = ""
     var feedUrl: String = ""   // 所属频道的 RSS 地址,用于从播放页跳转频道主页
+    /// 直播流(用户直接粘进搜索框的音频流地址,**没有 RSS、没有时长、不可回退**)。
+    ///
+    /// 它不是"一集节目",只是一条正在播的流:缓存、下载、历史、收听时长、断点续播、
+    /// 已播标记、队列自动跳过 —— 一律不参与(见 PlayerController 里以 isLive 为闸的几处)。
+    /// 落盘时也刻意不存 current(与电台同口径):流地址隔天多半已经失效。
+    var isLive: Bool = false
     /// 发布方自己提供的逐字稿(Podcasting 2.0 的 `podcast:transcript`)。
     /// 空串 = 这一集没有官方稿,界面才退回本机识别。字段名与 Android / 鸿蒙同义同名
     /// (Android `EpisodeJson` 一直在备份里写 `transcriptUrl`)。
@@ -36,7 +42,7 @@ struct Episode: Codable, Identifiable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, audioUrl, artworkUrl, podcastTitle
-        case durationSec, pubDate, feedUrl, transcriptUrl, transcriptType
+        case durationSec, pubDate, feedUrl, isLive, transcriptUrl, transcriptType
     }
 }
 
@@ -57,6 +63,8 @@ extension Episode {
         durationSec = (try? c.decode(Int.self, forKey: .durationSec)) ?? 0
         pubDate = (try? c.decode(String.self, forKey: .pubDate)) ?? ""
         feedUrl = (try? c.decode(String.self, forKey: .feedUrl)) ?? ""
+        // 缺键必须解成 false:历史 / 下载 / 备份里都是旧文件,而 isLive 只要一集都不该冒出来
+        isLive = (try? c.decode(Bool.self, forKey: .isLive)) ?? false
         transcriptUrl = (try? c.decode(String.self, forKey: .transcriptUrl)) ?? ""
         transcriptType = (try? c.decode(String.self, forKey: .transcriptType)) ?? ""
     }
