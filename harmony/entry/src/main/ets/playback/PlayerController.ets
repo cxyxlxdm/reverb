@@ -309,11 +309,14 @@ export class PlayerController {
    * **电台模式例外:那一档没有可恢复的身份** —— 电台的「上一集/下一集」走的是内存里的
    * `radioHistory`(随机抓来的节目序列,退出即弃),把它写成上下文队列
    * 会让重启后的「下一集」跳进一个毫不相干的列表。所以电台期间只留 up next、清空 current。
+   *
+   * **直播流按同一条处理**,理由更硬:直播地址是用户粘贴的那一条,它的有效期握在发布方手里
+   * (常见是几分钟的 token),写进快照等于保证第二天点开必然"这一集播不了"。
    */
   private persistState(): void {
     const st = this.stateStore;
     if (st === null) return;
-    if (this.radioMode) st.save(null, '', [], 0, this.userQueue);
+    if (this.radioMode || this.current?.isLive === true) st.save(null, '', [], 0, this.userQueue);
     else st.save(this.current, this.activeListTag, this.queue, this.queueIndex, this.userQueue);
   }
 
@@ -584,7 +587,9 @@ export class PlayerController {
     // 内置引导音频不是一集真正的播客:不进历史、不计收听时长,
     // 否则"收听时长"榜首会是引导音频,「继续收听」里也会挂着它。
     const isGuide = GuideEpisode.isGuide(e.id);
-    if (!isGuide && this.history !== null) this.history.record(e, Date.now());
+    // 直播流不进历史:它没有"上次听到哪儿"这个概念,留下一条也只会是永远 0 的僵尸记录。
+    const isLive = e.isLive === true;
+    if (!isGuide && !isLive && this.history !== null) this.history.record(e, Date.now());
     // 两种来源,一条判别:调用方**明确指定的那一秒**优先于「上次听到哪儿」。
     // 与 Android 同口径 —— `startMsOverride >= 0` 就吃掉它并置 explicit,否则走续播。
     let resumeMs: number;
@@ -592,7 +597,7 @@ export class PlayerController {
       resumeMs = this.startMsOverride;
       this.startMsOverride = -1;
       this.pendingSeekExplicit = true;
-    } else if (isGuide) {
+    } else if (isGuide || isLive) {
       resumeMs = 0;
     } else {
       this.pendingSeekExplicit = false;
@@ -649,8 +654,11 @@ export class PlayerController {
      * 视频集传的是**换成直链的副本**:缓存模块拿 `audioUrl` 去下载,伪地址它拉不下来
      * (会当成畸形 URL 立刻失败,账本里留一条永远下不完的条目)。与 Android
      * `cache(episode.copy(audioUrl = resolved))` 同式。
+     *
+     * **直播流不缓存**:它的"整集"没有终点,下载任务只会在磁盘上一直长到超时;
+     * 而直播本来就该边下边播,缓存没有可复用的那一刻。
      */
-    if (!useLocal && !this.radioMode && this.networkPlayNotice !== null) {
+    if (!useLocal && !this.radioMode && !isLive && this.networkPlayNotice !== null) {
       const isPseudo = BilibiliSource.isPseudo(e.audioUrl);
       this.networkPlayNotice(isPseudo ? withAudioUrl(e, streamUrl) : e,
         isPseudo ? BilibiliSource.streamHeaders() : null);
@@ -976,6 +984,17 @@ export class PlayerController {
       this.isPlaying = false;
       this.stopTicker();
       const cur = this.current;
+      // **直播流到此为止**:断流时 AVPlayer 一样会报 completed,而这一刻最不该做的事
+      // 就是"自动接下一集"——用户要的是这个台,换到别的内容比静音更费解。
+      // 也不写历史(它压根没进历史,updatePosition 会把那一条重新造出来)。
+      if (cur !== null && cur.isLive === true) {
+        Log.i('Player', `直播流结束 id=${cur.id}`);
+        if (this.onListenFlush !== null) this.onListenFlush();
+        this.playbackDesiredPlaying = false;
+        this.deactivateAudioSession();
+        this.notify();
+        return;
+      }
       if (cur !== null && this.history !== null && !GuideEpisode.isGuide(cur.id)) {
         this.history.updatePosition(cur.id, 0, this.durationMs);
         this.history.markPlayed(cur.id, true);
@@ -1169,6 +1188,11 @@ export class PlayerController {
   seekTo(ms: number): void {
     const p = this.player;
     if (p === null) return;
+    // 直播流没有时间轴:界面上进度条已被 LIVE 标识替掉,但锁屏/耳机/控制中心的
+    // 快进键仍可能打到这里。对无时长的流 seek 过去只会让播放器重新缓冲,
+    // 用户看到的是"按了一下就卡住"——直接忽略。
+    const cur = this.current;
+    if (cur !== null && cur.isLive === true && this.durationMs <= 0) return;
     const t = Math.max(0, ms);
     try {
       p.seek(t, media.SeekMode.SEEK_PREV_SYNC);
@@ -1204,6 +1228,11 @@ export class PlayerController {
 
   /// 设置倍速。AVPlayer 只有播放态允许 setPlaybackRate,状态切换中不发无效操作。
   private applyRate(p: media.AVPlayer, rate: number): void {
+    // 直播流一律不发:AVPlayer 对直播回 `Operate Not Permit: The stream is live stream,
+    // not support rate`,而那是走 `error` 事件的 —— try/catch 拦不住,会让 handleLoadFailure
+    // 把一路本来播得好好的流当成装载失败、每 0.8 秒重建一次(实测 HLS 电台连打六代)。见 H239。
+    const cur = this.current;
+    if (cur !== null && cur.isLive === true && this.durationMs <= 0) return;
     if (p.state !== 'playing') return;
     try {
       p.setPlaybackRate(rate);
@@ -1696,6 +1725,8 @@ export class PlayerController {
     if (e === null || this.history === null) return;
     // 引导音频不写历史:playEpisode 已跳过 record,这里若还写就会又建出一条
     if (GuideEpisode.isGuide(e.id)) return;
+    // 直播流同样不写(理由见 commitAndPlay 里那次 record 的注释)
+    if (e.isLive === true) return;
     // **这一集在本会话里真的播出过声音,才允许回写进度**(H129)。
     // 1.0.4 起冷启动会预载上次那一集,于是"有 current"先于"播过"而存在:
     // 少了这道闸,预载后任何一次 paused 事件或 ticker 都会拿 positionMs(那一刻可能是 0)
@@ -1713,6 +1744,7 @@ export class PlayerController {
       return;
     }
     if (GuideEpisode.isGuide(e.id)) return;   // 引导音频不计时长
+    if (e.isLive === true) return;            // 直播流也不计:它的"内容时长"是无限的
     if (e.id === this.clock.countedEpId) {
       const delta = this.positionMs - this.clock.countedPosMs;
       if (this.isPlaying && delta >= 1 && delta <= 3000 && this.onListened !== null) {

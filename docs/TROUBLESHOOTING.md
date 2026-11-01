@@ -11874,3 +11874,122 @@ search count=17                        ← 关键词搜索恢复(不再 v_vouche
 ④ **对照实验必须同一台设备、同一个出口、只改一个变量;并且客户端本身也是变量。**
    这次三个客户端(OkHttp / curl / Chrome)在同一组请求头下读数不同,恰恰是定位
    「Cookie 只该给哪个端点」的那把尺子。
+
+### H237. 鸿蒙的 `Http.probeCode` 探不了直播流 —— `request()` 要等整个响应体收完,而流永远收不完
+
+**现象**:实现 1.0.7 的直播流(A 档)时,鸿蒙侧第一版照抄现成的 `Http.probeCode`
+(`net/Http.ets:118`)去探「这条地址是不是音频流」。同一个电台地址在 Android 与 macOS 上
+一两秒内出结果,鸿蒙上却要一直等到 `readTimeout`(8 秒)才拿到一个 `0` —— 既不报错也不给响应头,
+界面上看起来像「这家电台的地址不通」。而同一个地址在设备浏览器里打开立刻出声。
+
+**根因**:`Http.probeCode` 用的是 `http.HttpRequest.request()`,它 resolve 出来的是
+`HttpResponse` —— 那份响应体必须装进 `result` 才轮得到构造这个对象。SDK 的
+`@ohos.net.http.d.ts` 在 `request()` 的 NOTE 里把这条口径写死了:该 API 只能接收小于 5 MB 的数据
+(API 23 起 50 MB),超过就得改用 `requestInStream`。**无限长的音频流永远到不了「收完」那一刻**,
+所以那个 promise 永不 settle —— 响应头明明早就到了,它也不给你。`readTimeout` 到点只是把它记成失败。
+同一个函数在探普通网页/短响应时完全正常,换到直播流就恒失败:**差别不在网络,在 API 的形状**
+(request 是「拿全文」,不是「拿头」)。
+
+**修法**(`net/LiveStream.ets`):
+
+1. 改成 `requestInStream` + `req.on('headersReceive', …)`。这个事件在**响应头到达时**回调,
+   不等响应体;拿到就把连接 `destroy()` 掉,不必把整路音频拖下来(与另外两端的
+   `call.cancel()` / `completionHandler(.cancel)` 同一个动作,只是名字不同)。
+2. `requestInStream` 的 promise 也只在**流结束**时才给状态码,所以它 resolve 出来的 `code`
+   不能当判据 —— 收到响应头那一刻码还是 `0`。判定只靠响应头三信号(audio/HLS/icy);
+   `code === 0` 一律**不否决**,否则每一条正常的直播流都会被判死。
+3. 再加一条硬 `setTimeout`(8 秒)兜底:事件不回调、promise 也不 resolve 的坏情况,
+   不能把搜索的转圈永远转下去。`settled` 守卫保证「头先到」与「超时先到」只有一次生效。
+
+**验收**:编译门 `hvigorw assembleHap --mode module -p product=default -p buildMode=debug`
+BUILD SUCCESSFUL;真机(iPhone/Android 之外的鸿蒙机)未验 —— 这一轮只到编译门,见 `ROADMAP.md`。
+
+**教训 / 规律**:
+① **「能拿到状态码」不等于「能拿到响应头」。** 三端各有一层 API 是「等响应体收完才返回」的
+   (鸿蒙 `request()`、macOS `data(for:)`、Android 的同步 `execute()`)—— 对着普通响应它们都好使,
+   对着无限流一律卡死。要头就得换**流式**那一层:鸿蒙 `requestInStream` + `headersReceive`、
+   macOS `dataTask` + delegate(H225)、Android `enqueue` + 回调里 cancel。
+② **同一个函数的适用范围要按「响应会不会结束」划,不是按「HTTP 码多少」划。** 探测类代码尤其容易
+   在这里失守:它本来只关心头,却用了「取全文」的 API。
+③ **超时兜底要独立于事件。** 依赖被调用方的回调来结束等待,遇到「它既不回调也不报错」就永远转圈;
+   硬超时 + `settled` 判重是这类探头的标准形状(与 macOS 的 `HTTP.probeCode`、鸿蒙的 `redirectProbe` 同构)。
+
+### H238. HLS 直播在 Android 上**有 60 秒时长** —— 界面据此恢复进度条,「直播中」变成一条走不完的 01:00
+
+**现象**:1.0.7 的直播流(A 档)在 Pixel 3 上装机验证时,HLS 电台
+(`http://ngcdn001.cnr.cn/live/zgzs/index.m3u8`)点进去能出声,但播放页**底部出现进度条**,
+读数一路 `00:33 / 01:00` 往上走,快进/快退与「上一集/下一集」也回到可按状态;
+而同一版 App 里粘一条**直出 MP3**(`https://lhttp.qtfm.cn/live/4915/64k.mp3`)是正常的「直播中」。
+两端同一个 `isLive` 标记、同一条界面闸门,只有 HLS 这一路错。
+
+**根因**:界面闸门写的是 `isLive && duration <= 0`。直出 MP3 给的是 `C.TIME_UNSET`
+(logcat `state READY dur=-9223372036854775807`),闸门成立;而 **HLS 直播的"时长"是播放列表窗口的长度**,
+Media3 报的是**有限的** `60032`(logcat `state READY dur=60032`)。于是 `duration <= 0` 不成立,
+闸门放开,界面按普通单集渲染出进度条与跳转 —— 那 60 秒不是节目长度,是滑动窗口,
+进度条永远走不完、拖到任何位置都还是直播。
+
+**修法**(`playback/PlayerController.kt` + `ui/screens/PlayerScreen.kt`):
+
+1. 门面加一条 `liveStream: StateFlow<Boolean>`,值取 `player.isCurrentMediaItemLive` ——
+   **这是播放器自己对"这是不是直播"的判定**,HLS 的 `#EXT-X-ENDLIST`、切片的滚动与否它都知道,
+   比我们按 mime 猜可靠。在 `onPlaybackStateChanged`、`syncOnce()` 与 500ms tick 三处同步
+   (与既有的 `duration` 同源、同频)。
+2. 界面闸门改成 `isLive && (duration <= 0 || liveStream)`;`PlayerScreen` 里所有
+   「按时间轴才成立」的东西(进度条、快进快退、上一/下一集、逐字稿页)统一改读这一个变量。
+3. **倍速控件也一起收起**(见 H239 的第二半):直播是线性源,倍速只会让它偏离直播边缘。
+
+**验收**(Pixel 3 / 1.0.7 release 包,`adb install -r` 覆盖装):
+
+- 修前:进度条 `00:33 / 01:00`(截图即用户看到的那一屏);
+- 修后:HLS 与直出 MP3 两种形状进播放页都是**「直播中」+ 无任何时间读数**,
+  dump 里 `上一集/下一集` 的父节点 `enabled="false"`(仍在原位,只是按不动);
+  播放全程 `Reverb/Player` 日志 5 行,`HistoryStore` / `ListenStats` / `AudioCache` **0 行**(阳性对照:同一次抓取里 Player 有 5 行)。
+- 阴性对照:粘一个普通网页地址(`https://www.example.com/`),**没有**「直播流」结果,
+  落到关键词搜索的空结果 —— 判据不会把网页当流。
+
+**教训 / 规律**:
+① **「时长有限」不等于「不是直播」。** HLS 直播天然有一个有限时长(窗口长度),
+   拿 `duration` 当直播判据在直出流上成立、在 HLS 上必然失守。能问播放器的就问播放器。
+② **`C.TIME_UNSET` 不是 0,是 `Long.MIN_VALUE + 1`。** 判"时长未知"要写 `<= 0`,
+   写 `== 0` 会把直出流判成有长度。同一条在本端与鸿蒙侧都适用(鸿蒙的 `durationMs` 直接是 0,
+   macOS 的 `durationMs` 也是 0),三端各自的口径要在注释里写死。
+③ **闸门写成 `A && B` 之后,`B` 的取值来源也要跟着进代码注释。** 这一条之所以能被真机抓到,
+   是因为验证时**两种流形状各跑了一遍**;只验直出 MP3 的话它到现在还是绿的。
+
+### H239. 鸿蒙的 AVPlayer 对直播**拒绝设倍速**,而拒绝是走 `error` 事件的 —— 重试循环里每秒报一次错
+
+**现象**:同一轮直播流验证,鸿蒙侧点进 HLS 电台后能出声,但日志里每 0.8 秒刷一次
+`[Player] 播放错误 generation=<n> Operate Not Permit: The stream is live stream, not support rate`,
+紧跟 `[Player] 加载失败,自动重试 1/3`;`generation` 一路涨到 45(每一代都 `prepared → playing → 报错 → 重试`)。
+界面上声音断断续续,而 Android 同一路流毫无此现象。
+
+**根因**:`PlayerController.applyRate` 在播放态无条件 `p.setPlaybackRate(rate)`,
+而 **AVPlayer 不接受直播流的倍速**。关键在于**它不是抛异常**:调用本身"成功"返回,
+失败经 `AVPlayer.on('error')` 异步回来;而本端的 error 处理把任何错误都当成"这一集播不了"⇒
+`加载失败,自动重试` ⇒ 重新 `prepare` ⇒ `state=playing` 后 `applyRate` 又发一次 ⇒ 再报错。
+**同一个确定性拒绝被当成可重试故障,于是变成死循环。**
+
+**修法**:
+
+1. `applyRate` 在 `current.isLive === true && durationMs <= 0` 时**直接 return**,不发这条命令
+   (与界面闸门同一个判据,见 H238)。注释里写清"错误是走事件回来的,`try/catch` 拦不住"。
+2. **倍速控件在直播时收起 —— 三端都收**(`PlayerPage.ets` 的 `speedChip`、Android `PlayerScreen.kt` 的
+   `SpeedChip`、macOS `PlayerView.swift` 的倍速 `Menu`)。只挡后端不挡界面的话,用户点 1.5×
+   会看到标签变成 1.5× 而声音不变,那是界面在说假话;三端统一收起,口径与「不能快进或回看」一致。
+
+**验收**(鸿蒙真机 / debug hap 覆盖装,`install-device.sh`):
+
+- 修前:hilog 里 `播放错误 … not support rate` + `加载失败,自动重试` 成对刷屏,generation 涨到 45;
+- 修后:新一轮进程(pid 15081)`generation=1` → `state=prepared` → `state=playing`,
+  **之后再无 `播放错误` / `加载失败` 行**;播放页 dump 里 `直播中` 在、`Slider` 0 个、`1×` 文本 0 个、`睡眠` 仍在;
+  全程 `HistoryStore` / `ListenStats` / `AudioCache` 只有启动时那 6 行加载日志,播放期间 0 行(阳性对照:同一抓取 `[Player]` 14 行)。
+- Android 侧同批改完后重新出包、覆盖装、同一路 HLS 复验:`直播中`、无时间读数、`1×` 文本消失。
+
+**教训 / 规律**:
+① **"没抛异常"不等于"被接受"。** 平台把拒绝分成两路(同步抛 / 异步事件)时,只看 `try/catch`
+   等于只看了一半。凡是对"能力边界"发命令(倍速、倍率、音轨、清晰度切换),都要在 error 事件里
+   按错误语义分类,而不是一律重试。
+② **重试前先问"这个错会自己好吗"。** 确定性拒绝(不支持的能力)重试一万次还是同一个结果;
+   本端这次把它当成网络抖动,代价是一条无限循环 + 每秒一条错误日志。错误分类比重试次数重要。
+③ **后端挡了一层,界面还得挡一层。** 用户看不到日志,只看得到控件;控件能点、点了没效果,
+   比控件不在更糟。这一点与 H238 的界面闸门是同一条规律的两个面。

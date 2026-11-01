@@ -34,6 +34,15 @@ export interface Episode {
   transcriptUrl: string;
   /// 逐字稿的 MIME(`application/json` / `text/vtt` / `application/srt` …),用于选解析器
   transcriptType: string;
+  /**
+   * 直播流标记。用户粘贴一条音频流地址时现场合成出来的 `Episode` 会置 true
+   * (见 `net/LiveStream`),它不对应任何订阅源,也没有分集边界。
+   *
+   * 置 true 之后整条链路按「没有时间轴」处理:不落历史、不写缓存、不计收听时长、
+   * 不续播、播完不自动接下一集。可选字段,历史与备份里没有它时按 false 读,
+   * 旧数据不必迁移(与 Android `Models.kt` / macOS `Models.swift` 同一口径)。
+   */
+  isLive?: boolean;
 }
 
 /**

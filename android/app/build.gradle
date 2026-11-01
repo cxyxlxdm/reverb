@@ -35,8 +35,8 @@ android {
         applicationId "com.yuyin.reverb.android"
         minSdk 26
         targetSdk 34
-        versionCode 7
-        versionName "1.0.6"
+        versionCode 8
+        versionName "1.0.7"
         vectorDrawables {
             useSupportLibrary true
         }
@@ -136,6 +136,10 @@ dependencies {
     implementation 'androidx.navigation:navigation-compose:2.7.7'
 
     implementation 'androidx.media3:media3-exoplayer:1.3.1'
+    // HLS 单独一个模块:media3-exoplayer 本体里没有 hls 包(1.3.1 实测 773 个类里没有),
+    // 不加这条,`.m3u8` 的直播流会在 DefaultMediaSourceFactory 那一步直接判"不支持的格式"。
+    // 仍是 AndroidX 自家模块(与 media3-exoplayer 同版本),不碰"不接第三方 SDK"那条约束。
+    implementation 'androidx.media3:media3-exoplayer-hls:1.3.1'
     implementation 'androidx.media3:media3-session:1.3.1'
     implementation 'androidx.media3:media3-common:1.3.1'
 

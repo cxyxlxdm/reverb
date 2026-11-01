@@ -8,6 +8,7 @@ import { DISCOVER_CATEGORIES, DiscoverCategory, categoryLabel } from '../model/G
 import { AppContainer } from '../AppContainer';
 import { FeedProbeState } from '../net/PodcastRepository';
 import { BilibiliSource } from '../net/BilibiliSource';
+import { LiveStream } from '../net/LiveStream';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
 import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, LIST_MENU_LONG_PRESS_MS } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
@@ -112,6 +113,14 @@ export struct DiscoverPage {
   @State searchProbeStates: FeedProbeState[] = [];
   @State searchLabel: string = '';
   @State searchRssFailed: boolean = false;
+  /**
+   * 直播流。粘一条音频流地址时,目录检索必然零结果,而它又不属于「节目 / 单集」任何一个分段
+   * (没有信息页、没有分集、没有进度),所以单独放一档,不走上面两个数组。
+   *
+   * 探针与目录检索**并行**跑:粘电台地址时那条 RSS 直连要白等十几秒超时,
+   * 串行会把"点一下就该出声"变成"先转十几秒圈"。
+   */
+  @State liveEpisode: Episode | null = null;
   @State searched: boolean = false;
   // 网络返回顺序不可控;只允许最后一次提交的结果落到界面。
   private searchGeneration: number = 0;
@@ -331,6 +340,7 @@ export struct DiscoverPage {
       this.searchEpisodes = [];
       this.searchProbeStates = [];
       this.searchRssFailed = false;
+      this.liveEpisode = null;
       return;
     }
 
@@ -343,11 +353,28 @@ export struct DiscoverPage {
     this.searchProbeStates = [];
     this.searchLabel = '';
     this.searchRssFailed = false;
+    this.liveEpisode = null;
     const region = this.app.region();
-    // 两类检索并行且各自落 UI；不再先等节目、再等单集，任一完成都能立即显示。
+    // 三类检索并行且各自落 UI；不再先等节目、再等单集，任一完成都能立即显示。
+    // 直播探针与它们同时出发:粘电台地址时 RSS 直连要白等到超时,串行等于让用户干等十几秒。
     const podcastsWork = this.loadSearchPodcasts(q, region, generation);
     const episodesWork = this.loadSearchEpisodes(q, region, generation);
-    await Promise.all([podcastsWork, episodesWork]);
+    const liveWork = LiveStream.looksLikeStream(q)
+      ? this.loadLiveStream(q, generation) : Promise.resolve();
+    await Promise.all([podcastsWork, episodesWork, liveWork]);
+  }
+
+  /// 直播探针落 UI。命中条件由渲染侧判(两个结果数组都空),这里只负责把读数放好。
+  private async loadLiveStream(q: string, generation: number): Promise<void> {
+    let ep: Episode | null = null;
+    try {
+      ep = await LiveStream.resolve(q);
+    } catch (_e) {
+      Log.w('Discover', '直播流探测异常');
+    }
+    if (generation !== this.searchGeneration || this.query.trim() !== q) return;
+    this.liveEpisode = ep;
+    if (ep !== null) Log.i('Discover', `直播流就绪 title=${ep.title}`);
   }
 
   private async loadSearchPodcasts(q: string, region: string, generation: number): Promise<void> {
@@ -465,6 +492,7 @@ export struct DiscoverPage {
     this.searchProbeStates = [];
     this.searchLabel = '';
     this.searchRssFailed = false;
+    this.liveEpisode = null;
   }
 
   build() {
@@ -1172,6 +1200,64 @@ export struct DiscoverPage {
 
   @Builder
   searchResults() {
+    /**
+     * 直播流**不属于**「节目 / 单集」任何一个分段:它没有信息页、没有分集、没有进度,
+     * 连分段条一起换掉才对 —— 挂着「节目 0 / 单集 0」只会让人以为是什么都没搜到。
+     *
+     * 判据取「两个结果数组都空」而不是只信 `liveEpisode`:粘一条合法的 RSS 地址时,
+     * 探针会因为它回 `text/xml` 而失败(liveEpisode 为 null),正常结果照常显示。
+     * 反过来,探针命中就先显示 —— RSS 直连那条要白等到超时,不该挡着用户收听。
+     */
+    if (this.liveEpisode !== null
+      && this.searchPodcasts.length === 0 && this.searchEpisodes.length === 0) {
+      this.liveResult(this.liveEpisode)
+    } else {
+      this.searchTabs()
+    }
+  }
+
+  @Builder
+  liveResult(ep: Episode | null) {
+    if (ep !== null) {
+      Column() {
+        Text(L.s('live_result_header'))
+          .fontSize(TypeScale.labelLarge * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .width('100%')
+          .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 8, bottom: 4 })
+        List() {
+          ListItem() {
+            EpisodeListItem({
+              scheme: this.scheme, fontScale: this.fontScale, episode: ep,
+              showPodcastTitle: true,
+              sourceTag: L.s('live_tag'),
+              isCurrent: this.player.current !== null && this.player.current.id === ep.id,
+              isPlaying: this.player.isPlaying,
+              onPlay: () => this.onPlayEpisode(ep, [ep], ''),
+              onPlayNext: () => { this.app.player.playNext(ep); },
+              onEnqueue: () => { this.app.player.enqueue(ep); }
+            })
+          }
+          ListItem() {
+            Text(L.s('live_result_hint'))
+              .fontSize(TypeScale.caption * this.fontScale)
+              .fontColor(this.scheme.onSurfaceVariant)
+              .width('100%')
+              .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 10 })
+          }
+        }
+        .scrollBar(BarState.Off)
+        .contentEndOffset(this.bottomPad)
+        .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
+        .layoutWeight(1)
+      }
+      .width('100%')
+      .layoutWeight(1)
+    }
+  }
+
+  @Builder
+  searchTabs() {
     Column() {
       // 分段:节目 / 单集
       Row({ space: 8 }) {

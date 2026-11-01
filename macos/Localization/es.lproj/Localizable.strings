@@ -36,11 +36,15 @@
 "30 秒 · 内置音频，不联网也能播" = "30 s · incluido, sin conexión";
 "随应用内置的 30 秒引导音频，无需联网即可播放。" = "Introducción de 30 segundos incluida. Se reproduce sin conexión.";
 "暂无内容" = "Sin contenido";
-"搜索播客/视频或粘贴 RSS 地址/视频链接" = "Buscar podcasts/vídeos o pegar un enlace RSS o de vídeo";
+"搜索播客/视频或粘贴 RSS、直播流、视频链接" = "Buscar podcasts/vídeos o pegar un enlace RSS, de emisión o de vídeo";
 "来自 %@" = "de %@";
 "B 站" = "Bilibili";
 "搜索中…" = "Buscando…";
 "没有找到「%@」" = "Sin resultados para «%@»";
+"直播流" = "Emisión en directo";
+"直播" = "En directo";
+"点一下开始收听。直播不记录播放进度,也不能快进或回看。" = "Toca para empezar a escuchar. Una emisión en directo no guarda la posición ni se puede adelantar.";
+"直播中" = "EN DIRECTO";
 "节目" = "Programas";
 "单集" = "Episodios";
 "下一集(右键停止电台)" = "Siguiente (clic derecho para detener la radio)";

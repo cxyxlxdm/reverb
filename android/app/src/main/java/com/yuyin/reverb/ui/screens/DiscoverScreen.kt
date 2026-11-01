@@ -102,6 +102,7 @@ import com.yuyin.reverb.data.remote.BilibiliSource
 import com.yuyin.reverb.data.remote.OpmlSupport
 import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.ReverbApp
+import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.HistoryEntry
 import com.yuyin.reverb.data.model.GuideEpisode
 import com.yuyin.reverb.data.model.Podcast
@@ -304,6 +305,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                 DiscoverState.Loading -> LoadingBox()
                 DiscoverState.Empty -> EmptyHint(stringResource(R.string.load_failed))
                 is DiscoverState.Success -> SearchResults(s = s, onOpen = onOpen)
+                is DiscoverState.Live -> LiveResult(s.episode)
                 DiscoverState.Idle -> Unit
             }
         }
@@ -943,6 +945,40 @@ private fun ContinueCard(
                 )
             }
         }
+    }
+}
+
+/** 搜索结果只有一条直播流时的形态。 */
+@Composable
+private fun LiveResult(ep: Episode) {
+    val current by PlayerController.current.collectAsStateWithLifecycle()
+    val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
+    // 不复用 [SearchResults]:那一页的两个分段是「节目 / 单集」的目录语义,而直播流既不是节目
+    // 也不是单集 —— 没有信息页可进、没有下载、没有进度。这里只给一行 + 一句说明:点即播,停即停。
+    Column(Modifier.fillMaxSize()) {
+        Text(
+            stringResource(R.string.live_result_header),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+        EpisodeListItem(
+            episode = ep,
+            isCurrent = current?.id == ep.id,
+            isPlaying = isPlaying,
+            onPlay = { PlayerController.playOrToggle(ep) },
+            // 直播流没有"整集"可存,下载给了也是一个永远下不完的条目
+            downloadDisabled = true,
+            sourceTag = stringResource(R.string.live_tag),
+            // feedUrl 是空的:这一条没有频道页可进
+            coverOpensChannel = false
+        )
+        Text(
+            stringResource(R.string.live_result_hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+        )
     }
 }
 

@@ -279,7 +279,9 @@ final class PlayerController: ObservableObject {
     /// 重启后没有"下一条随机"的种子,硬恢复那一集会让用户从电台掉回单集播放。
     private func persistState() {
         guard let st = stateStore else { return }
-        if radioMode {
+        // 直播流与电台同属「没有可恢复的身份」:流地址隔天多半已经失效,恢复出来只会是
+        // 一个点了没反应的迷你条。up next 是用户自己排的,照旧保留。
+        if radioMode || current?.isLive == true {
             st.save(current: nil, listTag: "", context: [], contextIndex: 0, upNext: userQueue)
         } else {
             st.save(current: current, listTag: activeListTag, context: queue,
@@ -558,16 +560,18 @@ final class PlayerController: ObservableObject {
         // 内置引导音频不是一集真正的播客:不进历史、不计收听时长,
         // 否则"收听时长"榜首会是引导音频,「继续收听」里也会挂着它。
         let isGuide = GuideEpisode.isGuide(episode.id)
-        if !isGuide { history?.record(episode, at: Date().timeIntervalSince1970) }
+        // 直播流不是"一集节目":没有起止,也就没有"听到哪了"可记。进度、历史、统计三样全关
+        // (见 `saveProgress` / `countListening` / `observeEnd` 三处同一条闸)。
+        if !isGuide && !episode.isLive { history?.record(episode, at: Date().timeIntervalSince1970) }
         // 起点有三个来源,优先级就按写的这个顺序:
         // ① 调用方明确指定的那一秒(批注)—— 消费掉 override,只生效一次;
-        // ② 引导音频永远从头;③ 否则才是续播进度。
+        // ② 引导音频与直播流永远从头;③ 否则才是续播进度。
         let resumeMs: Int
         if startMsOverride >= 0 {
             resumeMs = startMsOverride
             startMsOverride = -1
             pendingSeekExplicit = true
-        } else if isGuide {
+        } else if isGuide || episode.isLive {
             resumeMs = 0
             pendingSeekExplicit = false
         } else {
@@ -624,7 +628,7 @@ final class PlayerController: ObservableObject {
 
         // 只有真正在走流式时才排一次整集落缓存。电台那一路不缓存 —— 它是漫游,
         // 下一集由随机推荐决定;把每一集都留在盘上等于用 300 MB 换一份听不回去的清单。
-        if local == nil && !isRadio { audioCache?.cache(episode) }
+        if local == nil && !isRadio && !episode.isLive { audioCache?.cache(episode) }
         attach(episode, url: url, source: source, resumeMs: resumeMs, autoplay: autoplay, isRadio: isRadio)
     }
 
@@ -967,6 +971,12 @@ final class PlayerController: ObservableObject {
 
     func seek(toMs ms: Int) {
         let t = max(0, ms)
+        // 直播流没有可跳的时间轴:播放器还没报出时长时,durationMs 是 0,
+        // 拖到任何位置都只会把进度线画到一个假坐标上。有进度(点了播客文件)才放行。
+        if current?.isLive == true && durationMs <= 0 {
+            Log.i("Player", "直播流无时间轴,忽略拖动 \(t)ms")
+            return
+        }
         Log.d("Player", "seek → \(t)ms")
         player.seek(to: CMTime(value: Int64(t), timescale: 1000))
         positionMs = t
@@ -1069,6 +1079,13 @@ final class PlayerController: ObservableObject {
                 let stopAfter = self.sleepEndOfEpisode
                 self.sleepEndOfEpisode = false
                 Log.i("Player", "播放结束 id=\(self.current?.id ?? "-") radio=\(self.radioMode) userQueue=\(self.userQueue.count) 本集结束停止=\(stopAfter)")
+                // 直播流的"结束"只意味着这一路断了或停播了:**不记已播、不接下一集**。
+                // 否则用户本来在听电台,流一断就被换成队列里另一集,听感上像被偷换了台。
+                if self.current?.isLive == true {
+                    Log.i("Player", "直播结束,不续播 id=\(self.current?.id ?? "-")")
+                    self.listenStats?.flush()
+                    return
+                }
                 if let ep = self.current, !GuideEpisode.isGuide(ep.id) {
                     self.history?.updatePosition(ep.id, positionMs: 0, durationMs: self.durationMs)
                     self.history?.markPlayed(ep.id, true)   // 自然播完:标记已播完
@@ -1096,6 +1113,9 @@ final class PlayerController: ObservableObject {
         guard let ep = current else { return }
         // 引导音频不写历史:playEpisode 已跳过 record,这里若还写就会又建出一条
         if GuideEpisode.isGuide(ep.id) { return }
+        // 直播流不写进度:它的"位置"是这一路流自己的时间刻度,与用户听没听过无关,
+        // 写进历史还会让「继续收听」横条凭空多出一条永远"听到一半"的电台。
+        if ep.isLive { return }
         // 「刚起播、续播点还没落地」那一瞬间不写盘(见 REVIEW-2026-10-25 中-6)。
         //
         // 竞态的来源:`playEpisode` 先把 `positionMs = 0`,再在后面才 `seek(to: resumeMs)`;
@@ -1124,6 +1144,7 @@ final class PlayerController: ObservableObject {
     private func countListening() {
         guard let ep = current else { lastCountedEpId = ""; return }
         if GuideEpisode.isGuide(ep.id) { return }   // 引导音频不计时长
+        if ep.isLive { return }   // 直播流同样不计:没有"内容长度"这个概念,累计只会是挂机时长
         if ep.id == lastCountedEpId {
             let delta = positionMs - lastCountedPosMs
             if isPlaying && delta >= 1 && delta <= 3000 {

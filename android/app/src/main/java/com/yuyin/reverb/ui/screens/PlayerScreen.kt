@@ -85,6 +85,7 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val position by PlayerController.position.collectAsStateWithLifecycle()
     val duration by PlayerController.duration.collectAsStateWithLifecycle()
+    val liveStream by PlayerController.liveStream.collectAsStateWithLifecycle()
     val speed by PlayerController.speed.collectAsStateWithLifecycle()
     val sleepRemaining by PlayerController.sleepRemainingMs.collectAsStateWithLifecycle()
     val sleepEnd by PlayerController.sleepEndOfEpisode.collectAsStateWithLifecycle()
@@ -146,6 +147,17 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
     var dragValue by remember { mutableStateOf(0f) }
     val sliderValue = if (dragging) dragValue else position.toFloat()
     val maxValue = if (duration > 0) duration.toFloat() else 1f
+    /**
+     * 直播流没有时间轴:进度条与两端时间换成一句 LIVE。
+     *
+     * 判据是 `isLive && duration <= 0` 而不是只看 isLive —— 用户粘进来的也可能是一个**有限**的
+     * 音频文件,播放器一旦报出时长,进度条与快进快退就重新有意义,那时不该再装作是直播。
+     *
+     * **但「时长未知」在 HLS 直播上不成立**:Media3 会把播放列表窗口的长度当成时长报上来
+     * (实测一路电台 `.m3u8` 报 `60000`),于是那一档退化成 `00:33 / 01:00`、永远走不完。
+     * 所以再并上播放器自己的判词 [liveStream](`isCurrentMediaItemLive`)。见 H238。
+     */
+    val liveNoTimeline = episode.isLive && (duration <= 0 || liveStream)
 
     /**
      * 是否有第三页(逐字稿)。有引擎就跟设置开关走 ⇒ 任何一集都能转;
@@ -153,7 +165,10 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
      * 才出现第三页**(用户定的:没稿就别出空页)。
      */
     val transcriptEnabled by container.settingsStore.transcriptionEnabled.collectAsStateWithLifecycle()
-    val showTranscript = (AsrFactory.HAS_ENGINE && transcriptEnabled) || episode.transcriptUrl.isNotBlank()
+    // 直播流不给第三页:逐字稿要么下载整段、要么转写整段,而直播没有"整段"这个边界 ——
+    // 挂上去就是一个永远转不完、也永远不落盘的任务。
+    val showTranscript = !liveNoTimeline &&
+        ((AsrFactory.HAS_ENGINE && transcriptEnabled) || episode.transcriptUrl.isNotBlank())
     val pageCount = if (showTranscript) 3 else 2
     val uiLanguage by container.settingsStore.language.collectAsStateWithLifecycle()
     val pagerState = rememberPagerState(pageCount = { pageCount })
@@ -185,7 +200,10 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                SpeedChip(speed = speed)
+                // 直播不给倍速:它是线性源,倍速只会让声音脱离直播边缘;鸿蒙那边的
+                // AVPlayer 更是直接拒绝(`Operate Not Permit: not support rate`,见 H239),
+                // 三端一起藏掉,免得同一颗控件在一端能按、一端按了没反应。
+                if (!liveNoTimeline) SpeedChip(speed = speed)
                 SleepChip(remainingMs = sleepRemaining, endOfEpisode = sleepEnd)
                 FavoriteButton(
                     favorited = isFavorite,
@@ -327,38 +345,64 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
         }
 
         Spacer(Modifier.height(20.dp))
-        Slider(
-            value = sliderValue.coerceIn(0f, maxValue),
-            onValueChange = { dragging = true; dragValue = it },
-            onValueChangeFinished = {
-                PlayerController.seekTo(dragValue.toLong())
-                dragging = false
-            },
-            valueRange = 0f..maxValue,
-            colors = SliderDefaults.colors(
-                thumbColor = MaterialTheme.colorScheme.primary,
-                activeTrackColor = MaterialTheme.colorScheme.primary,
-                inactiveTrackColor = MaterialTheme.colorScheme.outline
+        if (liveNoTimeline) {
+            // 直播没有「听到哪了」:一行 LIVE 替掉进度条与两端时间,高度与那两块相当,版面不跳
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.error)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    stringResource(R.string.live_on_air),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        } else {
+            Slider(
+                value = sliderValue.coerceIn(0f, maxValue),
+                onValueChange = { dragging = true; dragValue = it },
+                onValueChangeFinished = {
+                    PlayerController.seekTo(dragValue.toLong())
+                    dragging = false
+                },
+                valueRange = 0f..maxValue,
+                colors = SliderDefaults.colors(
+                    thumbColor = MaterialTheme.colorScheme.primary,
+                    activeTrackColor = MaterialTheme.colorScheme.primary,
+                    inactiveTrackColor = MaterialTheme.colorScheme.outline
+                )
             )
-        )
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                formatTime(sliderValue.toLong()),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Text(
-                formatTime(duration),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    formatTime(sliderValue.toLong()),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    formatTime(duration),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
 
         Spacer(Modifier.height(20.dp))
         // 主控制行:快退 · 上一集 · 播放 · 下一集 · 快进
+        // 直播流只留中间那颗播放键:它没有可跳的时间轴,也没有"下一集"可去(播完不续播,
+        // 见 PlayerController 的 STATE_ENDED 分支)。
         Row(
             Modifier
                 .fillMaxWidth()
@@ -366,8 +410,8 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            SkipButton(seconds = backSec, forward = false) { PlayerController.skipBackward() }
-            PrevNextButton(next = false, enabled = hasPrev) { PlayerController.previous() }
+            if (!liveNoTimeline) SkipButton(seconds = backSec, forward = false) { PlayerController.skipBackward() }
+            PrevNextButton(next = false, enabled = hasPrev && !liveNoTimeline) { PlayerController.previous() }
             Surface(
                 shape = CircleShape,
                 color = MaterialTheme.colorScheme.primary,
@@ -384,8 +428,8 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                     )
                 }
             }
-            PrevNextButton(next = true, enabled = hasNext) { PlayerController.next() }
-            SkipButton(seconds = fwdSec, forward = true) { PlayerController.skipForward() }
+            PrevNextButton(next = true, enabled = hasNext && !liveNoTimeline) { PlayerController.next() }
+            if (!liveNoTimeline) SkipButton(seconds = fwdSec, forward = true) { PlayerController.skipForward() }
         }
     }
 
