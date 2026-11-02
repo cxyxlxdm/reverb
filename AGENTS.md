@@ -52,8 +52,10 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 | iOS 工具链 | Xcode 27.2 / iOS SDK 27.2(与上面同一个 Xcode) | `xcodebuild -project ios/Reverb.xcodeproj -scheme Reverb -showBuildSettings >/dev/null` exit 0 |
 
 ⚠️ **iOS 的编译门不需要证书,TestFlight 需要**。2026-11-02 本机实测:`ios/build-ios.sh`
-(不签名)exit 0、六条判据全过;但 `security find-identity -v -p codesigning` **没有有效身份**、
-工程 `DEVELOPMENT_TEAM` 为空、Xcode 未登录账号 ⇒ archive / export / upload **一次都没跑过**。
+(不签名)exit 0、六条判据全过;当晚 Xcode 登录后建了开发证书
+(`Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`,Team `J4YCBW8ZG7`,**免费 Personal Team**),
+iPhone 16 Pro 已配对,Debug 与 Release 都装上并跑过(四个 tab / 播放页 / 后台音频)。
+但 **archive / export / upload 仍一次都没跑过**:免费 Personal Team 拿不到分发描述文件,
 TestFlight 还要求 **Apple Developer Program 会员** + App Store Connect 里有 `com.yuyin.reverb`
 的 App 记录。逐条与现状表见 `docs/IOS.md`;别把"编译过了"当成"能传 TestFlight"。
 
@@ -786,7 +788,7 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 | `docs/HISTORY.md` | 开发历程(顺序与因果,返工写得更详细) |
 | `docs/ROADMAP.md` | 进度、遗留问题、演进方向(**含「没验过的路径」清单**) |
 | `docs/MACOS-GAPS.md` | **macOS 缺口清单**:Android 与鸿蒙已实现、桌面端缺什么(每条带代码落点与成本)+ 口径漂移 + **不该移植的项** + 建议顺序。盘手机端与桌面端的一致性时先看这份,别重新 grep 一遍 |
-| `docs/IOS.md` | **iOS 端**:为什么现在有(边界变更)、与 macOS 的共享层、工程结构、编译门、TestFlight 前置条件与流程、本机现状(模拟器界面已跑,**签名与真机未跑**)、排障 |
+| `docs/IOS.md` | **iOS 端**:为什么现在有(边界变更)、与 macOS 的共享层、工程结构、编译门、TestFlight 前置条件与流程、本机现状(模拟器与真机界面/播放已跑,**签名身份与真机安装已通,TestFlight 受免费团队所限未跑**)、排障 |
 | `docs/research/*.md` | **调研原文 + 顶部提炼的 TODO**(每份 = 提炼结论 + `---` + 照抄原文)。**状态一律是"未开工、等拍板"**,拍板前别按文中的技术方案动手 |
 | `CHANGELOG.md` | 版本变更记录(发版时追加;对外版本说明的上游) |
 | `docs/RELEASE-NOTES.md` | **对外版本说明**(可直接发给用户;每版一段,只写新增功能与修复的 bug,不写验收状态与内部措辞) |
