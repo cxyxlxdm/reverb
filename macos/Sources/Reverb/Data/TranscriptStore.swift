@@ -87,6 +87,7 @@ enum TranscriptFormat {
     nonisolated private static let subdir: URL = {
         let d = AppSupport.dir.appendingPathComponent("Transcripts", isDirectory: true)
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        AppSupport.excludeFromBackup(d)
         return d
     }()
 
@@ -129,7 +130,11 @@ enum TranscriptFormat {
     /// 发布方官方稿**不经过**这道门 —— 那只是下载一个文件,所以 14/15 上也能看
     /// (更早的系统没有播放页轮播,整条转录 UI 不出现)。
     static var localASRAvailable: Bool {
+        #if os(macOS)
         if #available(macOS 26, *) { return true }
+        #else
+        if #available(iOS 26, *) { return true }
+        #endif
         return false
     }
 
@@ -177,10 +182,17 @@ enum TranscriptFormat {
             Log.w("Transcript", "官方稿取不到,回退本机识别 id=\(episode.id)")
         }
 
+        #if os(macOS)
         guard #available(macOS 26, *) else {
             if !stale() { state = .needsMacOS26 }
             return
         }
+        #else
+        guard #available(iOS 26, *) else {
+            if !stale() { state = .needsMacOS26 }
+            return
+        }
+        #endif
         await run(gen: gen, episodeId: episode.id, audioURL: audioURL, localURL: localURL, localeId: localeId)
     }
 
@@ -227,7 +239,11 @@ enum TranscriptFormat {
 
     // MARK: - 执行
 
+    #if os(macOS)
     @available(macOS 26, *)
+    #else
+    @available(iOS 26, *)
+    #endif
     private func run(gen: Int, episodeId: String, audioURL: String, localURL: URL?, localeId: String) async {
         func stale() -> Bool { gen != generation }
 

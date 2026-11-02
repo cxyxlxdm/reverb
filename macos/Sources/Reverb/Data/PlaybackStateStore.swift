@@ -87,7 +87,11 @@ final class PlaybackStateStore {
                             contextIndex: localIndex, upNext: queued)
         do {
             let data = try JSONEncoder().encode(body)
-            try data.write(to: AppSupport.dir.appendingPathComponent(Self.fileName), options: .atomic)
+            let url = AppSupport.dir.appendingPathComponent(Self.fileName)
+            try data.write(to: url, options: .atomic)
+            // 播放态是这台设备上的一次性排程,不进备份(见类型注释);iOS 默认会备份整个
+            // Application Support,所以要在文件上显式打排除标记。
+            AppSupport.excludeFromBackup(url)
         } catch {
             Log.e("State", "播放态写入失败", error: error)
         }

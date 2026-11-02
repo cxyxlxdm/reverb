@@ -34,6 +34,7 @@ final class FeedCacheStore {
     /// 现在路径以 `AppSupport.dir` 为唯一真相,不再自建。
     init() {
         fileURL = AppSupport.dir.appendingPathComponent(Self.fileName)
+        AppSupport.excludeFromBackup(fileURL)
         mem = Self.load(fileURL)
         if !mem.isEmpty { Log.i("FeedCache", "频道缓存装载 \(mem.count) 个") }
     }

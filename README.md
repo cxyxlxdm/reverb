@@ -2,7 +2,10 @@
 
 > 余音绕梁，隽永悠长。 · *Every echo lingers.*
 
-一款轻量的多端播客客户端，三个原生端：**Android**(Kotlin / Compose)、**HarmonyOS**(ArkTS / ArkUI)、**macOS**(Swift / SwiftUI)。水墨底 + 青瓷 + 梁金配色，图标以「金色横梁 + 环绕向上的声波」诠释「余音绕梁」。
+一款轻量的多端播客客户端，四个原生端：**Android**(Kotlin / Compose)、**HarmonyOS**(ArkTS / ArkUI)、**macOS**(Swift / SwiftUI)、**iOS**(Swift / SwiftUI)。水墨底 + 青瓷 + 梁金配色，图标以「金色横梁 + 环绕向上的声波」诠释「余音绕梁」。
+
+> iOS 版 2026-11-02 加入，先走 **TestFlight** 分发（暂不上架 App Store），与 macOS 共用同一套数据 / 播放层。
+> 构建命令、TestFlight 前置条件与本机现状见 `docs/IOS.md`。
 
 ---
 
@@ -40,7 +43,7 @@
 
 ## 技术架构 · Android
 
-> 三端的分层、播放链路、渠道隔离与 native 模块见 `docs/ARCHITECTURE.md`，本节只是 Android 侧的速览。
+> 各端的分层、播放链路、渠道隔离与 native 模块见 `docs/ARCHITECTURE.md`，本节只是 Android 侧的速览。
 
 - **UI**：Jetpack Compose + Material3（Compose BOM 2024.06），单 Activity + Navigation Compose。
 - **播放**：Media3 1.3.1（ExoPlayer + MediaSessionService），后台播放、媒体通知、锁屏控制。
@@ -65,12 +68,14 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 - `android/` — Android 版(Kotlin / Jetpack Compose)
 - `harmony/` — HarmonyOS 版(ArkTS / ArkUI)
 - `macos/` — macOS 版(Swift / SwiftUI)
-- `docs/PRODUCT.md` — **功能介绍**(面向使用者与评审:每个功能是什么、怎么用、三端之间有何不同)
+- `ios/` — iOS 版(Swift / SwiftUI,与 macOS 共用 `Data` / `Playback`;分发走 TestFlight)
+- `docs/PRODUCT.md` — **功能介绍**(面向使用者与评审:每个功能是什么、怎么用、各端之间有何不同)
 - `docs/FEATURES.md` — **功能清单**(开发用矩阵,逐项标注平台差异;需要精确对照时以这份为准)
 - `docs/ARCHITECTURE.md` — **核心技术实现**(分层、播放链路、持久化、渠道隔离、native 模块、性能规律)
 - `docs/HISTORY.md` — **开发历程**(顺序与因果,以及哪里返了工)
-- `docs/ROADMAP.md` — **进度、遗留问题与演进方向**(三端各到什么程度、哪些路径还没验过、以后可能往哪走)
-- `docs/TRANSCRIPT.md` — 逐字稿 / 语音转文字的三端实现与取舍(含鸿蒙将来换三方引擎的路子)
+- `docs/ROADMAP.md` — **进度、遗留问题与演进方向**(各端到哪一步、哪些路径还没验过、以后可能往哪走)
+- `docs/TRANSCRIPT.md` — 逐字稿 / 语音转文字的实现与取舍(含鸿蒙将来换三方引擎的路子)
+- `docs/IOS.md` — **iOS 端**:与 macOS 的共享层、工程结构、编译门、TestFlight 前置条件与流程、本机现状
 - `docs/TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律
 - `docs/PRIVACY.md` — 隐私政策(与 `site/reverb/privacy.html` 必须同步)
 - `CHANGELOG.md` — 更新日志(面向使用者的版本变更记录)
@@ -126,6 +131,19 @@ cd macos
 ```
 
 产物:`macos/dist/余音-Reverb-<版本>-universal.dmg`(架构标记由脚本推导;`macos/build/` 里只是中间产物)
+
+**iOS** —— Xcode 27 / iOS SDK 27;编译门不需要证书,TestFlight 需要 Apple Developer Program
+
+```bash
+cd ios
+./build-ios.sh                      # 编译 + 产物验收(不需要签名)
+DEVELOPMENT_TEAM=XXXXXXXXXX ./build-ios.sh --export   # → dist/reverb-ios-<版本>-<构建号>.ipa
+BUILD_NUMBER=2 DEVELOPMENT_TEAM=XXXXXXXXXX \
+  ASC_KEY_ID=… ASC_ISSUER_ID=… ./build-ios.sh --upload # → TestFlight
+```
+
+签名团队与上传凭据只从环境变量读,不写进工程文件;完整前置条件(账号、App Store Connect 记录、
+内部 / 外部测试员差异)见 `docs/IOS.md`。
 
 ## 配置项
 - Android：minSdk 26 / targetSdk 34 / compileSdk 34

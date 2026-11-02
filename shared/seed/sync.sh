@@ -8,7 +8,7 @@
 #
 # 用法:
 #   ./sync.sh            分发
-#   ./sync.sh --check    只校验三端副本与规范副本是否一致(CI/提交前用),不写文件
+#   ./sync.sh --check    只校验各端副本与规范副本是否一致(CI/提交前用),不写文件
 #
 # 改清单的正确顺序:python3 gen-seed.py → ./sync.sh → 把规范副本与各端拷贝一起提交
 #
@@ -20,7 +20,7 @@ SRC="seed_podcasts.json"
 [ -f "$SRC" ] || { echo "✗ 缺 $SRC,先跑 python3 gen-seed.py"; exit 1; }
 
 # 目标路径:各端的「随包资源」约定位置
-# 注意目标只有两个:Android 与 macOS。鸿蒙那份**完全不打这个文件**。
+# 目标为 Android / macOS / iOS 三个。鸿蒙那份**完全不打这个文件**。
 #
 # 合规口径的背景(2026-10-18 之前的写法):应用市场把「内置内容目录 / 分类浏览 /
 # 内容推荐」判定为提供视听节目服务(需前置审批,个人主体拿不到),而「用户自行添加
@@ -33,6 +33,7 @@ SRC="seed_podcasts.json"
 TARGETS=(
   "$ROOT/android/app/src/main/assets/seed_podcasts.json"
   "$ROOT/macos/Resources/seed_podcasts.json"
+  "$ROOT/ios/Resources/seed_podcasts.json"
 )
 
 CHECK=0

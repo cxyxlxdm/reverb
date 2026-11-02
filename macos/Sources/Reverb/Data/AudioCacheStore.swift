@@ -42,6 +42,7 @@ final class AudioCacheStore {
 
     init() {
         fileURL = AppSupport.dir.appendingPathComponent(Self.fileName)
+        AppSupport.excludeFromBackup(fileURL)
         mem = Self.load(fileURL)
         if !mem.isEmpty { Log.i(Self.category, "cache ledger loaded items=\(mem.count)") }
     }

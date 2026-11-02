@@ -9,15 +9,19 @@
 
 ## 这是什么
 
-**余音 · Reverb** —— 一款播客客户端,三个原生端:
+**余音 · Reverb** —— 一款播客客户端,四个原生端:
 
-| 目录 | 端 | 技术栈 |
-|---|---|---|
-| `android/` | Android | Kotlin / Jetpack Compose |
-| `harmony/` | HarmonyOS | ArkTS / ArkUI |
-| `macos/` | macOS | Swift / SwiftUI |
-| `shared/` | 共享物料 | 图标、种子清单、引导音频(脚本分发到各端) |
-| `site/` | 个人主页 + 余音官网与隐私政策页(`site/reverb/`) | 静态 HTML |
+| 目录 | 端 | 技术栈 | 分发 |
+|---|---|---|---|
+| `android/` | Android | Kotlin / Jetpack Compose | 大陆应用市场 + GitHub Releases |
+| `harmony/` | HarmonyOS | ArkTS / ArkUI | 应用市场 |
+| `macos/` | macOS | Swift / SwiftUI | 自分发(dmg) |
+| `ios/` | iOS | Swift / SwiftUI | **TestFlight**(2026-11-02 新增;暂不上架 App Store) |
+| `shared/` | 共享物料 | 图标、种子清单、引导音频(脚本分发到各端) | — |
+| `site/` | 个人主页 + 余音官网与隐私政策页(`site/reverb/`) | 静态 HTML | — |
+
+iOS 与 macOS **共用同一份 `Data/` + `Playback/` 源码**(路径仍是 `macos/Sources/Reverb/…`,
+由 iOS target 直接编译),界面各写各的。改共享层必须两端都过编译门,见 `docs/IOS.md`。
 
 **四条不可动摇的约束**(所有设计的上游):
 
@@ -45,6 +49,13 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 | DevEco SDK | `/Applications/DevEco-Studio.app/Contents/sdk` | `ls $DEVECO_SDK_HOME/default/openharmony/toolchains/hdc` |
 | Chrome(仅宣传片流水线) | `/Applications/Google Chrome.app` | `--headless=new` 能起 |
 | **developer dir 的许可**(macOS 工具链**和 `/usr/bin/git`**都走它的 shim) | Xcode 27.1 已装(10-24),`xcode-select -p` 指向它;CLT 也还在 | `xcrun --show-sdk-path` 给得出路径才算通。**回一句 "You have not agreed to the Xcode license" 就是没通** —— 10-24 实测它 **exit 69**,这个退出码可以直接当脚本里的闸门;那时 `git` / `clang` / `swift` / `python3` 会一起失效,`command -v` 却仍然能找到它们(见 H208 教训 10)。**`macos/tools/selftest-verify.sh` 现在自带这条门**(取不到 SDK 就打印"这是环境门不是断言失败"并 exit 69);它的阳性对照不用等真坏 —— `DEVELOPER_DIR=/tmp/不存在 bash macos/tools/selftest-verify.sh` 必须给出那句话和 69 |
+| iOS 工具链 | Xcode 27.2 / iOS SDK 27.2(与上面同一个 Xcode) | `xcodebuild -project ios/Reverb.xcodeproj -scheme Reverb -showBuildSettings >/dev/null` exit 0 |
+
+⚠️ **iOS 的编译门不需要证书,TestFlight 需要**。2026-11-02 本机实测:`ios/build-ios.sh`
+(不签名)exit 0、六条判据全过;但 `security find-identity -v -p codesigning` **没有有效身份**、
+工程 `DEVELOPMENT_TEAM` 为空、Xcode 未登录账号 ⇒ archive / export / upload **一次都没跑过**。
+TestFlight 还要求 **Apple Developer Program 会员** + App Store Connect 里有 `com.yuyin.reverb`
+的 App 记录。逐条与现状表见 `docs/IOS.md`;别把"编译过了"当成"能传 TestFlight"。
 
 ⚠️ **上面那条许可检查是 10-24 下午新加的,起因是一次看起来"仓库坏了"的假象。** 本人装完 Xcode 之后
 `/usr/bin/git` 开始只回许可提示,而它是这台机器**唯一的 git**(brew 没装 git)——
@@ -274,6 +285,25 @@ bash tools/selftest-verify.sh      # 验收脚本的自检:手搭假 bundle 跑�
 > `bash macos/tools/selftest-verify.sh` 是断言脚本自己的自检(假 bundle 正向 + 每类失败形状各一道变异,
 > 含 2026-10-24 新加的三道「词表写错」配置变异),写变异时确实抓出过几条写错的断言,见 H136。
 > **仍未跑过的**是产物**跑起来**那部分:界面四项与自动续播验收一帧没做,清单在 `docs/ROADMAP.md` 三-A。
+
+### iOS
+
+```bash
+cd ios
+./build-ios.sh                 # 编译门(不需要证书)→ build/DerivedData/…/Reverb.app
+DEVELOPMENT_TEAM=XXXXXXXXXX ./build-ios.sh --archive   # → build/Reverb.xcarchive
+DEVELOPMENT_TEAM=XXXXXXXXXX ./build-ios.sh --export    # → dist/reverb-ios-<版本>-<构建号>.ipa
+BUILD_NUMBER=2 DEVELOPMENT_TEAM=XXXXXXXXXX \
+  ASC_KEY_ID=… ASC_ISSUER_ID=… ./build-ios.sh --upload # → TestFlight
+```
+
+- 编译门在本机可跑(2026-11-02 实测 exit 0,判据:版本 / 后台音频 / 本地化集合 / 内置物料 / 图标 / arm64);
+  archive / export / upload **需要签名,本机尚未跑过** —— 原因与前置条件见 `docs/IOS.md`。
+- 签名团队只从环境变量读,不写进工程文件;脚本不碰任何证书/口令。
+- iOS 与 macOS **共用** `macos/Sources/Reverb/{Data,Playback}`,改那边要两端都过编译门。
+- TestFlight:内部测试员无需审核;外部测试员首次要过 Beta App Review;每个构建 90 天过期;
+  构建号每次上传必须递增。
+- `ios/Reverb/**` 用 synchronized root group,加界面文件不用改 pbxproj;共享源码与本地化是显式引用。
 
 ### 发布物料(截图/商店图/上传用图标)
 
@@ -511,15 +541,16 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 
 ### 20. 发布单位只有一个:各端 `dist/` 里那份**最终 release 包** —— 且界面变了要整套重拍截图
 
-不管去处是鸿蒙应用市场,还是 GitHub Releases 上的 Android apk / macOS dmg,
+不管去处是鸿蒙应用市场、GitHub Releases 上的 Android apk / macOS dmg,还是 TestFlight 的 iOS ipa,
 **拿出去的必须是那次 release 构建的产物**:不是 debug 包,不是 `*/build/outputs/` 里的中间产物,
-也不是上一版留在 `dist/` 的旧包。三端的位置与"这就是发布物"的判据(跑命令,不是看构建日志):
+也不是上一版留在 `dist/` 的旧包。各端的位置与"这就是发布物"的判据(跑命令,不是看构建日志):
 
 | 端 | 发布物 | 判据 |
 |---|---|---|
 | Android | `android/dist/reverb.apk`(**唯一那份**,大陆商店与 GitHub Releases 传同一个文件) | `./build-release.sh`;脚本里已用 `apksigner` 读证书 DN,**是调试证书就 exit 1**(不是"verify 通过"就算数)。版本再对 `CHANGELOG.md`:`aapt2 dump badging` —— 注意 **aapt2 不在开发机 PATH**(H156),用 `$SDK/build-tools/<ver>/aapt2` 全路径,且"命令没跑成"和"版本不对"要按退出码分开读。⚠️ 重打前按 H204/H205 归档在架那份的 mapping |
 | HarmonyOS | `harmony/dist/reverb.app` **+ `reverb-symbol.zip`**(符号包一并传,否则市场侧还原不了崩溃栈) | `build-release.sh` 末尾那条 `debugKey` 断言(命中即 exit 1);`reverb-unsigned.app` **只是备查,别传** |
 | macOS | `macos/dist/余音-Reverb-<版本>-universal.dmg`(架构标记由 `EXPECTED` 推导,不是写死) | `./package.sh` 的架构硬断言(缺一个架构就不出 dmg);**`…-1.0.2-arm64.dmg` 那种单架构历史包不能顶替** —— Intel Mac 装 arm64 没有退路 |
+| iOS | `ios/dist/reverb-ios-<版本>-<构建号>.ipa`(TestFlight 上传的就是它) | `./build-ios.sh --export` 的验收段:版本/构建号与工程设置一致、4 套 `.lproj` 集合相等、后台音频、内置物料、图标、arm64;**ipa 解包后 `embedded.mobileprovision` 必须在、`codesign --verify` 必须过**。⚠️ 构建号每次上传递增,同名/同号会被 TestFlight 拒 |
 
 **报"包已就绪"要带出处**:那份文件的字节数与 `ls -lT` 时间戳,并说明它**晚于最后一次源码改动**
 (`find android/app/src shared/seed \( -name '*.kt' -o -name '*.xml' -o -name '*.json' -o -name '*.py' \) -newer android/dist/reverb.apk`
@@ -527,6 +558,8 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 判据会假绿。鸿蒙把 `android/app/src` 换成 `harmony/entry/src`、产物换成 `harmony/dist/reverb.app`。)
 这不是格式要求,是防"代码改了、包没重打" —— 那件事真发生过并被判过多次(见 H154 那轮"包比码旧"),
 而 `dist/` 里躺着旧包时它**看起来是就绪的**。
+iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data,Playback}`,
+`-newer` 判据要把两边都列进去;只列 `ios/Reverb` 会放过共享层的改动。
 
 **界面布局一变,同一轮的截图整套重拍,发布侧跟着换。**
 商店图(`*/store/`,不入库)与官网首页引用的 `site/reverb/shots/*.jpg`(同样不入库,部署时手工上传)
@@ -572,38 +605,56 @@ whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 
 ### macOS(`macos/Sources/Reverb/`)
 
 `AppEnvironment` · `ReverbApp` · `RootView` · `Data/` · `Playback/` · `UI/`。
-缺口清单见 `docs/MACOS-GAPS.md` —— **盘三端一致性先看这份,别重新 grep 一遍。**
+缺口清单见 `docs/MACOS-GAPS.md` —— **盘 macOS 与手机端的一致性先看这份,别重新 grep 一遍。**
+
+### iOS(`ios/Reverb/`)
+
+| 目录 | 职责 |
+|---|---|
+| `App/` | `ReverbApp`(启动 / 隐私门)· `AppEnvironment`(依赖容器)· `RootView`(四格 Tab + 迷你播放条) |
+| `UI/` | 发现 / 追更 / 音阁 / 设置 / 播放页 / 频道详情 / 逐字稿 / 队列 / 关于 / 同意页 / 主题组件 |
+| `../Localization/` | 4 套 `.lproj`(简中是基础语言,键名即简中) |
+| `../Resources/` | 种子清单、引导音频(由 `shared/*/sync.sh` 分发) |
+
+**数据与播放层不在这个目录**:它直接编译 `macos/Sources/Reverb/{Data,Playback}`。
+工程细节、TestFlight 流程与本机现状表见 `docs/IOS.md`。
 
 ### 其它
 
 | 路径 | 职责 |
 |---|---|
 | `shared/guide/` | 引导音频 + 脚本(`make-guide.sh`),分发到各端 |
-| `shared/seed/` | 种子清单(规范副本;`sync.sh` 分发到 Android + macOS,**不含鸿蒙**,理由写在脚本头) |
+| `shared/seed/` | 种子清单(规范副本;`sync.sh` 分发到 Android + macOS + iOS,**不含鸿蒙**,理由写在脚本头) |
 | `site/reverb/` | 官网 + 隐私页;`shots/` **不入库**,部署时手工上传 |
 | `marketing/<版本>/` | 宣传物料(宣传片 / 封面 / 配乐),流水线见 `marketing/README.md` |
 
 ## 版本与发版
 
-### 版本号一共三处,没有单一来源
+### 版本号一共四处,没有单一来源
 
-| 端 | 文件 | 字段 | 1.0.5 的值 |
+| 端 | 文件 | 字段 | 1.0.7 的值 |
 |---|---|---|---|
-| Android | `android/app/build.gradle:38-39` | `versionCode` / `versionName` | `6` / `1.0.5` |
-| 鸿蒙 | `harmony/AppScope/app.json5:5-6` | `versionCode` / `versionName` | `1000005` / `1.0.5` |
-| macOS | `macos/Info.plist:29-32` | `CFBundleShortVersionString` / `CFBundleVersion` | `1.0.4` / `2` |
+| Android | `android/app/build.gradle:38-39` | `versionCode` / `versionName` | `8` / `1.0.7` |
+| 鸿蒙 | `harmony/AppScope/app.json5:5-6` | `versionCode` / `versionName` | `1000007` / `1.0.7` |
+| macOS | `macos/Info.plist:29-32` | `CFBundleShortVersionString` / `CFBundleVersion` | `1.0.7` / `4` |
+| iOS | `ios/Reverb.xcodeproj/project.pbxproj` | `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` | `1.0.7` / `1` |
 
-**三处必须手改,漏一处不会有任何东西报错。** 改完用这条核:
+**四处必须手改,漏一处不会有任何东西报错。** 改完用这条核:
 
 ```bash
 grep -nE 'versionCode|versionName' android/app/build.gradle harmony/AppScope/app.json5
-grep -nA1 CFBundleShortVersionString macos/Info.plist
+grep -nA1 -E 'CFBundleShortVersionString|CFBundleVersion' macos/Info.plist
+grep -nE 'MARKETING_VERSION|CURRENT_PROJECT_VERSION' ios/Reverb.xcodeproj/project.pbxproj
 ```
+
+⚠️ **iOS 的构建号(TestFlight build number)每次上传必须递增**,版本名可以不变;
+同号会被 App Store Connect 拒。只这一轮覆盖用 `BUILD_NUMBER=2 ./build-ios.sh --upload`,
+长期仍要回写工程里的 `CURRENT_PROJECT_VERSION`。
 
 ⚠️ **macOS 落后一版是常态,不是遗漏。** 1.0.5 那轮用户拍的端范围是 Android + 鸿蒙,
 桌面端零改动,所以 `Info.plist` 停在 1.0.4 并在 `CHANGELOG` 里写明。
 **但只要这一轮动了 macOS 源码,就必须同步改** —— 否则用户看到的版本号与代码不符,
-而"三端共用一套版本节奏"这句承诺就没有任何东西在守。
+而"四端共用一套版本节奏"这句承诺就没有任何东西在守。
 
 ⚠️ **合并 flavor 那一轮(10-18)故意把版本停在 `6` / `1.0.5` 没升** —— 那是为了拿合并包与在架的
 default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `dist/reverb.apk` 与 GitHub Releases
@@ -614,7 +665,8 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 ### 发版顺序(固定)
 
 1. **先定 `CHANGELOG.md`** —— 它是对外文案的唯一上游(硬规矩 19);
-2. 三端各自 `build-release.sh` / `package.sh`;
+2. 各端出包:Android / 鸿蒙 `build-release.sh`,macOS `package.sh`,iOS `build-ios.sh --export`
+   (TestFlight 还要 `--upload`);
 3. 按硬规矩 20 做**解包验收 + mtime/SHA 判据**,不是看构建日志;
 4. 界面动过 → 截图整套重拍 → 商店图与官网 `shots/` 是**同源两条出口,两侧都要换**;
 5. 部署官网 → 上传商店 / GitHub Releases(**Releases 传的是公开分发仓 `revert-cast`,不是本机 git remote
@@ -660,7 +712,7 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 - **注释用中文**,可以很长。关键决定用一整段解释,并引用 `TROUBLESHOOTING` 编号(如 `见 H60`)。
 - **踩过的坑写在最近的代码旁边**,不只写进文档 —— 后来者改这行时才看得见。
 - 数据结构上的**不变式要显式写出来**(例:`TranscribedWord` 那条「各条 text 拼接 == 整句」)。
-- 三端字段命名与文件名尽量一致(缓存/备份格式互通),不一致的地方要注明。
+- 四端字段命名与文件名尽量一致(缓存/备份格式互通),不一致的地方要注明。
 
 **提交信息**也是中文,并且:写清**为什么**、**验收方式**,以及**没做完的部分**。
 参考近期提交 —— 每条都说明了动机、影响面与遗留项。
@@ -693,6 +745,8 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 | 鸿蒙界面 / 播放 | 上面 + **debug hap 装机** | 只编译 |
 | 新增 native 类型包 | 上面 + `ohpm install` | 漏了报 `arkts-no-any-unknown`(H61) |
 | macOS 任意 Swift | **整模块 typecheck,改前改后都必须是 0 错误** | "改前改后都是同样 4 条"**证明不了**其余文件被检查过(H128) |
+| iOS 任意 Swift(含共享层) | `cd ios && ./build-ios.sh` exit 0(编译门不需要证书)+ 产物判据;同改 `macos/Sources/Reverb/{Data,Playback}` 时 macOS 侧也要过 | 只跑模拟器变体 / 只看编译通过 |
+| iOS 界面 / 播放 / 后台 | 上面 + **模拟器(或真机签名包)实跑**对应路径 | 只编译;本机 2026-11-02 只跑过模拟器,真机未跑 |
 | 文档 | 数字与条数用 `grep -c` 现算 | 凭印象写"18 条" |
 
 **三条附加规矩:**
@@ -731,7 +785,8 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 | `docs/TROUBLESHOOTING.md` | **踩坑记录**:现象/根因/修法/可复用的规律 |
 | `docs/HISTORY.md` | 开发历程(顺序与因果,返工写得更详细) |
 | `docs/ROADMAP.md` | 进度、遗留问题、演进方向(**含「没验过的路径」清单**) |
-| `docs/MACOS-GAPS.md` | **macOS 缺口清单**:Android 与鸿蒙已实现、桌面端缺什么(每条带代码落点与成本)+ 口径漂移 + **不该移植的项** + 建议顺序。盘"三端一致性"时先看这份,别重新 grep 一遍 |
+| `docs/MACOS-GAPS.md` | **macOS 缺口清单**:Android 与鸿蒙已实现、桌面端缺什么(每条带代码落点与成本)+ 口径漂移 + **不该移植的项** + 建议顺序。盘手机端与桌面端的一致性时先看这份,别重新 grep 一遍 |
+| `docs/IOS.md` | **iOS 端**:为什么现在有(边界变更)、与 macOS 的共享层、工程结构、编译门、TestFlight 前置条件与流程、本机现状(**签名与界面均未跑**)、排障 |
 | `docs/research/*.md` | **调研原文 + 顶部提炼的 TODO**(每份 = 提炼结论 + `---` + 照抄原文)。**状态一律是"未开工、等拍板"**,拍板前别按文中的技术方案动手 |
 | `CHANGELOG.md` | 版本变更记录(发版时追加;对外版本说明的上游) |
 | `docs/RELEASE-NOTES.md` | **对外版本说明**(可直接发给用户;每版一段,只写新增功能与修复的 bug,不写验收状态与内部措辞) |
@@ -765,6 +820,10 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 |---|---|---|
 | `github.com/cxyxlxdm/reverb` = **本机 git remote** | **私有**(匿名 API 404) | 全部源码与文档 —— 就是你在读的这个仓库 |
 | `github.com/cxyxlxdm/revert-cast` | **公开** | 只有 `README.md` + **Releases**(apk 的分发处;1.0.1 / 1.0.2 那两版也放过 dmg,1.0.3 起只传 apk —— macOS 走自分发下载页)。Android 应用内更新查的就是它的 `releases/latest` —— **latest 是哪版别抄文档,现算**:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq .tag_name` |
+
+**iOS 的出口是 TestFlight,不是这两个仓库**:iOS 包不进 GitHub Releases(那个公开仓只放
+Android apk 与历史 dmg),也不在 `site/` 下载页出现;`ios/dist/*.ipa` 只用于上传 App Store Connect。
+TestFlight 链接本身也不是公开下载地址,由维护者在 App Store Connect 里邀请测试员。
 
 **两个都没有 `LICENSE` 文件。** 所以缺口的正确表述不是"公开仓库没证书",而是:
 **对外发出去的东西(安装包 + 那个公开仓)没有任何许可声明** —— 用户装了包,法律上却没被告知能装、能备份、能转发到什么程度。

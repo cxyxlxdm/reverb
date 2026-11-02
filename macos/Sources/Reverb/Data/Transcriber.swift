@@ -18,10 +18,18 @@ struct TranscribedSegment: Sendable, Codable, Equatable {
     var words: [TranscribedWord]? = nil
 }
 
-/// 离线语音转文字封装,基于 macOS 26 的 SpeechAnalyzer / SpeechTranscriber。
+/// 离线语音转文字封装,基于系统 26 的 SpeechAnalyzer / SpeechTranscriber。
 /// 完全设备端:音频不外传;语言模型由系统按语言首次下载一次(之后离线)。
 /// 一律以「本地文件」为输入(已下载单集用本地路径;流式单集由上层先下载到临时文件)。
+///
+/// 同一份源码被 macOS 与 iOS 两个 target 编译;两端的门槛年份相同、平台名不同,
+/// 所以可用性标注必须分开写 —— 写成 `@available(macOS 26, *)` 时 iOS 侧会被理解成
+/// 「iOS 任意版本都可用」,而音频分析 API 其实要 iOS 26。
+#if os(macOS)
 @available(macOS 26, *)
+#else
+@available(iOS 26, *)
+#endif
 enum Transcriber {
 
     /// 转录过程事件。

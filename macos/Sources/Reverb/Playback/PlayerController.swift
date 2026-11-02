@@ -2,7 +2,11 @@ import Foundation
 import AVFoundation
 import Combine
 import MediaPlayer
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 /// 列表播放模式。顺序 = 播到列表末尾即停;单曲循环 = 本集播完原地重播;
 /// 随机 = 把这个列表打乱播一遍(走完表就停)。
@@ -150,8 +154,44 @@ final class PlayerController: ObservableObject {
     private let sleepFadeMs = 8_000
     private var tickCount = 0
 
+    #if os(iOS)
+    /// iOS 的音频会话由本类唯一负责:`.playback` 让静音键拨下也照常出声,
+    /// 也是 Info.plist 里 `UIBackgroundModes=audio` 真正生效的前提。
+    /// macOS 没有会话概念,这一整段只在 iOS 编译。
+    private var interruptionObserver: NSObjectProtocol?
+    private var wasPlayingBeforeInterruption = false
+    #endif
+
     init() {
         player.automaticallyWaitsToMinimizeStalling = true
+        #if os(iOS)
+        try? AVAudioSession.sharedInstance().setCategory(.playback, mode: .spokenAudio)
+        interruptionObserver = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let info = note.userInfo,
+                  let raw = info[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                switch type {
+                case .began:
+                    // 来电/闹钟/其他 App 抢会话:先记住意图,再暂停。
+                    self.wasPlayingBeforeInterruption = self.isPlaying
+                    self.player.pause()
+                case .ended:
+                    let opts = (info[AVAudioSessionInterruptionOptionKey] as? UInt).map {
+                        AVAudioSession.InterruptionOptions(rawValue: $0)
+                    }
+                    if opts?.contains(.shouldResume) == true, self.wasPlayingBeforeInterruption {
+                        self.player.play()
+                    }
+                @unknown default:
+                    break
+                }
+            }
+        }
+        #endif
         timeObserver = player.addPeriodicTimeObserver(
             forInterval: CMTime(seconds: 0.5, preferredTimescale: 600), queue: .main
         ) { [weak self] time in
@@ -233,12 +273,24 @@ final class PlayerController: ObservableObject {
         Task { [weak self] in
             // 走与列表同一份封面磁盘缓存:断网时「正在播放」那张也还在,
             // 且不会再往系统 URLCache 里另存一份看不见的副本(见 ArtworkCache 顶部)。
-            guard let data = await ArtworkCache.shared.data(for: url),
-                  let img = NSImage(data: data) else {
+            guard let data = await ArtworkCache.shared.data(for: url) else {
                 Log.w("NowPlaying", "封面加载失败 \(Log.endpoint(url))")
                 return
             }
-            let art = MPMediaItemArtwork(boundsSize: img.size) { _ in img }
+            #if os(macOS)
+            guard let img = NSImage(data: data) else {
+                Log.w("NowPlaying", "封面解码失败 \(Log.endpoint(url))")
+                return
+            }
+            let size = img.size
+            #else
+            guard let img = UIImage(data: data) else {
+                Log.w("NowPlaying", "封面解码失败 \(Log.endpoint(url))")
+                return
+            }
+            let size = img.size
+            #endif
+            let art = MPMediaItemArtwork(boundsSize: size) { _ in img }
             await MainActor.run { [weak self] in
                 guard let self, self.current?.artworkUrl == url else { return }
                 self.artworkCache = art

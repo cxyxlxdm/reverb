@@ -162,6 +162,6 @@ import Foundation
 
     private func persist() {
         let keep = episodes.count > persistMax ? Array(episodes.prefix(persistMax)) : episodes
-        AppSupport.save("inbox.json", keep)
+        AppSupport.save("inbox.json", keep, excludeFromBackup: true)
     }
 }
