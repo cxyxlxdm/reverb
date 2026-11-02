@@ -25,7 +25,9 @@ final class PopularCacheStore {
     /// 写入缓存。失败静默忽略。
     func put(_ key: String, _ list: [Podcast]) {
         guard let data = try? encoder.encode(list) else { return }
-        try? data.write(to: fileURL(for: key), options: .atomic)
+        let url = fileURL(for: key)
+        try? data.write(to: url, options: .atomic)
+        AppSupport.excludeFromBackup(url)
     }
 
     /// 「清除缓存」用:删掉本目录下全部 `popular_*.json`。返回删除的个数(供日志)。

@@ -114,6 +114,7 @@ import Foundation
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let d = base.appendingPathComponent("Reverb/Downloads", isDirectory: true)
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        AppSupport.excludeFromBackup(d)
         return d
     }
 

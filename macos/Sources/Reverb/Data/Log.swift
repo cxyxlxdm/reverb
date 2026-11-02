@@ -30,6 +30,7 @@ enum Log {
             ?? URL(fileURLWithPath: NSTemporaryDirectory())
         let d = base.appendingPathComponent("Reverb/Logs", isDirectory: true)
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+        AppSupport.excludeFromBackup(d)
         return d
     }()
 

@@ -1,6 +1,7 @@
 # 余音 · Reverb 核心技术实现
 
-> 三端(Android / macOS / HarmonyOS)的架构与关键实现,以及**为什么这样选**。
+> 四端(Android / HarmonyOS / macOS / iOS)的架构与关键实现,以及**为什么这样选**。
+> iOS 直接编译 macOS 的 `Data/` 与 `Playback/` 源码,不复制一份;
 >
 > 范围划分:功能全貌见 `PRODUCT.md` / `FEATURES.md`;逐字稿单独成篇见 `TRANSCRIPT.md`;
 > 具体故障的现象-根因-修法见 `TROUBLESHOOTING.md`;做的顺序与返工见 `HISTORY.md`。
@@ -36,10 +37,10 @@
 
 ## 二、分层与依赖装配
 
-三端同一套分层,自下而上:
+四端同一套分层,自下而上:
 
 ```
-model      数据模型(三端字段逐一对齐,便于缓存/备份格式互通)
+model      数据模型(各端字段逐一对齐,便于缓存/备份格式互通)
 net        HTTP + RSS 解析 + 取源策略
 store      本地持久化(每个域一个 store,JSON 落盘)
 playback   播放门面 + 系统媒体会话 + 下载
@@ -47,12 +48,16 @@ view/ui    界面
 ```
 
 **依赖装配用手写容器,不引 DI 框架**:Android `AppContainer`、鸿蒙 `AppContainer`、
-macOS `AppEnvironment`,都是全局单例,界面直接取用。理由很实际——这个规模的应用
+macOS 与 iOS `AppEnvironment`,都是全局单例,界面直接取用。理由很实际——这个规模的应用
 引入 DI 框架带来的样板代码多于它省下的,而且手写容器让「哪些组件在什么时候装配」
 一眼可见,这一点在做隐私门控时是刚需(第六节)。
 
-**播放层是树外单例**。三端都把播放器放在界面树之外,所以界面重建(比如切换语言导致整树重建)
+**播放层是树外单例**。各端都把播放器放在界面树之外,所以界面重建(比如切换语言导致整树重建)
 不会打断播放。
+
+**iOS 的复用边界**:`macos/Sources/Reverb/{Data,Playback}` 原文件直接进 iOS target,
+平台差异收在 `#if os(iOS)` 与分开写的 `@available(macOS 26, *)` / `@available(iOS 26, *)`
+里;界面按触屏重写。所以改这两个目录**两端都要过编译门**,见 `docs/IOS.md`。
 
 ---
 
@@ -314,8 +319,8 @@ macOS 端解码**不做秒/毫秒归一** —— 没有一端写秒,归一只会
 
 ### 系统级备份(1.0.2):向操作系统声明白名单,而不是自己写上传
 
-手动备份(合并语义)之外,两端还向操作系统声明了一份**文件级白名单**,
-由系统把数据备份到用户自己的云(Google/厂商云、厂商云)或换机直连——
+手动备份(合并语义)之外,Android、鸿蒙与 iOS 还向操作系统声明了**文件级白名单**,
+由系统把数据备份到用户自己的云(Google/厂商云、厂商云、iCloud)或换机直连——
 应用没有参与上传的代码路径:
 
 - Android:`allowBackup="true"` + `backup_rules.xml`(API≤30)+
@@ -325,6 +330,11 @@ macOS 端解码**不做秒/毫秒归一** —— 没有一端写秒,归一只会
 - 鸿蒙:`module.json5` 声明 `type:"backup"` 扩展 +
   `resources/base/profile/backup_config.json` 白名单。注意路径是**虚拟沙箱**
   `/data/storage/el2/base/haps/entry/...`,且鸿蒙偏好文件**无 .xml 后缀**。
+- iOS:系统备份默认覆盖整个沙箱,**没有 include 白名单**,只能反向排除。
+  `AppSupport.excludeFromBackup(_:)` 给音频下载、音频缓存目录与账本、封面、
+  逐字稿、榜单缓存、播放态快照、`inbox.json` 与日志打
+  `com.apple.metadata:com_apple_backup_excludeItem`;剩下进备份的正好是
+  Android/鸿蒙白名单那一组。**新增落盘目录要记得加这一句**,否则它会悄悄进用户的 iCloud。
 - 与手动备份的口径差异:系统备份按**整文件**复制,设置里会带上 device_id 与
   privacy_version(手动备份刻意不导出 device_id,恢复合并按设备取 max 不受影响)。
   两份 Android 规则文件必须同口径维护,只改一份就是给 API 分层埋雷(H84)。

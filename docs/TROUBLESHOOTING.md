@@ -11993,3 +11993,39 @@ Media3 报的是**有限的** `60032`(logcat `state READY dur=60032`)。于是 `
    本端这次把它当成网络抖动,代价是一条无限循环 + 每秒一条错误日志。错误分类比重试次数重要。
 ③ **后端挡了一层,界面还得挡一层。** 用户看不到日志,只看得到控件;控件能点、点了没效果,
    比控件不在更糟。这一点与 H238 的界面闸门是同一条规律的两个面。
+
+### H240. iOS 工程四套 `.strings` 全报 `input not found`,紧跟一个**没有任何参数的** `Ld __preview.dylib failed`
+
+**现象**:新建 iOS target 后第一次 `xcodebuild build`,四条 `CopyStringsFile`
+(分别对应 en / es / fr / zh-Hant)全部报
+`error: ... unexpected input file .../en.lproj/Localizable.strings` /
+`Build input file cannot be found`,而文件明明在 `ios/Localization/en.lproj/` 下。
+同一份日志的**末尾**还有一条更扎眼的 `Ld .../__preview.dylib failed`,退出码非 0,
+但**看不到任何 `undefined symbol` / 架构 / 参数** —— 看起来像链接器坏了。
+
+**根因**:`ios/Reverb.xcodeproj/project.pbxproj` 是手写的,四个
+`PBXFileReference` 的 `path` 写成了 `<lang>.lproj/Localizable.strings`。
+pbxproj 里的相对路径**相对于所在 group**,而这个工程把本地化目录放在 `ios/Localization/` 下;
+少写 `Localization/` 这一层,Xcode 就去 `ios/en.lproj/...` 找,自然找不到。
+`CopyStringsFile` 失败后,Xcode 并行构建里的其余任务被**取消**;
+`__preview.dylib` 那条链接任务正好在同类并行批里,取消被记成 `Ld ... failed` ——
+**它不是独立故障,也没有自己的诊断信息**。
+
+**修法**:把四条路径补全成 `Localization/<lang>.lproj/Localizable.strings`
+(`PBXFileReference.path`,以及 `PBXVariantGroup` 的引用路径保持一致)。重新 build:
+
+- `xcodebuild ... build` exit 0;
+- 包里出现 **4 套** `.lproj`,每套 `Localizable.strings` 非空、`plutil -lint` 过
+  (条数以构建时文件的实际内容为准,别把某个快照数字写进判据);
+- 那条 `Ld __preview.dylib failed` 一并消失 —— 因为上游不再取消它。
+
+**教训 / 规律**:
+① **pbxproj 的 `path` 是相对 group 的,不是相对 `.xcodeproj` 的。** 手写工程文件时,
+   本地化、资源、共享源码三者最容易各用一套基准;落盘前拿 `xcodebuild -showBuildSettings`
+   与构建日志里的**绝对路径**反查一遍,比盯着 `path = ...` 猜快。
+② **并行构建里"没有参数的链接失败"先别查链接器。** Xcode 会把被取消的任务记成失败,
+   而取消的根因在**同一次构建的别处**。先扫整份日志里第一条 `error:`,再决定查哪个阶段;
+   只看最后一条会把一次路径写错误判成工具链问题。
+③ **"编译过了"不等于"资源进包了"。** 资源复制失败在增量构建里可能被缓存掩盖,
+   判据要落在产物上:`ls *.lproj` + 每套 `plutil -lint` + 条数(与硬规矩 1 同一做法)。
+   `ios/build-ios.sh` 的验收段已经把这三条写成硬断言。

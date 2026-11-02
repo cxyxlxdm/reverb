@@ -1,6 +1,6 @@
 # 更新日志 / Changelog
 
-余音 · Reverb 的版本变更记录,三端(Android / HarmonyOS / macOS)共用一套版本号节奏。
+余音 · Reverb 的版本变更记录,四端(Android / HarmonyOS / macOS / iOS)共用一套版本号节奏。
 以用户可见的变化为主,每版末尾附**工程要点**(只影响开发与发布流程的部分)。
 
 **发版时的动作**:在此追加一节。本文件是对外版本说明的**唯一上游**(硬规矩 19):
@@ -10,7 +10,27 @@
 
 ## 1.0.7 — 2026-11-01
 
-### 粘贴一条直播流地址就能听(三端)
+### 新增 iOS 版(TestFlight 分发)
+
+- 新增 iOS 客户端:界面按触屏重写,数据与播放层直接复用 macOS 那份源码;发现 / 追更 / 音阁 / 设置四格,搜索、订阅、播放与后台播放、下载、逐字稿、备份、电台与直播流均可用。
+- 与 macOS 相同的三处边界:没有应用内更新(由 TestFlight / App Store 负责),没有真实频谱,没有「仅 Wi-Fi 下载」闸门。
+- 本机转写用系统 Speech 框架,需要 iOS 26;iOS 17–25 只显示发布方提供的逐字稿。
+
+> **工程要点**
+> - Xcode 工程 `ios/Reverb.xcodeproj` 用同步根组引用 `ios/Reverb/**`,并显式引用
+>   `macos/Sources/Reverb/{Data,Playback}` 的共享文件;四套 `.lproj` 走 PBXVariantGroup
+>   (简中为开发语言,键名即简中原文)。资源路径相对 group,写错会报四条
+>   `CopyStringsFile ... input not found` 并连带一个看不出原因的链接失败,见 H240。
+> - `ios/build-ios.sh` 四种模式:`--verify`(默认,无需证书)/ `--archive` / `--export` / `--upload`;
+>   Team、API Key 等签名信息只从环境变量读,脚本不落盘。
+> - 编译门实测:Release / `CODE_SIGNING_ALLOWED=NO` exit 0,`--verify` 六条断言全过
+>   (版本、后台音频、4 套本地化、随包资源、图标、arm64)。模拟器(iPhone 17 / iOS 27.2)
+>   实跑首启隐私门、首页、播放页、后台播放与设置页通过;**真机、归档、导出与上传仍未跑** ——
+>   本机当前没有签名身份与 Developer Team,真机配对也不可用,见 `docs/IOS.md` 的机器状态表。
+> - iOS 备份口径:音频下载、音频缓存账本与文件、封面、逐字稿、榜单缓存、播放态快照与日志
+>   全部标 `isExcludedFromBackup`;iCloud/电脑备份只留清单与元数据,与另两端的白名单同结果。
+
+### 粘贴一条直播流地址就能听(四端)
 
 搜索框里粘一路音频流地址(网络电台 / 直播流),确认是音频流之后以一条「直播」结果出现,点一下即播。
 这是 A 档:**只放用户自己给的那一条地址**,不做目录、不做收录、不需要后端 —— 与「粘 RSS」「粘视频链接」同一性质。
@@ -33,13 +53,13 @@
 > - Android 补了 `androidx.media3:media3-exoplayer-hls`(与本体同一个 1.3.1)。1.3.1 的 `media3-exoplayer`
 >   本体里**没有 hls 包**,不加这条 `.m3u8` 会在 `DefaultMediaSourceFactory` 那一步直接判"不支持的格式"。
 >   仍是 AndroidX 自家模块,不构成"接第三方 SDK"。
-> - 三端的探针都**只收响应头,拿到就断开**:Android 用 OkHttp 的 `Range: bytes=0-0` + `Icy-MetaData: 1`;
+> - 三套实现(iOS 与 macOS 共用一套)的探针都**只收响应头,拿到就断开**:Android 用 OkHttp 的 `Range: bytes=0-0` + `Icy-MetaData: 1`;
 >   macOS 必须 `dataTask(with:)` 驱动 delegate(见 H225 那条:`data(for:)` 会让 `didReceive response` 不回调);
 >   鸿蒙必须 `requestInStream` + `headersReceive` —— `Http.probeCode` 走的 `request()` 要等整个响应体读完,
 >   对无限流永远不结算,见 H237。
 > - 探针与目录检索**并行发**,且直播先回来就先上屏:粘电台地址时 RSS 直连会一路白等到超时,
 >   串行等于让用户先干等十几秒才看到"这就是那一路流"。
-> - `Episode` 新增 `isLive`(三端同名,Android / macOS 进 JSON 编解码,缺字段按 `false` 读),旧数据不必迁移。
+> - `Episode` 新增 `isLive`(各端同名,Android / macOS 进 JSON 编解码,缺字段按 `false` 读),旧数据不必迁移。
 
 ---
 

@@ -9,6 +9,24 @@ enum AppSupport {
         return d
     }()
 
+    /// iOS 的 iCloud/电脑备份默认整份带上 Application Support。音频下载、自动缓存、
+    /// 封面与逐字稿动辄数百 MB,进备份等于白占用户的 iCloud 空间;而它们全都可以重建,
+    /// 丢了最多重下一次。与 Android/鸿蒙的备份白名单同一个口径:**只备份清单与元数据**
+    /// (订阅、收藏、历史、下载账本、印记、批注、收听时长、设置),大块可再生文件一律排除。
+    ///
+    /// macOS 不调用(`#if os(iOS)` 里是空实现):Time Machine 排除项由用户自己管,
+    /// 而且 `TimeMachineExclusion` 那类标记会改用户备份策略,不该由 App 单方面决定。
+    static func excludeFromBackup(_ url: URL) {
+        #if os(iOS)
+        var u = url
+        var values = URLResourceValues()
+        values.isExcludedFromBackup = true
+        try? u.setResourceValues(values)
+        #else
+        _ = url
+        #endif
+    }
+
     static func load<T: Decodable>(_ file: String, as type: T.Type) -> T? {
         let url = dir.appendingPathComponent(file)
         guard let data = try? Data(contentsOf: url) else { return nil }
@@ -36,11 +54,12 @@ enum AppSupport {
     /// 文件名 → 待执行的"编码并写盘";同一文件只保留最新一份
     nonisolated(unsafe) private static var pending: [String: () -> Void] = [:]
 
-    static func save<T: Encodable>(_ file: String, _ value: T) {
+    static func save<T: Encodable>(_ file: String, _ value: T, excludeFromBackup: Bool = false) {
         let work: () -> Void = {
             let url = dir.appendingPathComponent(file)
             if let data = try? JSONEncoder().encode(value) {
                 try? data.write(to: url, options: .atomic)
+                if excludeFromBackup { Self.excludeFromBackup(url) }
             }
         }
         lock.lock()

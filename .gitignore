@@ -42,6 +42,15 @@ MIGRATION.txt.bak-*
 # 宣传片渲染一次就是 150 MB 的 jpg 序列,`git add -A` 会把它整个吞进来。
 .workbuddy-ai/
 
+# iOS:构建产物与上传凭据(与其它端 dist/ 同口径)。
+# DerivedData 一次就是几百 MB,里面还有调试符号与中间包;private_keys 是
+# App Store Connect API 私钥(App Store Connect 只允许下载一次),绝不能入库。
+/ios/build/
+/ios/dist/
+/ios/private_keys/
+ios/*.xcarchive
+ios/*.ipa
+
 # 宣传片与营销物料(硬规矩 19 同一口径):整目录只留本地 —— 里面是渲染帧序列
 # (src/frames-305/ 上千张 jpg)、成片、封面与配乐,单目录 ≈400 MB,且截图素材含真实收听数据。
 # **文件一律不删**:流水线说明在 marketing/README.md(改文案 → 重渲染 → 重编码三条命令),

@@ -58,6 +58,7 @@ actor ArtworkCache {
     private init() {
         dir = AppSupport.dir.appendingPathComponent("artwork_cache", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        AppSupport.excludeFromBackup(dir)
         // 扫目录要一次磁盘往返;晚到几毫秒只意味着首屏走远程,不影响正确性。
         Task.detached(priority: .utility) { [weak self] in await self?.scan() }
     }

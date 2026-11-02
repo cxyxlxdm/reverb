@@ -38,6 +38,7 @@ final class AudioCacheManager: @unchecked Sendable {
         self.store = store
         dir = AppSupport.dir.appendingPathComponent(AudioCacheStore.dirName, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        AppSupport.excludeFromBackup(dir)
         // 对账要扫目录、要删孤儿,是 IO;放主线程就是给启动加一次磁盘往返。
         // 晚几毫秒不影响任何东西 —— 起播时的判定只看文件是否存在(见 localURL)。
         Task.detached(priority: .utility) { [weak self] in self?.reconcile() }

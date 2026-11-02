@@ -1,0 +1,387 @@
+/* 余音 Reverb — Français (fr) */
+
+/* App & navigation */
+"发现" = "Découvrir";
+"音阁" = "Bibliothèque";
+"余音" = "Reverb";
+"设置" = "Réglages";
+
+/* Discover categories */
+"推荐" = "À la une";
+"新闻" = "Actualités";
+"商业" = "Affaires";
+"科技" = "Tech";
+"文化" = "Culture";
+"知识" = "Savoir";
+"教育" = "Éducation";
+"喜剧" = "Comédie";
+"健康" = "Santé";
+"历史" = "Histoire";
+"体育" = "Sport";
+"美食" = "Cuisine";
+"旅行" = "Voyage";
+"动漫" = "Anime";
+"情感" = "Relations";
+"艺术" = "Arts";
+"音乐" = "Musique";
+"亲子" = "Enfants";
+"影视" = "Cinéma & TV";
+
+/* Discover */
+"分类" = "Catégorie";
+"每日热门" = "Tendances du jour";
+"内置精选" = "Sélection intégrée";
+"离线内容 · 上次更新 %@" = "Copie hors ligne · mise à jour %@";
+"余音使用引导" = "Premiers pas avec Reverb";
+"30 秒 · 内置音频，不联网也能播" = "30 s · intégré, hors ligne";
+"随应用内置的 30 秒引导音频，无需联网即可播放。" = "Introduction de 30 secondes intégrée. Lecture sans connexion.";
+"暂无内容" = "Aucun contenu";
+"搜索播客/视频或粘贴 RSS、直播流、视频链接" = "Rechercher podcasts/vidéos ou coller un lien RSS, de flux ou vidéo";
+"来自 %@" = "via %@";
+"B 站" = "Bilibili";
+"搜索中…" = "Recherche…";
+"没有找到「%@」" = "Aucun résultat pour « %@ »";
+"直播流" = "Flux en direct";
+"直播" = "Direct";
+"点一下开始收听。直播不记录播放进度,也不能快进或回看。" = "Touchez pour écouter. Un direct n'enregistre pas la position et ne peut pas être avancé.";
+"直播中" = "EN DIRECT";
+"节目" = "Émissions";
+"单集" = "Épisodes";
+"下一集(右键停止电台)" = "Suivant (clic droit pour arrêter la radio)";
+"情境电台" = "Radio contextuelle";
+"随机电台" = "Radio aléatoire";
+"停止电台" = "Arrêter la radio";
+/* 分类排序(M12):菜单项带省略号(macOS HIG:会再弹一层的动作),弹窗标题不带。 */
+"自定义分类排序…" = "Réorganiser les catégories…";
+"自定义分类排序" = "Réorganiser les catégories";
+"拖动行或用箭头调整顺序" = "Faites glisser les lignes ou utilisez les flèches pour réorganiser";
+"上移" = "Monter";
+"下移" = "Descendre";
+
+/* Library */
+"订阅" = "S'abonner";
+"收藏" = "Favoris";
+"下载" = "Téléchargements";
+"还没有订阅任何节目" = "Aucun abonnement";
+"还没有收藏的单集" = "Aucun épisode favori";
+"暂无播放历史" = "Aucun historique";
+"还没有离线下载的单集" = "Aucun téléchargement hors ligne";
+"取消收藏" = "Retirer des favoris";
+"删除下载" = "Supprimer le téléchargement";
+"删除此单集的离线文件?" = "Supprimer le fichier hors ligne de cet épisode ?";
+"删除" = "Supprimer";
+"取消" = "Annuler";
+"清空" = "Vider";
+"清空播放历史" = "Vider l'historique";
+"清空播放历史?" = "Vider l'historique de lecture ?";
+"将清空全部收听记录与续播位置。" = "Tout l'historique d'écoute et les positions de reprise seront effacés.";
+
+/* Player */
+"没有正在播放的内容" = "Aucune lecture en cours";
+"正在播放" = "Lecture en cours";
+"快退" = "Reculer";
+"快进" = "Avancer";
+"%lld 分钟" = "%lld min";
+"本集结束" = "Fin de l'épisode";
+"关闭" = "Désactiver";
+"睡眠定时" = "Minuteur de veille";
+"听觉印记" = "Empreinte sonore";
+"分享剪藏" = "Partager l'extrait";
+"保存剪藏" = "Enregistrer l'extrait";
+
+/* Seal labels */
+"开心" = "Joie";
+"治愈" = "Apaisant";
+"热血" = "Passion";
+"震撼" = "Impressionné";
+"沉思" = "Pensif";
+"领悟" = "Éclairé";
+"难过" = "Triste";
+"愤怒" = "Colère";
+"疲惫" = "Fatigué";
+
+/* Now Playing bar */
+"打开播放页" = "Ouvrir le lecteur";
+"关闭播放条" = "Fermer le lecteur";
+
+/* Podcast detail */
+"暂无单集" = "Aucun épisode";
+"重试" = "Réessayer";
+"已订阅" = "Abonné";
+"已下载 · 点击删除" = "Téléchargé · cliquer pour supprimer";
+"下载中" = "Téléchargement…";
+"下载不可用" = "Téléchargement indisponible";
+
+/* Settings */
+"外观" = "Apparence";
+"主题" = "Thème";
+"主题配色" = "Couleur d'accent";
+"字号" = "Taille du texte";
+"内容" = "Contenu";
+"地区" = "Région";
+"电台模式" = "Mode radio";
+"随机" = "Aléatoire";
+"情境" = "Contextuel";
+"播放" = "Lecture";
+"默认速度" = "Vitesse par défaut";
+"足迹" = "Empreintes";
+"听觉足迹" = "Empreintes sonores";
+"%lld 枚" = "%lld sceaux";
+"备份" = "Sauvegarde";
+"导出备份" = "Exporter la sauvegarde";
+"恢复备份" = "Restaurer la sauvegarde";
+"导出 OPML" = "Exporter OPML";
+"导入 OPML" = "Importer OPML";
+"存储" = "Stockage";
+"清除缓存" = "Vider le cache";
+"榜单、频道、图片、逐字稿与已播音频缓存" = "Classements, chaînes, images, transcriptions et l'audio écouté";
+"计算中…" = "Calcul…";
+"清除缓存?" = "Vider le cache ?";
+"清除" = "Vider";
+"将清除榜单、频道缓存、图片、已生成的逐字稿与已播音频缓存，不影响订阅与下载。" = "Vide les classements, chaînes, images, transcriptions générées en cache et l'audio déjà écouté. Abonnements et téléchargements non affectés.";
+"离线下载" = "Téléchargements hors ligne";
+"清空下载" = "Vider les téléchargements";
+"%lld 集 · %@" = "%lld épisodes · %@";
+"清空全部离线下载?" = "Vider tous les téléchargements hors ligne ?";
+"恢复" = "Restaurer";
+"选择要合并的内容" = "Choisir les éléments à fusionner";
+"备份数据" = "Sauvegarder les données";
+"选择要备份的内容" = "Choisir les éléments à sauvegarder";
+"跟随系统" = "Système";
+"浅色 · 宣纸" = "Clair · Papier";
+"深色 · 水墨" = "Sombre · Encre";
+"纯白" = "Blanc pur";
+"自动" = "Auto";
+"中国大陆" = "Chine continentale";
+"中国香港" = "Hong Kong";
+"中国台湾" = "Taïwan";
+"美国" = "États-Unis";
+"日本" = "Japon";
+"韩国" = "Corée du Sud";
+"英国" = "Royaume-Uni";
+"新加坡" = "Singapour";
+"澳大利亚" = "Australie";
+"加拿大" = "Canada";
+"德国" = "Allemagne";
+"%lld 秒" = "%lld s";
+"语言" = "Langue";
+"重启后生效" = "Prend effet après redémarrage";
+
+/* Logs */
+"日志" = "Journaux";
+"导出日志…" = "Exporter le journal…";
+"分享日志" = "Partager le journal";
+"清空日志" = "Effacer le journal";
+"确定清空日志?" = "Effacer le journal ?";
+
+/* Share cards */
+"共 %lld 枚印记" = "%lld empreintes au total";
+"余音 · 听觉足迹" = "Reverb · Empreintes sonores";
+"剪藏 · %@" = "Extrait · %@";
+"余音 · 每一段余音都值得留存" = "Reverb · Chaque écho mérite d'être gardé";
+
+/* Theme */
+"青瓷" = "Céladon";
+"黛蓝" = "Indigo";
+"绯红" = "Cramoisi";
+"竹青" = "Bambou";
+"暂停" = "Pause";
+"加载中…" = "Chargement…";
+"%lld 小时 %lld 分" = "%lld h %lld min";
+"yyyy年M月d日" = "d MMM yyyy";
+
+/* Footprints */
+"还没有留下听觉印记" = "Aucune empreinte sonore";
+"完成" = "Terminé";
+"分享" = "Partager";
+"保存" = "Enregistrer";
+"加载失败,请检查网络后重试" = "Échec du chargement. Vérifiez le réseau et réessayez.";
+"这一集暂时播不了" = "Cet épisode ne peut pas être lu pour le moment";
+"加载失败,点击重试" = "Échec — cliquez pour réessayer";
+
+/* 顶部三格 / 音阁分段 / 追更页 (M6, 2026-10-25) */
+"追更" = "Nouveautés";
+"待播" = "À suivre";
+"清空待播" = "Vider la file";
+"还没有订阅。去「发现」订阅几档，它们播过的单集都会汇到这里" = "Aucun abonnement pour l’instant. Abonnez-vous dans Découvrir et leurs épisodes arriveront ici.";
+"这些频道还没有可播的单集，点工具栏刷新再试" = "Aucun épisode jouable pour l’instant. Cliquez sur Actualiser dans la barre d’outils.";
+
+/* Queue, Continue listening, Played (v2 features) */
+"继续收听" = "Continuer l'écoute";
+"刷新" = "Actualiser";
+"播放队列为空" = "File d'attente vide";
+"清空播放队列?" = "Vider la file de lecture ?";
+"将清空待播队列中的全部单集，无法恢复。" = "Tous les épisodes de la file seront supprimés, sans possibilité d'annulation.";
+"下一个播放" = "Lire ensuite";
+"加入队列" = "Ajouter à la file";
+"标记为已播完" = "Marquer comme lu";
+"标记为未播完" = "Marquer comme non lu";
+"已播完" = "Lu";
+
+/* 批量加入待播 + 封面直达频道页。与 Android batch_* / a11y_open_channel 同源(硬规矩 5) */
+"进入频道页" = "Ouvrir la chaîne";
+"选择" = "Sélectionner";
+"选择多集" = "Sélectionner plusieurs épisodes";
+"全选" = "Tout sélectionner";
+"已选 %lld" = "%lld sélectionnés";
+"加入待播" = "Ajouter à la file";
+"已加入待播 %lld 集" = "%lld épisodes ajoutés à la file";
+"所选都已在待播里" = "Ces épisodes sont déjà dans la file";
+
+/* 播放模式(每列右端那颗按钮,与 Android / 鸿蒙同源) */
+"顺序播放" = "Lecture dans l'ordre";
+"单曲循环" = "Répéter cet épisode";
+"随机播放" = "Lecture aléatoire";
+
+/* i18n 补丁:查看频道 / 日志反馈 */
+"查看频道" = "Voir la chaîne";
+"发送日志到开发者邮箱" = "Envoyer les journaux au développeur";
+"余音 macOS 日志反馈" = "Retour des journaux Reverb macOS";
+"请描述你遇到的问题:\n\n\n——\n余音 macOS v%@ · %@" = "Veuillez décrire le problème rencontré :\n\n\n——\nReverb macOS v%@ · %@";
+
+/* 语音转文字(转录页) */
+"语音转文字" = "Reconnaissance vocale";
+"在播放页新增「转录」页,完全离线转录当前单集(需 macOS 26,首次按语言下载模型)" = "Ajoute une page Transcription au lecteur pour transcrire l'épisode entièrement hors ligne (nécessite macOS 26 ; le modèle se télécharge une fois).";
+"简介" = "Notes";
+"暂无简介" = "Aucune note";
+"转录" = "Transcription";
+"中文" = "Chinois";
+"正在准备音频…" = "Préparation de l'audio…";
+"正在下载语言模型…" = "Téléchargement du modèle…";
+"该语言暂不支持转录" = "Cette langue n'est pas prise en charge";
+"需要 macOS 26" = "Nécessite macOS 26";
+"把这集音频离线转成文字" = "Transcrire l'audio de cet épisode hors ligne";
+"生成转录" = "Transcrire";
+"正在识别…" = "Transcription…";
+"音频地址无效" = "URL audio invalide";
+"音频下载失败" = "Échec du téléchargement audio";
+"转录失败,点按重试" = "Échec de la transcription. Touchez pour réessayer";
+"正在获取发布方提供的逐字稿…" = "Récupération de la transcription de l’éditeur…";
+"这一集发布方提供了逐字稿" = "L’éditeur fournit une transcription pour cet épisode";
+"查看逐字稿" = "Afficher la transcription";
+
+// 收听时长
+"收听时长" = "Temps d'écoute";
+"已收听 %@" = "Écouté %@";
+"还没有收听记录" = "Aucun historique d'écoute";
+"未知频道" = "Chaîne inconnue";
+
+/* Notes · 批注(写下这一秒) */
+"批注" = "Annotations";
+"写批注" = "Écrire une annotation";
+"记下这一秒" = "Marquer cette seconde";
+"此刻想到什么，写下来" = "Écrivez ce qui vous vient à l'esprit";
+"还没有写过批注" = "Aucune annotation pour l'instant";
+"回到那一秒" = "Retourner à cette seconde";
+"删除批注" = "Supprimer l'annotation";
+"将删除这条批注，无法恢复。\n\n「%@」" = "Cette annotation sera supprimée, sans récupération possible.\n\n« %@ »";
+
+/* 失败提示。前四条与 Android / 鸿蒙的渲染值逐字对齐(硬规矩 5):`d’envoyer` 用的是弯撇号,
+   因为那两个端就是弯的 —— 本文件其余部分一律直撇号,别顺手「统一」过去(见 H156 教训 ④)。
+   后三条补的是本页「无法恢复备份」弹窗原先缺的译名。另:「备份失败」取 Android 的值,
+   鸿蒙同位置是更泛的「操作未完成」,这一条是已知的双端措辞差异,不是本轮改坏的。 */
+"日志发送失败" = "Impossible d’envoyer les journaux";
+"保存失败" = "Échec de l'enregistrement";
+"备份失败" = "Échec de la sauvegarde";
+"分享图片生成失败" = "Impossible de créer l’image à partager";
+"无法恢复备份" = "Impossible de restaurer la sauvegarde";
+"好" = "OK";
+"这个文件无法识别为余音的备份,可能已损坏或来自不兼容的版本。" = "Ce fichier n'est pas reconnu comme une sauvegarde de Reverb. Il est peut-être corrompu ou issu d'une version incompatible.";
+
+/* 关于 / 许可 / 首次同意(M11)。键名是简中原文;桌面端不列订阅提醒(M3 未做),
+   数据来源里也没有官网 OPML(桌面不读那份)—— 见 docs/MACOS-GAPS.md。
+   播放缓存 M8 已补,那一行照列。
+   撇号:本文件两种都有(HEAD 里既有 24 行直撇号、62 处弯撇号),不是统一的;
+   新增行跟着所在段落走,本段用弯撇号(’)。.strings 是 plist,直撇号不用转义
+   —— 与鸿蒙那份 JSON 不是一回事(JSON 的 `\'` 非法,见 AGENTS.md 硬规矩 5 / H191)。 */
+"关于" = "À propos";
+"关于余音" = "À propos de Reverb";
+"版本" = "Version";
+"版本 %@" = "Version %@";
+"隐私政策" = "Politique de confidentialité";
+"我们如何处理你的数据" = "Comment nous traitons vos données";
+"开源许可" = "Licences open source";
+"余音 · Reverb" = "Reverb · 余音";
+"余音绕梁，隽永悠长" = "Chaque écho persiste.";
+"这是什么" = "Qu’est-ce que c’est";
+"余音是一款轻量的播客客户端：发现好节目、订阅收听、离线下载、随时续播，专注「听」本身。macOS 版只使用系统自带的框架，不引入任何第三方 SDK。" = "Reverb est un client de podcasts léger : découvrez des émissions, abonnez-vous, écoutez, téléchargez hors ligne et reprenez à tout moment — centré sur l’écoute. La version macOS n’utilise que les frameworks système d’Apple et n’intègre aucun SDK tiers.";
+"主要功能" = "Fonctionnalités";
+"· 发现：按地区与分类浏览每日热门" = "· Découvrir : classements du jour par région et catégorie";
+"· 搜索：按名字或直接粘贴 RSS 地址" = "· Rechercher : par nom ou en collant une URL RSS";
+"· 视频链接：粘贴 B 站视频链接或 BV 号，直接当单集听（不登录；视频来源的单集不提供下载）" = "· Liens vidéo : collez un lien vidéo Bilibili ou un identifiant BV pour l’écouter comme un épisode (sans compte ; les épisodes issus d’une vidéo ne peuvent pas être téléchargés)";
+"· 频道分享：生成含 Logo、频道名、简介与余音落款的图片" = "· Partager une émission : créez une image avec le logo, le nom, la description et la signature Reverb";
+"· 电台：随机漫游，或按时段与情境推荐" = "· Radio : balade aléatoire, ou suggestions selon l’heure et le contexte";
+"· 追更：订阅频道播过的单集全在这一栏，按时间倒序翻看，可在页头手动刷新，可单独设这一栏的播放模式" = "· Nouveautés : tous les épisodes de vos abonnements dans une seule colonne, du plus récent au plus ancien ; actualisez depuis l’en-tête et donnez à cette colonne son propre mode de lecture";
+"· 音阁：订阅、收藏、下载、待播、历史、批注六栏管理" = "· Bibliothèque : abonnements, favoris, téléchargements, à écouter, historique et notes en six sections";
+"· 批量与直达：点任意单集封面直达它所属的频道；多个列表可切换「选择」把一批一次加入待播" = "· Lot et accès direct : cliquez sur la pochette d’un épisode pour ouvrir son émission ; plusieurs listes ont un mode Sélectionner pour ajouter un lot à À écouter d’un coup";
+"· 离线下载：下载的单集长期留在本机" = "· Hors ligne : les épisodes téléchargés restent sur ce Mac";
+"· 播放缓存：播过的单集自动留在本机，下次直接本地起播；断网时已加载的列表与封面仍可浏览，可在设置一键清除" = "· Cache de lecture : les épisodes écoutés restent sur ce Mac et démarrent en local la fois suivante ; les listes et pochettes déjà chargées restent consultables hors ligne, à vider depuis Réglages";
+"· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播，以及系统媒体键与「正在播放」" = "· Lecture : vitesse, retour et avance, minuteur, modes (dans l’ordre / répéter un titre / aléatoire), lecture automatique, touches multimédia et « Lecture en cours »";
+"· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）" = "· Transcription : affiche la transcription de l’éditeur quand il y en a une ; sinon, convertit l’épisode en texte sur ce Mac, surligné au fil de la lecture (la transcription locale nécessite macOS 26)";
+"· 批注：记下这一秒和此刻的一句话；音阁「批注」栏把它们连成时间线，点一下从那一句接着听" = "· Notes : marquez cette seconde avec une phrase ; la section Notes de la Bibliothèque les relie en une chronologie — cliquez pour reprendre à cette phrase";
+"· 节目笔记：播放页横滑查看简介" = "· Notes d’émission : faites glisser le lecteur pour lire la description";
+"· 备份：勾选分区导出或恢复备份（与手机端格式互通），也能导入导出 OPML" = "· Sauvegarde : exportez ou restaurez les sections choisies (compatible avec les applis mobiles) et importez ou exportez OPML";
+"· 外观：深色 / 浅色 / 跟随系统、字号、主题配色、多语言" = "· Apparence : sombre / clair / système, taille du texte, couleur d’accent, plusieurs langues";
+"设计理念" = "Conception";
+"美学上取「水墨 + 青瓷 + 梁金」的底色，名字与图标呼应「余音绕梁」——声波环绕横梁，余韵不散。" = "L’esthétique s’inspire de l’encre, du céladon et de l’or des poutres — le nom et l’icône évoquent « un écho tournant autour des poutres » : des ondes autour d’une poutre, qui ne s’éteignent pas.";
+"取源上坚持全链路免费、无需登录、无需任何 API Key：检索一律基于公开来源，最终始终回到发布方自己的 RSS，直接流式播放原始音频——版权干净、成本为零。" = "Les sources restent entièrement gratuites, sans compte ni clé API : la découverte s’appuie uniquement sur des sources publiques et la lecture revient toujours au RSS de l’éditeur, en streaming de l’audio d’origine — droits propres, coût nul.";
+"隐私上，订阅、历史和下载保存在设备本地，不向开发者自动上传，也不用于跨应用追踪。" = "Pour la confidentialité, abonnements, historique et téléchargements restent sur votre appareil ; rien n’est envoyé automatiquement au développeur ni utilisé pour un suivi entre applications.";
+"余音 macOS 版只使用系统自带的框架，不引入任何第三方 SDK 或统计组件。以下是所用的系统能力与数据来源。" = "La version macOS n’utilise que les frameworks système d’Apple et n’intègre aucun SDK ni outil d’analyse tiers. Voici les capacités système et les sources de données utilisées.";
+"系统能力" = "Capacités du système";
+"系统框架" = "Framework système";
+"数据来源" = "Sources de données";
+"以下为公开的播客目录/检索接口，仅用于检索与榜单；音频始终来自发布方原始 RSS，本应用不转存、不代理。" = "Annuaires et API publics, utilisés uniquement pour la recherche et les classements ; l’audio provient toujours du RSS d’origine. L’app ne l’héberge ni ne le relaie.";
+"播客发布方自己的 RSS 地址" = "Le flux RSS d’origine de l’éditeur";
+"隐私政策与数据说明" = "Politique de confidentialité et données";
+"余音以本机处理为主。没有开发者后端、账号、广告、统计、归因、第三方登录、第三方推送、崩溃上报或跨应用追踪。订阅、历史、收藏、下载、收听统计、设置、批注与运行日志都在本机处理，不会自动上传给开发者；macOS 版只使用系统自带的框架，不含任何第三方 SDK。若你在系统设置里开启 Time Machine 备份，系统会把本机数据一并备份到你自己的备份磁盘。" = "Reverb traite l’essentiel des données sur votre appareil. Il n’y a ni backend développeur, ni compte, ni publicité, ni statistiques, ni attribution, ni connexion ou push tiers, ni rapport de plantage, ni suivi entre applications. Abonnements, historique, favoris, téléchargements, statistiques d’écoute, réglages, notes et journaux sont traités localement et ne sont pas envoyés automatiquement au développeur. La version macOS n’utilise que les frameworks système d’Apple et n’intègre aucun SDK tiers. Si vous activez Time Machine dans Réglages Système, le système sauvegarde ces données avec le reste de votre Mac sur votre propre disque de sauvegarde.";
+"联网时，搜索词、地区或分类会发给 Apple、fyyd、gpodder 等公开目录；RSS、封面与音频直接请求发布方或托管方，因此对方会看到 IP 地址、User-Agent 和访问资源。日志可能包含节目或单集标识及所访问服务的主机名，只有你主动分享或导出时才离开应用。详情请阅读完整隐私政策。" = "En ligne, les termes de recherche, la région ou la catégorie sont envoyés à des annuaires publics comme Apple, fyyd et gpodder. Le RSS, les pochettes et l’audio sont demandés directement aux éditeurs ou à leurs hébergeurs, qui voient alors votre adresse IP, votre User-Agent et la ressource demandée. Les journaux peuvent contenir des identifiants d’émission ou d’épisode et les noms d’hôte des services consultés ; ils ne quittent l’app que si vous choisissez de les partager ou de les exporter. Lisez la politique complète pour plus de détails.";
+"视频链接（可选）：在搜索框粘贴一个视频页面链接或 BV 号，这一条视频会被当作单集来听——本应用向视频站公开接口（api.bilibili.com）请求标题、封面与音频地址，再从它的内容分发网络（*.bilivideo.com 等）直接流式播放，并像其他单集一样自动缓存到本机。请求不登录账号、不带任何用户标识；为取得音频地址，这类请求使用浏览器身份的 User-Agent 与视频站的来源页，对方因此会看到这些信息与你的 IP 地址。这类单集不提供「下载」。" = "Lien vidéo (facultatif) : collez un lien de page vidéo ou un identifiant BV dans le champ de recherche et cette vidéo est lue comme un épisode. L’application interroge l’API publique du site vidéo (api.bilibili.com) pour obtenir le titre, la pochette et l’adresse audio, puis lit en streaming depuis son réseau de diffusion (*.bilivideo.com et similaires) et met l’audio en cache localement comme pour tout autre épisode. Ces requêtes ne connectent aucun compte et ne portent aucun identifiant ; pour obtenir l’adresse audio, elles sont envoyées avec un User-Agent de navigateur et la page d’origine du site vidéo, que le site voit donc, ainsi que votre adresse IP. Ces épisodes ne peuvent pas être téléchargés.";
+"离线语音转文字（可选）：用系统自带的 Speech 框架在本机完成，首次使用某种语言时由系统下载对应模型；音频不上传、不出设备，也不经过任何服务器。该功能可在设置里关闭。" = "Transcription hors ligne (facultative). Elle s’exécute sur ce Mac avec le framework Speech d’Apple ; le système télécharge un modèle pour chaque langue lors de la première utilisation. L’audio n’est jamais envoyé, ne quitte jamais l’appareil et ne passe par aucun serveur. Vous pouvez la désactiver dans les réglages.";
+"点击「同意并继续」表示你已阅读并接受本政策。" = "En cliquant sur « Accepter et continuer », vous confirmez avoir lu et accepté cette politique.";
+"阅读完整隐私政策" = "Lire la politique de confidentialité complète";
+"同意并继续" = "Accepter et continuer";
+"不同意并退出" = "Refuser et quitter";
+"应用内更新（可选）：本版本启动时会向 GitHub 的公开发布页接口（api.github.com）询问一次「最新版是哪个」；请求只包含本应用自己的公开仓库地址，不含账号、任何标识符、订阅列表或收听内容。你也可以在「设置 → 检查更新」里随时主动询问一次。只有那次回答里确实有更新版本时才会下载安装包，下载完由你自己打开磁盘映像安装，本应用不会自行安装。" = "Mises à jour intégrées (facultatif) : au démarrage, cette version demande une fois à l’API publique des versions de GitHub (api.github.com) quelle est la dernière version. La requête ne contient que l’adresse du dépôt public de cette application, sans compte, identifiant, liste d’abonnements ni contenu écouté. Vous pouvez aussi la lancer à tout moment dans Réglages → Rechercher des mises à jour. L’installateur n’est téléchargé que si la réponse indique effectivement une version plus récente ; une fois téléchargé, c’est vous qui ouvrez l’image disque pour installer, l’application n’installe jamais rien d’elle-même.";
+
+/* In-app update */
+"更新" = "Mise à jour";
+"检查更新" = "Rechercher des mises à jour";
+"到 GitHub 查一次有没有新的安装包" = "Interroger GitHub pour savoir si un nouvel installateur est disponible";
+"正在检查…" = "Vérification…";
+"已是最新版本 %@" = "Vous utilisez la dernière version %@";
+"检查失败，看看网络之后再试一次" = "Échec de la vérification. Vérifiez votre connexion et réessayez.";
+"正在下载新版本 %d%%" = "Téléchargement de la nouvelle version %d%%";
+"新版本 %@ 已下载完成" = "Nouvelle version %@ téléchargée";
+"发现新版本 %@" = "Nouvelle version %@ disponible";
+"新版本 %@ 已下载完成（约 %@），现在打开安装包？" = "La version %@ a été téléchargée (environ %@). Ouvrir l’installateur maintenant ?";
+"打开安装包" = "Ouvrir l’installateur";
+"以后再说" = "Plus tard";
+"更新下载失败" = "Échec du téléchargement de la mise à jour";
+"安装包没有下载成功。检查网络后重试，也可以选「以后再说」。" = "L’installateur n’a pas pu être téléchargé. Vérifiez votre connexion et réessayez, ou choisissez « Plus tard ».";
+"重试" = "Réessayer";
+
+/* iOS-only additions (touch UI, background audio, iCloud wording) */
+"全部播放" = "Tout lire";
+"下一集" = "Suivant";
+"下一集播放" = "Lire ensuite";
+"删除离线文件" = "Supprimer le fichier hors ligne";
+"已下载" = "Téléchargé";
+"待播队列是空的" = "La file d’attente est vide";
+"更多" = "Plus";
+"正在读取…" = "Lecture…";
+"逐字稿" = "Transcription";
+"需要 iOS 26" = "Nécessite iOS 26";
+"电台" = "Radio";
+"移除" = "Retirer";
+"余音是一款轻量的播客客户端：发现好节目、订阅收听、离线下载、随时续播，专注「听」本身。iOS 版只使用系统自带的框架，不引入任何第三方 SDK。" = "Reverb est un client de podcasts léger : découvrez des émissions, abonnez-vous, écoutez, téléchargez hors ligne et reprenez à tout moment — centré sur l’écoute. La version iOS n’utilise que les frameworks système d’Apple et n’intègre aucun SDK tiers.";
+"余音 iOS 版只使用系统自带的框架，不引入任何第三方 SDK 或统计组件。以下是所用的系统能力与数据来源。" = "La version iOS n’utilise que les frameworks système d’Apple et n’intègre aucun SDK ni outil d’analyse tiers. Voici les capacités système et les sources de données utilisées.";
+"余音以本机处理为主。没有开发者后端、账号、广告、统计、归因、第三方登录、第三方推送、崩溃上报或跨应用追踪。订阅、历史、收藏、下载、收听统计、设置、批注与运行日志都在本机处理，不会自动上传给开发者；iOS 版只使用系统自带的框架，不含任何第三方 SDK。若你在系统设置里开启了 iCloud 备份，系统会把本机数据一并备份到你自己的 iCloud 空间。" = "Reverb traite l’essentiel des données sur votre appareil. Il n’y a ni backend développeur, ni compte, ni publicité, ni statistiques, ni attribution, ni connexion ou push tiers, ni rapport de plantage, ni suivi entre applications. Abonnements, historique, favoris, téléchargements, statistiques d’écoute, réglages, notes et journaux sont traités localement et ne sont pas envoyés automatiquement au développeur. La version iOS n’utilise que les frameworks système d’Apple et n’intègre aucun SDK tiers. Si vous activez la sauvegarde iCloud dans Réglages, le système sauvegarde ces données avec le reste de votre appareil dans votre espace iCloud.";
+"· 直播流：粘贴一条网络电台/直播流地址直接收听" = "· Directs : collez une URL de radio ou de flux en direct et écoutez immédiatement";
+"· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）与自动续播" = "· Lecture : vitesse, retour et avance, minuteur, modes de lecture (dans l’ordre / répéter un titre / aléatoire) et enchaînement automatique";
+"· 后台播放：锁屏或切到其他应用后继续播放，支持锁屏遥控与「正在播放」" = "· Lecture en arrière-plan : continue écran verrouillé ou quand vous changez d’app, avec commandes sur l’écran verrouillé et « En cours de lecture »";
+"· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 iOS 26）" = "· Transcription : affiche celle de l’éditeur lorsqu’elle existe, sinon convertit l’épisode en texte sur l’appareil et le surligne pendant la lecture (la transcription locale nécessite iOS 26)";
+"· 节目笔记：播放页查看简介" = "· Notes d’émission : consultez la description depuis le lecteur";
+"· 外观：深色 / 浅色 / 跟随系统、主题配色、多语言" = "· Apparence : sombre / clair / système, couleur d’accent, plusieurs langues";
+"在播放页查看逐字稿,完全离线转录当前单集(需 iOS 26,首次按语言下载模型)" = "Affichez la transcription dans le lecteur et transcrivez l’épisode en cours entièrement hors ligne (nécessite iOS 26 ; le modèle de langue se télécharge à la première utilisation)";
+"· 追更：订阅频道播过的单集全在这一栏，按时间倒序翻看" = "· Nouveautés : tous les épisodes de vos émissions abonnées dans une seule colonne, du plus récent au plus ancien";
+"无法读取文件" = "Impossible de lire le fichier";
