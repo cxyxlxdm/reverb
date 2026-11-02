@@ -187,7 +187,7 @@ xcrun simctl spawn booted log show --last 12s --style compact \
 
 实跑读数:首启隐私门正常;同意后首页能拉到榜单与封面;播放页 0:03/0:32、暂停键为播放态;
 切到「设置」App 后音频队列继续入队(`howFarAhead` 前进),锁屏信息由
-`MPNowPlayingInfoCenter` 持续更新。**没验过的**:真机、订阅刷新、逐字稿(需 iOS 26 语音模型)、
+`MPNowPlayingInfoCenter` 持续更新。**没验过的**:订阅刷新、逐字稿(需 iOS 26 语音模型)、
 下载、备份导出 —— 模拟器只覆盖到首启 / 首页 / 播放 / 后台 / 设置页渲染。
 
 iOS 备份排除项也可以在模拟器数据容器里直接验:
@@ -198,6 +198,41 @@ xattr -p com.apple.metadata:com_apple_backup_excludeItem \
   "$C/Library/Application Support/Reverb/popular_cn_default.json"  # → com.apple.MobileBackup
 ```
 
+### 4. 真机验收(2026-11-02 深夜实测)
+
+真机的点击注入仍然缺(WDA Runner 装机三次都是 `host_command_failed`),所以**逐页取证靠同一组
+Debug 启动参数**;唯一需要人手的一步是首启隐私门的「同意并继续」(点一次,之后本机记住)。
+
+```bash
+# 1) 先用同一份源码出 Debug 包(签名团队走命令行,不写进工程)
+cd ios
+xcodebuild -project Reverb.xcodeproj -scheme Reverb -configuration Debug \
+  -sdk iphoneos -destination 'generic/platform=iOS' \
+  -derivedDataPath /tmp/ios-debug-dd -allowProvisioningUpdates \
+  DEVELOPMENT_TEAM=J4YCBW8ZG7 build
+xcrun devicectl device install app --device <UDID> \
+  /tmp/ios-debug-dd/Build/Products/Debug-iphoneos/Reverb.app
+# 2) 逐页截图(-start-tab / -open-player / -autoplay-guide 只在 Debug 编译)
+xcrun devicectl device process launch --device <UDID> --terminate-existing \
+  com.yuyin.reverb -- -start-tab inbox
+xcrun devicectl device capture screenshot --device <UDID> --destination /tmp/inbox.png
+# 3) 后台播放:前台切到「设置」→ 等 14 秒 → 把 Reverb 拉回前台,看进度是否前进、PID 是否不变
+xcrun devicectl device process launch --device <UDID> com.apple.Preferences
+xcrun devicectl device process launch --device <UDID> com.yuyin.reverb
+# 4) 验完把 Release 包装回去(用户日常用的是它)
+xcodebuild … -configuration Release … && xcrun devicectl device install app …
+```
+
+实测读数(iPhone 16 Pro / iOS 27.2):四个 tab 的标题都在工具栏一行(发现/追更/音阁各有
+右侧图标,设置页无图标);首页能从网络拉到「每日热门」与封面;播放页 0:04/0:32 为播放态;
+切后台 14 秒后回到前台进度走到 0:31、PID 不变 ⇒ **后台音频在真机上仍推进**;迷你播放条正常。
+
+⚠️ **两个「看起来应该能自动」但实际不行的通道**,别重试:
+① 直接往应用容器的 `Library/Preferences/com.yuyin.reverb.plist` 写 `privacy_version=4`
+**会被 cfprefsd 缓存挡住**(文件读出来是新值,界面仍停在同意页);
+② `devicectl … launch -- -privacy_version 4` 也不足以过门(参数域对 `as? Int` 的取值不可靠)。
+所以首启那一下必须人点一次 —— 点过之后不再需要。
+
 ---
 
 ## 本机现状(2026-11-02,别当成"已验证")
@@ -206,14 +241,15 @@ xattr -p com.apple.metadata:com_apple_backup_excludeItem \
 |---|---|
 | Debug / Release 编译 | ✅ 均 exit 0 |
 | `./build-ios.sh` 编译门 | ✅ exit 0,六条判据全过(处理量由脚本自己打印) |
-| 签名身份 | ❌ `security find-identity -v -p codesigning` 无有效身份;工程 `DEVELOPMENT_TEAM` 为空;Xcode 未登录账号 |
-| archive / export / upload | ❌ 一次都没跑过(没有签名身份,必然失败,不是脚本问题) |
+| 签名身份 | ✅ 已建 `Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`;Team = `J4YCBW8ZG7`(**免费 Personal Team**);`DEVELOPMENT_TEAM` 仍不写进工程,只走命令行 |
+| archive / export / upload | ❌ 仍未跑过。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员(`--archive` 也没试过) |
 | iOS 模拟器运行时 | ✅ 已装 iOS 27.2;iPhone 17 模拟器上跑过(见上节) |
-| 真机 | ◐ `devicectl` 能看到 iPhone17,1(ECID 1167033789775900 / 序列号 G70WJW500J),但 `pairingState=unsupported`;**即使配对成功,未签名包也装不进真机** |
-| 界面与播放实跑 | ◐ 模拟器:首启 / 首页 / 播放页 / 后台播放 / 设置页 ✅;真机与其余路径 ❌ |
+| 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动 |
+| 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进)|
+| 仍未验 | ◐ 订阅刷新、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看) |
 
-**所以 TestFlight 链接目前还不可用**:缺的是 Apple Developer Program 账号与签名,
-不是代码。拿到账号后按上节四条命令走。
+**所以 TestFlight 链接目前还不可用**:缺的是 **Apple Developer Program 会员**(现在登录的是免费
+Personal Team,7 天有效的开发描述文件只够装自己的机器),不是代码。付费后按上节四条命令走。
 
 ---
 
