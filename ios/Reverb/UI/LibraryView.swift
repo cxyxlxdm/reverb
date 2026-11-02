@@ -44,6 +44,7 @@ struct LibraryView: View {
             }
         }
         .navigationTitle("音阁")
+        .toolbarTitleDisplayMode(.inlineLarge)
         .confirmationDialog("删除此单集的离线文件?", isPresented: Binding(
             get: { pendingDelete != nil },
             set: { if !$0 { pendingDelete = nil } }

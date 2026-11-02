@@ -76,6 +76,8 @@ struct DiscoverView: View {
             if isSearchActive { searchContent } else { popularContent }
         }
         .navigationTitle("余音")
+        // 标题与右侧按钮同处工具栏一行,不再另起一行大标题(四个 tab 同口径)。
+        .toolbarTitleDisplayMode(.inlineLarge)
         .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
                     prompt: "搜索播客/视频或粘贴 RSS、直播流、视频链接")
         .onSubmit(of: .search) { runSearch() }

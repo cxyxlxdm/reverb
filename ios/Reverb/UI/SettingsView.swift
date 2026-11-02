@@ -195,6 +195,8 @@ struct SettingsView: View {
             }
         }
         .tint(accent)
+        .navigationTitle("设置")
+        .toolbarTitleDisplayMode(.inlineLarge)
         .onAppear { refreshCacheSize(); refreshLogSize(); prepareShareLog() }
         .alert("清除缓存?", isPresented: $confirmClearCache) {
             Button("清除", role: .destructive) { clearCaches() }
