@@ -46,6 +46,7 @@ struct InboxView: View {
             }
         }
         .navigationTitle("追更")
+        .toolbarTitleDisplayMode(.inlineLarge)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
