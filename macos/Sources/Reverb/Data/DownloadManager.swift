@@ -13,6 +13,17 @@ import Foundation
     /// episodeId -> 已记录的进度里程碑(25/50/75),避免重复打点。
     private var loggedMilestone: [String: Int] = [:]
 
+    /// 「这次下载该不该放行」的闸门。**nil = 不拦** —— 桌面没有蜂窝基带,
+    /// 这是 macOS 唯一正确的取值(见 `SettingsStore.allowCellularDownload` 的长注释)。
+    ///
+    /// 闸门放在本类而不是各调用点,是因为调用点有三个(单集按钮、备份恢复的批量补下、
+    /// 将来的任何入口),而「靠调用点自律的规矩必漏」—— 详见 Android `util/CellularGate.kt`
+    /// 与 REVIEW-2026-10-25 中-3。判据本体由调用方给(iOS 是 `CellularGate.blocked()`),
+    /// 本层不引 Network 框架。
+    var allowsTransfer: (() -> Bool)?
+    /// 被闸门拦下时回调。界面上必须说出来 —— 否则用户点下载毫无反应。
+    var onBlocked: ((Episode) -> Void)?
+
     private lazy var session: URLSession = {
         URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     }()
@@ -24,11 +35,16 @@ import Foundation
 
     func isDownloading(_ id: String) -> Bool { active.contains(id) }
 
-    /// 开始下载。已下载或正在下载则忽略。
+    /// 开始下载。已下载或正在下载则忽略;被计费链路闸门拦下则回调界面、不建任务。
     func download(_ ep: Episode) {
         guard !store.contains(ep.id), !active.contains(ep.id),
               let url = URL(string: ep.audioUrl) else {
             Log.d("Download", "download 跳过 id=\(ep.id)(已下载/进行中/URL 无效)")
+            return
+        }
+        if let allowsTransfer, !allowsTransfer() {
+            Log.i("Download", "下载被计费链路闸门拦下 id=\(ep.id)(设置里未允许蜂窝下载)")
+            onBlocked?(ep)
             return
         }
         Log.i("Download", "开始下载 id=\(ep.id) title=\"\(ep.title)\" url=\(ep.audioUrl)")

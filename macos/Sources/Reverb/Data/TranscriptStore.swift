@@ -82,6 +82,14 @@ enum TranscriptFormat {
     private var generation = 0
     private var job: Task<Void, Never>?
 
+    /// 「转录前下整集音频」这一步该不该放行,nil = 不拦(macOS 的取值 —— 桌面没有蜂窝基带)。
+    ///
+    /// 这是三条大流量路径里的第三条,长期没接闸门(见 Android `util/CellularGate.kt` 头注):
+    /// 用户关了「仅在 Wi-Fi 下载」,下载与缓存都老实用 Wi-Fi,只有「转逐字稿」会在蜂窝上
+    /// 悄悄跑掉一整集。**只拦本机识别前的那次下载**;发布方官方稿是一个小文本文件,
+    /// 与 Android 同一条口径。已下载/已缓存到本地的集压根走不到这里,离线转写照旧。
+    var allowsTransfer: (() -> Bool)?
+
     /// `nonisolated`: `diskUsageBytes()` 要在后台扫它,而本类整体是 `@MainActor`
     /// (否则 `Self.subdir` 的读取就是一次跨 actor 访问,Swift 6 语言模式下直接报错)。
     nonisolated private static let subdir: URL = {
@@ -259,6 +267,15 @@ enum TranscriptFormat {
         if let local = localURL {
             fileURL = local
         } else {
+            // 闸门放在这里而不是更上层:只有"要下整集音频"这一支该被拦,
+            // 官方稿与本地转写都不该受「仅在 Wi-Fi 下载」影响。
+            if let allowsTransfer, !allowsTransfer() {
+                Log.w("Transcript", "转录前的音频下载被计费链路闸门拦下 id=\(episodeId)")
+                if !stale() {
+                    state = .failed(String(localized: "仅 Wi-Fi 下载已开启，切换到 Wi-Fi 后点按重试"))
+                }
+                return
+            }
             guard let remote = URL(string: audioURL) else {
                 if !stale() { state = .failed(String(localized: "音频地址无效")) }; return
             }

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 全屏播放页:封面 + 进度 + 传输控制 + 倍速/收藏/睡眠/印记/批注/逐字稿。
 ///
@@ -24,6 +25,15 @@ struct PlayerView: View {
     @State private var channel: Podcast?
     @State private var noteParagraphs: [String] = []
     @State private var noteForEpisode = ""
+    /// 剪藏同样要冻结「按下那一刻」的集与位置:渲染封面要等一次网络/磁盘读,
+    /// 用实时值会在等待期间换成下一集或往后跑几秒(与批注同一条门)。
+    @State private var clipEpisode: Episode?
+    @State private var clipPosMs = 0
+    @State private var clipImage: UIImage?
+    @State private var showClip = false
+    @State private var confirmDeleteDownload = false
+    /// 确认框开着时播放器可能已自动续播到下一集,删除的必须是按下那一下的那一集。
+    @State private var pendingDeleteDownload: String?
 
     private let sleepMinutes = [15, 30, 45, 60]
     private let seals: [(seal: String, label: String)] = [
@@ -63,6 +73,25 @@ struct PlayerView: View {
         .sheet(isPresented: $showNotes) {
             if let ep = player.current { descriptionSheet(ep) }
         }
+        .sheet(isPresented: $showClip) {
+            Group {
+                if let image = clipImage {
+                    ShareCardPreview(
+                        title: "剪藏海报",
+                        image: image,
+                        fileName: "reverb-moment-\(abs((clipEpisode?.id ?? "x").hashValue)).png",
+                        accent: accent)
+                } else {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在生成…").font(.callout).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .presentationDetents([.medium])
+                }
+            }
+            .task(id: clipEpisode?.id) { await renderClip() }
+        }
         .sheet(item: $channel) { p in
             NavigationStack {
                 PodcastDetailView(podcast: p)
@@ -75,6 +104,14 @@ struct PlayerView: View {
             .environmentObject(env)
             .environmentObject(player)
             .environmentObject(env.settings)
+        }
+        .confirmationDialog("删除此单集的离线文件?", isPresented: $confirmDeleteDownload,
+                            titleVisibility: .visible) {
+            Button("删除", role: .destructive) {
+                if let id = pendingDeleteDownload { env.downloadManager.delete(id) }
+                pendingDeleteDownload = nil
+            }
+            Button("取消", role: .cancel) {}
         }
     }
 
@@ -283,7 +320,9 @@ struct PlayerView: View {
                     Divider()
                     Button("关闭") { player.cancelSleep() }
                 } label: {
-                    actionLabel(Text("睡眠定时"), symbol: sleepActive ? "moon.zzz.fill" : "moon.zzz",
+                    // 倒计时就显示在本颗的字上(与 Android `SleepChip` / 鸿蒙 `SleepCountdownText`
+                    // 同一口径):开着定时却只换图标的话,用户看不出还剩多久。
+                    actionLabel(sleepTitle, symbol: sleepActive ? "moon.zzz.fill" : "moon.zzz",
                                 active: sleepActive, iconFirst: true)
                 }
                 .accessibilityLabel(Text("睡眠定时"))
@@ -295,18 +334,26 @@ struct PlayerView: View {
             }
             .frame(maxWidth: .infinity)
 
-            HStack(spacing: 10) {
+            // 自适应换行而不是一行 HStack:窄屏(SE 320pt 去掉左右 24)那一行放不下
+            // 四颗胶囊,末尾的下载按钮会被挤出屏幕 —— 这是排版问题,不该靠截断解决。
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 100), spacing: 8)], spacing: 8) {
                 secondaryButton("简介", symbol: "text.alignleft") { showNotes = true }
                 if !ep.isLive && (env.settings.transcriptionEnabled || !ep.transcriptUrl.isEmpty) {
                     secondaryButton("逐字稿", symbol: "text.viewfinder") { showTranscript = true }
                 }
                 secondaryButton("待播", symbol: "text.line.first.and.arrowtriangle.forward") { showQueue = true }
-                if !ep.isLive {
-                    EpisodeDownloadButton(episode: ep, accent: accent)
-                        .frame(width: 36, height: 36)
-                        .background(Color.secondary.opacity(0.10), in: Circle())
+                secondaryButton("剪藏", symbol: "bookmark") {
+                    clipEpisode = ep
+                    clipPosMs = player.positionMs
+                    clipImage = nil
+                    showClip = true
+                }
+                if !ep.isLive && !BilibiliSource.isPseudo(ep.audioUrl) {
+                    // 与其余四颗同为带字胶囊:早先这里是个 36pt 圆钮,夹在胶囊里像个漏排版的小件。
+                    downloadPill(ep)
                 }
             }
+            .frame(maxWidth: .infinity)
         }
         .padding(.top, 4)
         .task(id: ep.id) {
@@ -330,7 +377,9 @@ struct PlayerView: View {
                     }
                 }
                 .frame(height: 24)
-                title.font(.caption2).foregroundStyle(.secondary)
+                // 用 `Color.secondary` 而不是 `.secondary`:按钮标签里的层级样式会按 tint
+                // 解析,青瓷这类低饱和配色下小字会读成"禁用"(和下载钮同一类视觉问题)。
+                title.font(.caption2).foregroundStyle(Color.secondary)
             } else {
                 title
                     .font(.callout.monospacedDigit())
@@ -345,16 +394,54 @@ struct PlayerView: View {
 
     private func secondaryButton(_ title: LocalizedStringKey, symbol: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: symbol)
-                .font(.footnote)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Color.secondary.opacity(0.10), in: Capsule())
+            pill { Label(title, systemImage: symbol) }
         }
         .buttonStyle(.plain)
     }
 
+    /// 下载的四种状态收进同一颗胶囊。删掉离线文件仍要确认一次(与列表里的下载钮同一口径)。
+    @ViewBuilder
+    private func downloadPill(_ ep: Episode) -> some View {
+        if env.downloads.contains(ep.id) {
+            Button { pendingDeleteDownload = ep.id; confirmDeleteDownload = true } label: {
+                pill {
+                    Label("已下载", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(accent)
+                }
+            }
+            .buttonStyle(.plain)
+        } else if env.downloadManager.isDownloading(ep.id) {
+            pill {
+                ProgressView().controlSize(.mini)
+                Text("下载中")
+            }
+        } else {
+            Button { env.downloadManager.download(ep) } label: {
+                pill { Label("下载", systemImage: "arrow.down.circle") }
+            }
+            .buttonStyle(.plain)
+            .disabled(ep.audioUrl.isEmpty)
+        }
+    }
+
+    private func pill<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 6) { content() }
+            .font(.footnote)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.secondary.opacity(0.10), in: Capsule())
+    }
+
     private var sleepActive: Bool { player.sleepRemainingMs > 0 || player.sleepEndOfEpisode }
+
+    /// 与 Android `SleepChip` 同文案:倒计时优先,「本集结束」其次,否则就是未开。
+    private var sleepTitle: Text {
+        if player.sleepRemainingMs > 0 {
+            return Text(Fmt.clock(player.sleepRemainingMs)).monospacedDigit()
+        }
+        if player.sleepEndOfEpisode { return Text("本集结束") }
+        return Text("睡眠定时")
+    }
 
     private var currentSeal: String? {
         guard let ep = player.current else { return nil }
@@ -495,8 +582,19 @@ struct PlayerView: View {
         .tint(accent)
     }
 
+    /// 生成剪藏海报。封面先取到再渲染 —— `AsyncImage` 的异步链在 `ImageRenderer`
+    /// 那一帧里还没回来,不先 `await` 就会渲染出占位方块。
+    private func renderClip() async {
+        guard let ep = clipEpisode else { return }
+        let art = await loadUIImage(ep.artworkUrl)
+        let card = MomentCard(episode: ep, positionMs: clipPosMs, accent: accent, artwork: art)
+        clipImage = renderImage(card)
+    }
+
+    /// `%.2g` 会把 1.25 印成 `1.2×`、1.75 印成 `1.8×`(两位有效数字),菜单里选的那档
+    /// 与显示的不是同一个数。这端用 `%g` 与设置页同一口径:1 → `1×`、1.25 → `1.25×`。
     private func speedText(_ s: Double) -> String {
-        String(format: "%.2g×", s)
+        String(format: "%g×", s)
     }
 }
 

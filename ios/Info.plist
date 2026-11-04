@@ -50,7 +50,14 @@
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>fetch</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.yuyin.reverb.feed-refresh</string>
+	</array>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>用于把剪藏、足音与频道分享海报存进相册。</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

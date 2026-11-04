@@ -23,14 +23,30 @@ final class AppEnvironment: ObservableObject {
     /// 跨启动的播放态。文件名与字段和 Android / 鸿蒙 / macOS 是**同一份**
     /// (`playback_state.json`),四端可互读。
     let playbackState: PlaybackStateStore
+    /// 订阅更新提醒的巡检(后台任务 + 本地通知)。macOS 没有这一套:桌面是拉取式,
+    /// 打开追更才刷,见 `SettingsStore.updatesEnabled` 的注释。
+    let updates: UpdateReminders
+    /// 全局轻提示。下载被计费链路拦下这类「用户点了但什么都没发生」的事件必须说出来。
+    let toast = ToastCenter()
 
     init() {
+        updates = UpdateReminders(repository: repository, subscriptions: subscriptions)
         let version = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "?"
         let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
         Log.i("App", "启动 余音 Reverb v\(version) (\(build)) iOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
 
         downloadManager = DownloadManager(store: downloads)
         playbackState = PlaybackStateStore()
+        // 「仅在 Wi-Fi 下载」的闸门:iOS 有三条大流量路径(点名下载 / 首播落缓存 / 转录前下整集),
+        // 判据只有 `CellularGate` 一份,这里把它接到三个入口上。macOS 的三处闭包保持 nil(不拦)。
+        CellularGate.start()
+        downloadManager.allowsTransfer = { !CellularGate.blocked() }
+        downloadManager.onBlocked = { [weak self] ep in
+            self?.toast.show(NSLocalizedString("仅 Wi-Fi 下载已开启，连接到 Wi-Fi 后再试", comment: "下载被闸门拦下"))
+            Log.i("Download", "界面提示已拦下 id=\(ep.id)")
+        }
+        audioCache.allowsTransfer = { !CellularGate.blocked() }
+        transcripts.allowsTransfer = { !CellularGate.blocked() }
         player.bind(history: history, settings: settings)
         player.bindListenStats(listenStats)
         listenStats.seedFromHistory(history.history)
@@ -61,6 +77,10 @@ final class AppEnvironment: ObservableObject {
 
         let lang = settings.language.isEmpty ? "auto(\(Locale.preferredLanguages.first ?? "?"))" : settings.language
         Log.i("App", "本地数据就绪 region=\(region) language=\(lang) 订阅=\(subscriptions.subscriptions.count) 收藏=\(favorites.favorites.count) 历史=\(history.history.count) 印记=\(stamps.stamps.count) 批注=\(notes.notes.count) 下载=\(downloads.downloads.count)")
+
+        // 后台任务注册必须在启动早期完成(Info.plist 里已申报同一个 identifier)。
+        // `updatesEnabled` 关着时它只撤销排期,不发通知。
+        updates.registerBackgroundTask()
     }
 
     /// 当前生效地区:设置覆盖优先,否则跟随系统区域,再退化为 us。
@@ -68,5 +88,22 @@ final class AppEnvironment: ObservableObject {
         if !settings.regionOverride.isEmpty { return settings.regionOverride }
         let r = Locale.current.region?.identifier ?? "US"
         return r.lowercased()
+    }
+}
+
+/// 全局轻提示。手机上只活两秒多,不阻塞任何操作 —— 用来回答「我点了,怎么没反应?」。
+@MainActor
+final class ToastCenter: ObservableObject {
+    @Published private(set) var text: String?
+    private var token = 0
+
+    func show(_ value: String) {
+        token += 1
+        let mine = token
+        text = value
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_400_000_000)
+            if token == mine { text = nil }
+        }
     }
 }

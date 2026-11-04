@@ -66,6 +66,9 @@ struct DiscoverView: View {
     @State private var liveEpisode: Episode?
     /// 仅 Debug:`-search` 钩子写下的查询词,用来挡住搜索框复位带来的清空。
     @State private var debugQuery = ""
+    /// 「加入待播」的结果提示:入队落在待播页,当前页看不出任何变化,不提示等于没按上。
+    @State private var toast: String?
+    @State private var toastToken = 0
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
@@ -123,6 +126,22 @@ struct DiscoverView: View {
                 showReorder = false
             }
         }
+        .overlay(alignment: .top) { TopToast(text: toast) }
+        // 地区换了榜单就该跟着换:数据是按 region 取的缓存键,不重载会把上一地区的
+        // 「每日热门」原地留到下次冷启动(与 macOS 设置页那条 onChange 同一理由)。
+        .onChange(of: settings.regionOverride) { _, _ in
+            Task { await loadPopular(initial: false) }
+        }
+    }
+
+    private func showToast(_ text: String) {
+        toastToken += 1
+        let token = toastToken
+        toast = text
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            if toastToken == token { toast = nil }
+        }
     }
 
     // MARK: - 榜单
@@ -178,6 +197,19 @@ struct DiscoverView: View {
                             player.playQueue([entry.episode], startIndex: 0)
                         }
                         .contextMenu {
+                            Button {
+                                player.playNext(entry.episode)
+                            } label: {
+                                Label("下一个播放", systemImage: "text.line.first.and.arrowtriangle.forward")
+                            }
+                            Button {
+                                player.enqueue(entry.episode)
+                                showToast(NSLocalizedString("已加入待播", comment: "入队结果提示"))
+                            } label: {
+                                Label("加入待播", systemImage: "text.badge.plus")
+                            }
+                            // 卡片能出现在这条横里就说明它未播完(过滤条件如此),所以只给单向的
+                            // 「标记已播完」;撤销入口在音阁 · 历史(reverse 才是那条列的本分)。
                             Button {
                                 env.history.markPlayed(entry.episode.id, true)
                             } label: {
@@ -356,11 +388,16 @@ struct DiscoverView: View {
         searchEpisodes = []
         searchSource = ""
         if LiveStream.looksLikeStream(q) {
+            // 直播流与目录搜索是**互斥**的两种结果形态(与 Android `DiscoverState.Live`
+            // 同一条:那边识别成流之后根本不发目录请求)。原先这里两条路一起跑,
+            // 于是"粘一个流地址却搜出几个同名播客"时,直播那一块被条件挡在结果后面、看不见。
             Task {
                 let live = await LiveStream.resolve(q)
                 guard submittedQuery == q else { return }
                 liveEpisode = live
+                searching = false
             }
+            return
         }
         Task {
             async let podsTask = env.repository.search(q, region: env.region)
