@@ -361,3 +361,7 @@
 "更新下载失败" = "Update download failed";
 "安装包没有下载成功。检查网络后重试，也可以选「以后再说」。" = "The installer could not be downloaded. Check your network and try again, or choose “Later”.";
 "重试" = "Retry";
+
+/* 2026-11-04 与 iOS 对齐时只取这两条共用键(其余新串是 iOS 专属,不进本端) */
+"仅 Wi-Fi 下载已开启，切换到 Wi-Fi 后点按重试" = "Wi-Fi only is on. Switch to Wi-Fi and tap retry";
+"正在读取…" = "Reading…";

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 频道详情:封面 / 标题 / 作者 / 订阅 / 简介 + 单集列表。触屏形态下拉刷新。
 struct PodcastDetailView: View {
@@ -13,6 +14,9 @@ struct PodcastDetailView: View {
     @State private var loading = false
     /// 非 nil = 当前内容来自磁盘缓存,联网刷新还没成功。
     @State private var staleAt: Date?
+    @State private var shareImage: UIImage?
+    @State private var showShare = false
+    @StateObject private var selection = EpisodeSelection()
 
     private var display: Podcast { loaded ?? podcast }
     private var accent: Color { Theme.accent(settings.accentIndex) }
@@ -46,8 +50,31 @@ struct PodcastDetailView: View {
         }
         .navigationTitle(display.title)
         .navigationBarTitleDisplayMode(.inline)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if selection.selecting {
+                EpisodeSelectionBar(
+                    count: selection.picked.count,
+                    allSelected: selection.picked.count >= episodes.count,
+                    onAll: { selection.picked = Set(episodes.map(\.id)) },
+                    onEnqueue: {
+                        selection.enqueue(from: episodes, using: player, log: "列=频道 \(channelKey)")
+                    },
+                    onExit: { selection.reset() },
+                    accent: accent)
+            }
+        }
+        .selectionToast(selection)
         .refreshable { await load(force: true) }
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button {
+                    shareImage = nil
+                    showShare = true
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .accessibilityLabel(Text("分享频道"))
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { Task { await load(force: true) } } label: {
                     if loading { ProgressView().controlSize(.small) }
@@ -56,6 +83,25 @@ struct PodcastDetailView: View {
                 .disabled(loading)
                 .accessibilityLabel(Text("刷新"))
             }
+        }
+        .sheet(isPresented: $showShare) {
+            Group {
+                if let image = shareImage {
+                    ShareCardPreview(
+                        title: "分享频道",
+                        image: image,
+                        fileName: "reverb-channel-\(abs(display.feedUrl.hashValue)).png",
+                        accent: accent)
+                } else {
+                    VStack(spacing: 12) {
+                        ProgressView()
+                        Text("正在生成…").font(.callout).foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .presentationDetents([.medium])
+                }
+            }
+            .task { await renderShareCard() }
         }
         .task(id: podcast.id) { await load() }
     }
@@ -139,14 +185,25 @@ struct PodcastDetailView: View {
                             accent: accent,
                             // 已经在频道页里,封面再点只会把同一个频道压进栈。
                             coverOpensChannel: false,
+                            selecting: selection.selecting,
+                            selected: selection.picked.contains(ep.id),
                             onPlay: {
-                                player.playOrToggle(ep, queue: episodes, tag: ListTag.podcast(channelKey))
-                            })
-                        EpisodeDownloadButton(episode: ep, accent: accent)
+                                if selection.selecting { selection.toggle(ep) }
+                                else { player.playOrToggle(ep, queue: episodes, tag: ListTag.podcast(channelKey)) }
+                            },
+                            onEnterSelection: { selection.enter(ep.id) })
+                        if !selection.selecting {
+                            EpisodeDownloadButton(episode: ep, accent: accent)
+                        }
                     }
                 }
             }
         }
+    }
+
+    private func renderShareCard() async {
+        let art = await loadUIImage(display.artworkUrl)
+        shareImage = renderImage(ChannelShareCard(podcast: display, accent: accent, artwork: art))
     }
 
     private func load(force: Bool = false) async {

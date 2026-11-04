@@ -6,6 +6,7 @@ struct MiniPlayer: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
     var onOpen: () -> Void
+    @State private var showQueue = false
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isLive: Bool { player.current?.isLive == true && player.durationMs <= 0 }
@@ -38,19 +39,31 @@ struct MiniPlayer: View {
 
             HStack(spacing: 12) {
                 if let ep = player.current {
-                    Button(action: onOpen) {
-                        HStack(spacing: 11) {
+                    HStack(spacing: 11) {
+                        // 封面的第二重语义与列表行同一条(Android `MiniPlayer` 的
+                        // `coverChannelJump`):点头像进频道页,点其余部分展开播放页。
+                        // 两者是**兄弟**而不是嵌套 —— 把 NavigationLink 塞进 Button 的 label 里,
+                        // 命中会被外层 Button 吃掉,头像点了只会展开播放页。
+                        if let channel = ep.channelRef {
+                            NavigationLink(value: channel) {
+                                Artwork(url: ep.artworkUrl, size: 42, corner: 8)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(Text("进入频道页"))
+                        } else {
                             Artwork(url: ep.artworkUrl, size: 42, corner: 8)
+                        }
+                        Button(action: onOpen) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(ep.title).font(.callout).fontWeight(.medium).lineLimit(1)
                                 Text(ep.podcastTitle).font(.caption)
                                     .foregroundStyle(.secondary).lineLimit(1)
                             }
-                            Spacer(minLength: 0)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
                         }
-                        .contentShape(Rectangle())
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
 
                     Button {
                         if player.playbackError != nil { player.retry() } else { player.togglePlayPause() }
@@ -71,6 +84,24 @@ struct MiniPlayer: View {
                     .buttonStyle(.plain)
                     .disabled(!player.hasNext || ep.isLive)
                     .opacity(ep.isLive ? 0.3 : 1)
+
+                    // 队列入口与关闭:位次与 Android 底条一致 —— 队列在前、X 在最右。
+                    Button { showQueue = true } label: {
+                        Image(systemName: "list.bullet")
+                            .font(.system(size: 16))
+                            .frame(width: 30, height: 34)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("待播"))
+
+                    Button { player.close() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 30, height: 34)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("关闭播放器"))
                 }
             }
             .padding(.horizontal, 14)
@@ -78,5 +109,10 @@ struct MiniPlayer: View {
         }
         .background(.regularMaterial)
         .overlay(alignment: .top) { Divider() }
+        .sheet(isPresented: $showQueue) {
+            QueueView()
+                .environmentObject(player)
+                .environmentObject(settings)
+        }
     }
 }

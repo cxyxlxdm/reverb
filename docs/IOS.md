@@ -56,8 +56,15 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
 - 本地化:`ios/Localization/{en,es,fr,zh-Hant}.lproj`,**简中是基础语言**
   (代码里的键名就是简体中文原文),所以只有 4 套 —— 与 macOS 同形。
   新增文案 = 改代码默认串 + 4 个 `.strings`,加起来才是五个语种。
-- `Info.plist`:后台音频、出口合规声明、竖屏(iPhone)/四向(iPad)、
-  离线语音识别用途说明。GUID 与版本号由工程设置注入,不要手改。
+  ⚠️ **这是独立于 `macos/Localization` 的第二份副本**(pbxproj 路径相对 group 基准 `ios/`);
+  改桌面那份不会进 iOS 包,两份要一起改。2026-11-04 两份已合并过一次,机制与踩坑见 H246。
+  权限弹窗的说明文字不在这里,而是每套 `.lproj` 里的 **`InfoPlist.strings`**
+  (键 `NSPhotoLibraryAddUsageDescription` / `NSSpeechRecognitionUsageDescription`);
+  它是显式引用 + `PBXVariantGroup`,**新加 `.lproj` 文件不会自动进包** —— 光写文件不改 pbxproj 是静默无效。
+  `build-ios.sh` 的验收段现在要求 4 套里都有这份且两个键都非空。
+- `Info.plist`:后台音频、后台刷新任务标识、出口合规声明、竖屏(iPhone)/四向(iPad)、
+  离线语音识别与相册(仅添加)用途说明(简中基准;其余语种走 `InfoPlist.strings`)。
+  GUID 与版本号由工程设置注入,不要手改。
 
 ---
 
@@ -190,8 +197,13 @@ xcrun simctl spawn booted log show --last 12s --style compact \
 切到「设置」App 后音频队列继续入队(`howFarAhead` 前进),锁屏信息由
 `MPNowPlayingInfoCenter` 持续更新。2026-11-04 补测 B 站搜索相关度过滤:`-search 学习资料`
 启动后日志为 `[Bilibili] search count=6 dropped_irrelevant=11`(规则与逐条读数见 H241)。
-**没验过的**:订阅刷新、逐字稿(需 iOS 26 语音模型)、
-下载、备份导出 —— 模拟器只覆盖到首启 / 首页 / 播放 / 后台 / 设置页渲染。
+**2026-11-04 再跑一轮(功能对齐后)**:向模拟器容器的 `Application Support/Reverb/subscriptions.json`
+写入 4 档种子订阅后,追更页能拉到真实单集(封面 / 标题 / 频道 / 日期 / 时长 / 播放钮)、
+音阁「订阅」列表与播放页动作行均正常;设置页「字号 / 听觉足迹 / 仅在 Wi-Fi 下载 / 订阅更新提醒」
+四行渲染正常(修掉了两处 tint 视觉问题,见 H242、H243)。
+**没验过的**:订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、
+下载、备份导出、后台巡检与本地通知、相册保存、邮件草稿 —— 模拟器只覆盖到
+首启 / 首页 / 追更 / 音阁 / 播放 / 设置页渲染。
 
 iOS 备份排除项也可以在模拟器数据容器里直接验:
 
@@ -248,8 +260,8 @@ xcodebuild … -configuration Release … && xcrun devicectl device install app 
 | archive / export / upload | ❌ 仍未跑过。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员(`--archive` 也没试过) |
 | iOS 模拟器运行时 | ✅ 已装 iOS 27.2;iPhone 17 模拟器上跑过(见上节) |
 | 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动 |
-| 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进)|
-| 仍未验 | ◐ 订阅刷新、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看) |
+| 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊 |
+| 仍未验 | ◐ 订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看)、**2026-11-04 新增能力的运行侧**:后台巡检与本地通知(BGTask 需真机跨 6 小时)、通知权限拒绝分支、相册保存、邮件草稿、蜂窝闸门(要在真机上切 Wi-Fi / 蜂窝) |
 
 **所以 TestFlight 链接目前还不可用**:缺的是 **Apple Developer Program 会员**(现在登录的是免费
 Personal Team,7 天有效的开发描述文件只够装自己的机器),不是代码。付费后按上节四条命令走。

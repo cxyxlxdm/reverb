@@ -243,11 +243,18 @@ struct RoomyEpisodeRow: View {
     var accent: Color = .accentColor
     var sourceTag: String? = nil
     var coverOpensChannel: Bool = true
+    /// 多选态:整行的点击语义由调用方改成「勾选」(行自身不存这份状态 ——
+    /// 与 Android / macOS 同一条理由:行会被 Lazy 容器回收,状态留在行里会随滚动丢失)。
+    var selecting: Bool = false
+    var selected: Bool = false
     var onPlay: () -> Void = {}
     var onLongPress: (() -> Void)? = nil
+    /// 从长按菜单进入多选。手机上没有 macOS 那样常驻的工具栏「选择」按钮,
+    /// 菜单项是触屏上最不突兀的入口。
+    var onEnterSelection: (() -> Void)? = nil
 
     private var playing: Bool { isCurrent && isPlaying }
-    private var titleColor: Color { isCurrent ? accent : (played ? .secondary : .primary) }
+    private var titleColor: Color { isCurrent || selected ? accent : (played ? .secondary : .primary) }
 
     private var meta: String {
         var parts: [String] = []
@@ -259,11 +266,28 @@ struct RoomyEpisodeRow: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            EpisodeArtworkLink(episode: episode, size: 54, corner: 10, enabled: coverOpensChannel)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .strokeBorder(accent, lineWidth: isCurrent ? 2 : 0)
-                )
+            Group {
+                if selecting {
+                    Artwork(url: episode.artworkUrl, size: 54, corner: 10)
+                        .contentShape(Rectangle())
+                        .onTapGesture(perform: onPlay)
+                } else {
+                    EpisodeArtworkLink(episode: episode, size: 54, corner: 10, enabled: coverOpensChannel)
+                }
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .strokeBorder(accent, lineWidth: isCurrent ? 2 : (selected ? 1.5 : 0))
+            )
+            .overlay(alignment: .topTrailing) {
+                if selecting {
+                    Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 18, weight: .bold))
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, selected ? accent : Color.black.opacity(0.35))
+                        .offset(x: 5, y: -5)
+                }
+            }
 
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .top, spacing: 5) {
@@ -308,19 +332,24 @@ struct RoomyEpisodeRow: View {
             .contentShape(Rectangle())
             .onTapGesture(perform: onPlay)
 
-            Button(action: onPlay) {
-                Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundStyle(isCurrent ? accent : Color.secondary)
-                    .symbolRenderingMode(.hierarchical)
+            // 选择模式里行尾这颗不显示(不是禁灰):它在行内自己消费点击,
+            // 留着就是「点行尾播放、点行中间勾选」—— 同一行两种语义(与 macOS 同一条理由)。
+            if !selecting {
+                Button(action: onPlay) {
+                    Image(systemName: playing ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 30))
+                        .foregroundStyle(isCurrent ? accent : Color.secondary)
+                        .symbolRenderingMode(.hierarchical)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(playing ? Text("暂停") : Text("播放"))
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(playing ? Text("暂停") : Text("播放"))
         }
         .padding(.vertical, 10)
         .contentShape(Rectangle())
         .contextMenu {
-            EpisodeActionMenu(episode: episode, onLongPress: onLongPress)
+            EpisodeActionMenu(episode: episode, onLongPress: onLongPress,
+                              onEnterSelection: onEnterSelection)
         }
     }
 }
@@ -330,6 +359,7 @@ struct RoomyEpisodeRow: View {
 struct EpisodeActionMenu: View {
     let episode: Episode
     var onLongPress: (() -> Void)? = nil
+    var onEnterSelection: (() -> Void)? = nil
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var downloads: DownloadStore
@@ -337,6 +367,11 @@ struct EpisodeActionMenu: View {
 
     var body: some View {
         if !episode.isLive {
+            if let onEnterSelection {
+                Button(action: onEnterSelection) {
+                    Label("多选", systemImage: "checkmark.circle")
+                }
+            }
             Button {
                 env.favorites.toggle(episode)
             } label: {
@@ -353,12 +388,14 @@ struct EpisodeActionMenu: View {
             } label: {
                 Label("下一集播放", systemImage: "text.line.first.and.arrowtriangle.forward")
             }
-            if env.history.history.contains(where: { $0.episode.id == episode.id }) {
+            // 只有**反向撤销**这一项(2026-10-17 三端统一,见 Android Components.kt 该段注释):
+            // 正向的「标记为已播完」在任何单集列表里都不给 —— 它对没有历史条目的集是静默空操作,
+            // 唯一保留的正向入口是发现页「继续收听」那张卡(那里本来就显示进度)。
+            if env.history.isPlayed(episode.id) {
                 Button {
-                    env.history.markPlayed(episode.id, !env.history.isPlayed(episode.id))
+                    env.history.markPlayed(episode.id, false)
                 } label: {
-                    Label(env.history.isPlayed(episode.id) ? "标记为未播完" : "标记为已播完",
-                          systemImage: env.history.isPlayed(episode.id) ? "arrow.uturn.backward" : "checkmark.circle")
+                    Label("标记为未播完", systemImage: "arrow.uturn.backward")
                 }
             }
             if !BilibiliSource.isPseudo(episode.audioUrl) {
@@ -382,6 +419,107 @@ struct EpisodeActionMenu: View {
                 Label("更多", systemImage: "ellipsis.circle")
             }
         }
+    }
+}
+
+/// 一列单集的「多选」状态:进入/退出、已选集合、入队后那句话。
+/// 与 macOS `EpisodeSelection` 同名同语义;每张列表各持一份,互不串味 ——
+/// 集合里存的是 id,而同一个 id 可能同时出现在收藏与下载两列。
+@MainActor final class EpisodeSelection: ObservableObject {
+    @Published var selecting = false
+    @Published var picked = Set<String>()
+    @Published private(set) var toast: String?
+    private var toastToken = 0
+
+    func enter(_ episodeId: String) {
+        selecting = true
+        picked = [episodeId]
+    }
+
+    func toggle(_ ep: Episode) {
+        if picked.contains(ep.id) { picked.remove(ep.id) } else { picked.insert(ep.id) }
+    }
+
+    func reset() {
+        selecting = false
+        picked.removeAll()
+    }
+
+    /// 把已选的那些交给 `enqueueAll`(一次去重、一次更新导航标记),然后退出选择模式。
+    /// 结果必须说出来:入队结果在「待播」里,当前列表看不出任何变化。
+    func enqueue(from episodes: [Episode], using player: PlayerController, log: String) {
+        let chosen = episodes.filter { picked.contains($0.id) }
+        let added = player.enqueueAll(chosen)
+        Log.i("UI", "批量加入待播 \(log) 选中=\(chosen.count) 新增=\(added)")
+        showToast(added == 0
+            ? NSLocalizedString("所选都已在待播里", comment: "批量入队全部重复")
+            : String(format: NSLocalizedString("已加入待播 %lld 集", comment: "批量入队结果"),
+                     Int64(added)))
+        reset()
+    }
+
+    private func showToast(_ text: String) {
+        toastToken += 1
+        let token = toastToken
+        toast = text
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            if toastToken == token { toast = nil }
+        }
+    }
+}
+
+/// 多选态的底部浮条(手机形态)。桌面上是工具栏(`EpisodeBatchToolbar`),
+/// 触屏上工具栏放不下四项,浮条又正是 Android 的既有形态(见 `SelectionBar`)。
+struct EpisodeSelectionBar: View {
+    let count: Int
+    let allSelected: Bool
+    var onAll: () -> Void
+    var onEnqueue: () -> Void
+    var onExit: () -> Void
+    var accent: Color = .accentColor
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(String(format: NSLocalizedString("已选 %lld", comment: "多选条"), Int64(count)))
+                .font(.callout.monospacedDigit())
+            Spacer(minLength: 8)
+            Button(action: onAll) {
+                Image(systemName: "checkmark.circle")
+            }
+            .disabled(allSelected)
+            .accessibilityLabel(Text("全选"))
+            Button("加入待播", action: onEnqueue)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(count == 0)
+            Button(action: onExit) {
+                Image(systemName: "xmark")
+            }
+            .accessibilityLabel(Text("退出多选"))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.10)))
+        .shadow(color: .black.opacity(0.14), radius: 10, y: 4)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+        .tint(accent)
+    }
+}
+
+extension View {
+    /// 把某一列的「已加入待播 N 集」贴在页面顶部。每列各挂一次。
+    func selectionToast(_ selection: EpisodeSelection) -> some View {
+        modifier(SelectionToastModifier(selection: selection))
+    }
+}
+
+private struct SelectionToastModifier: ViewModifier {
+    @ObservedObject var selection: EpisodeSelection
+    func body(content: Content) -> some View {
+        content.overlay(alignment: .top) { TopToast(text: selection.toast) }
     }
 }
 
@@ -484,7 +622,10 @@ struct OfflineNotice: View {
 struct StateView: View {
     var loading: Bool = false
     var symbol: String = "tray"
-    var text: String
+    /// `LocalizedStringKey` 而不是 `String`:`Text(String)` 走的是**逐字**显示,
+    /// 键在 `.strings` 里也不会被查 —— 空态文案曾因此在英文界面下仍是中文
+    /// (见 H246)。带插值的调用(`"没有找到「\(query)」"`)同样按 `%@` 键解析。
+    var text: LocalizedStringKey
 
     var body: some View {
         VStack(spacing: 12) {

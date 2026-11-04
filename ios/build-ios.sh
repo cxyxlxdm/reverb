@@ -115,6 +115,13 @@ verify_bundle() {
     [ -d "$d" ] || die "bundle 里一套 .lproj 都没有"
     [ -s "$d/Localizable.strings" ] || die "$(basename "$d") 里缺 Localizable.strings"
     plutil -lint "$d/Localizable.strings" >/dev/null || die "$(basename "$d") 的 .strings 不是合法 plist"
+    # 权限说明会弹在用户面前,英文界面下弹中文等于没本地化(见 H246 同族问题)
+    [ -s "$d/InfoPlist.strings" ] || die "$(basename "$d") 里缺 InfoPlist.strings"
+    plutil -lint "$d/InfoPlist.strings" >/dev/null || die "$(basename "$d") 的 InfoPlist.strings 不是合法 plist"
+    for k in NSPhotoLibraryAddUsageDescription NSSpeechRecognitionUsageDescription; do
+      [ -n "$(plutil -extract "$k" raw -o - "$d/InfoPlist.strings" 2>/dev/null)" ] \
+        || die "$(basename "$d") 的 InfoPlist.strings 缺 $k"
+    done
     n=$((n + 1))
   done
   [ "$n" -eq "${#LANGS[@]}" ] || die "bundle 里 $n 套 .lproj,期望 ${#LANGS[@]} 套(简中是基础语言,没有 zh-Hans.lproj)"

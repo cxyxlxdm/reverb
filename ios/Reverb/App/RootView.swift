@@ -7,6 +7,7 @@ struct RootView: View {
 
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var player: PlayerController
+    @EnvironmentObject var env: AppEnvironment
 
     @State private var tab: Tab = .discover
     @State private var showPlayer = false
@@ -54,10 +55,45 @@ struct RootView: View {
         }
         .tint(Theme.accent(settings.accentIndex))
         .preferredColorScheme(Theme.colorScheme(settings.themeMode))
+        // 字号:手机端沿用 Android / 鸿蒙那四档(0.85 / 1.0 / 1.15 / 1.3)。
+        // SwiftUI 没有任意倍率的全局字号,只能映射到最接近的 `DynamicTypeSize`;
+        // 「标准」不施加约束 ⇒ 跟随系统辅助功能字号,这是 iOS 用户预期内的行为。
+        .dynamicTypeSize(FontScale.dynamicTypeSize(settings.fontScale))
+        .overlay(alignment: .top) {
+            TopToast(text: env.toast.text)
+                .animation(.spring(response: 0.3, dampingFraction: 0.85), value: env.toast.text)
+        }
         .fullScreenCover(isPresented: $showPlayer) {
             PlayerView()
                 .environmentObject(settings)
                 .environmentObject(player)
+        }
+    }
+}
+
+/// 四档字号的映射表。数值与 Android `SettingsStore.FONT_SCALES` / 鸿蒙 `Theme.FONT_SCALES`
+/// 逐项相同,但 iOS 只能落到离散的 `DynamicTypeSize` 上 —— 两边都是「同一档叫法、最接近的倍率」,
+/// 不承诺逐像素一致(见 `docs/FEATURES.md` 字号那一行)。
+enum FontScale {
+    static let scales: [Double] = [0.85, 1.0, 1.15, 1.3]
+    static let labels = ["小", "标准", "大", "特大"]
+
+    static func index(for scale: Double) -> Int {
+        var best = 1
+        var diff = Double.greatestFiniteMagnitude
+        for (i, s) in scales.enumerated() {
+            let d = abs(s - scale)
+            if d < diff { diff = d; best = i }
+        }
+        return best
+    }
+
+    static func dynamicTypeSize(_ scale: Double) -> DynamicTypeSize {
+        switch index(for: scale) {
+        case 0: return .small      // ≈0.88
+        case 2: return .xLarge     // ≈1.12
+        case 3: return .xxxLarge   // ≈1.35(最接近 1.3 的一档)
+        default: return .large     // 系统默认,跟随辅助功能设置
         }
     }
 }

@@ -359,3 +359,7 @@
 "更新下载失败" = "Échec du téléchargement de la mise à jour";
 "安装包没有下载成功。检查网络后重试，也可以选「以后再说」。" = "L’installateur n’a pas pu être téléchargé. Vérifiez votre connexion et réessayez, ou choisissez « Plus tard ».";
 "重试" = "Réessayer";
+
+/* 2026-11-04 与 iOS 对齐时只取这两条共用键(其余新串是 iOS 专属,不进本端) */
+"仅 Wi-Fi 下载已开启，切换到 Wi-Fi 后点按重试" = "« Wi-Fi uniquement » est activé. Passez au Wi-Fi et touchez Réessayer";
+"正在读取…" = "Lecture…";

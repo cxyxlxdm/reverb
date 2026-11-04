@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import MessageUI
 import UniformTypeIdentifiers
 
 /// 设置:外观 / 内容 / 播放 / 存储 / 备份 / 日志 / 关于。
@@ -35,6 +37,14 @@ struct SettingsView: View {
     @State private var shareLogURL: URL?
     @State private var logSizeText = ""
     @State private var alertText: LocalizedStringKey?
+    @State private var showFootprint = false
+    @State private var mailDraft = false
+    @State private var mailBody = ""
+    @State private var mailLogData = Data()
+
+    /// 回到前台时刷新存储与日志读数:设置页的 `.onAppear` 只在首次出现时跑,
+    /// 从播放/下载页回来时数字会停在打开那一刻。
+    @Environment(\.scenePhase) private var scenePhase
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
 
@@ -44,6 +54,15 @@ struct SettingsView: View {
                 Picker("主题", selection: $settings.themeMode) {
                     ForEach(0..<themeNames.count, id: \.self) {
                         Text(LocalizedStringKey(themeNames[$0])).tag($0)
+                    }
+                }
+                // 四档与 Android / 鸿蒙逐项相同(0.85 / 1.0 / 1.15 / 1.3),映射见 `FontScale`。
+                Picker("字号", selection: Binding(
+                    get: { FontScale.index(for: settings.fontScale) },
+                    set: { settings.fontScale = FontScale.scales[$0] }
+                )) {
+                    ForEach(0..<FontScale.scales.count, id: \.self) { i in
+                        Text(LocalizedStringKey(FontScale.labels[i])).tag(i)
                     }
                 }
                 Picker("主题配色", selection: $settings.accentIndex) {
@@ -68,6 +87,23 @@ struct SettingsView: View {
                 Picker("地区", selection: $settings.regionOverride) {
                     ForEach(regions, id: \.code) { Text(LocalizedStringKey($0.name)).tag($0.code) }
                 }
+                Button { showFootprint = true } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("听觉足迹")
+                                .foregroundStyle(.primary)
+                            Text("你盖下的所有印记，汇成一张足迹图")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                // Form 的默认 Button 样式会给标签上 tint,青瓷这类低饱和配色下整行读成
+                // 「禁用」。用 plain 样式按普通可进入行画,与另三端一致。
+                .buttonStyle(.plain)
                 Picker("电台模式", selection: $settings.contextualRadio) {
                     Text("随机").tag(false)
                     Text("情境").tag(true)
@@ -89,10 +125,37 @@ struct SettingsView: View {
                 Picker("快进", selection: $settings.skipForwardSec) {
                     ForEach(skipForwardOptions, id: \.self) { Text("\($0) 秒").tag($0) }
                 }
+                // 反向开关:存的是 `allowCellularDownload`,界面显示的是「仅 Wi-Fi」。
+                // 与 Android `set_wifi_only` / 鸿蒙同一口径,默认关(只 Wi-Fi)。
+                Toggle(isOn: Binding(
+                    get: { !settings.allowCellularDownload },
+                    set: { settings.allowCellularDownload = !$0 }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("仅在 Wi-Fi 下载")
+                        Text("关闭后蜂窝网络也允许下载与缓存")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
                 Toggle("语音转文字", isOn: $settings.transcriptionEnabled)
                 Text("在播放页查看逐字稿,完全离线转录当前单集(需 iOS 26,首次按语言下载模型)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+            }
+
+            Section("提醒") {
+                Toggle(isOn: Binding(
+                    get: { settings.updatesEnabled },
+                    set: { turnUpdates($0) }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("订阅更新提醒")
+                        Text("订阅有新一期时通知你")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Section("存储") {
@@ -160,6 +223,9 @@ struct SettingsView: View {
                         Label("分享日志", systemImage: "square.and.arrow.up.on.square")
                     }
                 }
+                Button { composeLogMail() } label: {
+                    Label("发送日志到开发者邮箱", systemImage: "envelope")
+                }
                 Button { exportLog() } label: {
                     Label("导出日志…", systemImage: "square.and.arrow.up")
                 }
@@ -198,6 +264,13 @@ struct SettingsView: View {
         .navigationTitle("设置")
         .toolbarTitleDisplayMode(.inlineLarge)
         .onAppear { refreshCacheSize(); refreshLogSize(); prepareShareLog() }
+        // 设置页在 TabView 里常驻:从播放页/系统设置回来不会触发 `onAppear`,
+        // 缓存在那期间可能已增长。回到前台时把两个读数重算一次。
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active {
+                refreshCacheSize(); refreshLogSize(); prepareShareLog()
+            }
+        }
         .alert("清除缓存?", isPresented: $confirmClearCache) {
             Button("清除", role: .destructive) { clearCaches() }
             Button("取消", role: .cancel) {}
@@ -259,6 +332,18 @@ struct SettingsView: View {
         }
         .sheet(isPresented: $showLicenses) {
             LicensesView().environmentObject(settings)
+        }
+        .sheet(isPresented: $showFootprint) {
+            FootprintView().environmentObject(env).environmentObject(settings)
+        }
+        .sheet(isPresented: $mailDraft) {
+            MailComposer(recipient: "woooxooom@gmail.com",
+                         subject: NSLocalizedString("余音 iOS 日志反馈", comment: "日志邮件主题"),
+                         body: mailBody,
+                         attachment: ("reverb-log.txt", mailLogData)) {
+                mailDraft = false
+            }
+            .ignoresSafeArea()
         }
         .fileImporter(isPresented: $showImporter,
                       allowedContentTypes: importerKind == .backup
@@ -365,7 +450,52 @@ struct SettingsView: View {
         }
     }
 
+    // MARK: - 提醒
+
+    /// 打开时先要通知权限:没有权限就把开关拨回去并说明,而不是留一个永远不会有动静的开关。
+    /// 与 Android `POST_NOTIFICATIONS` 那条分支同一意图。
+    private func turnUpdates(_ on: Bool) {
+        guard on else {
+            settings.updatesEnabled = false
+            env.updates.cancelScheduled()
+            return
+        }
+        Task {
+            let granted = await env.updates.requestAuthorization()
+            guard granted else {
+                settings.updatesEnabled = false
+                alertText = "通知权限未开启，请在系统设置里允许余音发送通知"
+                return
+            }
+            settings.updatesEnabled = true
+            env.updates.scheduleNext()
+        }
+    }
+
     // MARK: - 日志
+
+    /// 日志邮件:正文留「请描述你遇到的问题」模板,附件是 reverb-log.txt。
+    /// 设备没配邮件账户时退回 `mailto:` 并明说附件怎么给 —— 起草器打不开时
+    /// 悄悄什么都不发生,是最糟的一种反馈。
+    private func composeLogMail() {
+        let ver = AppInfo.version
+        let os = ProcessInfo.processInfo.operatingSystemVersionString
+        mailBody = String(format: NSLocalizedString("请描述你遇到的问题:\n\n\n——\n余音 iOS v%@ · %@",
+                                                    comment: "日志邮件正文"), ver, os)
+        mailLogData = Data(Log.allText().utf8)
+        guard MFMailComposeViewController.canSendMail() else {
+            var comps = URLComponents()
+            comps.scheme = "mailto"
+            comps.path = "woooxooom@gmail.com"
+            comps.queryItems = [URLQueryItem(name: "subject",
+                                             value: NSLocalizedString("余音 iOS 日志反馈", comment: "日志邮件主题"))]
+            if let url = comps.url { UIApplication.shared.open(url) }
+            alertText = "这台设备没有配置邮件账户。日志已准备好，也可以先用上面的「分享日志」把文件发给我"
+            Log.i("Settings", "邮件起草器不可用,退回 mailto bytes=\(mailLogData.count)")
+            return
+        }
+        mailDraft = true
+    }
 
     private func refreshLogSize() {
         let f = ByteCountFormatter()

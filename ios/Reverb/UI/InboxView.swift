@@ -6,6 +6,8 @@ struct InboxView: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
 
+    @StateObject private var selection = EpisodeSelection()
+
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var items: [Episode] { env.inbox.episodes }
 
@@ -31,7 +33,13 @@ struct InboxView: View {
                                 showDate: true,
                                 played: env.history.isPlayed(ep.id),
                                 accent: accent,
-                                onPlay: { player.playOrToggle(ep, queue: items, tag: ListTag.inbox) })
+                                selecting: selection.selecting,
+                                selected: selection.picked.contains(ep.id),
+                                onPlay: {
+                                    if selection.selecting { selection.toggle(ep) }
+                                    else { player.playOrToggle(ep, queue: items, tag: ListTag.inbox) }
+                                },
+                                onEnterSelection: { selection.enter(ep.id) })
                         }
                     }
                     .frame(maxWidth: Metrics.contentMaxWidth)
@@ -47,7 +55,22 @@ struct InboxView: View {
         }
         .navigationTitle("追更")
         .toolbarTitleDisplayMode(.inlineLarge)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if selection.selecting {
+                EpisodeSelectionBar(
+                    count: selection.picked.count,
+                    allSelected: selection.picked.count >= items.count,
+                    onAll: { selection.picked = Set(items.map(\.id)) },
+                    onEnqueue: { selection.enqueue(from: items, using: player, log: "列=追更") },
+                    onExit: { selection.reset() },
+                    accent: accent)
+            }
+        }
+        .selectionToast(selection)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                PlayModeButton(tag: ListTag.inbox)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 Button {
                     Task {

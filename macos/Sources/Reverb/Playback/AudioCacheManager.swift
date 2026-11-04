@@ -13,10 +13,15 @@ import Foundation
 /// 与 `DownloadManager` 完全分开:不同目录、不同账本、不同清理入口。用户点名下载的那份
 /// 永远不该被预算挤掉,所以本类**从不读写** `Downloads/`;反过来「清空下载」也删不到这里。
 ///
-/// **不走网络闸门**:手机两端拦的是「计费蜂窝上擅自跑几十 MB」。桌面没有蜂窝基带,
+/// **桌面不接网络闸门**:手机两端拦的是「计费蜂窝上擅自跑几十 MB」。桌面没有蜂窝基带,
 /// Mac 上唯一算"按量计费"的是给 iPhone 开热点,而本端 Downloads 与 RSS 也从不做这类拦截;
-/// `SettingsStore.allowCellularDownload` 在本端没有界面、只为备份互通而存在
+/// `SettingsStore.allowCellularDownload` 在 Mac 上没有界面、只为备份互通而存在
 /// (见那一格的长注释)。只给音频缓存单独加一道看不见的闸门,症状会比问题更难排查。
+///
+/// **iOS 不同**:那一端「仅在 Wi-Fi 下载」是有界面的真开关,而首播落缓存正是三条大流量
+/// 路径之一(另两条见 `DownloadManager` 与 `TranscriptStore`)。所以闸门做成可选的
+/// `allowsTransfer`(nil = 不拦,macOS 保持原样),由 iOS 在 `AppEnvironment` 里接上
+/// `CellularGate.blocked()`。判据本体不在本层 —— 本层不引 Network 框架。
 final class AudioCacheManager: @unchecked Sendable {
     /// 缓存总字节预算。整集 mp3 约 30–60 MB,300 MB 大约容下最近听过的 6–8 集。
     static let budgetBytes: Int64 = 300 * 1024 * 1024
@@ -33,6 +38,10 @@ final class AudioCacheManager: @unchecked Sendable {
     /// 没有这一格,「清除缓存」按下时正好在传的那几张会在目录清空之后 rename 回来,
     /// 设置页的数字当场又变成非 0 —— 与鸿蒙 `ArtworkCache.gen` 同一个形状。
     private var generation = 0
+
+    /// 「这次落缓存该不该放行」的闸门,nil = 不拦(macOS 的取值)。见类注释。
+    /// 闭包必须**同步、线程安全**:它会在 `Task.detached` 起的下载路径上被调用。
+    var allowsTransfer: (() -> Bool)?
 
     init(store: AudioCacheStore = AudioCacheStore()) {
         self.store = store
@@ -72,6 +81,10 @@ final class AudioCacheManager: @unchecked Sendable {
         // 引导音频指向包内资源,不是 HTTP enclosure,没什么可缓存
         guard !GuideEpisode.isGuide(id) else { return }
         guard store.get(id) == nil else { return }
+        if let allowsTransfer, !allowsTransfer() {
+            Log.i(Self.category, "cache 被计费链路闸门拦下 id=\(id)(未允许蜂窝下载,本次不落缓存)")
+            return
+        }
 
         lock.lock()
         if inFlightId == id {

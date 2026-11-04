@@ -120,8 +120,12 @@ import Foundation
 
     /// 拉取单个订阅源,带 ~timeoutSec 超时。失败或超时返回空数组,不影响其他源。
     /// **不按源截断** —— 追更要能翻到订阅频道的全部节目(与两端同口径)。
-    private static func loadAll(_ url: String, repository: PodcastRepository,
-                                timeoutSec: Double) async -> [Episode] {
+    ///
+    /// 非 private 是因为 iOS 的「订阅更新提醒」巡检(`UpdateReminders`)复用这一份:
+    /// 它同样要「限并发 + 单源超时 + 失败不拖累其余源」,而那段判据抄第二份时一定会漏
+    /// (REVIEW-2026-10-25 中-3 的同一条形状)。macOS 只有本类的追更在用。
+    static func loadAll(_ url: String, repository: PodcastRepository,
+                        timeoutSec: Double) async -> [Episode] {
         let result: [Episode]? = await withTaskGroup(of: [Episode]?.self) { group in
             group.addTask {
                 guard let r = await repository.feed(url) else { return [] }
