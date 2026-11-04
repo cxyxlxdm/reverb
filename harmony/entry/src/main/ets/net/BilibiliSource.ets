@@ -55,6 +55,58 @@ export class BilibiliSource {
     'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 ' +
       '(KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1';
   private static readonly BV_RE: RegExp = new RegExp('BV[0-9A-Za-z]{10}');
+  /**
+   * 标题强相关过滤的停用词。搜「怎么做一个播客」时,「怎么/做一个」不承担检索语义,
+   * 留着会把 2 字片段切碎(见 [isTitleRelevant])。长的放前面,避免短词先把长词拆坏。
+   */
+  private static readonly RELEVANCE_STOP_WORDS: string[] = [
+    '以及', '怎么', '如何', '为什么', '什么', '居然', '竟然', '原来是', '居然是',
+    '的', '了', '也', '都', '是', '在', '与', '和', '或', '并', '而', '及', '啊', '呀', '吧', '呢', '吗'
+  ];
+
+  /** 去掉停用词、空白、标点与符号,只留字母/数字(含汉字),再转小写。 */
+  private static relevanceKey(raw: string): string {
+    let s = raw.toLowerCase();
+    for (let i = 0; i < BilibiliSource.RELEVANCE_STOP_WORDS.length; i++) {
+      s = s.split(BilibiliSource.RELEVANCE_STOP_WORDS[i]).join('');
+    }
+    let out = '';
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charAt(i);
+      if (/[0-9a-z\u4e00-\u9fff]/.test(c)) out += c;
+    }
+    return out;
+  }
+
+  /**
+   * 标题是否与关键词强相关。
+   *
+   * 为什么需要这一层:B 站搜索是**模糊匹配**,`title` / `description` / `tag` 任一处命中
+   * 都会返回;短词或泛词(「播客」「美食教程」「学习资料」)的返回里因此混着大量标题
+   * 与关键词无关的视频,用户看起来就是「搜索结果掺了推荐流」。2026-11-04 用真实接口
+   * 复测:20 条里标题命中关键词的只有 8~13 条。
+   *
+   * 规则借自 `houliabc/bilibili-search-purify` 的 strict match,但**只借最保守的一条**:
+   * 清洗后整词包含,或关键词的任意 2 字连续片段出现在标题里,就算相关。
+   * 该项目的黑名单词库(擦边 / 标题党)是主观词表,不适合塞进客户端,没有采用。
+   *
+   * 2 字片段是「美食教程」还能留下「家常菜做法」这类近义标题的折中;整词命中要求
+   * 太严会把语义相近的结果全删掉。**全删空时调用方要退回原列表**(见 [searchEpisodes]),
+   * 宁可留杂音也不要给用户一屏空白。
+   */
+  private static isTitleRelevant(title: string, keyword: string): boolean {
+    const k = BilibiliSource.relevanceKey(keyword);
+    if (k.length === 0) return true;
+    const t = BilibiliSource.relevanceKey(title);
+    if (t.indexOf(k) >= 0) return true;
+    if (k.length >= 2) {
+      for (let i = 0; i <= k.length - 2; i++) {
+        if (t.indexOf(k.substring(i, i + 2)) >= 0) return true;
+      }
+    }
+    return false;
+  }
+
   /// 接口超时。比 Http 默认的 20s 短:这一串请求挡在"点播放"与出声之间,
   /// 超时该判失败让用户重试,而不是让播放页转 20 秒。
   private static readonly API_TIMEOUT_MS: number = 10000;
@@ -337,16 +389,30 @@ export class BilibiliSource {
         transcriptType: ''
       });
     }
+    // 先按标题相关性剔掉模糊命中的无关条目(见 [isTitleRelevant])。放在充电判定**之前**:
+    // 既让用户看到的列表干净,也把逐条 `view` 请求从 20 个降到实际候选数。
+    // 全滤空时退回原列表 —— 语义搜索(标题不含任何关键词片段)宁可留杂音也不白屏。
+    const relevantIdx: number[] = [];
+    for (let i = 0; i < out.length; i++) {
+      if (BilibiliSource.isTitleRelevant(out[i].title, kw)) relevantIdx.push(i);
+    }
+    const droppedIrrelevant = relevantIdx.length === 0 ? 0 : out.length - relevantIdx.length;
+    const allIdx: number[] = [];
+    for (let i = 0; i < out.length; i++) allIdx.push(i);
+    const poolIdx: number[] = relevantIdx.length === 0 ? allIdx : relevantIdx;
     // 充电专属视频要在这里就剔掉(见类注释第 6 条):用户点它只会看到播放条切走、
     // 然后「播放失败」,而重试永远不会成功 —— 看起来完全是播放器的 bug。
     // 搜索接口不带判据,只能逐条补一次 view(`isCharging` 有内存缓存,同一视频不重复问)。
     // 并发发、顺序收:20 条约 0.5 s,实测没有触发风控;一条失败就放行,不误删正常视频。
     const flags: boolean[] = await Promise.all(
-      bvids.map((bv: string): Promise<boolean> => this.isCharging(bv)));
-    const kept: Episode[] = out.filter((e: Episode, i: number): boolean => !flags[i]);
-    const dropped = out.length - kept.length;
+      poolIdx.map((i: number): Promise<boolean> => this.isCharging(bvids[i])));
+    const kept: Episode[] = [];
+    for (let j = 0; j < poolIdx.length; j++) if (!flags[j]) kept.push(out[poolIdx[j]]);
+    const dropped = poolIdx.length - kept.length;
     Log.i('Bilibili',
-      `search count=${kept.length}` + (dropped > 0 ? ` dropped_charge=${dropped}` : ''));
+      `search count=${kept.length}` +
+      (droppedIrrelevant > 0 ? ` dropped_irrelevant=${droppedIrrelevant}` : '') +
+      (dropped > 0 ? ` dropped_charge=${dropped}` : ''));
     return kept;
   }
 
