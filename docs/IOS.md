@@ -165,8 +165,9 @@ BUILD_NUMBER=2 DEVELOPMENT_TEAM=XXXXXXXXXX \
 ### 3. 模拟器验收(2026-11-02 实测通过)
 
 Xcode 27 不再带 `Simulator.app`(只有 `DeviceHub.app`),命令行也没有点击注入,
-所以 Debug 版留了两个**仅 Debug 编译**的启动参数:`-autoplay-guide`(播放内置引导音频)
-与 `-start-tab <discover|inbox|library|settings>`、`-open-player`。Release / TestFlight 包里没有这段。
+所以 Debug 版留了几个**仅 Debug 编译**的启动参数:`-autoplay-guide`(播放内置引导音频)、
+`-start-tab <discover|inbox|library|settings>`、`-open-player`、`-search <关键词>`(发现页启动即搜索,
+中文关键词没法用 `simctl`/`adb` 注入,这条是 H241 的验收入口)。Release / TestFlight 包里没有这段。
 
 ```bash
 cd ios
@@ -187,7 +188,9 @@ xcrun simctl spawn booted log show --last 12s --style compact \
 
 实跑读数:首启隐私门正常;同意后首页能拉到榜单与封面;播放页 0:03/0:32、暂停键为播放态;
 切到「设置」App 后音频队列继续入队(`howFarAhead` 前进),锁屏信息由
-`MPNowPlayingInfoCenter` 持续更新。**没验过的**:订阅刷新、逐字稿(需 iOS 26 语音模型)、
+`MPNowPlayingInfoCenter` 持续更新。2026-11-04 补测 B 站搜索相关度过滤:`-search 学习资料`
+启动后日志为 `[Bilibili] search count=6 dropped_irrelevant=11`(规则与逐条读数见 H241)。
+**没验过的**:订阅刷新、逐字稿(需 iOS 26 语音模型)、
 下载、备份导出 —— 模拟器只覆盖到首启 / 首页 / 播放 / 后台 / 设置页渲染。
 
 iOS 备份排除项也可以在模拟器数据容器里直接验:

@@ -64,6 +64,8 @@ struct DiscoverView: View {
     @State private var searchSource = ""
     @State private var searching = false
     @State private var liveEpisode: Episode?
+    /// 仅 Debug:`-search` 钩子写下的查询词,用来挡住搜索框复位带来的清空。
+    @State private var debugQuery = ""
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
@@ -82,7 +84,9 @@ struct DiscoverView: View {
                     prompt: "搜索播客/视频或粘贴 RSS、直播流、视频链接")
         .onSubmit(of: .search) { runSearch() }
         .onChange(of: searchText) { _, v in
-            if v.trimmingCharacters(in: .whitespaces).isEmpty {
+            // `-search` 验收钩子设进去的查询词会被 `.searchable` 的初始绑定复位成空串;
+            // 那一轮空串不能把已提交的查询也清掉(否则跑完搜索又退回榜单页)。
+            if v.trimmingCharacters(in: .whitespaces).isEmpty && debugQuery.isEmpty {
                 submittedQuery = ""
                 searchPodcasts = []
                 searchEpisodes = []
@@ -94,7 +98,23 @@ struct DiscoverView: View {
             ToolbarItem(placement: .topBarTrailing) { refreshButton }
             ToolbarItem(placement: .topBarTrailing) { radioButton }
         }
-        .task { await loadPopular(initial: true) }
+        .task {
+            await loadPopular(initial: true)
+            #if DEBUG
+            // 与 RootView 的 `-start-tab` 同一类验收钩子:中文关键词没法用 `simctl`
+            // 或 adb 注入,所以留一个启动即搜索的参数,Release / TestFlight 里不存在。
+            let args = ProcessInfo.processInfo.arguments
+            if let i = args.firstIndex(of: "-search"), i + 1 < args.count {
+                // 必须等 `.searchable` 挂上再赋值:`.task` 先跑时设进去的值会被搜索框的
+                // 初始绑定复位成空串,连带 `onChange` 把 `submittedQuery` 也清掉。
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                let q = args[i + 1]
+                debugQuery = q
+                searchText = q
+                runSearch(q)
+            }
+            #endif
+        }
         .sheet(isPresented: $showReorder) {
             CategoryOrderSheet(initial: categories) { ordered in
                 if !ordered.isEmpty { settings.categoryOrder = ordered.map(\.key) }
@@ -326,8 +346,8 @@ struct DiscoverView: View {
         return searchSource
     }
 
-    private func runSearch() {
-        let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+    private func runSearch(_ raw: String? = nil) {
+        let q = (raw ?? searchText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         submittedQuery = q
         searching = true

@@ -258,6 +258,48 @@ final class BilibiliSource {
 
     // MARK: - 关键词搜单集
 
+    /// 标题强相关过滤用到的停用词。搜「怎么做一个播客」时,「怎么/做一个」这些词
+    /// 不承担检索语义,留着会把 2 字片段切碎(见 `isTitleRelevant`)。
+    private static let stopWords = [
+        "以及", "怎么", "如何", "为什么", "什么", "居然", "竟然", "原来是", "居然是",
+        "的", "了", "也", "都", "是", "在", "与", "和", "或", "并", "而", "及", "啊", "呀", "吧", "呢", "吗"
+    ]
+
+    /// 去掉停用词、空白、标点与符号,再转小写。比较只在清洗后的串上做。
+    private static func relevanceKey(_ raw: String) -> String {
+        var s = raw.lowercased()
+        for w in stopWords { s = s.replacingOccurrences(of: w, with: "") }
+        return String(s.filter { !$0.isWhitespace && !$0.isPunctuation && !$0.isSymbol })
+    }
+
+    /// 标题是否与关键词强相关。
+    ///
+    /// 为什么需要这一层:B 站搜索是**模糊匹配**,`title` / `description` / `tag` 任一处命中
+    /// 都会返回;短词或泛词(「播客」「美食教程」「学习资料」)的返回里因此混着大量标题
+    /// 与关键词无关的视频,用户看起来就是「搜索结果掺了推荐流」。2026-11-04 用真实接口
+    /// 复测:20 条里标题命中关键词的只有 8~13 条。
+    ///
+    /// 规则借自 `houliabc/bilibili-search-purify` 的 strict match,但**只借最保守的一条**:
+    /// 清洗后整词包含,或关键词的任意 2 字连续片段出现在标题里,就算相关。
+    /// 该项目的黑名单词库(擦边 / 标题党)是主观词表,不适合塞进客户端,没有采用。
+    ///
+    /// 2 字片段是「美食教程」还能留下「家常菜做法」这类近义标题的折中;整词命中要求
+    /// 太严会把语义相近的结果全删掉。**全删空时调用方要退回原列表**(见 `searchEpisodes`),
+    /// 宁可留杂音也不要给用户一屏空白。
+    private static func isTitleRelevant(_ title: String, keyword: String) -> Bool {
+        let k = relevanceKey(keyword)
+        guard !k.isEmpty else { return true }
+        let t = relevanceKey(title)
+        if t.contains(k) { return true }
+        let chars = Array(k)
+        if chars.count >= 2 {
+            for i in 0...(chars.count - 2) where t.contains(String(chars[i...i + 1])) {
+                return true
+            }
+        }
+        return false
+    }
+
     /// 搜「单集」,不搜频道。路径带 `wbi` 但实测免签(类注释第 1 条)—— 别看到路径名
     /// 就去实现签名,那是原始调研里最贵的一块,而且并不需要。
     ///
@@ -281,14 +323,12 @@ final class BilibiliSource {
             }
             return []
         }
-        var out: [Episode] = []
-        var bvids: [String] = []
+        var out: [(episode: Episode, bvid: String)] = []
         for raw in arr {
             guard let o = raw as? [String: Any] else { continue }
             let bvid = Self.str(o, "bvid")
             if bvid.isEmpty { continue }
-            bvids.append(bvid)
-            out.append(Episode(
+            out.append((Episode(
                 // 搜索结果是「一个视频」,分 P 要等进频道页才知道 ⇒ id 先用 bvid 占位。
                 // 播放路径不靠 id 认视频(它解析 audioUrl);但它与频道页的 `scheme:bvid:cid`
                 // 不是同一个 id —— 同一视频两个入口各播一次会留两条历史、两份缓存(见 H226 教训④)。
@@ -308,8 +348,15 @@ final class BilibiliSource {
                 durationSec: Self.hhmmToSec(Self.str(o, "duration")),
                 pubDate: Self.dateOf(Self.num(o, "pubdate")),
                 feedUrl: Self.videoUri(bvid),
-                transcriptUrl: "", transcriptType: ""))
+                transcriptUrl: "", transcriptType: ""), bvid))
         }
+        // 先按标题相关性剔掉模糊命中的无关条目(见 `isTitleRelevant`)。放在充电判定**之前**:
+        // 既让用户看到的列表干净,也把逐条 `view` 请求从 20 个降到实际候选数。
+        // 全滤空时退回原列表 —— 语义搜索(标题不含任何关键词片段)宁可留杂音也不白屏。
+        let relevant = out.filter { Self.isTitleRelevant($0.episode.title, keyword: kw) }
+        let droppedIrrelevant = relevant.isEmpty ? 0 : out.count - relevant.count
+        let pool = relevant.isEmpty ? out : relevant
+        let bvids = pool.map(\.bvid)
         // 充电专属视频要在这里就剔掉(见类注释第 5 条):用户点它只会看到播放条切走、
         // 然后「播放失败」,而重试永远不会成功 —— 看起来完全是播放器的 bug。
         // 搜索接口不带判据,只能逐条补一次 view(`isCharging` 有内存缓存,同一视频不重复问)。
@@ -324,10 +371,11 @@ final class BilibiliSource {
         }
         var kept: [Episode] = []
         var dropped = 0
-        for (i, ep) in out.enumerated() {
-            if flags[i] { dropped += 1 } else { kept.append(ep) }
+        for (i, pair) in pool.enumerated() {
+            if flags[i] { dropped += 1 } else { kept.append(pair.episode) }
         }
         Log.i("Bilibili", "search count=\(kept.count)"
+              + (droppedIrrelevant > 0 ? " dropped_irrelevant=\(droppedIrrelevant)" : "")
               + (dropped > 0 ? " dropped_charge=\(dropped)" : ""))
         return kept
     }

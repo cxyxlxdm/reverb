@@ -138,6 +138,50 @@ class BilibiliSource(private val client: OkHttpClient) {
                 "(KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1"
         private val BV_RE = Regex("BV[0-9A-Za-z]{10}")
         private val HHMM_RE = Regex("^(\\d+):(\\d+)$")
+
+        /**
+         * 标题强相关过滤的停用词。搜「怎么做一个播客」时,「怎么/做一个」不承担检索语义,
+         * 留着会把 2 字片段切碎(见 [isTitleRelevant])。长的放前面,避免短词先把长词拆坏。
+         */
+        private val RELEVANCE_STOP_WORDS = listOf(
+            "以及", "怎么", "如何", "为什么", "什么", "居然", "竟然", "原来是", "居然是",
+            "的", "了", "也", "都", "是", "在", "与", "和", "或", "并", "而", "及", "啊", "呀", "吧", "呢", "吗"
+        )
+
+        /** 去掉停用词、空白、标点与符号,只留字母/数字(含汉字),再转小写。 */
+        private fun relevanceKey(raw: String): String {
+            var s = raw.lowercase()
+            for (w in RELEVANCE_STOP_WORDS) s = s.replace(w, "")
+            return s.filter { it.isLetterOrDigit() }
+        }
+
+        /**
+         * 标题是否与关键词强相关。
+         *
+         * 为什么需要这一层:B 站搜索是**模糊匹配**,`title` / `description` / `tag` 任一处命中
+         * 都会返回;短词或泛词(「播客」「美食教程」「学习资料」)的返回里因此混着大量标题
+         * 与关键词无关的视频,用户看起来就是「搜索结果掺了推荐流」。2026-11-04 用真实接口
+         * 复测:20 条里标题命中关键词的只有 8~13 条。
+         *
+         * 规则借自 `houliabc/bilibili-search-purify` 的 strict match,但**只借最保守的一条**:
+         * 清洗后整词包含,或关键词的任意 2 字连续片段出现在标题里,就算相关。
+         * 该项目的黑名单词库(擦边 / 标题党)是主观词表,不适合塞进客户端,没有采用。
+         *
+         * 2 字片段是「美食教程」还能留下「家常菜做法」这类近义标题的折中;整词命中要求
+         * 太严会把语义相近的结果全删掉。**全删空时调用方要退回原列表**(见 [searchEpisodes]),
+         * 宁可留杂音也不要给用户一屏空白。
+         */
+        private fun isTitleRelevant(title: String, keyword: String): Boolean {
+            val k = relevanceKey(keyword)
+            if (k.isEmpty()) return true
+            val t = relevanceKey(title)
+            if (t.contains(k)) return true
+            if (k.length >= 2) {
+                for (i in 0..k.length - 2) if (t.contains(k.substring(i, i + 2))) return true
+            }
+            return false
+        }
+
         /** 见 [getJson]:只有**快于这个数**的失败才补一次。慢失败(真超时)重试等于把等待翻倍。 */
         private const val RETRY_FAST_MS = 3000L
         private const val RETRY_DELAY_MS = 400L
@@ -396,18 +440,26 @@ class BilibiliSource(private val client: OkHttpClient) {
                 )
             )
         }
+        // 先按标题相关性剔掉模糊命中的无关条目(见 [isTitleRelevant])。放在充电判定**之前**:
+        // 既让用户看到的列表干净,也把逐条 `view` 请求从 20 个降到实际候选数。
+        // 全滤空时退回原列表 —— 语义搜索(标题不含任何关键词片段)宁可留杂音也不白屏。
+        val relevantIdx = out.indices.filter { isTitleRelevant(out[it].title, kw) }
+        val droppedIrrelevant = if (relevantIdx.isEmpty()) 0 else out.size - relevantIdx.size
+        val poolIdx = if (relevantIdx.isEmpty()) out.indices.toList() else relevantIdx
         // 充电专属视频要在这里就剔掉(见类注释第 6 条):用户点它只会看到播放条切走、
         // 然后「播放失败,点按重试」,而那个重试永远不会成功 —— 看起来完全是播放器的 bug。
         // 搜索接口不带判据,只能逐条补一次 view(`isCharging` 有内存缓存,同一视频不重复问)。
         // 并发发、顺序收:20 条实测约 0.5 s,且没有触发风控;一条失败就放行,不误删正常视频。
         val flags = coroutineScope {
-            bvids.map { bv -> async { isCharging(bv) } }.awaitAll()
+            poolIdx.map { i -> async { isCharging(bvids[i]) } }.awaitAll()
         }
-        val kept = ArrayList<Episode>(out.size)
-        for (i in out.indices) if (!flags[i]) kept.add(out[i])
-        val dropped = out.size - kept.size
+        val kept = ArrayList<Episode>(poolIdx.size)
+        for (j in poolIdx.indices) if (!flags[j]) kept.add(out[poolIdx[j]])
+        val dropped = poolIdx.size - kept.size
         com.yuyin.reverb.util.Logger.i(
-            TAG, "search count=${kept.size}" + if (dropped > 0) " dropped_charge=$dropped" else ""
+            TAG, "search count=${kept.size}" +
+                (if (droppedIrrelevant > 0) " dropped_irrelevant=$droppedIrrelevant" else "") +
+                (if (dropped > 0) " dropped_charge=$dropped" else "")
         )
         kept
     }
