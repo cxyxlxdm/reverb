@@ -190,7 +190,11 @@ struct PlayerView: View {
     /// 判据同 macOS:`isLive && durationMs <= 0`。有限时长的流报出时长后,
     /// 进度条与快进快退重新有意义,不该再装作直播。
     private func seekBar(_ ep: Episode) -> some View {
-        Group {
+        // 冷启动恢复成**暂停**态时 `player.durationMs` 还是 0(AVPlayer 的时长要等
+        // item 加载后由 tick 填,暂停不 tick),于是总时长显示 0:00、滑杆按 0...1 判满格。
+        // 这里退到条目自带时长;真正报出时长后仍以播放器为准(直播流时长可能变)。
+        let totalMs = player.durationMs > 0 ? player.durationMs : max(0, ep.durationSec * 1000)
+        return Group {
             if ep.isLive && player.durationMs <= 0 {
                 HStack(spacing: 8) {
                     Circle().fill(.red).frame(width: 8, height: 8)
@@ -204,7 +208,7 @@ struct PlayerView: View {
                             get: { dragging ? dragValue : Double(player.positionMs) },
                             set: { dragValue = $0 }
                         ),
-                        in: 0...Double(max(1, player.durationMs)),
+                        in: 0...Double(max(1, totalMs)),
                         onEditingChanged: { editing in
                             if editing { dragging = true }
                             else { player.seek(toMs: Int(dragValue)); dragging = false }
@@ -214,7 +218,7 @@ struct PlayerView: View {
                     HStack {
                         Text(Fmt.clock(dragging ? Int(dragValue) : player.positionMs))
                         Spacer()
-                        Text(Fmt.clock(player.durationMs))
+                        Text(Fmt.clock(totalMs))
                     }
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
