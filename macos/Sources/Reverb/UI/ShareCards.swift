@@ -90,9 +90,14 @@ struct MomentCard: View {
     }
 }
 
-// MARK: - 频道分享卡片
+// MARK: - 朋友圈海报
 
-/// 频道分享卡:频道 Logo + 频道名 + 简介(最多四行,超出省略)+ App 落款,不携带可能含私有凭据的 RSS 地址。
+/// 朋友圈海报:频道 Logo + 频道名 + 简介(最多四行)+ App 落款,不携带可能含私有凭据的 RSS 地址。
+///
+/// 3:4(480×640,@2x 即 960×1280):微信朋友圈的单图预览按 3:4 收,
+/// 原来 420×640 的比例在信息流里会先被裁掉上下两头。加宽到 480 是为了
+/// 让简介四行在 3:4 里仍放得下,而不是把封面缩小。
+/// 微信没有开放「发朋友圈」的接口,这张图只交给系统分享或保存面板。
 struct ChannelShareCard: View {
     let podcast: Podcast
     var accent: Color = .accentColor
@@ -102,9 +107,9 @@ struct ChannelShareCard: View {
     private var plainDesc: String { Fmt.plainText(podcast.description) }
 
     var body: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: 24) {
             artworkView
-                .frame(width: 250, height: 250)
+                .frame(width: 240, height: 240)
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .shadow(color: .black.opacity(0.4), radius: 18, y: 9)
 
@@ -128,9 +133,9 @@ struct ChannelShareCard: View {
                 .font(.callout)
                 .foregroundStyle(.white.opacity(0.55))
         }
-        .padding(36)
-        // 简介最多四行 + 标题三行的最坏情形装不下 525;短内容由 Spacer 撑开
-        .frame(width: 420, height: 640)
+        .padding(30)
+        // 封面 240 + 标题三行 + 简介四行的最坏情形约 536,3:4 的内高 580 仍留得下落款
+        .frame(width: 480, height: 640)
         .background(
             LinearGradient(
                 colors: [Color(red: 0.09, green: 0.10, blue: 0.13),

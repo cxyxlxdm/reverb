@@ -15,7 +15,7 @@
     <string name="saved_ok">Saved to gallery</string>
     <string name="saved_fail">Save failed</string>
     <string name="clip_share">Share this moment</string>
-    <string name="channel_share">Share show</string>
+    <string name="moments_poster">Moments poster</string>
     <string name="share_failed">Couldn’t create the share image</string>
     <string name="stamp_add">Stamp · Listening mark</string>
     <string name="stamp_edit">Edit stamp · Listening mark</string>

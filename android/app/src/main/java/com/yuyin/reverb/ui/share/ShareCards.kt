@@ -84,12 +84,18 @@ object ShareCards {
             bmp
         }
 
-    /** 频道分享卡:频道 Logo + 频道名 + 简介(最多四行,超出省略)+ App 落款,不携带可能含私有凭据的 RSS 地址。 */
+    /**
+     * 朋友圈海报:频道 Logo + 频道名 + 简介(最多四行,超出省略)+ App 落款,
+     * 不携带可能含私有凭据的 RSS 地址。
+     *
+     * 3:4(1080×1440)而不是原来的 1080×1500:微信朋友圈的单图预览按 3:4 收,
+     * 原来的比例在信息流里会先被裁掉上下两头。改矮 60px 之后标题三行 + 简介四行
+     * 的最坏情形仍离落款 50px 以上,不再需要原先为 1350 加的余量。
+     */
     suspend fun channelCard(context: Context, podcast: Podcast): Bitmap =
         withContext(Dispatchers.IO) {
             val w = 1080
-            // 加高到 1500:标题三行 + 简介四行的最坏情形在 1350 里会压到底部落款
-            val h = 1500
+            val h = 1440
             val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
             val c = Canvas(bmp)
             drawInkBackground(c, w, h)

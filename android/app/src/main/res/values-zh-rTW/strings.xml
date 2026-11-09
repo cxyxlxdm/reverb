@@ -15,7 +15,7 @@
     <string name="saved_ok">已儲存到相簿</string>
     <string name="saved_fail">儲存失敗</string>
     <string name="clip_share">分享此刻</string>
-    <string name="channel_share">分享頻道</string>
+    <string name="moments_poster">朋友圈海報</string>
     <string name="share_failed">分享圖片產生失敗</string>
     <string name="stamp_add">蓋章 · 聽覺印記</string>
     <string name="stamp_edit">改章 · 聽覺印記</string>

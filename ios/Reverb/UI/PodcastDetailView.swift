@@ -75,7 +75,7 @@ struct PodcastDetailView: View {
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }
-                .accessibilityLabel(Text("分享频道"))
+                .accessibilityLabel(Text("朋友圈海报"))
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { Task { await load(force: true) } } label: {
@@ -90,9 +90,9 @@ struct PodcastDetailView: View {
             Group {
                 if let image = shareImage {
                     ShareCardPreview(
-                        title: "分享频道",
+                        title: "朋友圈海报",
                         image: image,
-                        fileName: "reverb-channel-\(abs(display.feedUrl.hashValue)).png",
+                        fileName: "reverb-moments-\(abs(display.feedUrl.hashValue)).png",
                         accent: accent)
                 } else {
                     VStack(spacing: 12) {

@@ -1037,8 +1037,8 @@
       "value": "Partager cet instant"
     },
     {
-      "name": "channel_share",
-      "value": "Partager l’émission"
+      "name": "moments_poster",
+      "value": "Affiche pour Moments"
     },
     {
       "name": "share_failed",

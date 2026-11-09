@@ -1037,8 +1037,8 @@
       "value": "Compartir este momento"
     },
     {
-      "name": "channel_share",
-      "value": "Compartir programa"
+      "name": "moments_poster",
+      "value": "Póster para Moments"
     },
     {
       "name": "share_failed",
