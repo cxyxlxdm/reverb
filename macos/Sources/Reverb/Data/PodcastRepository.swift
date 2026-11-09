@@ -1,4 +1,16 @@
 import Foundation
+import Combine
+
+/// 一次「这个源要用户名密码」的挑战。由 `PodcastRepository.feed/search` 在收到 401 时发出,
+/// 界面收到后弹输入框(见 H253)。
+struct FeedAuthChallenge: Identifiable, Equatable {
+    /// 已去掉 userinfo 的 feedUrl,与订阅/缓存里那份是同一个键。
+    let feedUrl: String
+    /// true = 本机已经存着这个源的凭据,但这次仍是 401(输错了 / 服务器改了口令)。
+    /// 输入框据此显示错误行,并把用户名预填出来。
+    let failed: Bool
+    var id: String { feedUrl }
+}
 
 /// 播客数据仓库:聚合各数据源,提供搜索、榜单、订阅源解析与随机一集。
 /// 镜像 Android 版行为。标记 @MainActor 便于 SwiftUI 直接调用。
@@ -10,6 +22,13 @@ final class PodcastRepository {
     private let gpodder = GpodderSource()
     private let rss = RssParser()
     private let cache = PopularCacheStore()
+    /// 私有订阅源的凭据账本。与 `feedCache` 一样由仓库持有 —— 但**只在本机**,
+    /// 不随订阅列表导出,也不进系统备份(见 `FeedAuthStore` 类注释)。
+    let authStore = FeedAuthStore()
+    /// 401 挑战。用 `PassthroughSubject` 而不是 `@Published` 状态:同一时刻可能有多个页面
+    /// 在场(搜索页 / 频道详情),而**只有发起这次请求的那一个该弹框** ——
+    /// 由各页面自己按 feedUrl 认领(见 H253)。
+    let authRequired = PassthroughSubject<FeedAuthChallenge, Never>()
     // 随包内置的精选清单:缓存为空(首启/清缓存/无网)时给发现页兜底,避免首屏空白
     private let seed = SeedCatalog()
     // 频道详情(解析后的 RSS)缓存:详情页秒开,且断网时仍能看已访问过的频道
@@ -66,10 +85,19 @@ final class PodcastRepository {
             return ([], "")
         }
         if q.hasPrefix("http://") || q.hasPrefix("https://") {
-            if let result = await rss.fetch(q) {
+            // 凭据要从 URL 里拆出来:它不该进订阅、备份与日志,只该进本机凭据账本。
+            let (url, inline) = FeedCredential.splitUrl(q)
+            switch await rss.fetch(url, auth: inline ?? authStore.get(url)) {
+            case .success(let result):
+                // 只在**确实读到了内容**之后才落盘:401 的那对错凭据不该覆盖原有的
+                if let inline { authStore.save(url, inline) }
                 return ([result.podcast], "RSS")
+            case .unauthorized:
+                challenge(url)
+                return ([], "")
+            case .failed:
+                return ([], "")
             }
-            return ([], "")
         }
 
         let apple = await itunes.search(q, country: region)
@@ -153,28 +181,62 @@ final class PodcastRepository {
     /// 解析订阅源。成功则回写磁盘缓存;失败返回 nil(旧缓存保留,由调用方决定是否用)。
     /// 与 cachedFeed 配合成「先缓存秒开、再后台刷新、刷新失败退回缓存」。
     func feed(_ feedUrl: String) async -> FeedResult? {
+        // 凭据/网址从同一处拆分:搜索页粘进来的带 userinfo 的地址,与订阅里存的那份
+        // 必须收敛到同一个键 —— 否则缓存、凭据、备份会各认一个。
+        let (url, inline) = FeedCredential.splitUrl(feedUrl)
         // 视频源的 feedUrl 是 `bilibili://video/<bvid>` 这种伪地址:RSS 解析器拿它会当场失败,
         // 所以在这里分叉。落盘缓存照写 —— 存的同样只有伪地址,不含会过期的直链。
-        if BilibiliSource.isPseudo(feedUrl) {
-            let result = await bilibili.feedOf(feedUrl)
-            if let result, !result.episodes.isEmpty { feedCache.put(feedUrl, result) }
+        if BilibiliSource.isPseudo(url) {
+            let result = await bilibili.feedOf(url)
+            if let result, !result.episodes.isEmpty { feedCache.put(url, result) }
             return result
         }
-        let result = await rss.fetch(feedUrl)
-        if let result, !result.episodes.isEmpty {
-            feedCache.put(feedUrl, result)
+        switch await rss.fetch(url, auth: inline ?? authStore.get(url)) {
+        case .success(let result):
+            if let inline { authStore.save(url, inline) }
+            if !result.episodes.isEmpty { feedCache.put(url, result) }
+            return result
+        case .unauthorized:
+            challenge(url)
+            return nil
+        case .failed:
+            return nil
         }
-        return result
+    }
+
+    /// 界面在 401 弹框里点「保存」之后调用,然后自己重新拉一次。
+    func saveAuth(_ feedUrl: String, username: String, password: String) {
+        authStore.save(cleanUrl(feedUrl), FeedCredential(username: username, password: password))
+    }
+
+    /// 取消订阅时清掉这个源的凭据(AppEnvironment 把它接在 `SubscriptionStore.onRemoved` 上)。
+    func forgetAuth(_ feedUrl: String) { authStore.forget(cleanUrl(feedUrl)) }
+
+    /// 输入框预填用。
+    func credential(for feedUrl: String) -> FeedCredential? { authStore.get(cleanUrl(feedUrl)) }
+
+    /// 音频 / 逐字稿取流时用的头:只有与已存源同主机(或互为子域)才给。
+    func authHeader(for url: String) -> String? { authStore.headerForUrl(url) }
+
+    func cleanUrl(_ raw: String) -> String { FeedCredential.splitUrl(raw).url }
+
+    /// 401 → 交给界面。`failed` 只有一种来源:本机对这个源已经存着凭据 ——
+    /// 那说明这次是**凭据不对**,输入框要显示错误行并预填用户名。
+    private func challenge(_ feedUrl: String) {
+        let clean = cleanUrl(feedUrl)
+        let failed = authStore.get(clean) != nil
+        Log.w("Repo", "feed 需要认证 feed=\(Log.endpoint(clean)) failed=\(failed)")
+        authRequired.send(FeedAuthChallenge(feedUrl: clean, failed: failed))
     }
 
     /// 立即返回上次解析结果(可能过时,可能为 nil),供进入详情页时秒开、断网时兜底。
     func cachedFeed(_ feedUrl: String) -> FeedResult? {
-        guard let e = feedCache.get(feedUrl) else { return nil }
+        guard let e = feedCache.get(cleanUrl(feedUrl)) else { return nil }
         return FeedResult(podcast: e.podcast, episodes: e.episodes)
     }
 
     /// 该 feed 缓存的落盘时刻;无缓存返回 nil。用于「上次更新于 X」提示。
-    func feedCachedAt(_ feedUrl: String) -> Date? { feedCache.get(feedUrl)?.fetchedAt }
+    func feedCachedAt(_ feedUrl: String) -> Date? { feedCache.get(cleanUrl(feedUrl))?.fetchedAt }
 
     // MARK: - 随机一集
 

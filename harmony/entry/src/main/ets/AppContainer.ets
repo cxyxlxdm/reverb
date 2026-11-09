@@ -96,6 +96,11 @@ export class AppContainer {
     // 内置精选清单:这里只记上下文,真正读 rawfile 推迟到第一次用(见 SeedCatalog.attach)
     this.seedCatalog.attach(ctx);
     this.feedCache.load();
+    // 私有订阅的凭据账本(feed_auth.json)。**纯本地读**,与上面几个 store 同一性质;
+    // 不放进备份 —— 口令只留在本机,换机要重新输入(见 docs/FEATURES.md 私有订阅一节)。
+    this.repository.authStore.load();
+    // 退订即作废凭据:链接都没了,留一份口令在磁盘上只有坏处。
+    this.subscriptions.onRemoved = (p) => this.repository.forgetAuth(p.feedUrl);
     // 内置引导音频:把 rawfile 拷到 filesDir 一份,随后复用已有的本地文件播放路径。
     // 异步进行,不阻塞首帧;未就绪时引导卡不显示(见 GuideEpisode.available)。
     GuideEpisode.prepare(ctx);
@@ -180,6 +185,15 @@ export class AppContainer {
     this.player.networkPlayNotice = (e: Episode, headers: Record<string, string> | null) => {
       this.audioCache.cache(e, headers);
     };
+    /**
+     * 私有订阅的凭据查询。**只交"该不该带"的判断结果,不交凭据本身** ——
+     * 播放 / 下载 / 官方稿三处都从这里取,主机匹配(同域或父子域)统一落在
+     * `PodcastRepository.authHeader` 里,免得三处各写一份判据而慢慢分叉。
+     */
+    const authOf = (url: string): string | null => this.repository.authHeader(url);
+    this.player.authHeaderProvider = authOf;
+    this.downloadManager.authHeaderProvider = authOf;
+    this.transcripts.authHeaderProvider = authOf;
     // 视频源的伪地址在起播前现取直链。注入的是**同一个** `bilibili` 实例(repository 里那一个),
     // 候选流缓存与探活游标都在它身上 —— 换实例等于每次起播重新摸一遍 PCDN。
     // 回来的是 `{ url, durationSec }`:时长是**这一次解析的那个 cid** 的真值,见 `ResolvedStream`。

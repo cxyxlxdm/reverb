@@ -12,6 +12,14 @@ export class SubscriptionStore {
   subscriptions: Podcast[] = [];
   private static FILE = 'subscriptions.json';
 
+  /**
+   * 退订回调:让凭据随之作废。
+   *
+   * 凭据只服务于「还在订阅的私有源」——退订后用户已经把链接删了,再留着口令等于
+   * 在磁盘上多存一份没用的密码。AppContainer 把它接到 `repository.forgetAuth`。
+   */
+  onRemoved: ((p: Podcast) => void) | null = null;
+
   load(): void {
     const arr = JsonFile.readArray(SubscriptionStore.FILE);
     const out: Podcast[] = [];
@@ -40,6 +48,7 @@ export class SubscriptionStore {
     if (idx >= 0) {
       next.splice(idx, 1);
       Log.i('Store', `取消订阅 "${p.title}"`);
+      if (this.onRemoved !== null) this.onRemoved(p);
     } else {
       next.unshift(p);
       Log.i('Store', `订阅 "${p.title}"`);

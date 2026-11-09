@@ -10,6 +10,7 @@ import { PlayerController } from '../playback/PlayerController';
 import { TopBar, EmptyHint, LoadingBox, Artwork, Glyph, Sym } from './Widgets';
 import {
   EpisodeListItem, PlayModeButton, formatListenDuration, ConfirmDialog, ConfirmSpec,
+  FeedAuthDialog, FeedAuthSpec,
   EpisodeBatchBar, BATCH_BAR_GAP, BATCH_AVOID, batchEnqueueAndToast
 } from './Components';
 import { formatCachedAt } from '../util/DateParse';
@@ -47,6 +48,10 @@ export struct PodcastDetailPage {
   @State staleAt: number = 0;
   /// 待确认的「删除某集下载」(非 null 即弹框),理由见 askDeleteDownload
   @State pendingDelete: ConfirmSpec | null = null;
+  /// 私有订阅源的 401 挑战(非 null 即弹登录框),见 H253。
+  @State authPrompt: FeedAuthSpec | null = null;
+  private previousChallenge: ((feedUrl: string, failed: boolean) => void) | null = null;
+  private installedChallenge: ((feedUrl: string, failed: boolean) => void) | null = null;
   @State descExpanded: boolean = false;
   @State sharing: boolean = false;
   @State pulling: boolean = false;   // 下拉刷新指示器(Refresh 容器)
@@ -76,11 +81,36 @@ export struct PodcastDetailPage {
   private app: AppContainer = AppContainer.get();
 
   aboutToAppear(): void {
+    this.claimAuthChallenge();
     this.load();
   }
 
   aboutToDisappear(): void {
     this.loadGeneration += 1;
+    // 只撤自己挂上去的那一个(发现页可能压在下面,不能把它一起抹掉)。
+    if (this.app.repository.authChallenge === this.installedChallenge) {
+      this.app.repository.authChallenge = this.previousChallenge;
+    }
+  }
+
+  /**
+   * 认领本频道的 401。**按 feedUrl 过滤** —— 发现页可能同时挂着(它认自己那次 URL 搜索),
+   * 两页各认各的,谁发起的谁弹框;不认领的那个直接返回,回调不会被他吞掉。
+   */
+  private claimAuthChallenge(): void {
+    this.previousChallenge = this.app.repository.authChallenge;
+    const claim = (feedUrl: string, failed: boolean): void => {
+      if (this.app.repository.cleanUrl(this.seed.feedUrl) !== feedUrl) return;
+      const cred = this.app.repository.credentialFor(feedUrl);
+      this.authPrompt = new FeedAuthSpec(feedUrl, failed,
+        cred === null ? '' : cred.username,
+        (user: string, pass: string) => {
+          this.app.repository.saveAuth(feedUrl, user, pass);
+          this.load();
+        });
+    };
+    this.installedChallenge = claim;
+    this.app.repository.authChallenge = claim;
   }
 
   /// 下拉刷新:强制走网络,与 load() 的区别是**不清空已展示内容** ——
@@ -425,6 +455,16 @@ export struct PodcastDetailPage {
           fontScale: this.fontScale,
           spec: this.pendingDelete,
           onDismiss: () => { this.pendingDelete = null; }
+        })
+      }
+
+      // 私有订阅源的登录框。与删除确认同址:本页根 Stack 的最后,遮罩盖住整页。
+      if (this.authPrompt !== null) {
+        FeedAuthDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          spec: this.authPrompt,
+          onDismiss: () => { this.authPrompt = null; }
         })
       }
     }

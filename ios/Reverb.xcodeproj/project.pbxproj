@@ -15,6 +15,8 @@
 		28419EB933F7F4B3D3843D68 /* DownloadManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 00373261B979F08F6E89A04E /* DownloadManager.swift */; };
 		7B70E0CD36BC33FA1FF41D04 /* DownloadStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 075EF5AA2609890B8490377F /* DownloadStore.swift */; };
 		19FB9CC8D5802A03A31D6E4B /* FeedCacheStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4BC8D7B58693047070E3B935 /* FeedCacheStore.swift */; };
+		A1B2C3D4E5F60718293A0001 /* FeedAuthStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0011 /* FeedAuthStore.swift */; };
+		A1B2C3D4E5F60718293A0002 /* FeedCredential.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A0012 /* FeedCredential.swift */; };
 		0D444DAC871EC8F496AEB52A /* FyydSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = C52FE37921F1891D489B66E3 /* FyydSource.swift */; };
 		0C02E34BAED1D7F578485DFF /* GpodderSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2BF825992D7B366E4081316 /* GpodderSource.swift */; };
 		6C900B5571CE149E07D8B6AD /* GuideEpisode.swift in Sources */ = {isa = PBXBuildFile; fileRef = A347A2C9BF06B6C8C45FC137 /* GuideEpisode.swift */; };
@@ -82,6 +84,8 @@
 		00373261B979F08F6E89A04E /* DownloadManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DownloadManager.swift; path = "../macos/Sources/Reverb/Data/DownloadManager.swift"; sourceTree = "<group>"; };
 		075EF5AA2609890B8490377F /* DownloadStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DownloadStore.swift; path = "../macos/Sources/Reverb/Data/DownloadStore.swift"; sourceTree = "<group>"; };
 		4BC8D7B58693047070E3B935 /* FeedCacheStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FeedCacheStore.swift; path = "../macos/Sources/Reverb/Data/FeedCacheStore.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0011 /* FeedAuthStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FeedAuthStore.swift; path = "../macos/Sources/Reverb/Data/FeedAuthStore.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A0012 /* FeedCredential.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FeedCredential.swift; path = "../macos/Sources/Reverb/Data/FeedCredential.swift"; sourceTree = "<group>"; };
 		C52FE37921F1891D489B66E3 /* FyydSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FyydSource.swift; path = "../macos/Sources/Reverb/Data/FyydSource.swift"; sourceTree = "<group>"; };
 		A2BF825992D7B366E4081316 /* GpodderSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GpodderSource.swift; path = "../macos/Sources/Reverb/Data/GpodderSource.swift"; sourceTree = "<group>"; };
 		A347A2C9BF06B6C8C45FC137 /* GuideEpisode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = GuideEpisode.swift; path = "../macos/Sources/Reverb/Data/GuideEpisode.swift"; sourceTree = "<group>"; };
@@ -187,6 +191,8 @@
 				00373261B979F08F6E89A04E /* DownloadManager.swift */,
 				075EF5AA2609890B8490377F /* DownloadStore.swift */,
 				4BC8D7B58693047070E3B935 /* FeedCacheStore.swift */,
+				A1B2C3D4E5F60718293A0011 /* FeedAuthStore.swift */,
+				A1B2C3D4E5F60718293A0012 /* FeedCredential.swift */,
 				C52FE37921F1891D489B66E3 /* FyydSource.swift */,
 				A2BF825992D7B366E4081316 /* GpodderSource.swift */,
 				A347A2C9BF06B6C8C45FC137 /* GuideEpisode.swift */,
@@ -363,6 +369,8 @@
 				28419EB933F7F4B3D3843D68 /* DownloadManager.swift in Sources */,
 				7B70E0CD36BC33FA1FF41D04 /* DownloadStore.swift in Sources */,
 				19FB9CC8D5802A03A31D6E4B /* FeedCacheStore.swift in Sources */,
+				A1B2C3D4E5F60718293A0001 /* FeedAuthStore.swift in Sources */,
+				A1B2C3D4E5F60718293A0002 /* FeedCredential.swift in Sources */,
 				0D444DAC871EC8F496AEB52A /* FyydSource.swift in Sources */,
 				0C02E34BAED1D7F578485DFF /* GpodderSource.swift in Sources */,
 				6C900B5571CE149E07D8B6AD /* GuideEpisode.swift in Sources */,

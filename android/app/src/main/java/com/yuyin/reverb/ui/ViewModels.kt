@@ -14,11 +14,13 @@ import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.local.CategoryStore
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.data.model.FeedCredential
 import com.yuyin.reverb.data.model.Podcast
 import com.yuyin.reverb.data.remote.LiveStreamSource
 import com.yuyin.reverb.data.remote.PodcastRepository
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 // ---------- 发现（检索）----------
@@ -66,6 +68,9 @@ val DISCOVER_CATEGORIES = listOf(
     Category("tv", R.string.cat_tv, 1309)
 )
 
+/** 私有订阅源被 401 打回时,界面要弹的输入框。 */
+data class FeedAuthPrompt(val feedUrl: String, val failed: Boolean = false)
+
 /** 地区选项。code 为 null 表示自动跟随设备；labelRes 为本地化显示名。 */
 data class RegionOption(val code: String?, val labelRes: Int)
 
@@ -94,6 +99,38 @@ class DiscoverViewModel(
         private set
     var state by mutableStateOf<DiscoverState>(DiscoverState.Idle)
         private set
+
+    /** 粘进来的私有源要求 Basic 认证时非 null —— 界面据此弹输入框。 */
+    var authPrompt by mutableStateOf<FeedAuthPrompt?>(null)
+        private set
+
+    // 最近一次检索的私有源地址(去掉 userinfo 的那一份)与地区;401 回来时用来判断
+    // "这一枪是不是冲着当前输入打的" —— 旧请求的 401 不该弹到新词下面。
+    private var lastRegion = ""
+    private var lastAuthUrl: String? = null
+    private var authAttempted = false
+
+    init {
+        viewModelScope.launch {
+            repo.authRequired.collect { url ->
+                if (url != lastAuthUrl) return@collect
+                authPrompt = FeedAuthPrompt(url, failed = authAttempted)
+            }
+        }
+    }
+
+    fun dismissAuth() {
+        authPrompt = null
+    }
+
+    /** 输入框里点了「保存」:落进本机凭据账本,然后用同一地区再搜一次。 */
+    fun submitAuth(username: String, password: String) {
+        val prompt = authPrompt ?: return
+        authAttempted = true
+        repo.saveAuth(prompt.feedUrl, username, password)
+        authPrompt = null
+        search(lastRegion)
+    }
 
     // 用户自定义顺序的分类列表
     var orderedCategories by mutableStateOf(loadOrdered())
@@ -128,6 +165,7 @@ class DiscoverViewModel(
         // 清空输入即回到热门推荐，清掉上一次的搜索结果
         if (q.isBlank()) {
             searchGen++      // 作废在途请求,否则它回来还会把结果盖回空输入框下面
+            lastAuthUrl = null
             state = DiscoverState.Idle
         }
     }
@@ -135,6 +173,7 @@ class DiscoverViewModel(
     fun clearQuery() {
         query = ""
         searchGen++
+        lastAuthUrl = null
         state = DiscoverState.Idle
     }
 
@@ -159,6 +198,11 @@ class DiscoverViewModel(
 
     fun search(region: String) {
         val q = query.trim()
+        lastRegion = region
+        // URL 直连分支才会触发 401;关键词检索把 lastAuthUrl 清掉,免得旧的 401 弹到新词上
+        lastAuthUrl = if (q.startsWith("http://", true) || q.startsWith("https://", true)) {
+            FeedCredential.splitUrl(q).first
+        } else null
         if (q.isBlank()) {
             searchGen++
             state = DiscoverState.Idle
@@ -196,6 +240,8 @@ class DiscoverViewModel(
                 com.yuyin.reverb.util.Logger.i("DiscoverVM", "搜索结果作废 gen=$gen cur=$searchGen q=$q")
                 return@launch
             }
+            // 这次拿到了内容 —— 之前那对凭据被接受,下次 401 就不该再说"不对"
+            if (outcome.podcasts.isNotEmpty()) authAttempted = false
             state = if (outcome.podcasts.isEmpty() && episodes.isEmpty()) {
                 // 探针可能已经上屏;还在路上的那一份回来时会自己落状态,这里保持不动即可。
                 if (state is DiscoverState.Live) state else DiscoverState.Empty
@@ -227,15 +273,49 @@ class PodcastViewModel(private val repo: PodcastRepository) : ViewModel() {
     var state by mutableStateOf<PodcastState>(PodcastState.Loading)
         private set
 
+    /** 这个订阅源要求 Basic 认证时非 null —— 界面据此弹输入框。 */
+    var authPrompt by mutableStateOf<FeedAuthPrompt?>(null)
+        private set
+
     private var loadedFeed: String? = null
+    private var authAttempted = false
+
+    init {
+        viewModelScope.launch {
+            repo.authRequired.collect { url ->
+                // 401 可能来自上一页的源或后台巡检 —— 只认当前这一列
+                val current = loadedFeed ?: return@collect
+                if (FeedCredential.splitUrl(current).first != url) return@collect
+                authPrompt = FeedAuthPrompt(url, failed = authAttempted)
+            }
+        }
+    }
+
+    fun dismissAuth() {
+        authPrompt = null
+    }
+
+    /** 输入框里点了「保存」:落盘后强制重拉这一列(不等下拉刷新)。 */
+    fun submitAuth(username: String, password: String) {
+        val prompt = authPrompt ?: return
+        authAttempted = true
+        repo.saveAuth(prompt.feedUrl, username, password)
+        authPrompt = null
+        loadedFeed?.let { load(it, force = true) }
+    }
 
     /**
      * 先出缓存（秒开、断网也有内容），再后台刷新替换。
      * 刷新失败时**保留缓存内容并标记为陈旧**，只有连缓存都没有才是 Error。
+     *
+     * @param force 跳过"已经是这个 feed 的 Loaded 态就早退"那道门。401 之后补了凭据
+     *              必须真的再发一次请求,否则界面看起来像保存没生效。
      */
-    fun load(feedUrl: String) {
-        if (loadedFeed == feedUrl && state is PodcastState.Loaded) return
+    fun load(feedUrl: String, force: Boolean = false) {
+        if (!force && loadedFeed == feedUrl && state is PodcastState.Loaded) return
+        val switched = loadedFeed != feedUrl
         loadedFeed = feedUrl
+        if (switched) authAttempted = false
         val cached = repo.cachedFeed(feedUrl)
         state = if (cached != null) {
             PodcastState.Loaded(cached.podcast, cached.episodes, repo.feedCachedAt(feedUrl))
@@ -251,6 +331,7 @@ class PodcastViewModel(private val repo: PodcastRepository) : ViewModel() {
                 cached != null -> PodcastState.Loaded(cached.podcast, cached.episodes, repo.feedCachedAt(feedUrl))
                 else -> PodcastState.Error
             }
+            if (result != null) authAttempted = false
         }
     }
 

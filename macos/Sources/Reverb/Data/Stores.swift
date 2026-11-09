@@ -94,10 +94,16 @@ enum AppSupport {
 
     func isSubscribed(_ id: String) -> Bool { subscriptions.contains { $0.id == id } }
 
+    /// 取消订阅时通知外面:私有订阅源的凭据要跟着删(见 `FeedAuthStore` / H253)。
+    /// 用回调而不是让本类直接持有 `FeedAuthStore`,是因为本类只该认识"订阅"这一件事,
+    /// 而凭据账本与它的生命周期并无从属关系。
+    var onRemoved: ((Podcast) -> Void)?
+
     func toggle(_ p: Podcast) {
         if let i = subscriptions.firstIndex(where: { $0.id == p.id }) {
             subscriptions.remove(at: i)
             Log.i("Store", "取消订阅 id=\(p.id) title=\"\(p.title)\"")
+            onRemoved?(p)
         } else {
             subscriptions.insert(p, at: 0)
             Log.i("Store", "订阅 id=\(p.id) title=\"\(p.title)\"")
@@ -372,14 +378,16 @@ enum AppSupport {
     /// 但与手机端同一个数);3 = 1.0.6(视频站接口 `api.bilibili.com`、其 CDN、封面地址与短链);
     /// **4 = 1.0.6 macOS 补上应用内更新** —— 桌面端这时才真的开始请求 `api.github.com`,
     /// 对 macOS 用户来说是新增的网络访问点,按合规口径要重新征求一次。
+    /// **5 = 未发版(私有订阅)** —— 不新增网络地址,但新增一类本机保存、并随请求发出去的数据
+    /// (某个源的用户名与密码,HTTP Basic,只发给该源自己的主机)。四端同一轮一起 +1:
+    /// Android / 鸿蒙从 3 到 4,macOS / iOS 从 4 到 5(它们此前多走了一档)。
     ///
-    /// ⚠️ 这是**唯一一次**桌面比手机先行:Android 自 1.0.5 起就在请求同一个接口,
-    /// 它的同意页早就写过这件事,所以 Android / 鸿蒙的 `PRIVACY_VERSION` 停在 3 不动 ——
+    /// ⚠️ 4 是**唯一一次**桌面比手机先行:Android 自 1.0.5 起就在请求同一个接口,
+    /// 它的同意页早就写过这件事,所以 Android / 鸿蒙的 `PRIVACY_VERSION` 当时停在 3 不动 ——
     /// 让手机用户为一件他们已经同意过的事再点一次同意,不是谨慎,是骚扰。
-    /// 下一次三端都有的实质变更再一起 +1(把这三行注释当作「为什么这里不同步」的凭据)。
     /// **1.0.7 的直播流没有 +1**:它不引入任何有名有姓的第三方 —— 请求的就是用户自己
     /// 粘贴的那条流地址,与「粘 RSS」同一类,同意页正文早已写明「直接请求发布方或托管方」。
-    static let privacyVersion = 4
+    static let privacyVersion = 5
     @Published private(set) var privacyAccepted: Bool
     /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。
     @Published var language: String {

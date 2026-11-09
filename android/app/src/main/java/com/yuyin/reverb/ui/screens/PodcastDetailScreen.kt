@@ -67,6 +67,7 @@ import com.yuyin.reverb.ui.PodcastState
 import com.yuyin.reverb.ui.components.Artwork
 import com.yuyin.reverb.ui.components.EpisodeBatchBar
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.FeedAuthDialog
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.PlayModeButton
 import com.yuyin.reverb.ui.components.SELECTION_BAR_SLOT
@@ -83,6 +84,16 @@ import kotlinx.coroutines.launch
 fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
     val vm = podcastViewModel()
     LaunchedEffect(feedUrl) { vm.load(feedUrl) }
+
+    // 私有源被 401 打回:弹一次用户名/密码,保存后强制重拉(见 PodcastViewModel.submitAuth)
+    vm.authPrompt?.let { prompt ->
+        FeedAuthDialog(
+            feedUrl = prompt.feedUrl,
+            failed = prompt.failed,
+            onDismiss = vm::dismissAuth,
+            onSubmit = vm::submitAuth
+        )
+    }
 
     val context = LocalContext.current
     val container = (context.applicationContext as ReverbApp).container

@@ -849,6 +849,34 @@
       "value": "将清空待播队列中的全部单集,无法恢复。"
     },
     {
+      "name": "feed_auth_title",
+      "value": "需要用户名和密码"
+    },
+    {
+      "name": "feed_auth_message",
+      "value": "「%1$s」要求先验证身份才能读取。凭据只保存在这台设备上，不会写进备份，也不会随订阅导出。"
+    },
+    {
+      "name": "feed_auth_user",
+      "value": "用户名"
+    },
+    {
+      "name": "feed_auth_pass",
+      "value": "密码"
+    },
+    {
+      "name": "feed_auth_save",
+      "value": "保存并重试"
+    },
+    {
+      "name": "feed_auth_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "feed_auth_wrong",
+      "value": "这对用户名和密码没有通过，再核对一下。"
+    },
+    {
       "name": "set_share_log",
       "value": "分享日志"
     },
@@ -1227,6 +1255,10 @@
     {
       "name": "privacy_consent_video",
       "value": "视频链接（可选）。在搜索框粘贴一个视频页面链接或 BV 号，这一条视频会被当作单集来听：本应用向视频站公开接口（api.bilibili.com）请求标题、封面与音频地址，再从它的内容分发网络（*.bilivideo.com 等）直接流式播放，并像其他单集一样自动缓存到本机。请求不登录账号、不带任何用户标识；为了取得音频地址，这类请求使用浏览器身份的 User-Agent 与视频站的来源页，对方因此会看到这些信息与你的 IP 地址。这类单集不提供「下载」，自动缓存可在设置「清除缓存」中一并删除。"
+    },
+    {
+      "name": "privacy_consent_auth",
+      "value": "私有订阅（可选）。部分自建 RSS 源需要用户名和密码（HTTP Basic 认证）。对方要求时，本应用会询问一次，并且只把这对凭据送回该源自己的域名（含其子域），用于它的 RSS、音频、下载与官方逐字稿；不会发给与它无关的音频 CDN。凭据只保存在本机，不进入备份、OPML 导出或日志，退订该源时一并删除。明文 http:// 源会以未加密方式发送口令，建议优先使用 https://。"
     },
     {
       "name": "privacy_consent_asr",

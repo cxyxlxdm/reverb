@@ -23,6 +23,22 @@ export class RedirectProbe {
   }
 }
 
+/// `fetchText` 的读数:状态码 + 正文。**非 2xx 也回**,由调用方自己分辨 401(要问口令)
+/// 与其余失败 —— 混成一个 null 的话,用户看到的永远是「加载失败」,以为链接坏了(见 H253)。
+export class HttpResult {
+  readonly code: number;
+  readonly body: string;
+
+  constructor(code: number, body: string) {
+    this.code = code;
+    this.body = body;
+  }
+
+  get ok(): boolean {
+    return this.code >= 200 && this.code <= 299;
+  }
+}
+
 export class Http {
   /**
    * GET 取文本。失败返回 null(不抛),由调用方走降级链。
@@ -85,6 +101,58 @@ export class Http {
         });
       } catch (_e) {
         finish(null, '启动异常');
+      }
+    });
+  }
+
+  /**
+   * GET 取"状态码 + 正文"。与 [`text`] 的区别只有一处:**非 2xx 的响应也交回来**。
+   *
+   * 私有源(HTTP Basic)要能分辨两件事:「401 = 该问用户要口令」与「其余失败 = 真取不到」。
+   * 传输层失败(超时 / 拒连)仍回 `code = 0`,与 `probeCode` 同一个口径。
+   *
+   * 硬超时与 `text` 同式:系统网络栈不保证 Promise 按时结束,到点主动 destroy。
+   */
+  static async fetchText(url: string, headers?: Record<string, string>,
+    timeoutMs: number = READ_TIMEOUT): Promise<HttpResult> {
+    const req = http.createHttp();
+    const host = Http.host(url);
+    const startedAt = Date.now();
+    return await new Promise<HttpResult>((resolve: (value: HttpResult) => void) => {
+      let settled = false;
+      let timerId: number = -1;
+      const finish = (value: HttpResult, stage: string): void => {
+        if (settled) return;
+        settled = true;
+        if (timerId >= 0) clearTimeout(timerId);
+        try {
+          req.destroy();
+        } catch (_e) {
+          // 释放失败不影响结果
+        }
+        if (!value.ok) {
+          Log.w('Http', `host=${host} http=${value.code} 阶段=${stage} 耗时=${Date.now() - startedAt}ms`);
+        }
+        resolve(value);
+      };
+
+      timerId = setTimeout(() => { finish(new HttpResult(0, ''), '硬超时'); }, Math.max(1, timeoutMs));
+      try {
+        req.request(url, {
+          method: http.RequestMethod.GET,
+          header: Http.headersOf(headers),
+          connectTimeout: Math.min(CONNECT_TIMEOUT, timeoutMs),
+          readTimeout: timeoutMs,
+          expectDataType: http.HttpDataType.STRING
+        }).then((resp: http.HttpResponse) => {
+          const body = typeof resp.result === 'string' ? resp.result as string : '';
+          finish(new HttpResult(resp.responseCode, body), '完成');
+        }).catch((e: BusinessError) => {
+          Log.w('Http', `host=${host} 请求异常 code=${e.code} msg=${e.message}`);
+          finish(new HttpResult(0, ''), '请求异常');
+        });
+      } catch (_e) {
+        finish(new HttpResult(0, ''), '启动异常');
       }
     });
   }

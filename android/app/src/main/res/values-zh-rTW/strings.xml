@@ -78,6 +78,7 @@
     <string name="guide_card_sub">30 秒 · 內建音訊，不連網也能播</string>
     <string name="privacy_consent_title">隱私政策與資料說明</string>
     <string name="privacy_consent_catalog">節目檢索與熱門榜。本版本會存取 Apple 播客檢索（itunes.apple.com）、Apple 熱門榜（rss.marketingtools.apple.com）、fyyd.de、gpodder.net 等公開介面；這些請求不攜帶任何驗證憑證與使用者識別碼。</string>
+    <string name="privacy_consent_auth">私有訂閱（選填）。部分自建 RSS 來源需要使用者名稱與密碼（HTTP Basic 認證）。來源要求時，本應用程式會詢問一次，並且只把這組憑證送回該來源自己的網域（含其子網域），用於它的 RSS、音訊、下載與官方逐字稿；不會傳給與它無關的音訊 CDN。憑證只保存在本機，不進入備份、OPML 匯出或日誌，取消訂閱該來源時一併刪除。明文 http:// 來源會以未加密方式傳送密碼，建議優先使用 https://。</string>
     <string name="privacy_consent_video">影片連結（選填）。在搜尋框貼上一個影片頁面連結或 BV 號，這一則影片會被當作單集來聽：本應用程式向影片站公開介面（api.bilibili.com）請求標題、封面與音訊位址，再從它的內容傳遞網路（*.bilivideo.com 等）直接串流播放，並像其他單集一樣自動快取到本機。請求不登入帳號、不帶任何使用者識別碼；為了取得音訊位址，這類請求使用瀏覽器身分的 User-Agent 與影片站的來源頁，對方因此會看到這些資訊與你的 IP 位址。這類單集不提供「下載」，自動快取可在設定「清除快取」中一併刪除。</string>
     <string name="privacy_consent_body">餘音以本機處理為主。沒有開發者後端、帳號、廣告、統計、歸因、第三方登入、第三方推播、當機回報或跨應用程式追蹤。訂閱、歷史、收藏、下載、播放快取、收聽統計、設定、安裝隨機識別碼和執行日誌在本機處理，不會自動上傳給開發者；Android 使用 AndroidX、OkHttp、Coil 等開源基礎程式庫，但不含上述資料回報 SDK。自 1.0.2 起，若你在系統設定中開啟備份（Android 雲端備份、廠商換機遷移），作業系統會把訂閱、收藏、歷史、下載紀錄（僅連結）、印記、批註、收聽統計與設定備份到你自己的系統雲端帳號或新裝置；音訊、逐字稿快取、排行榜快取與日誌不在其中，開關也在系統設定裡。\n\n連網時，搜尋詞、地區或分類會傳給 Apple、fyyd、gpodder 等公開目錄；RSS、封面、音訊和逐字稿直接向發布方或託管方請求，因此對方會看到 IP 位址、User-Agent 和存取資源。日誌可能包含節目或單集識別碼及所存取服務的主機名稱，只有你主動分享或匯出時才會離開應用程式。詳情請閱讀完整隱私政策。\n\n點按「同意並繼續」表示你已閱讀並接受本政策。</string>
     <string name="privacy_read_full">閱讀完整隱私政策</string>
@@ -427,4 +428,13 @@
     <string name="widget_description">顯示上次聽到的節目與進度，點一下接著聽</string>
     <string name="widget_progress_time">%1$s / %2$s</string>
     <string name="widget_live">直播</string>
+
+    <!-- 私有訂閱源(HTTP Basic):伺服器回 401 時彈的使用者名稱/密碼框(見 H253) -->
+    <string name="feed_auth_title">需要使用者名稱與密碼</string>
+    <string name="feed_auth_message">「%1$s」要求先驗證身分才能讀取。憑據只保存在這台裝置上，不會寫進備份，也不會隨訂閱匯出。</string>
+    <string name="feed_auth_user">使用者名稱</string>
+    <string name="feed_auth_pass">密碼</string>
+    <string name="feed_auth_save">儲存並重試</string>
+    <string name="feed_auth_cancel">取消</string>
+    <string name="feed_auth_wrong">這組使用者名稱與密碼沒有通過，請再核對一次。</string>
 </resources>

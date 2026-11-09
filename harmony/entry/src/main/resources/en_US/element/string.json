@@ -849,6 +849,34 @@
       "value": "This clears every episode in the up next queue. It cannot be undone."
     },
     {
+      "name": "feed_auth_title",
+      "value": "Sign-in required"
+    },
+    {
+      "name": "feed_auth_message",
+      "value": "“%1$s” asks for a username and password before it can be read. Credentials stay on this device — they are not included in backups or exported subscriptions."
+    },
+    {
+      "name": "feed_auth_user",
+      "value": "Username"
+    },
+    {
+      "name": "feed_auth_pass",
+      "value": "Password"
+    },
+    {
+      "name": "feed_auth_save",
+      "value": "Save and retry"
+    },
+    {
+      "name": "feed_auth_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "feed_auth_wrong",
+      "value": "That username and password were not accepted. Please check them and try again."
+    },
+    {
       "name": "set_share_log",
       "value": "Share logs"
     },
@@ -1227,6 +1255,10 @@
     {
       "name": "privacy_consent_video",
       "value": "Video links (optional). Paste a video page link or a BV ID into the search field and that video is played as an episode: the app asks the video site’s public API (api.bilibili.com) for the title, cover and audio address, then streams from its content delivery network (*.bilivideo.com and similar) and caches the audio locally like any other episode. The requests do not sign in and carry no user identifiers; to obtain the audio address they are sent with a browser User-Agent and the video site’s referring page, so the site sees those and your IP address. Episodes from video links cannot be downloaded; their automatic cache is cleared together with everything else by “Clear cache”."
+    },
+    {
+      "name": "privacy_consent_auth",
+      "value": "Private feeds (optional). Some self-hosted RSS feeds require a username and password (HTTP Basic authentication). When such a feed asks, the app prompts once and sends those credentials back only to that feed’s own host (including its subdomains), for its RSS, audio, downloads and official transcripts — never to an unrelated audio CDN. Credentials are stored only on this device, are not included in backups, OPML exports or logs, and are deleted when you unsubscribe. A plain http:// feed sends the password unencrypted; prefer https://."
     },
     {
       "name": "privacy_consent_asr",

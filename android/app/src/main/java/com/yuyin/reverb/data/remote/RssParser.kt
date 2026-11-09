@@ -2,6 +2,7 @@ package com.yuyin.reverb.data.remote
 
 import android.util.Xml
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.data.model.FeedCredential
 import com.yuyin.reverb.data.model.FeedResult
 import com.yuyin.reverb.data.model.Genres
 import com.yuyin.reverb.data.model.Podcast
@@ -21,23 +22,57 @@ class RssParser(private val client: OkHttpClient) {
 
     private val TAG = "Rss"
 
-    suspend fun fetch(feedUrl: String): FeedResult? = withContext(Dispatchers.IO) {
+    suspend fun fetch(feedUrl: String, auth: FeedCredential? = null,
+                      onUnauthorized: (() -> Unit)? = null): FeedResult? = withContext(Dispatchers.IO) {
         com.yuyin.reverb.util.Logger.d(TAG, "fetch endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}")
-        val xml = download(feedUrl) ?: return@withContext null
+        val xml = download(feedUrl, auth, onUnauthorized) ?: return@withContext null
         parse(xml, feedUrl)
     }
 
-    private fun download(feedUrl: String): String? = try {
-        val req = Request.Builder()
+    /**
+     * 下载 feed 原文。
+     *
+     * 401 分两种:没有凭据(要问用户)与凭据不对(也要问用户,输入框会预填用户名)。
+     * 两种情况都通过 [onUnauthorized] 上报,由界面弹框 —— 静默失败在这里是最坏的结果,
+     * 用户只会看到「加载失败」,然后以为链接坏了。
+     *
+     * 为什么会有第二次请求:RFC 7617 没规定字符集,凭据里带非 ASCII 字符时 ISO-8859-1
+     * 与 UTF-8 编出来的字节不同。这里只在两种编码**真的不一样**时用 UTF-8 再试一次,
+     * 纯 ASCII 凭据不会多打一枪(见 H253)。
+     */
+    private fun download(feedUrl: String, auth: FeedCredential?,
+                         onUnauthorized: (() -> Unit)?): String? {
+        val first = attempt(feedUrl, auth?.header(utf8 = false))
+        if (first.first != 401) return first.second
+        // 401 只有两种可能:没带凭据,或凭据不对。两种都要交给界面问一次 ——
+        // 静默失败在这里是最坏的结果,用户只会看到「加载失败」,然后以为链接坏了。
+        if (auth == null) {
+            onUnauthorized?.invoke()
+            return null
+        }
+        // 门槛是「两串字节真的不同」而不是「有非 Latin-1 字符」:`é` / `ß` 这类
+        // Latin-1 表示得了的字符两串就不同,服务器按 UTF-8 解时只有第二发能过。
+        // 纯 ASCII 凭据两种编码完全一样,不重复发同一个头(见 H253)。
+        if (!auth.encodingDiffers) {
+            onUnauthorized?.invoke()
+            return null
+        }
+        val second = attempt(feedUrl, auth.header(utf8 = true))
+        if (second.first == 401) onUnauthorized?.invoke()
+        return second.second
+    }
+
+    private fun attempt(feedUrl: String, authorization: String?): Pair<Int, String?> = try {
+        val builder = Request.Builder()
             .url(feedUrl)
             .header("User-Agent", "Reverb/1.0 (Android podcast client)")
-            .build()
-        client.newCall(req).execute().use { resp ->
+        if (authorization != null) builder.header("Authorization", authorization)
+        client.newCall(builder.build()).execute().use { resp ->
             if (!resp.isSuccessful) com.yuyin.reverb.util.Logger.w(
                 TAG,
                 "http ${resp.code} endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}"
             )
-            if (resp.isSuccessful) resp.body?.string() else null
+            resp.code to (if (resp.isSuccessful) resp.body?.string() else null)
         }
     } catch (e: Exception) {
         com.yuyin.reverb.util.Logger.e(
@@ -45,7 +80,7 @@ class RssParser(private val client: OkHttpClient) {
             "download error endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}",
             e
         )
-        null
+        0 to null
     }
 
     private fun parse(xml: String, feedUrl: String): FeedResult? {

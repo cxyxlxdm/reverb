@@ -17,6 +17,13 @@ class SubscriptionStore(context: Context) {
     private val _subscriptions = MutableStateFlow(load())
     val subscriptions: StateFlow<List<Podcast>> = _subscriptions
 
+    /**
+     * 退订时的附加动作(由 AppContainer 接到 `FeedAuthStore.forget`)。
+     * 为什么退订要清凭据:口令只服务于"这一个源还能不能用",用户不再订阅之后
+     * 让它在设备上继续躺着没有理由;代价只是重新订阅时再输一次。
+     */
+    var onRemoved: ((Podcast) -> Unit)? = null
+
     fun isSubscribed(id: String): Boolean = _subscriptions.value.any { it.id == id }
 
     fun toggle(podcast: Podcast) {
@@ -28,6 +35,7 @@ class SubscriptionStore(context: Context) {
             _subscriptions.value = current
             persist(current)
             com.yuyin.reverb.util.Logger.i("SubStore", "${if (removed) "remove" else "add"} id=${podcast.id} total=${current.size}")
+            if (removed) onRemoved?.invoke(podcast)
         }
     }
 

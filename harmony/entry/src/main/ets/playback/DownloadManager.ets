@@ -44,6 +44,10 @@ export class DownloadManager {
   /// episodeId → 进度(界面观察)
   states: Record<string, DownloadProgress> = {};
 
+  /// 私有订阅的取流凭据。与 PlayerController 同一个口径:按 URL 判主机,不给就不带。
+  /// 下载落在 CDN 上也要能过 401,所以这里必须与播放侧吃同一份判断。
+  authHeaderProvider: ((url: string) => string | null) | null = null;
+
   private dir = '';
   private store: DownloadStore | null = null;
   private settings: SettingsStore | null = null;
@@ -153,9 +157,13 @@ export class DownloadManager {
         }
       });
 
+      const auth = this.authHeaderProvider === null ? null : this.authHeaderProvider(e.audioUrl);
+      // 先落成一个带类型的 Record 再加字段:三元里给两个对象字面量过不了 arkts-no-untyped-obj-literals。
+      const headers: Record<string, string> = { 'User-Agent': 'Reverb/1.0 (HarmonyOS podcast client)' };
+      if (auth !== null) headers['Authorization'] = auth;
       const code = await req.requestInStream(e.audioUrl, {
         method: http.RequestMethod.GET,
-        header: { 'User-Agent': 'Reverb/1.0 (HarmonyOS podcast client)' },
+        header: headers,
         connectTimeout: 15000,
         readTimeout: 120000
       });

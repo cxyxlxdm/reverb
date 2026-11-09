@@ -11,6 +11,8 @@ import { TranscribedSegment } from '../model/Models';
  * 与 `FeedTask` 一样连网络一起搬:大稿的字符串(上限 8 MB)因此不出现在 UI 线程的堆上。
  */
 @Concurrent
-export async function fetchTranscriptConcurrent(url: string, declaredType: string): Promise<TranscribedSegment[]> {
-  return await TranscriptFetcher.fetch(url, declaredType);
+export async function fetchTranscriptConcurrent(url: string, declaredType: string,
+                                               authHeader: string): Promise<TranscribedSegment[]> {
+  // 凭据以**字符串**过线:taskpool 的参数必须可序列化,闭包/对象传不过去(见 FeedTask 同式)。
+  return await TranscriptFetcher.fetch(url, declaredType, authHeader.length > 0 ? authHeader : null);
 }

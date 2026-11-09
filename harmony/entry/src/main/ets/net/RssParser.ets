@@ -5,6 +5,20 @@ import { Log } from '../util/Logger';
 import { htmlToText, parseDurationSec } from '../util/HtmlText';
 import { Episode, Podcast, FeedResult, emptyPodcast } from '../model/Models';
 import { Genres } from '../model/Genres';
+import { FeedCredential } from '../model/FeedCredential';
+
+/**
+ * 一次取 feed 的结果。**401 必须与"传输/解析失败"分开**:前者要弹用户名密码输入框,
+ * 后者只该显示加载失败 —— 混成一个 null 的话,用户看到的永远是「加载失败」,
+ * 以为链接坏了(见 H253)。
+ *
+ * 用 interface 而不是带方法的类:它要跨 taskpool 边界回来(`FeedTask`),
+ * 只有纯字段的普通对象才保证可序列化。
+ */
+export interface FeedOutcome {
+  result: FeedResult | null;
+  unauthorized: boolean;
+}
 
 /**
  * 播放核心:解析播客自身的 RSS/Atom,取出频道信息与每集音频直链。
@@ -16,9 +30,37 @@ import { Genres } from '../model/Genres';
  */
 export class RssParser {
   static async fetch(feedUrl: string, timeoutMs: number): Promise<FeedResult | null> {
-    const text = await Http.text(feedUrl, timeoutMs);
-    if (text === null) return null;
-    return RssParser.parse(text, feedUrl);
+    const outcome = await RssParser.fetchOutcome(feedUrl, timeoutMs, '', '');
+    return outcome.result;
+  }
+
+  /**
+   * 带 HTTP Basic 凭据取 feed。`user` 为空 = 这个源还没有凭据。
+   *
+   * **先 ISO-8859-1、401 再 UTF-8**(与 Android `RssParser` / AntennaPod 同一条兜底):
+   * RFC 7617 没有规定字符集,两种服务器都真实存在。门槛是「两串字节真的不同」
+   * 而不是「有非 Latin-1 字符」—— `é` / `ß` 这类字符两串就不同,服务器按 UTF-8 解时
+   * 只有第二发能过(见 H253)。
+   */
+  static async fetchOutcome(feedUrl: string, timeoutMs: number,
+    user: string, pass: string): Promise<FeedOutcome> {
+    const auth = user.length > 0 ? new FeedCredential(user, pass) : null;
+    const first = await Http.fetchText(feedUrl, RssParser.authHeaders(auth, false), timeoutMs);
+    if (first.ok) return { result: RssParser.parse(first.body, feedUrl), unauthorized: false };
+    if (first.code !== 401 || auth === null) {
+      return { result: null, unauthorized: first.code === 401 };
+    }
+    if (!auth.encodingDiffers) return { result: null, unauthorized: true };
+    const second = await Http.fetchText(feedUrl, RssParser.authHeaders(auth, true), timeoutMs);
+    if (second.ok) return { result: RssParser.parse(second.body, feedUrl), unauthorized: false };
+    return { result: null, unauthorized: second.code === 401 };
+  }
+
+  private static authHeaders(auth: FeedCredential | null, utf8: boolean): Record<string, string> | undefined {
+    if (auth === null) return undefined;
+    const h: Record<string, string> = {};
+    h['Authorization'] = auth.header(utf8);
+    return h;
   }
 
   static parse(xmlText: string, feedUrl: string): FeedResult | null {

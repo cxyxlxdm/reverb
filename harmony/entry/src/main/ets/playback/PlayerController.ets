@@ -186,6 +186,12 @@ export class PlayerController {
    */
   networkPlayNotice: ((e: Episode, headers: Record<string, string> | null) => void) | null = null;
   /**
+   * 私有订阅源的取流头(`Authorization`),闭包注入,与 `localFileProvider` 同一解耦风格。
+   * 只有与已存源同主机(或互为子域)的地址才会拿到头;其余一律 null(见 H253)。
+   * 音频 / 逐字稿是同一份口径,两边各接一次。
+   */
+  authHeaderProvider: ((url: string) => string | null) | null = null;
+  /**
    * 伪地址 → 一条现取的直链 + **这一 P** 的真时长(视频源专用,闭包注入,与上面同一解耦风格)。
    *
    * 注入的是 `PodcastRepository.bilibili.resolvePlayback` 的**同一个实例** —— 候选流缓存
@@ -659,10 +665,14 @@ export class PlayerController {
      * **直播流不缓存**:它的"整集"没有终点,下载任务只会在磁盘上一直长到超时;
      * 而直播本来就该边下边播,缓存没有可复用的那一刻。
      */
+    // 取流头:**视频源**整份替换(浏览器 UA + Referer);私有源在默认 UA 之上加
+    // `Authorization`;其余普通单集 null(即默认 UA)。见 `authHeaderProvider`。
+    const isPseudo = BilibiliSource.isPseudo(e.audioUrl);
+    const streamHeaders = isPseudo
+      ? BilibiliSource.streamHeaders()
+      : this.authStreamHeaders(e.audioUrl);
     if (!useLocal && !this.radioMode && !isLive && this.networkPlayNotice !== null) {
-      const isPseudo = BilibiliSource.isPseudo(e.audioUrl);
-      this.networkPlayNotice(isPseudo ? withAudioUrl(e, streamUrl) : e,
-        isPseudo ? BilibiliSource.streamHeaders() : null);
+      this.networkPlayNotice(isPseudo ? withAudioUrl(e, streamUrl) : e, streamHeaders);
     }
 
     try {
@@ -686,8 +696,7 @@ export class PlayerController {
         this.localFile = f;
         p.fdSrc = { fd: f.fd };
       } else {
-        await this.setNetworkSource(p, streamUrl,
-          BilibiliSource.isPseudo(e.audioUrl) ? BilibiliSource.streamHeaders() : null);
+        await this.setNetworkSource(p, streamUrl, streamHeaders);
       }
       // prepare 在 stateChange 的 'initialized' 分支触发
     } catch (err) {
@@ -722,7 +731,8 @@ export class PlayerController {
    * **但带自定义头的调用方(视频流)不回落** —— 那条路丢了头就是必然 403,见函数里的注释。
    *
    * - Parameter headers: 整份替换要发的头。视频源传 `BilibiliSource.streamHeaders()`
-   *   (浏览器 UA + `Referer`,缺 Referer 的节点会 403);普通单集传 null 即本端 UA。
+   *   (浏览器 UA + `Referer`,缺 Referer 的节点会 403);私有订阅传 `authStreamHeaders()`
+   *   (默认 UA + `Authorization`);普通单集传 null 即本端 UA。
    */
   private async setNetworkSource(p: media.AVPlayer, url: string,
                                  headers: Record<string, string> | null = null): Promise<void> {
@@ -739,6 +749,23 @@ export class PlayerController {
       if (headers !== null) throw err as Error;
     }
     p.url = url;
+  }
+
+  /**
+   * 私有订阅的取流头:默认 UA + `Authorization`。
+   *
+   * 认证头**不在这里做主机匹配** —— 判断"这个 URL 该不该带凭据"是本层的
+   * `authHeaderProvider` 给出来的结论(它按订阅源的 feed 主机及其父子域收窄),这里只负责
+   * 拼进请求头。理由同另两端:音频常常落在 CDN 上,凭据跟着 feed 主机走才不至于送给第三方。
+   *
+   * 没有凭据时返回 null 而不是默认 UA 那份 —— `setNetworkSource` 自己会补默认 UA,
+   * 而"带了头"与"没带"在它那里还决定**要不要回落**(见函数注释)。
+   */
+  private authStreamHeaders(url: string): Record<string, string> | null {
+    if (this.authHeaderProvider === null) return null;
+    const auth = this.authHeaderProvider(url);
+    if (auth === null) return null;
+    return { 'User-Agent': PLAYER_UA, 'Authorization': auth };
   }
 
   private async ensurePlayer(): Promise<media.AVPlayer | null> {

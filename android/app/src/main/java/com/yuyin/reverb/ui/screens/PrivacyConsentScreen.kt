@@ -105,10 +105,14 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                          * 「视频链接」是 1.0.6 追加的第五段:它带来的是**新的网络访问地址**
                          * (视频站接口与它的 CDN),按本仓库的口径要进同意页,并且 PRIVACY_VERSION 要 +1
                          * 让老用户重看一次(见 `SettingsStore.PRIVACY_VERSION` 的历史表)。
+                         *
+                         * 「私有订阅」是未发版那一轮追加的段落:它不引入新的网络地址,但**新增了一类
+                         * 在本机保存、并会随请求发出去的数据(用户名与密码)** —— 按同一口径 +1。
                          */
                         listOf(
                             stringResource(R.string.privacy_consent_body),
                             stringResource(R.string.privacy_consent_catalog),
+                            stringResource(R.string.privacy_consent_auth),
                             stringResource(R.string.privacy_consent_video),
                             stringResource(R.string.privacy_consent_update),
                             stringResource(R.string.privacy_consent_asr),

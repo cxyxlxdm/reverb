@@ -35,7 +35,7 @@ final class AppEnvironment: ObservableObject {
         let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
         Log.i("App", "启动 余音 Reverb v\(version) (\(build)) iOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
 
-        downloadManager = DownloadManager(store: downloads)
+        downloadManager = DownloadManager(store: downloads, feedAuth: repository.authStore)
         playbackState = PlaybackStateStore()
         // 「仅在 Wi-Fi 下载」的闸门:iOS 有三条大流量路径(点名下载 / 首播落缓存 / 转录前下整集),
         // 判据只有 `CellularGate` 一份,这里把它接到三个入口上。macOS 的三处闭包保持 nil(不拦)。
@@ -52,6 +52,10 @@ final class AppEnvironment: ObservableObject {
         listenStats.seedFromHistory(history.history)
         player.localFileProvider = { [downloads] ep in downloads.localURL(ep.id) }
         player.bindAudioCache(audioCache)
+        // 私有订阅源:401 要弹输入框、音频直链与官方稿要带同一个 `Authorization`。
+        player.bindFeedAuth(repository.authStore)
+        transcripts.authHeaderProvider = { [repository] url in repository.authHeader(for: url) }
+        subscriptions.onRemoved = { [repository] p in repository.forgetAuth(p.feedUrl) }
         let repo = repository
         player.resolvePseudoUrl = { url in await repo.bilibili.resolvePlayback(url) }
         player.bindState(playbackState)

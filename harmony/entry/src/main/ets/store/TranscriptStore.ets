@@ -96,6 +96,12 @@ export class TranscriptStore implements TranscriptSink {
   /// 实际干识别活的那位。由 AppContainer 注入,store 不认识它的实现细节。
   transcriber: SpeechTranscriberLike | null = null;
 
+  /**
+   * 私有订阅的凭据查询。官方稿常常就挂在订阅源同域下(要认证),所以取稿也得带上。
+   * 只在这条路上用:系统识别吃的是本地音频,与网络凭据无关。
+   */
+  authHeaderProvider: ((url: string) => string | null) | null = null;
+
   init(filesDir: string): void {
     this.filesDir = filesDir;
     try {
@@ -228,12 +234,14 @@ export class TranscriptStore implements TranscriptSink {
 
   /// 取官方稿:走子线程(解析上万条词级条目),失败回落本线程。
   private async fetchOfficial(url: string, declaredType: string): Promise<TranscribedSegment[]> {
+    const auth = this.authHeaderProvider === null ? null : this.authHeaderProvider(url);
     try {
-      const out: Object = await taskpool.execute(fetchTranscriptConcurrent, url, declaredType);
+      const out: Object = await taskpool.execute(fetchTranscriptConcurrent, url, declaredType,
+        auth === null ? '' : auth);
       return out === null || out === undefined ? [] : out as TranscribedSegment[];
     } catch (e) {
       Log.w(TranscriptStore.TAG, `子线程取官方稿失败,回落本线程:${(e as Error).message}`);
-      return TranscriptFetcher.fetch(url, declaredType);
+      return TranscriptFetcher.fetch(url, declaredType, auth);
     }
   }
 

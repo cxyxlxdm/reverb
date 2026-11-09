@@ -35,13 +35,17 @@ final class AppEnvironment: ObservableObject {
         let build = (Bundle.main.infoDictionary?["CFBundleVersion"] as? String) ?? "?"
         Log.i("App", "启动 余音 Reverb v\(version) (\(build)) macOS \(ProcessInfo.processInfo.operatingSystemVersionString)")
 
-        downloadManager = DownloadManager(store: downloads)
+        downloadManager = DownloadManager(store: downloads, feedAuth: repository.authStore)
         playbackState = PlaybackStateStore()
         player.bind(history: history, settings: settings)
         player.bindListenStats(listenStats)
         listenStats.seedFromHistory(history.history)   // 首启用历史近似种子(仅当无既有统计)
         player.localFileProvider = { [downloads] ep in downloads.localURL(ep.id) }
         player.bindAudioCache(audioCache)
+        // 私有订阅源:401 要弹输入框、音频直链与官方稿要带同一个 `Authorization`。
+        player.bindFeedAuth(repository.authStore)
+        transcripts.authHeaderProvider = { [repository] url in repository.authHeader(for: url) }
+        subscriptions.onRemoved = { [repository] p in repository.forgetAuth(p.feedUrl) }
         // 视频源的伪地址在起播前现取直链。注入的是**同一个** `BilibiliSource`(仓库里那一个),
         // 候选流缓存与探活游标都在它身上 —— 换实例等于每次起播重新摸一遍 PCDN。
         let repo = repository

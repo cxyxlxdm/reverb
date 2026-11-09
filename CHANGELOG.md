@@ -10,6 +10,28 @@
 
 ## 未发版 — 版本号待定
 
+### 私有订阅源(HTTP Basic 认证)
+
+- 需要用户名与密码的 RSS 源(自建 WordPress 会员站、有声书服务器、私人托管等)现在能正常订阅:
+  对方要求时问一次,输对即可订阅、播放、下载与阅读官方逐字稿。
+- 也支持直接粘贴 `https://user:pass@host/feed.xml`;保存下来的订阅地址会把这段 userinfo 剥掉。
+- 凭据只存本机,**不进完整备份 / OPML 导出 / 日志**,退订该源即删除;
+  只发回该源自己的域名(含父子域),音频放在无关的第三方 CDN 上时不发。
+- 已存密码不对时会再问一次(预填用户名),不需要卸载重装。
+
+> **工程要点**
+> - 四端同名同职责:`FeedCredential` / `FeedAuthStore` / `feed_auth.json`。`RssParser` 先按 ISO-8859-1 发,
+>   401 且 `encodingDiffers` 时再按 UTF-8 发一次;音频 / 下载 / 官方逐字稿这类不可重试的调用点按内容选编码。
+>   主机匹配与「同主机多对凭据则一个都不带」只在 `headerForUrl` 一处判定。
+> - 401 挑战按页面认领,且只认自己那一个源(干净 `feedUrl` 比对),页面消失时还原上一个回调;
+>   粘贴入口的 userinfo 在落库前由 `splitUrl` 剥离。凭据只在**真正读到内容**之后落盘。
+> - 隐私政策同步:`PRIVACY_VERSION` Android / 鸿蒙 3→4、macOS / iOS 4→5(新增一类本机保存、并随请求发出的数据),
+>   同意页加「私有订阅」一段;`docs/PRIVACY.md` 与 `site/reverb/privacy.html` 同步,更新日期 2026-11-09。
+> - 验收:两台本地夹具(全站 Basic + 只认 UTF-8)上 Apple 共享层探针 **pass=56 fail=0**;
+>   Android `:app:compileReleaseKotlin`、鸿蒙 `assembleHap`、iOS `build-ios.sh` 编译门全过。
+>   **三端 401 弹框的点击流程未实跑**(本机无鸿蒙设备,Android / iOS 也未装这一版)。四端 `dist/` 未重打。
+> - 逐条坑与四条已知边界见 `docs/TROUBLESHOOTING.md` H253。
+
 ### 双击底部 tab 回顶(手机三端)
 
 - 列表滑得很远时,双击当前所在的那颗底部 tab(发现 / 追更 / 音阁),这一格立即回到顶部。macOS 没有底部 tab,不涉及。

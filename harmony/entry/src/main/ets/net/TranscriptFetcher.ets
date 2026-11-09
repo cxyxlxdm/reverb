@@ -21,11 +21,15 @@ export class TranscriptFetcher {
   private static readonly TAG: string = 'Transcript';
 
   /**
+   * @param authHeader 私有源的 `Authorization` 头;null = 公开源。判断该不该带(主机匹配)
+   *   在调用方 —— 这里只负责发出去,与播放/下载两侧同一口径。
    * @returns 解析好的句子;取不到或解析不出来返回空数组(调用方据此回退系统识别)
    */
-  static async fetch(url: string, declaredType: string): Promise<TranscribedSegment[]> {
+  static async fetch(url: string, declaredType: string,
+                     authHeader: string | null = null): Promise<TranscribedSegment[]> {
     if (url.length === 0) return [];
-    const body = await Http.text(url);
+    const body = await Http.text(url, undefined,
+      authHeader === null ? undefined : { 'Authorization': authHeader });
     if (body === null || body.length === 0) {
       Log.w(TranscriptFetcher.TAG, `官方稿取不到 host=${Http.host(url)}`);
       return [];

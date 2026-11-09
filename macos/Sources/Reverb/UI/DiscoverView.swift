@@ -79,6 +79,8 @@ struct DiscoverView: View {
     /// 用户粘的是一路直播流时它非空(见 `LiveStream`)。它与三个搜索结果数组互斥:
     /// 直播流不是节目也不是单集,单独一条渲染。
     @State private var liveEpisode: Episode?
+    /// 私有订阅源的 401 挑战(见 `FeedAuthChallenge` / H253)。
+    @State private var authPrompt: FeedAuthChallenge?
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
@@ -114,6 +116,24 @@ struct DiscoverView: View {
             ToolbarItem(placement: .primaryAction) { radioButton }
         }
         .task { await loadPopular(initial: true) }
+        // 只认**用户刚粘的那条地址**:追更的后台巡检也会触发 401,那一路不该在发现页弹框。
+        .onReceive(env.repository.authRequired) { challenge in
+            guard FeedCredential.splitUrl(submittedQuery).url == challenge.feedUrl else { return }
+            authPrompt = challenge
+        }
+        .sheet(item: $authPrompt) { challenge in
+            FeedAuthSheet(
+                feedUrl: challenge.feedUrl,
+                failed: challenge.failed,
+                initialUsername: env.repository.credential(for: challenge.feedUrl)?.username ?? "",
+                onSubmit: { user, pass in
+                    env.repository.saveAuth(challenge.feedUrl, username: user, password: pass)
+                    authPrompt = nil
+                    runSearch()
+                },
+                onCancel: { authPrompt = nil }
+            )
+        }
         .sheet(isPresented: $showReorder) {
             CategoryOrderSheet(initial: categories) { ordered in
                 // 空表不落盘:与 Android `saveOrder` 的早退、鸿蒙 `CategoryStore.save` 同一条

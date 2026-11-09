@@ -31,6 +31,24 @@ enum HTTP {
         }
     }
 
+    /// 带请求头的 GET,**把状态码一并交回**(非 2xx 也算"取到了响应")。
+    ///
+    /// 只有私有订阅源那一路用得上:它必须把 **401 与"网络坏了"分开** ——
+    /// 前者要弹输入框,后者只该提示加载失败。`data(_:)` 一律把非 2xx 折成 nil,
+    /// 分辨不出这两种(见 H253)。传输错误仍然返回 nil。
+    static func fetch(_ urlString: String, headers: [String: String] = [:],
+                      timeout: TimeInterval = 20) async -> (data: Data, code: Int)? {
+        guard let req = request(urlString, headers: headers, timeout: timeout) else { return nil }
+        do {
+            let (data, response) = try await session.data(for: req)
+            let code = (response as? HTTPURLResponse)?.statusCode ?? 0
+            return (data, code)
+        } catch {
+            Log.e("HTTP", "传输失败 \(urlString)", error: error)
+            return nil
+        }
+    }
+
     /// 拉取并解析为 JSON 字典。失败返回 nil。
     static func json(_ urlString: String) async -> [String: Any]? {
         guard let data = await data(urlString) else { return nil }

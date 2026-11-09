@@ -849,6 +849,34 @@
       "value": "Efface tous les épisodes de la file « À suivre ». Cette action est définitive."
     },
     {
+      "name": "feed_auth_title",
+      "value": "Connexion requise"
+    },
+    {
+      "name": "feed_auth_message",
+      "value": "« %1$s » demande un identifiant et un mot de passe avant de pouvoir être lu. Les identifiants restent sur cet appareil : ils ne sont ni sauvegardés dans les copies de sécurité ni exportés avec les abonnements."
+    },
+    {
+      "name": "feed_auth_user",
+      "value": "Identifiant"
+    },
+    {
+      "name": "feed_auth_pass",
+      "value": "Mot de passe"
+    },
+    {
+      "name": "feed_auth_save",
+      "value": "Enregistrer et réessayer"
+    },
+    {
+      "name": "feed_auth_cancel",
+      "value": "Annuler"
+    },
+    {
+      "name": "feed_auth_wrong",
+      "value": "Ces identifiants n'ont pas été acceptés. Vérifiez-les et réessayez."
+    },
+    {
       "name": "set_share_log",
       "value": "Partager les journaux"
     },
@@ -1227,6 +1255,10 @@
     {
       "name": "privacy_consent_video",
       "value": "Lien vidéo (facultatif). Collez un lien de page vidéo ou un identifiant BV dans le champ de recherche : cette vidéo est lue comme un épisode. L’application interroge l’API publique du site vidéo (api.bilibili.com) pour obtenir le titre, la pochette et l’adresse audio, puis lit en streaming depuis son réseau de diffusion (*.bilivideo.com et similaires) et met l’audio en cache localement comme pour tout autre épisode. Ces requêtes ne connectent aucun compte et ne portent aucun identifiant ; pour obtenir l’adresse audio, elles sont envoyées avec un User-Agent de navigateur et la page d’origine du site vidéo, que le site voit donc, ainsi que votre adresse IP. Ces épisodes ne peuvent pas être téléchargés ; leur cache automatique est supprimé avec le reste par « Vider le cache »."
+    },
+    {
+      "name": "privacy_consent_auth",
+      "value": "Flux privés (facultatif). Certains flux RSS auto-hébergés exigent un nom d’utilisateur et un mot de passe (authentification HTTP Basic). Lorsqu’un tel flux les demande, l’application les demande une fois et ne les renvoie qu’au domaine de ce flux (sous-domaines compris), pour son RSS, son audio, ses téléchargements et ses transcriptions officielles ; jamais à un réseau de diffusion audio sans rapport. Les identifiants restent sur cet appareil, ne sont inclus ni dans les sauvegardes, ni dans les exports OPML, ni dans les journaux, et sont supprimés lorsque vous vous désabonnez. Un flux http:// non chiffré transmet le mot de passe en clair ; préférez https://."
     },
     {
       "name": "privacy_consent_asr",
