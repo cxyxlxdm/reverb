@@ -93,6 +93,16 @@ export struct QueueBody {
   /// 动作走闭包、不走值:V1 里无装饰器的成员变量只在建组件时赋值一次(见 H29/H145)。
   onOpenChannel: (feedUrl: string) => void = () => {};
   @ObjectLink player: PlayerController;
+  /// 双击底部「音阁」时外壳递增这个数。内嵌在音阁时由 `LibraryPage` 透传过来;
+  /// 独立页(`QueuePage`)不传,默认 0,@Watch 不会触发。
+  @Prop @Watch('onScrollTopToken') scrollTopToken: number = 0;
+  private scroller: Scroller = new Scroller();
+
+  /// 回顶。⚠️ 只回顶部、不碰选中/确认框状态:双击 tab 是"我滑远了"的诉求,
+  /// 不是"我要清空队列"的前奏。
+  onScrollTopToken(): void {
+    this.scroller.scrollEdge(Edge.Top);
+  }
 
   build() {
     Column() {
@@ -103,7 +113,7 @@ export struct QueueBody {
         })
           .layoutWeight(1)
       } else {
-        List() {
+        List({ scroller: this.scroller }) {
           if (this.chipReserve) {
             ListItem() {
               Row().width('100%').height(CHIPS_RESERVE_H)

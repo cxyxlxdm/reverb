@@ -22,8 +22,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -127,7 +129,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
+fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
     val vm = discoverViewModel()
     val keyboard = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
@@ -261,7 +263,8 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
             SubscribeStarter(
                 continueEntries = inProgress,
-                showGuide = firstRun
+                showGuide = firstRun,
+                scrollTopToken = scrollTopToken
             )
         } else if (browsing) {
             val selectedIndex = pagerState.currentPage.coerceIn(0, (categories.size - 1).coerceAtLeast(0))
@@ -280,7 +283,8 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
                         onOpen = onOpen,
                         continueEntries = inProgress,
                         showGuide = firstRun,
-                        topPad = GLASS_CHIPS_TOP_PAD
+                        topPad = GLASS_CHIPS_TOP_PAD,
+                        scrollTopToken = scrollTopToken
                     )
                 }
                 GlassChipsRow(
@@ -304,7 +308,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit) {
             when (val s = vm.state) {
                 DiscoverState.Loading -> LoadingBox()
                 DiscoverState.Empty -> EmptyHint(stringResource(R.string.load_failed))
-                is DiscoverState.Success -> SearchResults(s = s, onOpen = onOpen)
+                is DiscoverState.Success -> SearchResults(s = s, onOpen = onOpen, scrollTopToken = scrollTopToken)
                 is DiscoverState.Live -> LiveResult(s.episode)
                 DiscoverState.Idle -> Unit
             }
@@ -383,7 +387,8 @@ private fun CategoryPage(
     continueEntries: List<HistoryEntry> = emptyList(),
     showGuide: Boolean = false,
     // 悬浮分类玻璃条占掉的高度:列表要能从条下滚过,首项又要从条下露出,全靠这个让位
-    topPad: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Unspecified
+    topPad: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp.Unspecified,
+    scrollTopToken: Int = 0
 ) {
     // 先展示缓存（无缓存则用随包内置清单），秒开；再后台刷新，数据回来替换。地区变化时按新地区重载。
     var list by remember(category.key, region) { mutableStateOf(vm.cachedCategory(category, region)) }
@@ -430,6 +435,7 @@ private fun CategoryPage(
                 podcasts = list,
                 onOpen = onOpen,
                 topPad = topPad,
+                scrollTopToken = scrollTopToken,
                 topContent = when {
                     continueEntries.isNotEmpty() -> { { ContinueListeningStrip(continueEntries) } }
                     showGuide -> { { GuideCard() } }
@@ -549,28 +555,35 @@ private fun ReorderCategoriesDialog(
 @Composable
 private fun SubscribeStarter(
     continueEntries: List<HistoryEntry>,
-    showGuide: Boolean
+    showGuide: Boolean,
+    scrollTopToken: Int = 0
 ) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
 
-    if (subs.isEmpty()) StarterOnboarding(continueEntries, showGuide)
-    else HomeFeed(continueEntries)
+    if (subs.isEmpty()) StarterOnboarding(continueEntries, showGuide, scrollTopToken)
+    else HomeFeed(continueEntries, scrollTopToken)
 }
 
 /** 零订阅时的引导：说明 + 通栏导入按钮 + 内置引导音频卡。 */
 @Composable
 private fun StarterOnboarding(
     continueEntries: List<HistoryEntry>,
-    showGuide: Boolean
+    showGuide: Boolean,
+    scrollTopToken: Int = 0
 ) {
     val context = LocalContext.current
     val container = (context.applicationContext as ReverbApp).container
     val scope = rememberCoroutineScope()
     var importing by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(scrollTopToken) {
+        if (scrollTopToken > 0) listState.animateScrollToItem(0)
+    }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 24.dp + LocalGlassBottomPad.current)
     ) {
         item {
@@ -640,11 +653,15 @@ private const val HOME_LATEST_MAX = 20
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeFeed(continueEntries: List<HistoryEntry>) {
+private fun HomeFeed(continueEntries: List<HistoryEntry>, scrollTopToken: Int = 0) {
     val context = LocalContext.current
     val container = (context.applicationContext as ReverbApp).container
     val scope = rememberCoroutineScope()
     var importing by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
+    LaunchedEffect(scrollTopToken) {
+        if (scrollTopToken > 0) listState.animateScrollToItem(0)
+    }
 
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
     val episodes by container.inboxStore.episodes.collectAsStateWithLifecycle()
@@ -684,7 +701,8 @@ private fun HomeFeed(continueEntries: List<HistoryEntry>) {
             .nestedScroll(pullState.nestedScrollConnection)
     ) {
         LazyColumn(
-            Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 24.dp + LocalGlassBottomPad.current)
         ) {
             if (continueEntries.isNotEmpty()) item { ContinueListeningStrip(continueEntries) }
@@ -984,11 +1002,19 @@ private fun LiveResult(ep: Episode) {
 
 /** 搜索结果：单集 / 节目 两个分段。单集点击即播，节目点进详情。 */
 @Composable
-private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
+private fun SearchResults(
+    s: DiscoverState.Success,
+    onOpen: (Podcast) -> Unit,
+    scrollTopToken: Int = 0
+) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val history by container.historyStore.history.collectAsStateWithLifecycle()
+    val episodeListState = rememberLazyListState()
+    LaunchedEffect(scrollTopToken) {
+        if (scrollTopToken > 0) episodeListState.animateScrollToItem(0)
+    }
     // 默认停在「单集」；若本次无单集则落到「节目」，避免进来一片空白
     var tab by remember(s) { mutableIntStateOf(if (s.episodes.isNotEmpty()) 0 else 1) }
     // 单集这一列是两路拼起来的(Apple 在前、B 站在后),一个表头装不下两个来源,
@@ -1017,7 +1043,8 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
                 EmptyHint(stringResource(R.string.search_empty_episodes))
             } else {
                 LazyColumn(
-                    Modifier.fillMaxSize(),
+                    state = episodeListState,
+                    modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 24.dp + LocalGlassBottomPad.current)
                 ) {
                     items(s.episodes) { ep ->
@@ -1055,7 +1082,8 @@ private fun SearchResults(s: DiscoverState.Success, onOpen: (Podcast) -> Unit) {
                         }
                     ),
                     podcasts = s.podcasts,
-                    onOpen = onOpen
+                    onOpen = onOpen,
+                    scrollTopToken = scrollTopToken
                 )
             }
         }
@@ -1074,10 +1102,20 @@ private fun PodcastResultList(
     onOpen: (Podcast) -> Unit,
     topContent: (@Composable () -> Unit)? = null, // 列表首项(如“继续收听”横条),随列表一起滚动
     // 悬浮分类玻璃条的让位:列表视口从条下开始,首项要滚出条上方
-    topPad: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp(0f)
+    topPad: androidx.compose.ui.unit.Dp = androidx.compose.ui.unit.Dp(0f),
+    /**
+     * 双击底部 tab 回顶的触发器(见 `ReverbRoot.MainShell`)。只认"变没变",
+     * 0 是初始值 —— `LaunchedEffect` 首次挂载也会跑一次,`> 0` 把那一趟挡掉。
+     */
+    scrollTopToken: Int = 0
 ) {
+    val listState = rememberLazyListState()
+    LaunchedEffect(scrollTopToken) {
+        if (scrollTopToken > 0) listState.animateScrollToItem(0)
+    }
     LazyColumn(
-        Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = topPad,
             bottom = 24.dp + LocalGlassBottomPad.current

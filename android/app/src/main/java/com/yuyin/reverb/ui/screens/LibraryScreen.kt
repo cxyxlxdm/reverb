@@ -17,9 +17,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -38,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -107,7 +110,12 @@ private const val SEG_NOTES = 5
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenListenStats: () -> Unit) {
+fun LibraryScreen(
+    onOpen: (Podcast) -> Unit,
+    onOpenSettings: () -> Unit,
+    onOpenListenStats: () -> Unit,
+    scrollTopToken: Int = 0
+) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val history by container.historyStore.history.collectAsStateWithLifecycle()
     val subsGrid by container.settingsStore.subsGrid.collectAsStateWithLifecycle()
@@ -189,16 +197,16 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
                 modifier = Modifier.fillMaxSize()
             ) { page ->
                 when (page) {
-                    SEG_SUBS -> SubscriptionsSection(subsGrid, onOpen)
-                    SEG_FAV -> FavoritesSection()
-                    SEG_DL -> DownloadsSection()
+                    SEG_SUBS -> SubscriptionsSection(subsGrid, onOpen, scrollTopToken)
+                    SEG_FAV -> FavoritesSection(scrollTopToken)
+                    SEG_DL -> DownloadsSection(scrollTopToken)
                     // 待播段就是 `PlayerController.userQueue` 本体 —— 与独立队列页同源,
                     // 不是另一份列表。复用 `QueueBody`(独立页标题栏以下的那一段)。
-                    SEG_QUEUE -> QueueBody(topPad = GLASS_CHIPS_TOP_PAD)
+                    SEG_QUEUE -> QueueBody(topPad = GLASS_CHIPS_TOP_PAD, scrollTopToken = scrollTopToken)
                     // 从这里开始**必须写显式页号**:原来是 `else -> HistorySection`,
                     // 加第 6 段时若不拆开,历史会被挤到批注段的位置上(点了历史看到批注)。
-                    SEG_HISTORY -> HistorySection(history)
-                    SEG_NOTES -> NotesSection()
+                    SEG_HISTORY -> HistorySection(history, scrollTopToken)
+                    SEG_NOTES -> NotesSection(scrollTopToken)
                 }
             }
             GlassChipsRow(
@@ -274,9 +282,21 @@ fun LibraryScreen(onOpen: (Podcast) -> Unit, onOpenSettings: () -> Unit, onOpenL
 }
 
 @Composable
-private fun SubscriptionsSection(gridLayout: Boolean, onOpen: (Podcast) -> Unit) {
+private fun SubscriptionsSection(
+    gridLayout: Boolean,
+    onOpen: (Podcast) -> Unit,
+    scrollTopToken: Int = 0
+) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
+    // 两套布局各一个 state,**只滚当前挂上的那一个**:对没挂到布局上的 state 调
+    // `animateScrollToItem` 会一直等布局信息(协程挂住,而不是安静的无操作)。
+    val gridState = rememberLazyGridState()
+    val listState = rememberLazyListState()
+
+    ScrollTopEffect(scrollTopToken) {
+        if (gridLayout) gridState.animateScrollToItem(0) else listState.animateScrollToItem(0)
+    }
 
     if (subs.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_library))
@@ -287,6 +307,7 @@ private fun SubscriptionsSection(gridLayout: Boolean, onOpen: (Podcast) -> Unit)
     if (gridLayout) {
         LazyVerticalGrid(
             columns = GridCells.Adaptive(minSize = 104.dp),
+            state = gridState,
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 start = 16.dp, end = 16.dp,
@@ -300,7 +321,8 @@ private fun SubscriptionsSection(gridLayout: Boolean, onOpen: (Podcast) -> Unit)
         }
     } else {
         LazyColumn(
-            Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = GLASS_CHIPS_TOP_PAD,
                 bottom = 24.dp + LocalGlassBottomPad.current
@@ -312,16 +334,19 @@ private fun SubscriptionsSection(gridLayout: Boolean, onOpen: (Podcast) -> Unit)
 }
 
 @Composable
-private fun FavoritesSection() {
+private fun FavoritesSection(scrollTopToken: Int = 0) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val favorites by container.favoriteStore.favorites.collectAsStateWithLifecycle()
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
 
     val history by container.historyStore.history.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
 
     // 多选(批量加入待播)的已选集合;判据与「追更」页同一套,见 `Components.kt EpisodeBatchBar`
     var picked by remember { mutableStateOf(emptySet<String>()) }
+
+    ScrollTopEffect(scrollTopToken) { listState.animateScrollToItem(0) }
 
     if (favorites.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_favorites))
@@ -331,7 +356,8 @@ private fun FavoritesSection() {
         // 存储里就是「最新收藏在前」(`FavoriteStore.toggle` 用 add(0, …)),显示不再翻。
         // 行内点某一集起播时,整列 favorites 会成为播放队列 —— 显示顺序与队列顺序必须是同一份。
         LazyColumn(
-            Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = GLASS_CHIPS_TOP_PAD,
                 bottom = 24.dp + LocalGlassBottomPad.current +
@@ -376,7 +402,7 @@ private fun FavoritesSection() {
 }
 
 @Composable
-private fun DownloadsSection() {
+private fun DownloadsSection(scrollTopToken: Int = 0) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val downloads by container.downloadStore.downloads.collectAsStateWithLifecycle()
     val history by container.historyStore.history.collectAsStateWithLifecycle()
@@ -385,9 +411,12 @@ private fun DownloadsSection() {
     // 删除是不可逆操作，点对号后先弹确认，避免误删
     var pendingDelete by remember { mutableStateOf<DownloadedEpisode?>(null) }
     var picked by remember { mutableStateOf(emptySet<String>()) }
+    val listState = rememberLazyListState()
     // 「全选」与批量新增数都按这一列算,所以取**显示的那一份**。remember 而不是每次现算:
     // 这一列可以有几几百行,而它落在渲染路径上(硬规矩 6)。
     val episodes = remember(downloads) { downloads.map { it.episode } }
+
+    ScrollTopEffect(scrollTopToken) { listState.animateScrollToItem(0) }
 
     if (downloads.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_downloads))
@@ -397,7 +426,8 @@ private fun DownloadsSection() {
         // 与收藏段同理:存储顺序即「最新下载在前」,显示不再翻。
         // 行内点某一集起播时,整列 `downloads.map { it.episode }` 会成为播放队列 —— 顺序必须是同一份。
         LazyColumn(
-            Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = GLASS_CHIPS_TOP_PAD,
                 bottom = 24.dp + LocalGlassBottomPad.current +
@@ -460,13 +490,19 @@ private fun DownloadsSection() {
 }
 
 @Composable
-private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntry>) {
+private fun HistorySection(
+    history: List<com.yuyin.reverb.data.model.HistoryEntry>,
+    scrollTopToken: Int = 0
+) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
 
     var picked by remember { mutableStateOf(emptySet<String>()) }
     val episodes = remember(history) { history.map { it.episode } }
+    val listState = rememberLazyListState()
+
+    ScrollTopEffect(scrollTopToken) { listState.animateScrollToItem(0) }
 
     if (history.isEmpty()) {
         EmptyHint(stringResource(R.string.empty_history))
@@ -474,7 +510,8 @@ private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntr
     }
     Box(Modifier.fillMaxSize()) {
         LazyColumn(
-            Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(
                 top = GLASS_CHIPS_TOP_PAD,
                 bottom = 24.dp + LocalGlassBottomPad.current +
@@ -534,19 +571,23 @@ private fun HistorySection(history: List<com.yuyin.reverb.data.model.HistoryEntr
  * (不是上次听到的位置;这条区别为什么必须存在见 `PlayerController.playAt` 的注释)。
  */
 @Composable
-private fun NotesSection() {
+private fun NotesSection(scrollTopToken: Int = 0) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val notes by container.noteStore.notes.collectAsStateWithLifecycle()
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     var pendingDelete by remember { mutableStateOf<EpisodeNote?>(null) }
+    val listState = rememberLazyListState()
+
+    ScrollTopEffect(scrollTopToken) { listState.animateScrollToItem(0) }
 
     if (notes.isEmpty()) {
         EmptyHint(stringResource(R.string.note_empty))
         return
     }
     LazyColumn(
-        Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = GLASS_CHIPS_TOP_PAD,
             bottom = 24.dp + LocalGlassBottomPad.current
@@ -664,5 +705,22 @@ private fun NoteRowItem(
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+/**
+ * 双击底部 tab 回顶(三颗 token 由 `ReverbRoot.MainShell` 递增,见那里的一段)。
+ *
+ * 为什么 `token > 0` 才滚:`LaunchedEffect` 在**首次挂载**时也会跑一趟,而 0 是初始值 ——
+ * 不挡的话每次进页/切回这一格都会平白往上滚一次(而那时列表本来就在顶上,看不出问题,
+ * 但一旦将来把滚动位置存下来,这一下就会把用户的进度冲掉)。
+ *
+ * 传 lambda 而不是 `LazyListState`:订阅段的行/宫格是两套 state,只有**当前挂上的那个**
+ * 能滚 —— 对没挂到布局上的 state 调 `animateScrollToItem` 会一直等布局信息(协程挂住)。
+ */
+@Composable
+private fun ScrollTopEffect(token: Int, scroll: suspend () -> Unit) {
+    LaunchedEffect(token) {
+        if (token > 0) scroll()
     }
 }

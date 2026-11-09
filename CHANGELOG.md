@@ -8,6 +8,25 @@
 
 ---
 
+## 未发版 — 版本号待定
+
+### 双击底部 tab 回顶(手机三端)
+
+- 列表滑得很远时,双击当前所在的那颗底部 tab(发现 / 追更 / 音阁),这一格立即回到顶部。macOS 没有底部 tab,不涉及。
+- 「追更」拿到新的头一条时自动回顶:下拉刷新或后台巡检进来的新内容不再被顶到视口之外、停在旧位置。
+
+> **工程要点**
+> - 三端底栏原先都只上报"换了哪一格",点已选中的那颗没有任何回调。Android 在自绘 `GlassNavBar`
+>   的 tap 手势里做 380ms 双击窗,鸿蒙接 `HdsTabs.onTabBarClick`,iOS 在 `UITabBar` 上装两击手势;
+>   三端都是"每格一个计数器、各列只消费自己那一个"(音阁六个分段各有滚动容器)。
+> - 追更自动回顶的判据是**头一条 id 变了**,不是条数;首次装配不滚,避免冷启动一进来就跳。
+> - 验收状态:三端编译门全过(Android `compileReleaseKotlin` / 鸿蒙 `assembleHap` / iOS `build-ios.sh`);
+>   iOS 模拟器日志确认双击探针挂在 `UITabBar(items=4)` 上,**双击动作本身仍需真机手指补验**
+>   (本机 Xcode 27 无 `Simulator.app`、`simctl` 无触摸注入)。Android / 鸿蒙未装机点过。
+> - 逐条坑见 `docs/TROUBLESHOOTING.md` H248。四端 `dist/` 本轮都没有重打。
+
+---
+
 ## 1.0.8 — 2026-11-08
 
 ### 重新发布 Android 与 macOS

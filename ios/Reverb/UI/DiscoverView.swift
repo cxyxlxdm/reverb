@@ -51,6 +51,12 @@ struct DiscoverView: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
 
+    /// 双击底部「发现」时外壳递增这个数(见 RootView)。默认 0,除根视图外没有别的调用点。
+    var scrollTopToken: Int = 0
+    /// 榜单与搜索结果两个 `ScrollView` 共用这一个锚点 id:它们互斥(屏上永远只有一个),
+    /// 所以 `scrollTo` 不会指到屏外那个容器上。
+    private static let topAnchor = "discover-top"
+
     @State private var selected = DiscoverCategory.all[0]
     @State private var showReorder = false
     @State private var popular: [Podcast] = []
@@ -77,6 +83,17 @@ struct DiscoverView: View {
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14)]
 
     var body: some View {
+        ScrollViewReader { proxy in
+            page
+                .onChange(of: scrollTopToken) { _, _ in
+                    // 瞬时回顶、不做动画:连点两下的诉求是"立刻看到最上面",
+                    // 一段滚动动画反而让"到底回没回到"变得要靠等(与另两端同口径)。
+                    proxy.scrollTo(Self.topAnchor, anchor: .top)
+                }
+        }
+    }
+
+    private var page: some View {
         Group {
             if isSearchActive { searchContent } else { popularContent }
         }
@@ -225,6 +242,7 @@ struct DiscoverView: View {
 
     private var popularContent: some View {
         ScrollView {
+            Color.clear.frame(height: 0).id(Self.topAnchor)
             VStack(alignment: .leading, spacing: Metrics.sectionSpacing) {
                 if !continueItems.isEmpty {
                     continueStrip
@@ -306,6 +324,7 @@ struct DiscoverView: View {
 
     private var searchContent: some View {
         ScrollView {
+            Color.clear.frame(height: 0).id(Self.topAnchor)
             if let live = liveEpisode, searchPodcasts.isEmpty && searchEpisodes.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("直播流").font(.headline)

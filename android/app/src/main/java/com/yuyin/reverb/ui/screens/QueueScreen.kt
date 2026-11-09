@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -27,6 +28,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -113,9 +115,15 @@ fun QueueScreen(onBack: () -> Unit) {
  * (那条坑记在 H64 / H77,判据是"它多久变一次")。
  */
 @Composable
-fun QueueBody(topPad: Dp = Dp(0f)) {
+fun QueueBody(topPad: Dp = Dp(0f), scrollTopToken: Int = 0) {
     val queue by PlayerController.userQueue.collectAsStateWithLifecycle()
     val openChannelLabel = stringResource(R.string.a11y_open_channel)
+    val listState = rememberLazyListState()
+
+    // 双击底部 tab 回顶(音阁「待播」段传进来;独立队列页走默认 0,不参与)。
+    LaunchedEffect(scrollTopToken) {
+        if (scrollTopToken > 0) listState.animateScrollToItem(0)
+    }
 
     if (queue.isEmpty()) {
         EmptyHint(stringResource(R.string.queue_empty))
@@ -123,7 +131,8 @@ fun QueueBody(topPad: Dp = Dp(0f)) {
     }
 
     LazyColumn(
-        Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(
             top = topPad,
             bottom = 24.dp + LocalGlassBottomPad.current

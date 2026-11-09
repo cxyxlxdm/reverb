@@ -18,6 +18,11 @@ struct LibraryView: View {
     @EnvironmentObject var downloads: DownloadStore
     @EnvironmentObject var downloadManager: DownloadManager
 
+    /// 双击底部「音阁」时外壳递增这个数(见 RootView)。默认 0,除根视图外没有别的调用点。
+    var scrollTopToken: Int = 0
+    /// 六个分段共用一个锚点 id:同一时刻只渲染一段,屏上只有一个滚动容器。
+    private static let topAnchor = "library-top"
+
     @State private var segment: Segment = .subscriptions
     @State private var pendingDelete: Episode?
     @State private var pendingNoteDelete: EpisodeNote?
@@ -42,6 +47,23 @@ struct LibraryView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            page
+                .onChange(of: scrollTopToken) { _, _ in scrollToTop(proxy) }
+        }
+    }
+
+    /// 回顶。待播那段是 SwiftUI `List`,零高锚点插进去会变成一行空行,
+    /// 所以它直接定位到队列第一条;其余五段都是 `ScrollView` + 共同锚点。
+    private func scrollToTop(_ proxy: ScrollViewProxy) {
+        if segment == .queue {
+            if let first = player.userQueue.first { proxy.scrollTo(first.id, anchor: .top) }
+        } else {
+            proxy.scrollTo(Self.topAnchor, anchor: .top)
+        }
+    }
+
+    private var page: some View {
         VStack(spacing: 0) {
             segmentBar
             Group {
@@ -192,6 +214,7 @@ struct LibraryView: View {
                 StateView(symbol: "books.vertical", text: "还没有订阅任何节目")
             } else if settings.subsGrid {
                 ScrollView {
+                    Color.clear.frame(height: 0).id(Self.topAnchor)
                     LazyVGrid(columns: columns, spacing: Metrics.gridSpacing) {
                         ForEach(env.subscriptions.subscriptions) { p in
                             NavigationLink(value: p) { PodcastCard(podcast: p) }
@@ -207,6 +230,7 @@ struct LibraryView: View {
                 // 默认是列表:与 Android `SubscriptionsSection(gridLayout=false)` 同一条,
                 // 宫格是用户显式打开的那一档。
                 ScrollView {
+                    Color.clear.frame(height: 0).id(Self.topAnchor)
                     LazyVStack(spacing: 0) {
                         ForEach(env.subscriptions.subscriptions) { p in
                             NavigationLink(value: p) {
@@ -233,6 +257,7 @@ struct LibraryView: View {
             } else {
                 let items = env.favorites.favorites
                 ScrollView {
+                    Color.clear.frame(height: 0).id(Self.topAnchor)
                     LazyVStack(spacing: 0) {
                         ForEach(items) { ep in
                             HStack(spacing: 10) {
@@ -278,6 +303,7 @@ struct LibraryView: View {
             } else {
                 let items = downloads.downloads.map { $0.episode }
                 ScrollView {
+                    Color.clear.frame(height: 0).id(Self.topAnchor)
                     LazyVStack(spacing: 0) {
                         ForEach(items) { ep in
                             HStack(spacing: 10) {
@@ -368,6 +394,7 @@ struct LibraryView: View {
             } else {
                 let items = env.history.history.map { $0.episode }
                 ScrollView {
+                    Color.clear.frame(height: 0).id(Self.topAnchor)
                     LazyVStack(spacing: 0) {
                         ForEach(items) { ep in
                             RoomyEpisodeRow(
@@ -404,6 +431,7 @@ struct LibraryView: View {
                 StateView(symbol: "square.and.pencil", text: "还没有写过批注")
             } else {
                 ScrollView {
+                    Color.clear.frame(height: 0).id(Self.topAnchor)
                     LazyVStack(spacing: 0) {
                         ForEach(env.notes.notes) { n in
                             HStack(spacing: 12) {

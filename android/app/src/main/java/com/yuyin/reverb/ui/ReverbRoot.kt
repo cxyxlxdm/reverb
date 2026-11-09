@@ -230,6 +230,26 @@ private fun MainShell(rootNav: NavHostController) {
     var seenFeed by rememberSaveable { mutableStateOf(false) }
     var seenLibrary by rememberSaveable { mutableStateOf(false) }
 
+    /**
+     * 「双击当前 tab → 列表回顶」的下发量。**每格一份**而不是一个共享计数器:
+     * 三页在叠层里长期共存(见上面那段差分),共享一个数会让没打开的那页也收到同一次请求,
+     * 下次切过去时它已经"回顶"过了。值本身只是触发器,页内 `LaunchedEffect` 只看变没变。
+     *
+     * 为什么要用 token 而不是把 `LazyListState` 提升到外壳:全仓没有一处把列表状态提升过
+     * (见下面 [morphConnection] 那段),那要改三页并把状态穿透进 body;这里只多一个 Int。
+     */
+    var discoverTopToken by rememberSaveable { mutableIntStateOf(0) }
+    var feedTopToken by rememberSaveable { mutableIntStateOf(0) }
+    var libraryTopToken by rememberSaveable { mutableIntStateOf(0) }
+
+    fun requestScrollTop(i: Int) {
+        when (i) {
+            0 -> discoverTopToken++
+            1 -> feedTopToken++
+            2 -> libraryTopToken++
+        }
+    }
+
     fun select(i: Int) {
         if (i == 1) seenFeed = true
         if (i == 2) seenLibrary = true
@@ -360,7 +380,10 @@ private fun MainShell(rootNav: NavHostController) {
                     .zIndex(if (selectedTab == 0) Z_VISIBLE else Z_HIDDEN)
                     .tabKept(selectedTab != 0)
             ) {
-                DiscoverScreen(onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") })
+                DiscoverScreen(
+                    onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
+                    scrollTopToken = discoverTopToken
+                )
             }
             if (seenFeed) {
                 Box(
@@ -369,7 +392,7 @@ private fun MainShell(rootNav: NavHostController) {
                         .zIndex(if (selectedTab == 1) Z_VISIBLE else Z_HIDDEN)
                         .tabKept(selectedTab != 1)
                 ) {
-                    FeedScreen()
+                    FeedScreen(scrollTopToken = feedTopToken)
                 }
             }
             if (seenLibrary) {
@@ -382,7 +405,8 @@ private fun MainShell(rootNav: NavHostController) {
                     LibraryScreen(
                         onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
                         onOpenSettings = { rootNav.navigate("settings") },
-                        onOpenListenStats = { rootNav.navigate("listen_stats") }
+                        onOpenListenStats = { rootNav.navigate("listen_stats") },
+                        scrollTopToken = libraryTopToken
                     )
                 }
             }
@@ -473,6 +497,7 @@ private fun MainShell(rootNav: NavHostController) {
                     tabs = tabs,
                     selected = selectedTab,
                     onSelect = { i -> select(i) },
+                    onDoubleTap = { i -> requestScrollTop(i) },
                     modifier = Modifier.align(Alignment.BottomCenter),
                     collapsed = collapsed.value
                 )

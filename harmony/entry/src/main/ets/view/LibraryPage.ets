@@ -54,6 +54,11 @@ export struct LibraryPage {
   /// 底部栏悬浮后,滚动内容需让出的底部空间(栏 + 手势区 + 播放条,Index 算好传入)。
   /// 只用于各 List 的 contentEndOffset / 宫格的尾部占位行。
   @Prop bottomPad: number = 0;
+  /**
+   * 双击底部「音阁」格回顶的触发器(Index 递增,见那里的 `onTabBarClick`)。
+   * 音阁有六段,各自一条列表 —— 只有**当前这一段**会被滚(见 [onScrollTopToken])。
+   */
+  @Prop @Watch('onScrollTopToken') scrollTopToken: number = 0;
   /// 滚动量交给外壳,由它决定播放条收不收进底部栏(见 DiscoverPage 同名注释)
   onScrollDy: (dy: number, st: ScrollState) => void = () => {};
   @ObjectLink player: PlayerController;
@@ -121,6 +126,20 @@ export struct LibraryPage {
   @State pickedFav: Set<string> = new Set();
   @State pickedDl: Set<string> = new Set();
   @State pickedHist: Set<string> = new Set();
+
+  /**
+   * 六段各自的滚动控制器(双击回顶用,见 [onScrollTopToken])。
+   *
+   * 订阅段**两个** —— 行 / 宫格是两套容器,只有当前挂上的那个能滚;另一个 `scrollEdge`
+   * 是空操作(它没绑到任何 Scrollable 上),不会有副作用。其余五段各一个(待播段那一份
+   * 在 `QueueBody` 内部,由它自己的 token 通道管)。
+   */
+  private subsGridScroller: Scroller = new Scroller();
+  private subsListScroller: Scroller = new Scroller();
+  private favScroller: Scroller = new Scroller();
+  private dlScroller: Scroller = new Scroller();
+  private historyScroller: Scroller = new Scroller();
+  private notesScroller: Scroller = new Scroller();
 
   /**
    * 六个分段。与 Android `LibraryScreen` 同序(订阅 / 收藏 / 下载 / 待播 / 历史 / 批注)。
@@ -363,7 +382,7 @@ export struct LibraryPage {
         // `height(ceil(n / 2) * 230 + 20)` 手算总高 —— Grid 本身就可滚动,套 Scroll 才需要
         // 给死高度,而那个 230 是按两列卡高估的常数:改列数、改字号、改字号倍率都会让它算错
         // (算小了滚不到底,算大了底部拖出一片空白)。直接用 Grid 自己滚,这笔账就不用算。
-        Grid() {
+        Grid(this.subsGridScroller) {
           // 顶部占位**一整行**:给玻璃分段条让出余量(宫格用不了 List 的 contentStartOffset)。
           // 个数取 SUBS_GRID_COLS —— 单个 GridItem 只占一格,不占满一行就等于没让位(见该常量注释)。
           ForEach(subsGridSpacers(), (_p: number, i: number) => {
@@ -402,7 +421,7 @@ export struct LibraryPage {
         .onDidScroll((dy: number, st: ScrollState): void => this.onScrollDy(dy, st))
         .width('100%').height('100%')
       } else {
-        List() {
+        List({ scroller: this.subsListScroller }) {
           // 顶部占位:给玻璃分段条让出高度(contentStartOffset 实测是初始滚动位语义,
           // 列表重建后首项会被顶到条背后;占位 ListItem 是纯布局,保证首项停在条下方)
           ListItem() {
@@ -436,7 +455,10 @@ export struct LibraryPage {
       QueueBody({
         scheme: this.scheme, fontScale: this.fontScale, player: this.player,
         bottomPad: this.bottomPad, chipReserve: true,
-        showChannelJump: true, onOpenChannel: this.onOpenChannel
+        showChannelJump: true, onOpenChannel: this.onOpenChannel,
+        // 待播段的回顶由 `QueueBody` 自己做(它持有那一列自己的 Scroller),
+        // 所以 `onScrollTopToken` 里 SEG_QUEUE 那一支只留了注释、不重复滚。
+        scrollTopToken: this.scrollTopToken
       })
     }
     .width('100%').height('100%')
@@ -450,7 +472,7 @@ export struct LibraryPage {
         if (this.favorites.favorites.length === 0) {
           EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_favorites') })
         } else {
-          List() {
+          List({ scroller: this.favScroller }) {
             // 顶部占位:理由见订阅段同名注释
             ListItem() {
               Row().width('100%').height(CHIPS_RESERVE_H)
@@ -513,7 +535,7 @@ export struct LibraryPage {
         if (this.downloads.downloads.length === 0) {
           EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_downloads') })
         } else {
-          List() {
+          List({ scroller: this.dlScroller }) {
             // 顶部占位:理由见订阅段同名注释
             ListItem() {
               Row().width('100%').height(CHIPS_RESERVE_H)
@@ -580,6 +602,31 @@ export struct LibraryPage {
     return next;
   }
 
+  /**
+   * 双击底部「音阁」→ 把**当前这一段**的列表滚回顶部。
+   *
+   * 只滚当前段:另外五段的列表此刻多半不在视口里(Swiper 只留相邻一页),对它们下发滚动
+   * 既看不出来、又可能在切过去时留下一个半路的位置。判据用 `seg` 而不是 `chipSel` ——
+   * `chipSel` 只在拖动时跟着手指走,落位之前那一页还没真正显示。
+   *
+   * 订阅段按当前布局选 scroller:行 / 宫格两套容器同时存在,只有挂上的那个能动。
+   */
+  onScrollTopToken(): void {
+    if (this.seg === SEG_SUBS) {
+      if (this.settings.subsGrid) this.subsGridScroller.scrollEdge(Edge.Top);
+      else this.subsListScroller.scrollEdge(Edge.Top);
+    } else if (this.seg === SEG_FAV) {
+      this.favScroller.scrollEdge(Edge.Top);
+    } else if (this.seg === SEG_DL) {
+      this.dlScroller.scrollEdge(Edge.Top);
+    } else if (this.seg === SEG_HISTORY) {
+      this.historyScroller.scrollEdge(Edge.Top);
+    } else if (this.seg === SEG_NOTES) {
+      this.notesScroller.scrollEdge(Edge.Top);
+    }
+    // SEG_QUEUE 不在这里:待播段是 `QueueBody`,它自己按同一个 token 滚(见 queueSection)
+  }
+
   /// 选择模式下各列表要多让出的高度(浮条自己 + 它与底部栏的缝),理由见 `BATCH_AVOID`。
   private endOffset(picked: Set<string>): number {
     return this.bottomPad + (picked.size > 0 ? BATCH_AVOID : 0);
@@ -615,7 +662,7 @@ export struct LibraryPage {
         if (this.history.history.length === 0) {
           EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_history') })
         } else {
-          List() {
+          List({ scroller: this.historyScroller }) {
             // 顶部占位:理由见订阅段同名注释
             ListItem() {
               Row().width('100%').height(CHIPS_RESERVE_H)
@@ -718,7 +765,7 @@ export struct LibraryPage {
       if (this.notes.notes.length === 0) {
         EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('note_empty') })
       } else {
-        List() {
+        List({ scroller: this.notesScroller }) {
           // 顶部占位:理由见订阅段同名注释
           ListItem() {
             Row().width('100%').height(CHIPS_RESERVE_H)

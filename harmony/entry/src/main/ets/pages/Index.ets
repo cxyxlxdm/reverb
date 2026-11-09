@@ -38,6 +38,13 @@ import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import window from '@ohos.window';
 import { TapGuard } from '../util/TapGuard';
 
+/**
+ * 双击底部 tab 的时间窗(毫秒)。与 Android `GlassNavBar.DOUBLE_TAP_MS` **同值** ——
+ * 同一颗栏的手感不该两端两个数。380ms 比系统双击判定(约 300–500ms)中间偏紧:
+ * 太宽会把"点一下没反应、再补一下"读成双击,太窄又要求手速。
+ */
+const TAB_DOUBLE_TAP_MS: number = 380;
+
 /// 顶层外壳:Navigation 承载全屏页(频道详情等),内页是「发现 / 追更 / 音阁」三 tab。
 /// 与 Android 一致的取舍:全屏页整体转场,底部栏不产生占位跳动。
 @Entry
@@ -77,6 +84,22 @@ struct Index {
    * 滚动累计量到阈值就翻它,见 [feedScroll]。
    */
   @StorageLink(MORPH_KEY) collapsed: boolean = false;
+  /**
+   * 双击底部 tab 回顶(**三格各一颗**)。外层只负责数,滚动由各页自己的 `Scroller` 做 ——
+   * 从外壳把列表的滚动状态提上来需要改三页的 body,而这里只需要一个会变的数。
+   *
+   * 为什么是三颗而不是"当前页一颗":用户可能双击的是**没显示的那一格**吗?不会 ——
+   * 但三格各自保住自己的"第几次双击"更简单,而且与 Android 侧 `MainShell` 的三颗同形。
+   */
+  @State discoverTopToken: number = 0;
+  @State feedTopToken: number = 0;
+  @State libraryTopToken: number = 0;
+  /**
+   * 双击判据:`[0]` 上一次点栏的时刻、`[1]` 点的是第几格。只在 `onTabBarClick` 里读写,
+   * 不进状态、不触发重渲(同 [morphAcc])。
+   */
+  private lastTabTapAt: number = -1;
+  private lastTabTapIdx: number = -1;
   /// 收/展的累计滚动量(vp)。只在 [feedScroll] 里读写,不进状态、不触发重渲。
   private morphAcc: number = 0;
   /**
@@ -648,6 +671,32 @@ struct Index {
     }
   }
 
+  /**
+   * 底部栏被点一下(`HdsTabs.onTabBarClick`)。**只数双击,不切页** —— 切页是组件自己的事
+   * (它读 `index`,并且会回调 `onChange`)。
+   *
+   * 为什么双击要贴着栏判、不放进 `onChange`:切格才走 `onChange`,而用户双击的是**当前那一格**,
+   * 那一下根本不换页 ⇒ 回调里永远数不到第一下。Android 侧同一条(`GlassNavBar` 里
+   * `commitIdx == currentSelected` 那支),两端理由是同一个。
+   *
+   * 判据用**同一格 + 间隔 ≤ [TAB_DOUBLE_TAP_MS]**,一次双击只认一次(触发后把窗口清掉,
+   * 第三下重新算)—— 否则连点三下会回顶两次。切格会清窗口(见 `.onChange`),
+   * 免得"点 A 切过去,再点一下"被读成双击。
+   */
+  private onTabBarClick(i: number): void {
+    const now: number = Date.now();
+    if (this.lastTabTapIdx === i && now - this.lastTabTapAt <= TAB_DOUBLE_TAP_MS) {
+      this.lastTabTapAt = -1;
+      this.lastTabTapIdx = -1;
+      if (i === 0) this.discoverTopToken++;
+      else if (i === 1) this.feedTopToken++;
+      else this.libraryTopToken++;
+    } else {
+      this.lastTabTapAt = now;
+      this.lastTabTapIdx = i;
+    }
+  }
+
   /// 收束态左端那颗小圆球:只把播放条放回两行共存,不改当前 tab(盘上是当前那一格,点它不切页)。
   private expandMini(): void {
     this.morphAcc = 0;
@@ -783,6 +832,8 @@ struct Index {
               player: this.player,
               bottomPad: this.underBarPad(),
               onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
+              // 双击底部「发现」回顶(见 [onTabBarClick])
+              scrollTopToken: this.discoverTopToken,
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
               // 封面/头像单独可点 → 频道页。与上面那颗不同:那颗拿整个 Podcast(发现页
               // 手上就有),这颗只拿 feedUrl(列表行只有这一集),由 openPodcastByFeed 查/合成种子。
@@ -802,6 +853,7 @@ struct Index {
               history: this.history,
               bottomPad: this.underBarPad(),
               onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
+              scrollTopToken: this.feedTopToken,
               onOpenChannel: (feedUrl: string) => this.openPodcastByFeed(feedUrl),
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
@@ -821,6 +873,7 @@ struct Index {
               downloadManager: this.downloadManager,
               bottomPad: this.underBarPad(),
               onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
+              scrollTopToken: this.libraryTopToken,
               onOpenPodcast: (p: Podcast) => this.openPodcast(p),
               onOpenChannel: (feedUrl: string) => this.openPodcastByFeed(feedUrl),
               notes: this.notes,
@@ -862,7 +915,15 @@ struct Index {
         .scrollable(false)
         .barOverlap(true)
         .barFloatingStyle(barFloating(this.bottomInset, this.windowWVp, this.materialType, this.collapsed))
-        .onChange((i: number) => { this.tab = i; })
+        // 双击回顶的判定(见 [onTabBarClick])。⚠️ 它与 `onChange` **不是一回事**:
+        // 点当前那一格不换页、不走 `onChange`,但这里照样回调 —— 双击的第一下只能在这儿数到。
+        .onTabBarClick((i: number) => { this.onTabBarClick(i); })
+        .onChange((i: number) => {
+          this.tab = i;
+          // 换格就把双击窗口清掉:先点 A 切过去、紧接着补一下,不该被读成"双击 A"
+          this.lastTabTapAt = -1;
+          this.lastTabTapIdx = -1;
+        })
         .width('100%')
         .height('100%')
       }

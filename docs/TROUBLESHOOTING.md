@@ -12274,3 +12274,59 @@ Android / 鸿蒙同一位置都是正文黑 + 次要灰,只有 iOS 这样。
 真机验收清单里要把「杀进程 → 重开 → 直接进播放页」单列一条。
 ③ 同形态可以在其它端自查:凡是"播放器/引擎未就绪时该字段为 0"的量(时长、码率、缓冲区间),
 都要问一句"它进过 range 或除法吗"。
+
+### H248. 双击底部 tab 回顶:三端底栏都**只上报"换了哪一格"**,而且"新内容进来看不见"
+
+**现象**:2026-11-09 提出两件事 ——
+① 列表向下滑很远之后,没有任何"快速回顶"的手段,希望**双击底部 tab** 就回到顶部;
+② 「追更」在后台巡检 / 下拉刷新拿到新的一集之后,列表仍停在**上次打开的位置**,
+新内容被顶到视口上方,看起来像"没更新"。
+
+**根因**(两条,彼此独立):
+① **底栏的事件源不够。** Android 自绘 `GlassNavBar` 只在"选中格变了"时调 `onSelect`;
+鸿蒙 `HdsTabs.onChange` 同样只在切换时触发;iOS 的 `TabView` 也只有 `selection` 绑定。
+也就是说"点当前这一颗 tab"在三端**根本不会产生任何回调** —— 不是监听写漏了,是系统/自绘层
+都没有给这一路事件。双击因此没有落点。
+② **列表的滚动位置是"跟着页面活着"的。** Android 的 `LazyListState` / 鸿蒙的 `Scroller` /
+iOS 的 `ScrollView` 位置在切换 tab 之后都还在;而追更只往**头部**插新条目,
+`LazyColumn` / `List` / `LazyVStack` 都会尽量保持可见内容不动(这是列表该有的行为)
+⇒ 新头一条被顶到视口外,用户读到的仍然是上次那一屏。
+
+**修法**:
+- **每格一个计数器**(Android `discoverTopToken` / `feedTopToken` / `libraryTopToken`,
+  鸿蒙三个 `@State` + `@Prop @Watch`,iOS 三个 `@State` 传入子视图):底栏识别双击后只 `+1` 对应那一格。
+- **底栏取原始点击**:Android 在栏的 tap 手势里自己做 380ms 双击窗(因为 `onSelect` 不含"重复点同一格");
+  鸿蒙接 `HdsTabs.onTabBarClick`(@since 6.0.0(20),点已选中的也触发),用 `Date.now()` 判 380ms;
+  iOS 用零尺寸 `UIViewRepresentable` 在窗口里找到 `UITabBar`,装一个 `numberOfTapsRequired = 2` 的
+  `UITapGestureRecognizer`(系统自己按双击间隔判时)。
+- **每一列滚自己的容器**:音阁六段各有 `Scroller` / `LazyListState` / `ScrollView`,
+  由各页按 `this.seg` 分发 —— 不能共用一个滚动状态,也不能靠"滚到第 0 项"这种全局动作。
+  iOS 侧订阅段有宫格/列表两种容器,只滚当前挂载的那一个。
+- **追更自动回顶**:判据是**头一条的 id 变了**(不是条数、不是"刷新完成"),且旧值为空时不滚(首次装配)。
+  Android 用 `LaunchedEffect(episodes.firstOrNull()?.id)`;鸿蒙在 `refreshInbox` 前后各取一次头 id;
+  iOS 用 `.onChange(of: items.first?.id)`,并在 `onAppear` 里补一次"离开时头 id 与现在不同"的检查
+  (见教训③)。
+
+**验收**:三端编译门全过(Android `:app:compileReleaseKotlin`、鸿蒙 `assembleHap`、iOS `./build-ios.sh` 六条断言)。
+iOS 在模拟器里读了日志 `[TabBar] 双击回顶探针已挂上 items=4` —— 探针确实找到了 `UITabBar`;
+追更页注入一档订阅后列表正常渲染。
+⚠️ **"双击真的回顶了"这一步在模拟器上做不到**:这台机器的 Xcode 27 不带 `Simulator.app`,
+`simctl` 也没有触摸注入 ⇒ 需要**手指在真机(或有界面的模拟器)上点两下**才能补验。
+Android / 鸿蒙同样只有编译门,没装机点过。
+
+**教训 / 规律**:
+① **"能点到"不等于"能收到"。** 容器只上报"状态变了"时,"状态没变的那次操作"就是没有事件源的 ——
+   这类需求要先问一句"我想要的这次点击,现有回调会不会触发?",再决定是加事件还是改形态。
+② **回顶的令牌必须按"格 / 段"分开。** 一份共享计数器 + 各列各自消费,等于让屏外那些列也收到指令:
+   Android 的 `animateScrollToItem` 在未挂载的 state 上会**挂起等待布局**,鸿蒙的 `scrollEdge`
+   对未绑定到界面的 `Scroller` 是**静默空操作**,iOS 的 `proxy.scrollTo` 找不到锚点也无声 ——
+   三种失败方式都不可见,只有"按格分发"能让"点了没反应"变成"不可能发生"。
+③ **屏外的回顶不算数。** iOS 的 `TabView` 在切走的那个 tab 上 `scrollTo` 不生效(视图不在屏上),
+   而"人在别的 tab 时追更刷新了"恰恰是最常见的一种情形 ⇒ 需要 `onAppear` 时按头 id 再对一次。
+   Android / 鸿蒙的页面是常驻组合的,没有这一层。
+④ **iOS 的 `List` 不能插零高锚点**:插一行 `Color.clear.frame(height: 0)` 会变成一条**可见的空行**
+   (列表行不是自由布局),所以待播段的回顶改成 `scrollTo(第一条的 id)`;`ScrollView` 那五段才用锚点。
+⑤ **iOS 的探针要关 `delaysTouchesEnded`。** 只关 `cancelsTouchesInView` 时,两击手势在"等第二下"的
+   那段时间会把 `touchesEnded` 扣住 ⇒ 每次单击切格都慢半拍;两个都关才是"单击照常、双击额外多一次回调"。
+⑥ **点的是哪一格用等分算,别去认私有类名。** `UITabBar` 的格子宽度 = `bounds.width / items.count`;
+   按 `subviews` 里 `UITabBarButton` 的 frame 命中要匹配私有类名,系统改名就静默失效。

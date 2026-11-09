@@ -6,12 +6,42 @@ struct InboxView: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
 
+    /// 双击底部「追更」时外壳递增这个数(见 RootView)。
+    var scrollTopToken: Int = 0
+    private static let topAnchor = "inbox-top"
+    /// 离开这一格时的头一条 id。用来补上「人在别的 tab 时追更刷新了」这一种:
+    /// 那种情况下 `onChange` 仍会触发,但这一页不在屏上、`scrollTo` 滚不动,
+    /// 只能等回到本页再对一次(见下面的 `onAppear`)。
+    @State private var headWhenLeft: String?
+
     @StateObject private var selection = EpisodeSelection()
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var items: [Episode] { env.inbox.episodes }
 
     var body: some View {
+        ScrollViewReader { proxy in
+            page
+                .onChange(of: scrollTopToken) { _, _ in scrollToTop(proxy) }
+                // 内容更新(头一条换了)就回顶。判据取**头一条 id**而不是条数:
+                // 条数不变也可能整批换了(退订一档又订回来);旧值为空(首次装配)时不动。
+                .onChange(of: items.first?.id) { old, new in
+                    guard let old, let new, old != new else { return }
+                    scrollToTop(proxy)
+                }
+                .onAppear {
+                    if let left = headWhenLeft, left != items.first?.id { scrollToTop(proxy) }
+                    headWhenLeft = nil
+                }
+                .onDisappear { headWhenLeft = items.first?.id }
+        }
+    }
+
+    private func scrollToTop(_ proxy: ScrollViewProxy) {
+        proxy.scrollTo(Self.topAnchor, anchor: .top)
+    }
+
+    private var page: some View {
         Group {
             if items.isEmpty {
                 if env.inbox.refreshing {
@@ -23,6 +53,7 @@ struct InboxView: View {
                 }
             } else {
                 ScrollView {
+                    Color.clear.frame(height: 0).id(Self.topAnchor)
                     LazyVStack(spacing: 0) {
                         ForEach(items) { ep in
                             RoomyEpisodeRow(
