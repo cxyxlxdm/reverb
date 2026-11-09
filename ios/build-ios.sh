@@ -136,6 +136,30 @@ verify_bundle() {
   [ -f "$app/AppIcon60x60@2x.png" ] || die "缺 AppIcon60x60@2x.png —— 上传会被拒"
   echo "   ok: 应用图标已编译进包"
 
+  # 5b) 桌面卡片扩展:嵌入阶段漏掉 .appex 时 App 照常能跑、卡片却永远不出现 ——
+  #     这一条是"卡片真的进了包"的唯一判据(硬规矩 20:解包看,不看构建日志)。
+  local appex="$app/PlugIns/ReverbWidget.appex"
+  [ -d "$appex" ] || die "缺小组件扩展 ReverbWidget.appex(嵌入阶段没把 target 带进包)"
+  local point
+  point="$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$appex/Info.plist" 2>/dev/null || true)"
+  [ "$point" = "com.apple.widgetkit-extension" ] || die "appex 的 NSExtensionPointIdentifier 不是 widgetkit-extension(实际 '$point')"
+  local wver wbuild
+  wver="$(plutil -extract CFBundleShortVersionString raw "$appex/Info.plist" 2>/dev/null || true)"
+  wbuild="$(plutil -extract CFBundleVersion raw "$appex/Info.plist" 2>/dev/null || true)"
+  [ "$wver" = "$expect_ver" ] || die "appex 版本 $wver ≠ 主包 $expect_ver"
+  [ "$wbuild" = "$expect_build" ] || die "appex 构建号 $wbuild ≠ 主包 $expect_build"
+  local wn=0
+  for d in "$appex"/*.lproj; do
+    [ -d "$d" ] || continue
+    plutil -lint "$d/Localizable.strings" >/dev/null || die "appex $(basename "$d") 的 .strings 不是合法 plist"
+    # 编进包之后 .strings 会变成二进制 plist,中文键在这里是 UTF-16,不能用 grep 找
+    [ -n "$(plutil -extract "继续收听" raw -o - "$d/Localizable.strings" 2>/dev/null)" ] \
+      || die "appex $(basename "$d") 缺卡片画廊文案"
+    wn=$((wn + 1))
+  done
+  [ "$wn" -eq "${#LANGS[@]}" ] || die "appex 里 $wn 套 .lproj,期望 ${#LANGS[@]} 套(简中是基础语言)"
+  echo "   ok: ReverbWidget.appex 在包内(版本 $wver/$wbuild,$wn 套本地化)"
+
   # 6) 二进制架构:设备包只有 arm64;出现 x86_64 说明拿错了模拟器产物
   local archs
   archs="$(lipo -archs "$app/Reverb" 2>/dev/null || echo '')"

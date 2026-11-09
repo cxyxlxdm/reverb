@@ -38,10 +38,13 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.ui.components.DissolveLayer
 import com.yuyin.reverb.ui.components.DissolveRequest
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -61,6 +64,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -102,18 +106,31 @@ import com.yuyin.reverb.update.SelfUpdateHost
  * 跳转这些页面时整个 tab 外壳作为一个整体转场，不存在底部栏占位变化 → 无上下闪动。
  */
 @Composable
-fun ReverbRoot(openPlayerSignal: Int = 0) {
+fun ReverbRoot(openPlayerSignal: Int = 0, openEpisodeId: String? = null) {
     val rootNav = rememberNavController()
+    val context = LocalContext.current
 
     // 这里**不再**申请通知权限。原先是一进来就无条件弹,与隐私政策写明的
     // 「仅在你主动开启『订阅更新提醒』时征求你的同意」不符,也属于"启动即申请非必要权限"。
     // 改到设置页那个开关里申请(与「真实频谱」同一范式:授权成功才落地开关)。
 
-    // 通知栏点击进来（openPlayerSignal 自增）时打开播放页
+    // 通知栏 / 桌面小组件点击进来（openPlayerSignal 自增）时打开播放页
     LaunchedEffect(openPlayerSignal) {
-        if (openPlayerSignal > 0 && PlayerController.current.value != null) {
-            rootNav.navigate("player") { launchSingleTop = true }
+        if (openPlayerSignal <= 0) return@LaunchedEffect
+        if (PlayerController.current.value == null && openEpisodeId == null) return@LaunchedEffect
+        if (PlayerController.current.value == null) {
+            // 小组件那条来自历史(playback_state 可能是空的),此时播放页没有「当前集」可画。
+            // 先把那一集装载成暂停态 —— 只跳转、不自动播放是产品口径(见 PlayerController.prepare),
+            // 然后等它落位再导航:冷启动时控制器可能还没连上,prepare 会挂在 pending 上。
+            val container = (context.applicationContext as ReverbApp).container
+            container.historyStore.history.value
+                .firstOrNull { it.episode.id == openEpisodeId }
+                ?.episode
+                ?.let { PlayerController.prepare(it) }
         }
+        val ready = PlayerController.current.value != null ||
+            withTimeoutOrNull(3_000) { PlayerController.current.first { it != null } } != null
+        if (ready) rootNav.navigate("player") { launchSingleTop = true }
     }
 
     // 「点封面/头像进频道页」的入口:在 NavHost 外层提供一次,列表行、待播那一行、

@@ -394,6 +394,11 @@ export class ArtworkCache {
    * 旧文件由 mtime 淘汰收尾;图片是可重取的小对象,这一笔换"不再串图"是划算的。
    * Android 侧这一族由另一个代理同步加长;缓存文件名**不是三端互通格式**,不要求两端逐字节相同。
    */
+  /** 封面缓存文件路径(服务卡片要用 fd 传图,拿不到 UI 进程里那份 `entries`)。 */
+  static pathFor(filesDir: string, url: string): string {
+    return `${filesDir}/artwork_cache/${ArtworkCache.nameOf(url)}`;
+  }
+
   private static nameOf(url: string): string {
     let h = url.length;
     for (let i = 0; i < url.length; i++) {

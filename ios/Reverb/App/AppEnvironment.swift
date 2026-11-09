@@ -57,6 +57,9 @@ final class AppEnvironment: ObservableObject {
         player.bindState(playbackState)
         // 依赖都绑好之后再恢复:预载要能命中本地下载文件,续播起点要读历史。
         player.restoreState()
+        // 桌面卡片是**另一个进程**:这里只把「上次听到哪」写进 App Group 容器,
+        // 由扩展自己去读。没签名到组容器时它只记一行日志,App 照常可用。
+        WidgetBridge.shared.start(player: player, history: history, settings: settings)
 
         #if DEBUG
         // 模拟器没有可用的点击注入工具时,用启动参数验证整条播放链:

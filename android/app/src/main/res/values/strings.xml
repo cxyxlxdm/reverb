@@ -435,4 +435,13 @@
     <string name="update_is_latest">已是最新版本 %1$s</string>
     <string name="update_check_failed">检查失败，看看网络之后再试一次</string>
     <string name="update_title_repack">这个版本重新发布过安装包 %1$s</string>
+
+    <!-- 继续收听小组件 -->
+    <string name="widget_name">余音 · 继续收听</string>
+    <string name="widget_continue">继续收听</string>
+    <string name="widget_empty_title">挑一集开始听</string>
+    <string name="widget_empty_sub">上次听到哪一集，会出现在这里</string>
+    <string name="widget_description">显示上次听到的节目与进度，点一下接着听</string>
+    <string name="widget_progress_time">%1$s / %2$s</string>
+    <string name="widget_live">直播</string>
 </resources>

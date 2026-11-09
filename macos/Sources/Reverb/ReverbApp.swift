@@ -16,6 +16,15 @@ struct Main {
 }
 
 struct ReverbApp: App {
+    /// 深链走 AppKit 代理,而不是只靠 SwiftUI 的 `.onOpenURL`。
+    ///
+    /// 2026-11-09 排查时一度读成「系统没投递」:挂在 RootView 上的 `.onOpenURL` 一次都没被调用。
+    /// 三个探针(AppKit / 最小 SwiftUI / 挂 `.onReceive` 的)在同样的锁屏状态下都收得到,
+    /// 说明环境没问题;真正的原因是本机卡在首次启动的同意门后面 —— `RootView` 根本没构建,
+    /// 挂在它身上的哪个回调都不会跑(见 H249)。所以这里**不是**在修一条坏接线,
+    /// 而是把接收点提前到代理:同意门还在、RootView 还不存在的时候,`application(_:open:)`
+    /// 照样能收到系统投递,先存进 `DeepLinkInbox` 等界面就绪。
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var env = AppEnvironment()
 
     /**
@@ -58,6 +67,35 @@ struct ReverbApp: App {
                 .environmentObject(env.settings)
                 .environmentObject(env.downloads)
                 .environmentObject(env.downloadManager)
+        }
+    }
+}
+
+/// 系统投递进来的 `reverb://` URL 先落到这里,再由 RootView 取走。
+///
+/// 为什么要一个缓冲:**冷启动**时系统会在 `RootView` 还没订阅之前就投递
+/// (同意门没过的机器上更晚),只挂 `onReceive` 会漏掉第一次点击。
+/// `takePending()` 是那次「先到后订」的兜底;两条路都走同一个 `open` 方法,重复到达无副作用。
+@MainActor
+final class DeepLinkInbox: ObservableObject {
+    static let shared = DeepLinkInbox()
+    @Published private(set) var arrival: URL?
+    private var pending: URL?
+    func post(_ url: URL) {
+        pending = url
+        arrival = url
+    }
+    func takePending() -> URL? {
+        defer { pending = nil }
+        return pending
+    }
+}
+
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for url in urls {
+            Log.i("DeepLink", "系统投递 scheme=\(url.scheme ?? "-") host=\(url.host ?? "-")")
+            DeepLinkInbox.shared.post(url)
         }
     }
 }

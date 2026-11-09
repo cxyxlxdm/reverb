@@ -418,4 +418,13 @@
     <string name="update_is_latest">You already have %1$s</string>
     <string name="update_check_failed">Could not check. Check your connection and try again.</string>
     <string name="update_title_repack">The package for %1$s was republished</string>
+
+    <!-- Continue-listening widget -->
+    <string name="widget_name">Reverb · Continue listening</string>
+    <string name="widget_continue">CONTINUE LISTENING</string>
+    <string name="widget_empty_title">Pick an episode</string>
+    <string name="widget_empty_sub">Your last episode shows up here</string>
+    <string name="widget_description">Shows where you left off — tap to keep listening</string>
+    <string name="widget_progress_time">%1$s / %2$s</string>
+    <string name="widget_live">LIVE</string>
 </resources>

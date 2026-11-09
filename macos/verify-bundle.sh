@@ -187,7 +187,89 @@ done
 # 判「跑不跑得起来」要在 ≥ 门槛的系统上实跑,那是构建机上的另一份清单(ROADMAP 三-A)。
 vtool -show-build "$BIN" 2>/dev/null | grep -E 'minos|platform|sdk' | sed 's/^/      /' || echo "      (vtool 读不到 build load command)"
 
-# ---- 5. 签名:要真验,不是只 dump 描述 ------------------------------------
+# ---- 5. 卡片扩展(.appex)---------------------------------------------------
+# 「继续收听」卡片在 macOS 上是一个 PlugIns 里的 .appex,由 SwiftPM 编出的裸可执行文件
+# + package.sh 手工组装。**少了它 App 本身照样跑**,只是小组件库里查无此项 ——
+# 正是「打印出来看着正常」的那类失败,所以这里逐项断言。
+APPEX="$BUNDLE/Contents/PlugIns/ReverbWidget.appex"
+APPEX_PLIST="$APPEX/Contents/Info.plist"
+echo "   卡片扩展:${APPEX#$BUNDLE/}"
+if [ ! -f "$APPEX_PLIST" ]; then
+  fail "缺 Contents/PlugIns/ReverbWidget.appex —— 「继续收听」卡片不会出现在系统小组件库"
+else
+  point=$(plutil -extract NSExtension.NSExtensionPointIdentifier raw "$APPEX_PLIST" 2>/dev/null || true)
+  if [ "$point" = "com.apple.widgetkit-extension" ]; then
+    echo "      扩展点:$point"
+  else
+    fail "卡片扩展的 NSExtensionPointIdentifier 是「${point:-<缺失>}」,期望 com.apple.widgetkit-extension"
+  fi
+  # 版本必须与宿主一致:不一致时 WidgetKit 不装载(症状是"卡片突然不见了",与代码无关)
+  for k in CFBundleShortVersionString CFBundleVersion; do
+    hv=$(plutil -extract "$k" raw "$PLIST" 2>/dev/null || true)
+    wv=$(plutil -extract "$k" raw "$APPEX_PLIST" 2>/dev/null || true)
+    # 宿主本身缺这个键时第 4 段已经报过了,这里不再补一刀(否则一个缺键报两条,
+    # 自检里「只触发一条」的变异用例会失真)。
+    [ -n "$hv" ] || continue
+    if [ "$wv" = "$hv" ]; then
+      printf '      %-26s %s\n' "$k" "$wv"
+    else
+      fail "卡片扩展的 $k=「${wv:-<缺失>}」与主程序「${hv:-<缺失>}」不一致 —— 系统会拒绝装载"
+    fi
+  done
+  # 架构:与主程序同一份期望集合(少一个架构 = 那类 Mac 上卡片加载不了)
+  WIDGET_NAME=$(plutil -extract CFBundleExecutable raw "$APPEX_PLIST" 2>/dev/null || true)
+  WIDGET_BIN="$APPEX/Contents/MacOS/${WIDGET_NAME:-ReverbWidget}"
+  if [ ! -f "$WIDGET_BIN" ]; then
+    fail "卡片扩展没有可执行文件 Contents/MacOS/${WIDGET_NAME:-ReverbWidget}"
+  else
+    WARCHS=$(LC_ALL=C lipo -archs "$WIDGET_BIN" 2>/dev/null || echo '')
+    echo "      卡片扩展架构:${WARCHS:-<读不出>}"
+    [ -n "$WARCHS" ] || fail "卡片扩展二进制架构读不出来(lipo -archs 空)"
+    for a in "${EXPECTED[@]}"; do
+      case " $WARCHS " in *" $a "*) ;; *) fail "卡片扩展缺架构 $a" ;; esac
+    done
+  fi
+  # 画廊文案:正文由 App 写,这里只要求每门语言都有表、且能取到那个键
+  APPEX_WANT=("${WANT_LANGS[@]}")
+  if [ ${#APPEX_WANT[@]} -eq 0 ]; then
+    APPEX_WANT=($(find "$APPEX/Contents/Resources" -maxdepth 1 -type d -name '*.lproj' 2>/dev/null | while IFS= read -r d; do basename "$d" .lproj; done))
+  fi
+  for l in "${APPEX_WANT[@]}"; do
+    f="$APPEX/Contents/Resources/$l.lproj/Localizable.strings"
+    if [ ! -f "$f" ]; then
+      fail "卡片扩展缺 $l.lproj/Localizable.strings —— 小组件库里的名字会退回英文/键名"
+      continue
+    fi
+    lint=$(plutil -lint "$f" 2>&1 | awk -F': ' '{print $NF}')
+    [ "$lint" = "OK" ] || fail "卡片扩展 $l 的 Localizable.strings lint 不过:$lint"
+    # 编译后是二进制 plist 且键是 UTF-16,**只能 plutil 取**,grep 中文恒 0(与 iOS 那条同一个坑)
+    [ -n "$(plutil -extract "继续收听" raw -o - "$f" 2>/dev/null)" ] \
+      || fail "卡片扩展 $l 的 Localizable.strings 缺「继续收听」键"
+  done
+  # entitlements:沙箱是 WidgetKit 的装载前提;只读例外是卡片能读到 App 数据的**唯一**通道 ——
+  # 漏了它不会报错,只会永久显示空态,所以必须在包上验。
+  ENT=$(mktemp)
+  if codesign -d --entitlements :- "$APPEX" >"$ENT" 2>/dev/null && [ -s "$ENT" ]; then
+    # ⚠️ 这里**不能用 `plutil -extract com.apple.security.app-sandbox`** —— 键名里带点,
+    # 而 plutil 的 key path 也拿点当分隔符,于是它报「No value at that key path」
+    # (2026-11-09 自检第一跑就这样把正向用例拦成 2 条失败)。`plutil -p` 的文本形状稳定。
+    if plutil -p "$ENT" 2>/dev/null | grep -q -F '"com.apple.security.app-sandbox" => true'; then
+      :
+    else
+      fail "卡片扩展缺 com.apple.security.app-sandbox=true(WidgetKit 只装载沙箱扩展)"
+    fi
+    if plutil -convert xml1 -o - "$ENT" 2>/dev/null | grep -q -F -- "/Library/Application Support/Reverb/widget"; then
+      echo "      entitlements:app-sandbox + 卡片目录只读例外"
+    else
+      fail "卡片扩展缺对 ~/Library/Application Support/Reverb/widget 的只读例外(卡片会永远显示空态)"
+    fi
+  else
+    fail "读不到卡片扩展的 entitlements(签名没进去?)"
+  fi
+  rm -f "$ENT"
+fi
+
+# ---- 6. 签名:要真验,不是只 dump 描述 ------------------------------------
 # `codesign -dvv` 是「读签名信息」,签坏了也可能照样打印;`--verify` 才是校验。
 if codesign --verify --deep --strict "$BUNDLE" 2>/dev/null; then
   echo "   签名:codesign --verify 通过($(codesign -dvv "$BUNDLE" 2>&1 | grep -E '^Signature=' | sed 's/Signature=//' | tr -d ' '))"

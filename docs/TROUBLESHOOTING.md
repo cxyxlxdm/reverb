@@ -12342,3 +12342,139 @@ iOS 在模拟器里读了日志 `[TabBar] 双击回顶探针已挂上 items=4` �
    (433, 570),连点三次都没反应 —— `uiautomator dump` 读到的真实可点区是 `[312,580][558,712]`,
    570 落在 chip 上方的空隙里。**tap 点要么取 dumper 的 bounds 中心,要么连点两下确认不是"点空了"**;
    把"没反应"先归因给代码,会白查一轮(这次差点把搜索分段的回顶判成没生效)。
+
+### H249. 桌面卡片点开没反应:回调"没被调用"的真相是**它所在的视图根本没建** —— 本机卡在隐私同意门后面
+
+**现象**:2026-11-09 给 macOS 加「继续收听」WidgetKit 卡片。点卡片、或手动
+`open 'reverb://player?id=…'`,App 没有任何反应:播放页不出,`.onOpenURL` 里新加的那行日志
+一次都没打印。系统看起来像"根本没把 URL 投给这个进程"。
+
+**排查(先把环境排除掉)**:在同样的**锁屏**状态下(本机解锁归维护者,取证时屏幕锁着)搭了三个最小探针:
+AppKit 代理版(`application(_:open:)`)、最小 SwiftUI 版(`.onOpenURL`)、挂 `.onReceive` 版。
+三个**都收得到** URL ⇒ 系统投递、锁屏、scheme 注册这几层都没问题,问题在本 app。
+
+**根因**:**`RootView` 在这次运行里压根没被构建。** 本机 UserDefaults 里存着 `privacy_version = 3`,
+而代码当前要求 `4`(`Data/Stores.swift:382`,同意页正文改版时抬的),于是
+`PrivacyGate` 一直显示同意页 —— 它**只在同意之后**才构建 `RootView`(M11 的设计:
+未同意时连发现页的联网 `.task` 都不该发出去)。挂在 `RootView` 上的 `.onOpenURL` / `.onAppear` / `.onReceive`
+一个都不存在,自然一个都不会跑。**这不是接线坏了,是宿主对象不存在。**
+
+决定性证据:把接收点挪到 `NSApplicationDelegateAdaptor` 的 `application(_:open:)` 之后,
+**同意门还挡着的时候**,日志就打出了 `[DeepLink] 系统投递 scheme=reverb host=player` ——
+代理不依赖任何视图,URL 确实一直在到达进程。
+
+**修法**:
+- 接收点提前到 AppKit 代理(`ReverbApp.swift` 的 `AppDelegate`),URL 交给
+  `DeepLinkInbox`(`@MainActor` 单例)缓冲;
+- `RootView` 用 `.onReceive(DeepLinkInbox.shared.$arrival…)` 消费,**并在 `.onAppear` 里
+  `takePending()`** —— 冷启动 / 同意门未过时 URL 可能先到,视图后建,这一步是"先到后订"的兜底。
+
+**同日 iOS 同形补洞**:iOS 的卡片深链原先只挂 `RootView.onOpenURL`,同一道同意门一样会把它吞掉。
+修法不是加代理,而是把 `.onOpenURL` 挂到**同意门外面**的外层视图(`ReverbApp` 的 `PrivacyGate { … }` 上),
+收到就 `DeepLinkInbox.shared.post`;`RootView` 就绪后由 `onReceive` / `onAppear` 取走。
+缓冲那只类两端同形,只有接收点不同(桌面在 AppKit 代理,移动端在 SwiftUI 外层视图)。
+
+**顺带一个不是 bug 的坑**:刚在 `/tmp` 编出来的 ad-hoc 探针,`open 'xxxprobe://…'` 报
+`kLSApplicationNotFoundErr` —— LaunchServices 还没把它登记成那个 scheme 的处理者。
+用 `open -a /tmp/X.app '<url>'` 直接指定 App 即可,别据此判断"URL 投递不可用"。
+
+**教训 / 规律**:
+① **"回调没执行"先问"回调所在的对象存在吗"。** 隐私同意门、登录门、空态替换这类
+   "整棵视图树不建"的设计,会让挂在树上的所有回调(包括深链、埋点、`onAppear` 初始化)一起静默失效。
+   这类症状最像"系统没投递",其实是"没人接收"。
+② **URL 的"到达"和"消费"是两层。** 到达属于进程(代理可证),消费属于界面。
+   把接收放在进程层、把缓冲放在中间,冷启动和门未过这两种时序才不需要各自特判。
+③ **锁屏不挡 URL 投递。** 三个探针都在锁屏状态下收到;取证阶段可以放心用日志验投递,
+   不要用"屏幕锁着"当作跳过投递验证的理由(它挡的是"看到界面")。
+
+---
+
+### H250. App 与卡片扩展之间没有"通用共享目录" —— macOS ad-hoc 签名用不了 App Group,只能走普通目录 + 沙盒只读例外
+
+**现象**:「继续收听」卡片要读到 App 里的"上次听到哪一集"。iOS 用 App Group 天然可解
+(模拟器 ad-hoc 安装不校验 entitlement,2026-11-09 实测能写出状态);macOS 这条路走不通,
+而 iOS 的**真机 / TestFlight** 上,免费 Personal Team 的 profile 预计也不含 App Groups 能力(签名结果未实测)。
+
+**根因**:
+- 卡片扩展是**独立进程 + 沙盒**,读不到 App 的容器;两边必须有一个共同的落点。
+- **macOS 的 App Group 名要求带 Team 前缀**,而本端是 ad-hoc 签名(没有 Team ID),
+  组容器建不出来;iOS 的模拟器虽然**不校验**这项 entitlement(实测可写),但真机签名走的是
+  provisioning profile,免费团队预计拿不到 App Groups 能力(未实测)。
+- 沙盒扩展里 **`NSHomeDirectory()` 返回的是容器路径**,不是用户家目录 —— 拿它拼
+  `~/Library/Application Support/...` 会落到扩展自己的容器里,与 App 写的不是同一处。
+
+**修法**:共享契约 `macos/Sources/WidgetContract/WidgetState.swift` 按平台分叉:
+- **iOS**:`FileManager.containerURL(forSecurityApplicationGroupIdentifier: "group.com.yuyin.reverb")`;
+- **macOS**:`getpwuid(getuid())` 现取真实家目录,写
+  `~/Library/Application Support/Reverb/widget/widget_state.json`;扩展 entitlements 只给
+  `com.apple.security.temporary-exception.files.home-relative-path.read-only`
+  = `["/Library/Application Support/Reverb/widget/"]`(相对家目录、只读、路径要精确匹配)。
+- 读不到容器时 App **不写、只记一行**,卡片退回空态:
+  `没有 App Group 容器,卡片只能显示空态(免费团队签名没有这项能力)` —— 宁可见到明确的空态,
+  也不要崩溃或静默白块。
+
+**教训 / 规律**:
+① **同一个"跨进程共享状态"的需求,在四种签名/分发模型下没有同一种解。** 定契约时把
+   "容器从哪来"作为平台差异显式写在一个文件里(`containerURL`),别让两侧各自猜路径。
+② **沙盒里的"家目录"是容器。** 取用户家目录走 `getpwuid`,取 App 数据走容器 API,
+   两个函数的返回值在沙盒进程里不是同一个东西。
+③ **`temporary-exception` 是权宜之计,不是设计。** 它被 Apple 明确不推荐;哪天 macOS
+   改成 Developer ID + Team 签名,应立刻换回 App Group,别让这条例外沉淀成"架构"。
+④ **降级路径要可观测。** 缺能力时那行日志是"为什么卡片是空的"的唯一线索;
+   没有它,用户与开发者都只会看到一张什么都不画的卡。
+
+---
+
+### H251. `plutil -extract` 把**键名里的点**当 key path 分隔符 —— 带点的 entitlements 键断言全被自己拦成失败
+
+**现象**:2026-11-09 给 `verify-bundle.sh` 加卡片扩展断言,第一次跑 `selftest-verify.sh`
+就有 2 条**正向用例失败**:签名里明明有 `com.apple.security.app-sandbox`,断言却说读不到。
+
+**根因**:`plutil -extract com.apple.security.app-sandbox raw` 里的点被当成**键路径分隔符**
+(先找 `com` → `apple` → …),于是报 `No value at that key path`;而 entitlements 的键名
+**本身就带点**。这不是签名没进去,是判据的取法错了。
+
+**修法**:用 `plutil -p` 的稳定文本形状 + `grep -F`:
+```bash
+plutil -p "$ENT" | grep -q -F '"com.apple.security.app-sandbox" => true'
+plutil -convert xml1 -o - "$ENT" | grep -q -F -- "/Library/Application Support/Reverb/widget"
+```
+**同一个断言里的姊妹坑**:扩展的 `.strings` 编译后是**二进制 plist、键是 UTF-16**,
+`grep 继续收听` 对字节搜恒为 0;中文键只能 `plutil -extract "继续收听" raw` 取。
+
+**教训 / 规律**:
+① **断言脚本必须自己有变异测试。** 这两条如果只跑一次"看起来失败",很容易被当成
+   "包没打好"去改打包脚本;是 `tools/selftest-verify.sh` 的阳性对照先把出错的那一侧钉在了判据上。
+② **工具的语法会悄悄改变语义。** 点号在 shell 里是普通字符,在 plutil 里是路径分隔符;
+   判据里出现"带点的标识符"时要先问"这个工具怎么解释它"。
+③ **二进制 plist 不要拿字节 grep 当判据。** 编译后的资源/entitlements 用 plutil 取,
+   与 H209 那条"9~15 字节字面量被拆成立即数、整词 grep 恒 0"是同一类错误的不同来源。
+
+---
+
+### H252. 全默认值的 public struct 已经**自动合成** `init()` —— 再在 extension 里补一个 public 版就是重名
+
+**现象**:`WidgetState` 的每个字段都有默认值,但跨模块构造需要公开的无参构造器。
+把 `public init() {}` 写进 `extension WidgetState { … }` 后编译报:
+```
+error: invalid redeclaration of synthesized 'init()'
+```
+
+**根因**:存储属性全有默认值时,编译器会在**类型体**里合成一个 `init()`(public struct 的
+合成成员/默认构造器是 internal,所以跨模块又必须自己公开一份)。在 extension 里声明同签名,
+不会"替换"那份合成品,而是**与它重名**。
+
+**修法**:`public init() {}` 写进**类型体**;`init(from decoder:)` 留在 extension。
+两个方向都实测过(8 行最小复现):
+- 类型体里显式写了 `init()`,编译器不再合成,正常;
+- 反过来把任何自定义 `init` 写进类型体,**合成的 `init()` 会消失**(`S()` 直接报
+  `missing argument for parameter 'from'`)—— 所以"哪个 init 放哪"不是风格,决定 API 有没有。
+
+**教训 / 规律**:
+① **"extension 里补一个"不适用于初始化器去重。** 合成成员(init / == / Codable)在
+   类型体;扩展只做协议实现,不要拿它当"补默认值"的地方。
+② **遇到这种报错先写最小复现,别在大文件里猜。** 八行 struct 一跑,
+   "合成 vs 显式"的规则当场清楚;在大文件里改来改去只会把错误挪个位置。
+③ **跨模块的 public struct 要显式公开构造器。** 合成的默认/成员构造器是 internal,
+   编译在本模块里过、被扩展 target 调用时才失败 —— 这类"换个 target 才炸"的错,
+   在共享契约文件里尤其常见。

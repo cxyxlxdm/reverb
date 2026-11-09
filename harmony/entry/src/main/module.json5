@@ -48,6 +48,18 @@
         "metadata": [
           { "name": "ohos.extension.backup", "resource": "$profile:backup_config" }
         ]
+      },
+      {
+        // 「继续收听」服务卡片。三档尺寸各是一个 form 条目,口径见 form_config.json 与
+        // ets/widget/WidgetFormData.ets 的 WidgetFormNames(更新回调不带尺寸,只能按 formName 反查)。
+        "name": "WidgetFormExtension",
+        "srcEntry": "./ets/widget/WidgetFormExtension.ets",
+        "description": "$string:widget_description",
+        "type": "form",
+        "exported": false,
+        "metadata": [
+          { "name": "ohos.extension.form", "resource": "$profile:form_config" }
+        ]
       }
     ],
     "requestPermissions": [

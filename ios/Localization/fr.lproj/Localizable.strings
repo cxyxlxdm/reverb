@@ -422,3 +422,7 @@
 "订阅更新提醒（可选）：开启后，应用会在后台每 6 小时检查一次你订阅频道的 RSS，有新一期时发一条本地通知；请求只发往发布方或托管方，与手动刷新时一样。关闭开关会撤销后续检查。" = "Rappels de nouveaux épisodes (facultatif) : une fois activés, l’app vérifie le RSS de vos abonnements en arrière-plan toutes les 6 heures et envoie une notification locale lorsqu’un nouvel épisode paraît. Les requêtes ne vont qu’aux éditeurs ou à leur hébergeur, comme lors d’une actualisation manuelle. Désactiver l’interrupteur annule les vérifications suivantes.";
 "提醒" = "Rappels";
 "剪藏海报" = "Carte de citation";
+
+/* 「继续收听」卡片空态(App 写进共享状态,扩展不自己本地化) */
+"挑一集开始听" = "Choisissez un épisode";
+"上次听到哪一集，会出现在这里" = "Votre dernier épisode apparaîtra ici";

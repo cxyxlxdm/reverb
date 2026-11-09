@@ -17,6 +17,7 @@ import com.yuyin.reverb.data.local.HistoryStore
 import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.remote.BilibiliSource
+import com.yuyin.reverb.widget.WidgetRefresh
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -60,7 +61,12 @@ object PlayerController {
 
     private var controller: MediaController? = null
     private val handler = Handler(Looper.getMainLooper())
-    private var pending: Episode? = null
+    /**
+     * 控制器还没连上时的待装载集。**连 auto 一起记**:冷启动点小组件要求「装载但不起播」,
+     * 若这里只存 episode、连上之后按默认 auto=true 重放,小组件那一下就会自己响起来。
+     */
+    private var pending: PendingLoad? = null
+    private data class PendingLoad(val episode: Episode, val autoplay: Boolean)
     /**
      * 每次 [playEpisode] 递增。视频源的直链要**先解析、后提交**(见 H232),解析回来时靠它
      * 判断"这次起播还算不算数" —— 解析只差一次网络往返,而用户可能已经点了别的集或关了播放条。
@@ -491,7 +497,7 @@ object PlayerController {
                 // (playQueue / playQueueAt / advanceQueue / previous / restoreState / playRadioEpisode)
                 // 都已经**在自己那一处把 queue 摆好了**,这里再盖一次纯属多余且是错的。
                 // 见 REVIEW-2026-10-25 低·族 C-2。
-                pending?.let { ep -> pending = null; updateNavFlags(); playEpisode(ep) }
+                pending?.let { p -> pending = null; updateNavFlags(); playEpisode(p.episode, autoplay = p.autoplay) }
                 // **syncOnce 要排在恢复之前**:它用播放器的 currentPosition 刷进度线,而预载那一刻
                 // currentPosition 还是 0 —— 排在后面的话它会把 restoreState 里"先按历史画"那一笔覆盖掉,
                 // 界面读到的是 0:00,正是那条注释里说要防的"看着像进度丢了"。
@@ -554,6 +560,8 @@ object PlayerController {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _isPlaying.value = isPlaying
             if (isPlaying) { playbackStarted = true; startTicker() } else { stopTicker(); saveProgress(); listenStats?.flush() }
+            // 播放/暂停直接改变小组件那条「继续收听」的状态,不节流。
+            appContext?.let { WidgetRefresh.request(it, force = true) }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -616,6 +624,7 @@ object PlayerController {
                     }
                 }
                 listenStats?.flush()
+                appContext?.let { WidgetRefresh.request(it, force = true) }
                 when {
                     stopAfterThis -> Unit
                     // 电台模式:本集播完自动抓下一首随机节目续播
@@ -678,6 +687,24 @@ object PlayerController {
 
     /** 播放单集(单条,无上下文):等价于队列只有它自己,无上/下一集。 */
     fun play(episode: Episode) = playQueue(listOf(episode), 0)
+
+    /**
+     * 只装载、不起播(桌面小组件的点击入口)。
+     *
+     * 小组件上写的是「点一下接着听」,但用户要点的是**播放页**而不是让声音突然起来 ——
+     * 所以走 [restoreState] 同一口径:预载到就绪、进度按历史续上、按下播放键即刻出声。
+     * 队列只放这一集(与 [play] 一致):小组件没有「这一列」的上下文,
+     * 把历史整列塞进来会让上下集跳到用户没预期的位置。
+     */
+    fun prepare(episode: Episode) {
+        log.i(TAG, "prepare id=${episode.id} title='${episode.title}'")
+        if (_radioMode.value) stopRadio()
+        queue = listOf(episode)
+        queueIndex = 0
+        _activeListTag.value = ""
+        updateNavFlags()
+        playEpisode(episode, autoplay = false)
+    }
 
     /**
      * 从**指定那一秒**开始播某一集(批注列表「跳回那一句」用)。
@@ -865,7 +892,7 @@ object PlayerController {
         val c = controller
         if (c == null) {
             log.w(TAG, "controller not ready, pending id=${episode.id}")
-            pending = episode
+            pending = PendingLoad(episode, autoplay)
             return
         }
         _position.value = 0
@@ -876,6 +903,7 @@ object PlayerController {
         // 直播流不是"一集节目":没有起止,也就没有"听到哪了"可记。进度、历史、统计三样全关
         // (见 [saveProgress] / [countListening] / STATE_ENDED 三处同一条闸)。
         if (!isGuide && !episode.isLive) history?.record(episode, System.currentTimeMillis())
+        appContext?.let { WidgetRefresh.request(it, force = true) }
         pendingSeekMs = if (startMsOverride >= 0) {
             val s = startMsOverride
             startMsOverride = -1L
@@ -1103,6 +1131,8 @@ object PlayerController {
         queueIndex = 0
         persistState()
         updateNavFlags()
+        // 关掉播放条后小组件应回到空态;history 的写去抖要等一等再读。
+        appContext?.let { WidgetRefresh.request(it, force = true, delayMs = 900) }
     }
 
     /** 本集播完:抓下一首随机节目续播;抓不到则自动关台。 */
@@ -1176,6 +1206,8 @@ object PlayerController {
         }
         c.seekTo(target)
         _position.value = target
+        // history 的进度写入还在 400ms 去抖窗口里,延后一点再让小组件读。
+        appContext?.let { WidgetRefresh.request(it, force = true, delayMs = 900) }
     }
 
     fun seekBy(deltaMs: Long) {
@@ -1196,6 +1228,7 @@ object PlayerController {
         log.d(TAG, "seekBy $deltaMs -> ${target}ms")
         c.seekTo(target)
         _position.value = target
+        appContext?.let { WidgetRefresh.request(it, force = true, delayMs = 900) }
     }
 
     fun cycleSpeed() {
@@ -1315,6 +1348,8 @@ object PlayerController {
             countListening()
             tickCount++
             if (tickCount % 10 == 0) saveProgress() // 每约 5 秒落一次进度
+            // 小组件的进度条 20 秒刷一次就够(时间文字只到分钟级),不必跟着 5 秒的落盘走。
+            if (tickCount % 40 == 0) appContext?.let { WidgetRefresh.request(it) }
             if (c.isPlaying) handler.postDelayed(this, 500)
         }
     }

@@ -9,6 +9,7 @@ import { SettingsStore } from '../store/SettingsStore';
 import { PlaybackStateStore } from '../store/PlaybackStateStore';
 import { PlaybackClock } from './PlaybackClock';
 import { BilibiliSource, ResolvedStream } from '../net/BilibiliSource';
+import { WidgetUpdater } from '../widget/WidgetUpdater';
 import { Log } from '../util/Logger';
 
 /// 播放请求的 User-Agent。与 Http.ets 的 UA 同一形态 —— 不少播客 CDN 会按 UA 拒绝请求。
@@ -1710,6 +1711,8 @@ export class PlayerController {
       this.countListening();
       this.clock.ticks += 1;
       if (this.clock.ticks % 10 === 0) this.saveProgress();   // 约每 5 秒
+      // 卡片进度约每 20 秒推一次(节流在 WidgetUpdater 里;这里 40 tick × 500ms)。
+      if (this.clock.ticks % 40 === 0) this.refreshWidget(false);
     }, 500);
   }
 
@@ -1770,6 +1773,18 @@ export class PlayerController {
 
   private notify(): void {
     if (this.onStateChanged !== null) this.onStateChanged();
+    // 真实状态变化(播放/暂停/换集/seek)立刻排一次卡片推送,口径同 Android WidgetRefresh。
+    this.refreshWidget(true);
+  }
+
+  /**
+   * 桌面卡片的数据推送。`settings` 还没注入(冷启动最开始那几次 notify)时跳过 ——
+   * 卡片要的深浅档位就在 settings 里,而 AppContainer 装好之后必然还有一次状态回调。
+   */
+  private refreshWidget(force: boolean): void {
+    const s = this.settings;
+    if (s === null) return;
+    WidgetUpdater.request(s, force);
   }
 
   async release(): Promise<void> {

@@ -375,6 +375,21 @@ final class PlayerController: ObservableObject {
 
     // MARK: - 播放入口
 
+    /// 只装载、不出声(暂停态)。小组件在 `playback_state.current` 为空时从历史里取到那一集,
+    /// 点开时播放页得有东西可画,又不该自动播 —— 与 Android `prepare(episode)` 同一条口径。
+    func prepare(_ episode: Episode) {
+        guard current?.id != episode.id else { return }
+        loadRetries = 0
+        if radioMode { stopRadio() }
+        queue = [episode]
+        queueIndex = 0
+        activeListTag = ""
+        applyPlayMode(mode(for: ""))
+        updateNavFlags()
+        Log.i("Player", "prepare(暂停态) id=\(episode.id)")
+        playEpisode(episode, autoplay: false)
+    }
+
     /// 单集(无上下文)。
     func play(_ episode: Episode) { playQueue([episode], startIndex: 0) }
 

@@ -1435,6 +1435,38 @@
     {
       "name": "batch_added_none",
       "value": "Ces épisodes sont déjà dans la file"
+    },
+    {
+      "name": "widget_name",
+      "value": "Reverb · Reprendre l'écoute"
+    },
+    {
+      "name": "widget_name_medium",
+      "value": "Reprendre l'écoute (M)"
+    },
+    {
+      "name": "widget_name_large",
+      "value": "Reprendre l'écoute (L)"
+    },
+    {
+      "name": "widget_description",
+      "value": "Affiche où vous en étiez ; touchez pour reprendre"
+    },
+    {
+      "name": "widget_continue",
+      "value": "REPRENDRE L'ÉCOUTE"
+    },
+    {
+      "name": "widget_empty_title",
+      "value": "Choisissez un épisode"
+    },
+    {
+      "name": "widget_empty_sub",
+      "value": "Votre dernier épisode apparaîtra ici"
+    },
+    {
+      "name": "widget_live",
+      "value": "EN DIRECT"
     }
   ]
 }

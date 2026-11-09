@@ -418,4 +418,13 @@
     <string name="update_is_latest">已是最新版本 %1$s</string>
     <string name="update_check_failed">檢查失敗，看看網路之後再試一次</string>
     <string name="update_title_repack">這個版本重新發布過安裝包 %1$s</string>
+
+    <!-- 繼續收聽小工具 -->
+    <string name="widget_name">餘音 · 繼續收聽</string>
+    <string name="widget_continue">繼續收聽</string>
+    <string name="widget_empty_title">挑一集開始聽</string>
+    <string name="widget_empty_sub">上次聽到哪一集，會出現在這裡</string>
+    <string name="widget_description">顯示上次聽到的節目與進度，點一下接著聽</string>
+    <string name="widget_progress_time">%1$s / %2$s</string>
+    <string name="widget_live">直播</string>
 </resources>

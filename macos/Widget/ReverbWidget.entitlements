@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- 卡片扩展必须沙箱化(WidgetKit 的宿主进程只装载沙箱扩展)。
+         macOS 的 App Group 名要求带 Team 前缀,而本端是 ad-hoc 签名(没有 Team ID),
+         所以数据不走进组容器,而是 App 写在一个普通目录里、扩展在这个目录上只读:
+         ~/Library/Application Support/Reverb/widget(路径与 App 侧同源,见 WidgetContract)。
+         ⚠️ temporary-exception 是 Apple 明确不推荐的能力,这里是自分发 + ad-hoc 签名下
+         唯一能让独立进程读到 App 数据的办法;哪天上了 Developer ID 签名,应换成 App Group。 -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+    <array>
+        <string>/Library/Application Support/Reverb/widget/</string>
+    </array>
+</dict>
+</plist>

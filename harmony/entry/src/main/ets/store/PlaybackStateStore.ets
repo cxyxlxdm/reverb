@@ -144,7 +144,8 @@ export class PlaybackStateStore {
     return s;
   }
 
-  private static readFromDisk(): PlaybackSnapshot {
+  /** 公开给服务卡片的 FormExtensionAbility:它在独立进程里,只能按同一份文件自己读一遍。 */
+  static readFromDisk(): PlaybackSnapshot {
     const out = new PlaybackSnapshot();
     const root = JsonFile.readObject(FILE_NAME);
     if (root === null) return out;

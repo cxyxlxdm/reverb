@@ -27,6 +27,34 @@
 >   双击动作本身仍需真机手指补验(本机 Xcode 27 无 `Simulator.app`、`simctl` 无触摸注入)。
 > - 逐条坑见 `docs/TROUBLESHOOTING.md` H248。四端 `dist/` 本轮都没有重打。
 
+### 继续收听桌面小组件 / 服务卡片(四端)
+
+- 桌面(Android 小部件、鸿蒙服务卡片、macOS 通知中心与桌面小组件、iOS 主屏小组件)新增「继续收听」:显示上次听到的那一集 —— 封面、标题、频道名、进度条与「已听 / 总时长」。
+- 三档尺寸(小 / 中 / 大),窄条与方形各有独立排法;没有可继续的内容时显示空态「挑一集开始听」。
+- 点一下打开播放页并**装载成暂停态**(不自动出声),从上次的位置接着听。直播那类没有进度的内容不参与挑选。
+- 内容跟着 App 更新:换集 / 播放暂停 / seek / 进度落盘后推送,播放中最多 20 秒刷一次(卡片时间只到秒,更快的刷新没有意义)。
+
+> **工程要点**
+> - Android 走 `AppWidgetProvider` + `RemoteViews`(`android/.../widget/`,2×2 / 4×2 / 2×4 / 4×4 四种排法按宿主给的格子尺寸选),点击带 `EXTRA_OPEN_PLAYER` + `EXTRA_OPEN_EPISODE` 回 `MainActivity`;
+>   鸿蒙走 Form Kit(`harmony/.../ets/widget/`,`WidgetFormExtension` 独立进程 + App 侧 `WidgetUpdater` 推 `formBindingData`),点击走 `WidgetRoute` 回播放页;
+>   iOS / macOS 走 WidgetKit,两端共用 `macos/Sources/WidgetContract/WidgetState.swift` 这一份状态契约。
+> - **iOS 用 App Group(`group.com.yuyin.reverb`)共享状态**:模拟器上 ad-hoc 安装**不校验**这项 entitlement,实测能写出状态;
+>   真机 / TestFlight 需要**付费 Apple Developer Program** 的 profile(免费团队预计拿不到,签名结果未实测)。
+>   缺容器时 App 只记一行「没有 App Group 容器,卡片只能显示空态」,卡片退回空态、App 照常可用。
+> - **macOS 没有可用的 App Group**:App Group 名必须带 Team 前缀,而本包是 ad-hoc 签名。改为 App 写 `~/Library/Application Support/Reverb/widget/`,
+>   扩展加沙盒 + `temporary-exception.files.home-relative-path.read-only` 只读这一个目录;沙盒里 `NSHomeDirectory()` 是容器,真实家目录走 `getpwuid`。
+> - macOS 的 `.appex` 由 `package.sh` 手工组装(SwiftPM 不产出扩展包),先签扩展(带 entitlements)再签 App,不加 `--deep`;
+>   `verify-bundle.sh` 新增扩展点 / 版本一致 / 架构 / 四语字符串 / entitlements 五组断言,`tools/selftest-verify.sh` 同步加了 5 道变异(现为 pass=17)。
+> - macOS 深链走 `NSApplicationDelegateAdaptor` 的 `application(_:open:)`,并在 `DeepLinkInbox` 里缓冲 ——
+>   冷启动或同意页未过时 `RootView` 还不存在,直接挂 `.onOpenURL` 会丢掉那一次点击。iOS 同形:iOS 没有
+>   代理可借,把 `.onOpenURL` 挂到同意门外层视图,收到的 URL 同样先进 `DeepLinkInbox`。两端同一个坑,见 H249。
+> - 验收状态:**Android 已在 Pixel 3 真机验收**(三档尺寸、空白态、点击回播放页);Android / 鸿蒙 / iOS 编译门全过,鸿蒙**未装机点过**(本机 `hdc list targets` 为空);
+>   **iOS 模拟器**确认扩展能被系统登记,App Group 容器可用、`widget_state.json` 真的写出了真实数据(读到 `余音使用引导 / 0:00 / 0:32`),但主屏上把卡片加出来看渲染没做;
+>   真机 / TestFlight 的 App Group 需要付费 Apple Developer Program(未实测签名结果);
+>   **macOS** `pluginkit -m -i com.yuyin.reverb.widget` 能看到扩展、App 运行即写出 `widget_state.json`、系统向进程投递深链成功(日志 `[DeepLink]`),
+>   但**通知中心里加卡片看渲染、点卡片开播放页这两步没做** —— 本机停在隐私同意页(存的是 `privacy_version 3`,当前要求 4)且屏幕锁着,需要人点一下同意再验。
+> - 逐条坑见 `docs/TROUBLESHOOTING.md` H249–H251。四端 `dist/` 只有 macOS 本轮重打过(1.0.8,含扩展)。
+
 ---
 
 ## 1.0.8 — 2026-11-08

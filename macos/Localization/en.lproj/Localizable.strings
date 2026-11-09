@@ -365,3 +365,7 @@
 /* 2026-11-04 与 iOS 对齐时只取这两条共用键(其余新串是 iOS 专属,不进本端) */
 "仅 Wi-Fi 下载已开启，切换到 Wi-Fi 后点按重试" = "Wi-Fi only is on. Switch to Wi-Fi and tap retry";
 "正在读取…" = "Reading…";
+
+/* 「继续收听」卡片空态(App 写进共享状态,扩展不自己本地化) */
+"挑一集开始听" = "Pick an episode";
+"上次听到哪一集，会出现在这里" = "Your last episode shows up here";
