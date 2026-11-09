@@ -99,7 +99,7 @@ export struct DissolveParticles {
   }
 
   private spawn(): void {
-    const step = this.state.rectH / 8.5; // 条高 52vp ⇒ 步长约 6vp,与 Android 同密度
+    const step = this.state.rectH / 8.5; // 条高 56vp ⇒ 步长约 6.6vp,与 Android 同密度(那边条高同为 56)
     const out: Shard[] = [];
     let seed = this.state.tick * 7919 + 1; // 可复现的伪随机(排障时同一 tick 同一碎片图)
     const rnd = (): number => {

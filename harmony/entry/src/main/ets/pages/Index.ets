@@ -17,7 +17,7 @@ import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
 import {
   SystemTabItem, barFloating, pickMaterialType, TAB_BAR_H, TAB_KEY, MORPH_KEY, MORPH_SLOPE,
-  MINI_H, MINI_H_COLLAPSED, MINI_GAP, MINI_SIDE_MARGIN, morphSpring, barReserve, channelMiniBottom
+  MINI_H, MINI_GAP, MINI_SIDE_MARGIN, morphSpring, barReserve, channelMiniBottom
 } from '../view/BottomBar';
 import { DissolveParticles, DissolveState } from '../view/DissolveParticles';
 import { hdsMaterial, HdsTabs } from '@kit.UIDesignKit';
@@ -753,11 +753,11 @@ struct Index {
     }, 650);
   }
 
-  /// tab 外壳那一处播放条的屏幕矩形(收束态高度用 [MINI_H_COLLAPSED])。
+  /// tab 外壳那一处播放条的屏幕矩形。2026-11-09 起两态同高([MINI_H] = [MINI_H_COLLAPSED]),
+  /// 收束只改落点、不改高度。
   private tabMiniRect(): number[] {
-    const h = this.collapsed ? MINI_H_COLLAPSED : MINI_H;
-    return [MINI_SIDE_MARGIN, this.windowHvp - this.miniBottom() - h,
-      this.windowWVp - MINI_SIDE_MARGIN * 2, h];
+    return [MINI_SIDE_MARGIN, this.windowHvp - this.miniBottom() - MINI_H,
+      this.windowWVp - MINI_SIDE_MARGIN * 2, MINI_H];
   }
 
   /// 频道详情页那一处(永不收束,恒 [MINI_H],落点走 [detailLanding])。
@@ -771,6 +771,9 @@ struct Index {
    *
    * - 展开:抬到栏**上方**再留 8vp 缝(参考片实测那两道 26px);
    * - 收束:落进栏那 56vp 里,于是只剩手势区那一道。
+   *
+   * 2026-11-09 起两态块高相同(见 [MINI_H]),所以这里改的 64vp 是**纯平移**
+   * —— 上一版还叠着"块高 48 → 56"那一档,两端看起来一样高、实际是两条曲线叠出来的。
    *
    * 栏由 `HdsTabs` 画,它自己按 `barBottomMargin = bottomInset` 浮在避让区上方
    * (见 `BottomBar.barFloating`),所以两种落点都以"屏底往上 bottomInset"为基准,不用自己算栏高。

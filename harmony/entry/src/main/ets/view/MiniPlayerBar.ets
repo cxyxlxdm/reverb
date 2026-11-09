@@ -4,7 +4,7 @@ import { PlayerController } from '../playback/PlayerController';
 import { Artwork, Glyph, Sym } from './Widgets';
 import {
   HomeSlot, morphSpring,
-  MINI_COVER_NARROW, MINI_COVER_WIDE, MINI_H_COLLAPSED, MINI_PAD_COLLAPSED,
+  MINI_COVER_NARROW, MINI_COVER_WIDE, MINI_PAD_COLLAPSED,
   MINI_PAD_EXPANDED, MINI_SIDE_MARGIN, MINI_RADIUS, MINI_SYMBOL, MINI_HIT_EXT, MINI_HIT_OFF
 } from './BottomBar';
 
@@ -13,10 +13,10 @@ import {
  * 点信息区打开全屏播放页,点队列符号进队列页(与 macOS 底部条的列表按钮同位次
  * —— 都在最右)。对应 Android `Components.kt` 的 MiniPlayer。
  *
- * 两态的几何(2026-10-15 第五轮口径,内边距由第六轮改到 7/8):
- * - 展开(`collapsed=false`):**长椭圆胶囊**,与悬浮栏同宽(左右各收 23vp),整块 48vp
- *   = 7 + 34(封面)+ 7,坐在 tab 栏**上方** 8vp 处,不透明 surface 底;
- * - 收束(`collapsed=true`):**两个物体,不是一条**,并且**这一态整块与 tab 栏等高**。
+ * 两态的几何(2026-11-09 起**两态同高**,内边距 8/8):
+ * - 展开(`collapsed=false`):**长椭圆胶囊**,与悬浮栏同宽(左右各收 23vp),整块 56vp
+ *   = 8 + 40(封面)+ 8,坐在 tab 栏**上方** 8vp 处,不透明 surface 底;
+ * - 收束(`collapsed=true`):**两个物体,不是一条**,并且**整块与 tab 栏等高**。
  *   左端那颗**小圆球**(盘 52、里面是当前那一格的图标)独立站在栏的左沿,右端是播放条
  *   **自己的胶囊**(封面 + 文字 + 三个按钮,块高 56 = 8 + 40(封面)+ 8 = [MINI_H_COLLAPSED],
  *   不透明 surface 底 + 半高圆角
@@ -35,23 +35,20 @@ import {
  * 所以那一轮把球**挪出胶囊**,并让胶囊在收束态**有自己的底**(不再是 alpha 0)。
  *
  * 两态是**同一套节点、只差几个几何量**,不是两个布局 —— 这是"丝滑"的唯一来源:
- * 换布局会让整行内容重挂,而重挂没有中间帧。这里封面尺寸/上下 padding/左槽宽度与高度/圆角
- * 四项都写成随 `collapsed` 取的属性,并在**各自节点**上声明 `.animation()`,
- * 弹簧曲线从 [morphSpring] 取,和 Index 里那层"整块往上抬 64vp"(栏高 56 + 缝 8)用的是同一条。
+ * 换布局会让整行内容重挂,而重挂没有中间帧。这里随 `collapsed` 动画的只剩两项:
+ * 左槽宽度(0 → 56)与右内距(16 → 8);封面、纵向内距、圆角从 2026-11-09 起两态相同,
+ * 不再参与插值。弹簧曲线从 [morphSpring] 取,和 Index 里那层"整块下沉 64vp"(栏高 56 + 缝 8)
+ * 用的是同一条。
  * ⚠️ **底色不再是其中一项**(第五轮起两态同为不透明 `surface`):收束态那一行已经没有系统胶囊垫底,
  * 再留半透明就是让列表文字从按钮底下穿上来。
  *
  * ⚠️ 属性动画挂在**自己有属性变化的那个节点**上,不跨组件 —— 早先试过 animateTo 从父级
  * 包一下,子组件里 @Prop 同步带来的变化并不吃这个动画(观感是"一半在动一半瞬移")。
  *
- * ⚠️ 封面 34↔40 这 6vp **是瞬间跳的**(它是子组件 Artwork 内部的 width,父层动画管不到)。
- * 第六轮整机缩一档(40/44 → 34/40)之后跳幅从 4vp 涨到 6vp,这是明知代价选下来的:
- * 那三条装机意见("图标还是太大 / 上下左边距父容器太近")量的都是**留白** —— 上一版是
- * `4 + 40 + 4`(展开)与 `6 + 44 + 6`(收束),封面上下各只剩 4/6vp、左 5vp,
- * 在圆角胶囊里读出来就是"方块顶着容器边";而那三枚按钮当时已缩到 16vp,亮像素外接框离胶囊
- * 上沿 72px(22vp)、下沿 71px,不贴边。**贴边的是封面。**
- * 仍不为此加"包一层 clip 的壳":壳会在展开态也一直是活的布局节点,多一处要维护的几何;
- * 而 6vp 的跳幅叠在整块 64vp 的弹簧位移上读不出形状。**下一轮装机要盯这一条有没有真的读出来。**
+ * ⚠️ **封面两态同 40(2026-11-09),瞬移代价到此为止。** 早先两态不同档(34 / 40),
+ * 而封面边长是 `Artwork` **内部**的 width、父层属性动画管不到它,收束时那 6vp 是**瞬移**;
+ * 第六轮为"展开更紧凑"付下这条代价,上一版还留着"下一轮装机盯有没有读出来"的待验项。
+ * 统一块高之后两态封面都是 56 − 8×2,它不再需要插值 —— **别为了"两态不一样"把窄档再调开**。
  * 见 `BottomBar.MINI_COVER_WIDE`。
  */
 @Component
@@ -125,7 +122,8 @@ export struct MiniPlayerBar {
     if (p !== this.pct) this.pct = p;
   }
 
-  /// 封面边长。收束态缩到窄档(与 `Artwork` 的 `dim` 同一个值,覆盖层要按它摆)。
+  /// 封面边长。两态同 40(见 `BottomBar.MINI_COVER_WIDE`);保留这个出口是因为
+  /// `Artwork` 的 `dim` 与点击覆盖层的尺寸都从这里取,将来要再分档也只有这一处。
   private coverDim(): number {
     return this.collapsed ? MINI_COVER_NARROW : MINI_COVER_WIDE;
   }
@@ -183,8 +181,8 @@ export struct MiniPlayerBar {
          * 第四轮第一版把 14vp 全给了胶囊内白,外缝只剩 2vp,两个圆头几乎相切,观感仍是
          * "胶囊左端鼓出一颗球")。见 `BottomBar.HOME_SLOT_GAP`。
          *
-         * ⚠️ 圆角跟着**各自的高度**走,不是同一个数:展开态块高 48 ⇒ 24,收束态块高 56 ⇒ 28。
-         * 写死一个数会在其中一态露出"不够圆"的那一头。
+         * ⚠️ 圆角跟着块高走:两态同高(56)⇒ 同一个 [MINI_RADIUS](28)。
+         * 上一版按态取两份(展开 24 / 收束 28),已并掉 —— 分开写只会漂。
          *
          * 为什么是 `Stack` 而不是原来的 `Column`:进度线从"行内的一格"改成**压在胶囊上沿的
          * 覆盖层**。旧写法那 2vp 参与测量,于是收束态只能靠上下 padding 不等(4/6)把封面找回
@@ -288,8 +286,8 @@ export struct MiniPlayerBar {
           .width('100%')
           /**
            * 内边距**整块随两态换**(见 [MINI_PAD_EXPANDED] / [MINI_PAD_COLLAPSED] 里各边的理由),
-           * 所以 `.animation()` 就挂在这个节点上。三档都在变:左 14↔5(收束态那道 5 只是头部留白,
-           * "球 → 胶囊"的缝由球槽的外边距给)、纵向 4/4↔6/6(把块高从 48 顶到 56 = 栏高)、右 16↔8。
+           * 所以 `.animation()` 就挂在这个节点上。2026-11-09 统一之后只剩**右内距 16 ↔ 8** 在动
+           * (左 14 与纵向 8/8 两态相同;"球 → 胶囊"的缝由球槽的外边距给)。
            */
           .padding(this.collapsed ? MINI_PAD_COLLAPSED : MINI_PAD_EXPANDED)
           .alignItems(VerticalAlign.Center)
@@ -302,7 +300,7 @@ export struct MiniPlayerBar {
         }
         .layoutWeight(1)
         .backgroundColor(this.scheme.surface)
-        .borderRadius(this.collapsed ? MINI_H_COLLAPSED / 2 : MINI_RADIUS)
+        .borderRadius(MINI_RADIUS)
         .clip(true)
         .animation({ curve: morphSpring() })
       }
