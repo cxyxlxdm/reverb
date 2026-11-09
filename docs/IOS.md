@@ -293,6 +293,33 @@ xcodebuild … -configuration Release … && xcrun devicectl device install app 
   两条标题转强调色、封面角标打勾,第三条保持未选;浮条的 全选 / 加入待播 / 退出 三钮都在,
   底部浮条停在标签栏之上不互相遮挡。
 
+**2026-11-09 1.0.7 取证(同一台机器;WDA 仍未装上)**:
+
+- 机上装的是分支包 `com.yuyin.reverb 1.0.7 (1)`(`devicectl device info apps` 可读);
+  `devicectl device capture screenshot` 能出 1206×2622 的 PNG ⇒ **WDA 不可用也能做静态取证**。
+  当晚 23:08 的截图里发现页已是 1.0.7 的悬浮四格栏 + 圆角搜索框。
+- 应用日志也不依赖界面:
+  ```bash
+  xcrun devicectl device info files --device <UDID> --domain-type appDataContainer \
+    --domain-identifier com.yuyin.reverb --subdirectory "Library/Application Support/Reverb/Logs"
+  xcrun devicectl device copy from --device <UDID> --domain-type appDataContainer \
+    --domain-identifier com.yuyin.reverb \
+    --source "Library/Application Support/Reverb/Logs/reverb.log" --destination /tmp/ios_reverb.log
+  ```
+  当晚拉到 96 242 B(最后一条 22:46):`refreshPopular region=cn → 27 频道`、
+  `Artwork cached …` 都在,说明应用此前确实在这台机器上跑过。
+- **23:20 重新拉起被拒**:`devicectl … process launch --terminate-existing com.yuyin.reverb
+  -- -start-tab settings` 返回 `FBSOpenApplicationErrorDomain error 3` +
+  「invalid code signature, inadequate entitlements or its profile has not been explicitly trusted」。
+  当时手机已自动锁屏(`lockState passcodeRequired=true`)。按 11-04 那条顺序排:
+  **网络 → 信任记录 → 描述文件**;免费 Personal Team 的描述文件只有 7 天(11-02 首次安装),
+  这次也可能是到期。重新签装要人先解锁,再走
+  `xcodebuild … Debug … -allowProvisioningUpdates DEVELOPMENT_TEAM=J4YCBW8ZG7 build`
+  → `devicectl device install app …`。
+- WDA runner 仍不可用:最近一次 `ios_install_runner`(`retry_reason=facts_rechecked`)仍为
+  `host_command_failed`、`installed=false`。所以 401 弹框、海报生成、双击回顶、追更自动回顶、
+  卡片点开、直播流播放这些**需要点击的项,iOS 上仍未验**;本轮不把它们记成已验证。
+
 ⚠️ **两个「看起来应该能自动」但实际不行的通道**,别重试:
 ① 直接往应用容器的 `Library/Preferences/com.yuyin.reverb.plist` 写 `privacy_version=4`
 **会被 cfprefsd 缓存挡住**(文件读出来是新值,界面仍停在同意页);
@@ -310,9 +337,9 @@ xcodebuild … -configuration Release … && xcrun devicectl device install app 
 | 签名身份 | ✅ 已建 `Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`;Team = `J4YCBW8ZG7`(**免费 Personal Team**);`DEVELOPMENT_TEAM` 仍不写进工程,只走命令行 |
 | archive / export / upload | ❌ 仍未跑过。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员(`--archive` 也没试过) |
 | iOS 模拟器运行时 | ✅ 已装 iOS 27.2;iPhone 17 模拟器上跑过(见上节) |
-| 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动 |
+| 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动。**2026-11-09**:1.0.7(1) 在机上,截图与 App 日志都取得到;但重新拉起被 `FBSOpenApplicationErrorDomain error 3` 拒(当时锁屏;免费 7 天描述文件 11-02 装、可能到期),WDA runner 仍 `host_command_failed` ⇒ 点击类验收仍缺 |
 | 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊;同日**真机**复跑:设置三段 / 追更与音阁空态 / 英文界面 / 权限说明本地化 / 后台音频 / 冷启动暂停态时长(H247);**11-08 真机**补验音阁历史多选浮条 |
-| 仍未验 | ◐ 订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看)、**2026-11-04 新增能力的运行侧**:后台巡检与本地通知(BGTask 需真机跨 6 小时)、通知权限拒绝分支、相册保存、邮件草稿、蜂窝闸门(要在真机上切 Wi-Fi / 蜂窝) |
+| 仍未验 | ◐ 订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看)、**2026-11-04 新增能力的运行侧**:后台巡检与本地通知(BGTask 需真机跨 6 小时)、通知权限拒绝分支、相册保存、邮件草稿、蜂窝闸门(要在真机上切 Wi-Fi / 蜂窝);**2026-11-09 补记**:401 弹框、朋友圈海报生成、双击回顶、追更自动回顶、继续收听卡片点开、直播流播放,在 iOS 上**仍全部没有真机读数**(WDA 装不上,见 §4) |
 
 **所以 TestFlight 链接目前还不可用**:缺的是 **Apple Developer Program 会员**(现在登录的是免费
 Personal Team,7 天有效的开发描述文件只够装自己的机器),不是代码。付费后按上节四条命令走。
