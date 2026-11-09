@@ -55,8 +55,21 @@ export struct FeedPage {
    * 裸对象字段变了界面不重渲(这条坑记在 H26 / H27,音阁那四处交互就是它)。
    */
   @ObjectLink player: PlayerController;
-  @ObjectLink inbox: InboxStore;
-  @ObjectLink subscriptions: SubscriptionStore;
+  /**
+   * 头条一变就回顶。**必须挂在这层 store 上,不能只写在刷新方法里** ——
+   * 鸿蒙的页签内容一旦建好就常驻(`aboutToAppear` 只跑一次),所以在别页改了订阅、
+   * 或别处刷新了同一个 InboxStore 时,本页没有任何"重新进来"的时机。
+   * Android 用 `LaunchedEffect(episodes.firstOrNull()?.id)`、iOS 用 `onChange(of: items.first?.id)`,
+   * 两端都是**对 store 变化反应**;这里原先只在 `refreshInbox` 末尾比对,换成别的入口改数据就不回顶
+   * (2026-11-09 装机发现:退订后回追更,列表既没去掉那一档、也没回顶)。
+   */
+  @ObjectLink @Watch('onInboxChanged') inbox: InboxStore;
+  /**
+   * 订阅集变了就重聚合(与 Android `LaunchedEffect(subs)` 同一口径)。
+   * 没有这一笔,退订/新订后追更会继续摆着"已退订那一档的单集",直到用户手动下拉 ——
+   * 装机实测就是这么摆着的(2026-11-09)。`refreshIfStale` 自带签名判断与防重入,重复触发无害。
+   */
+  @ObjectLink @Watch('onSubscriptionsChanged') subscriptions: SubscriptionStore;
   @ObjectLink history: HistoryStore;
   onPlayEpisode: (e: Episode, queue: Episode[], tag: string) => void = () => {};
   /**
@@ -79,13 +92,39 @@ export struct FeedPage {
 
   private app: AppContainer = AppContainer.get();
   /// 这一页列表的滚动控制器。双击回顶([onScrollTopToken])与「更新了就从顶部看起」
-  /// ([refreshInbox])都靠它,所以必须是字段而不是每次 build 新建。
+  /// ([onInboxChanged])都靠它,所以必须是字段而不是每次 build 新建。
   private scroller: Scroller = new Scroller();
+  /**
+   * 上一次看到的头条 id。**在 [aboutToAppear] 里先记基线**,首趟比对才不会把"进页"当"更新":
+   * 与 Android 的 `prev == null 时只记不跳` 同一条规矩(那边靠 effect 的初始调用,这边靠显式赋值)。
+   */
+  private lastHeadId: string = '';
 
   aboutToAppear(): void {
+    this.lastHeadId = this.inbox.episodes.length > 0 ? this.inbox.episodes[0].id : '';
     // 进页即按需刷新(订阅集未变则跳过,避免切 tab 反复全量刷)。
     // 原先这笔刷新挂在**音阁**的 aboutToAppear 上,因为那时「最新」是音阁的第 2 段;
     // 段搬成页之后,刷新跟着这一页走 —— 冷启动不建这页就不会发请求。
+    this.refreshInbox(false);
+  }
+
+  /**
+   * 头条 id 变了 = 真的有新集插到头上 → 回顶,不要把用户晾在"上次打开的位置"
+   * (用户 2026-11-09 的反馈)。判据取 id 不取条数:换源/排序变化也可能条数不变而内容全换。
+   *
+   * 挂 `@Watch` 的理由见 [inbox] 字段注释:清理入口不能只认本页自己发起的那次刷新。
+   * `refreshing` 翻转也会进来,但那时 id 没变,自然不动。
+   */
+  onInboxChanged(): void {
+    const head: string = this.inbox.episodes.length > 0 ? this.inbox.episodes[0].id : '';
+    if (this.lastHeadId.length > 0 && head.length > 0 && head !== this.lastHeadId) {
+      this.scroller.scrollEdge(Edge.Top);
+    }
+    this.lastHeadId = head;
+  }
+
+  /// 订阅集变了 → 重聚合(理由见 [subscriptions] 字段注释)。
+  onSubscriptionsChanged(): void {
     this.refreshInbox(false);
   }
 
@@ -94,18 +133,8 @@ export struct FeedPage {
   private async refreshInbox(force: boolean): Promise<void> {
     const subs = this.subscriptions.subscriptions;
     if (subs.length === 0) return;
-    // 刷之前记下"第一条是谁":刷完若头上换了人,说明真的有新集插进来。
-    // 不记长度而记 id —— 换源/排序变化也可能让长度不变而内容全换,那种也该回顶。
-    const headBefore: string = this.inbox.episodes.length > 0 ? this.inbox.episodes[0].id : '';
     if (force) await this.inbox.refresh(subs, this.app.repository);
     else await this.inbox.refreshIfStale(subs, this.app.repository);
-    const headAfter: string = this.inbox.episodes.length > 0 ? this.inbox.episodes[0].id : '';
-    // **内容更新了就从顶部看起**,不要把用户晾在"上次打开的位置"(用户 2026-11-09 的反馈)。
-    // List 的滚动位是像素量,新集插在头上时它不会自己动 —— 不处理就是"明明更新了却看不见"。
-    // `headBefore === ''` 只出现在首刷(那时列表还没东西,本来就在顶上),不滚。
-    if (headBefore.length > 0 && headAfter.length > 0 && headBefore !== headAfter) {
-      this.scroller.scrollEdge(Edge.Top);
-    }
     Log.i('Feed', `追更:当前 ${this.inbox.episodes.length} 条`);
   }
 
