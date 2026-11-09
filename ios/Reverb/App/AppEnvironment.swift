@@ -73,6 +73,19 @@ final class AppEnvironment: ObservableObject {
            let guide = GuideEpisode.make() {
             player.playQueue([guide], startIndex: 0)
         }
+        // 同类第二条:直播流要**点一下结果行**才开始,而模拟器没有点击注入。
+        // `simctl launch … -play-live <流地址>` 直接走 `LiveStream.resolve` 再入队,
+        // 用来验收播放页的直播态(无进度条 / 无倍速 / 快进快退与上下集禁用 / 不记历史)。
+        // 判据与用户粘贴同一条路径 —— 这里一个分支都不绕过,否则验的就不是那条链。
+        let liveArgs = ProcessInfo.processInfo.arguments
+        if let i = liveArgs.firstIndex(of: "-play-live"), i + 1 < liveArgs.count {
+            let raw = liveArgs[i + 1]
+            Task { @MainActor in
+                if let live = await LiveStream.resolve(raw) {
+                    player.playQueue([live], startIndex: 0)
+                }
+            }
+        }
         #endif
 
         for pub in [subscriptions.objectWillChange, favorites.objectWillChange,

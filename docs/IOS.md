@@ -206,7 +206,9 @@ BUILD_NUMBER=2 DEVELOPMENT_TEAM=XXXXXXXXXX \
 Xcode 27 不再带 `Simulator.app`(只有 `DeviceHub.app`),命令行也没有点击注入,
 所以 Debug 版留了几个**仅 Debug 编译**的启动参数:`-autoplay-guide`(播放内置引导音频)、
 `-start-tab <discover|inbox|library|settings>`、`-open-player`、`-search <关键词>`(发现页启动即搜索,
-中文关键词没法用 `simctl`/`adb` 注入,这条是 H241 的验收入口)。Release / TestFlight 包里没有这段。
+中文关键词没法用 `simctl`/`adb` 注入,这条是 H241 的验收入口)、`-play-live <流地址>`(2026-11-09 新增:
+直播流要「点一下结果行」才开播,这里直接走 `LiveStream.resolve` → `playQueue`,验播放页的直播态)。
+Release / TestFlight 包里没有这段。
 
 ```bash
 cd ios
@@ -215,8 +217,9 @@ xcodebuild -project Reverb.xcodeproj -scheme Reverb -configuration Debug \
   -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' \
   -derivedDataPath build/SimDerived CODE_SIGNING_ALLOWED=NO build
 xcrun simctl install booted build/SimDerived/Build/Products/Debug-iphonesimulator/Reverb.app
-# 免点击过隐私门(等价于点「同意并继续」)
-xcrun simctl spawn booted defaults write com.yuyin.reverb privacy_version -int 4
+# 免点击过隐私门(等价于点「同意并继续」)。**要写当前 privacyVersion**,1.0.7 是 5;
+# 走 cfprefsd,和直接改 plist 不是一回事(见本节末尾那条警告)。
+xcrun simctl spawn booted defaults write com.yuyin.reverb privacy_version -int 5
 xcrun simctl launch booted com.yuyin.reverb -autoplay-guide -open-player
 xcrun simctl io booted screenshot /tmp/ios-player.png
 # 退后台:改成前台打开「设置」,再看日志里的音频队列仍在推进
@@ -233,9 +236,28 @@ xcrun simctl spawn booted log show --last 12s --style compact \
 写入 4 档种子订阅后,追更页能拉到真实单集(封面 / 标题 / 频道 / 日期 / 时长 / 播放钮)、
 音阁「订阅」列表与播放页动作行均正常;设置页「字号 / 听觉足迹 / 仅在 Wi-Fi 下载 / 订阅更新提醒」
 四行渲染正常(修掉了两处 tint 视觉问题,见 H242、H243)。
+
+**2026-11-09 1.0.7 补验(同一台 iPhone 17 模拟器)**:
+
+- **B 站标题强相关过滤**:`-search 学习资料` → `[Bilibili] search count=7 dropped_irrelevant=10`
+  (与鸿蒙同一天、同关键词的读数一致;规则见 H241)。界面「节目 · 来自 Apple」正常,关键词留在搜索框。
+- **直播流 A 档**:`-search <流地址>` 出「直播流」结果行(title 取 `icy-name`,没有则退回主机名,
+  标签写「直播」);用新增的 `-play-live <流地址>` 走与用户粘贴**完全相同**的
+  `LiveStream.resolve` → `playQueue`,播放页读数为:红点「直播中」、**无进度条**、**无倍速菜单**、
+  上一集/下一集置灰。数据侧:`history.json` 仍为 1 条、前后未变,且不含 `live:` 前缀;
+  `playback_state.json` 不存在(直播那一路 `save(current: nil…)` 直接走 `clear()`)⇒
+  「不记历史 / 不落播放态」两条闸都生效。
+- **阴性对照**:`-search https://www.example.com/` → `[Live] 不是直播流 code=206 type=text/html`,
+  界面是「没有找到」而不是直播结果。
+- ⚠️ **这一轮模拟器的媒体层放不出声,别把它算成直播链路的问题**:同一次会话里连内置引导音频
+  (`-autoplay-guide` → `file://…/guide_intro.m4a`)都 `AVPlayerItem failed`:
+  `AVFoundationErrorDomain -11800`,底层 `NSOSStatusErrorDomain -12746`;
+  CNR HLS / 蜻蜓 MP3 / FIP MP3 三路报同一个码。非直播播放页(引导音频)同时有 0:00/0:32 进度条、
+  30 秒按钮与 1× 倍速 ⇒ **两套布局按 `isLive` 正确分叉,但「能出声」仍只有真机可证**。
+
 **没验过的**:订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、
-下载、备份导出、后台巡检与本地通知、相册保存、邮件草稿 —— 模拟器只覆盖到
-首启 / 首页 / 追更 / 音阁 / 播放 / 设置页渲染。
+下载、备份导出、后台巡检与本地通知、相册保存、邮件草稿,以及所有**需要点击**的入口
+(朋友圈海报、401 弹框、双击回顶、继续收听卡片)—— 模拟器没有注入手段,WDA 在真机上也没装上。
 
 iOS 备份排除项也可以在模拟器数据容器里直接验:
 
@@ -318,13 +340,17 @@ xcodebuild … -configuration Release … && xcrun devicectl device install app 
   → `devicectl device install app …`。
 - WDA runner 仍不可用:最近一次 `ios_install_runner`(`retry_reason=facts_rechecked`)仍为
   `host_command_failed`、`installed=false`。所以 401 弹框、海报生成、双击回顶、追更自动回顶、
-  卡片点开、直播流播放这些**需要点击的项,iOS 上仍未验**;本轮不把它们记成已验证。
+  卡片点开这些**需要点击的项,真机上仍未验**;直播流的 UI 当晚已在模拟器补上(结果行 +
+  播放页直播态 + 不记历史,见 §3),但**出声**仍要等真机解锁后再验。
 
 ⚠️ **两个「看起来应该能自动」但实际不行的通道**,别重试:
-① 直接往应用容器的 `Library/Preferences/com.yuyin.reverb.plist` 写 `privacy_version=4`
+① 直接往应用容器的 `Library/Preferences/com.yuyin.reverb.plist` 写 `privacy_version`
 **会被 cfprefsd 缓存挡住**(文件读出来是新值,界面仍停在同意页);
 ② `devicectl … launch -- -privacy_version 4` 也不足以过门(参数域对 `as? Int` 的取值不可靠)。
 所以首启那一下必须人点一次 —— 点过之后不再需要。
+**模拟器另有一条能走通的**:`xcrun simctl spawn booted defaults write com.yuyin.reverb
+privacy_version -int <当前版本>` 走的是 cfprefsd,2026-11-09 实测可用(当时版本 5);
+上面 ① 的问题是「写文件」而不是 defaultsd,两者别混为一谈。
 
 ---
 
@@ -338,8 +364,8 @@ xcodebuild … -configuration Release … && xcrun devicectl device install app 
 | archive / export / upload | ❌ 仍未跑过。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员(`--archive` 也没试过) |
 | iOS 模拟器运行时 | ✅ 已装 iOS 27.2;iPhone 17 模拟器上跑过(见上节) |
 | 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动。**2026-11-09**:1.0.7(1) 在机上,截图与 App 日志都取得到;但重新拉起被 `FBSOpenApplicationErrorDomain error 3` 拒(当时锁屏;免费 7 天描述文件 11-02 装、可能到期),WDA runner 仍 `host_command_failed` ⇒ 点击类验收仍缺 |
-| 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊;同日**真机**复跑:设置三段 / 追更与音阁空态 / 英文界面 / 权限说明本地化 / 后台音频 / 冷启动暂停态时长(H247);**11-08 真机**补验音阁历史多选浮条 |
-| 仍未验 | ◐ 订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看)、**2026-11-04 新增能力的运行侧**:后台巡检与本地通知(BGTask 需真机跨 6 小时)、通知权限拒绝分支、相册保存、邮件草稿、蜂窝闸门(要在真机上切 Wi-Fi / 蜂窝);**2026-11-09 补记**:401 弹框、朋友圈海报生成、双击回顶、追更自动回顶、继续收听卡片点开、直播流播放,在 iOS 上**仍全部没有真机读数**(WDA 装不上,见 §4) |
+| 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊;同日**真机**复跑:设置三段 / 追更与音阁空态 / 英文界面 / 权限说明本地化 / 后台音频 / 冷启动暂停态时长(H247);**11-08 真机**补验音阁历史多选浮条;**11-09 模拟器**补验 B 站过滤读数、直播流结果行与播放页直播态(无进度条 / 无倍速 / 上下集置灰)、直播不记历史 |
+| 仍未验 | ◐ 订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看)、**2026-11-04 新增能力的运行侧**:后台巡检与本地通知(BGTask 需真机跨 6 小时)、通知权限拒绝分支、相册保存、邮件草稿、蜂窝闸门(要在真机上切 Wi-Fi / 蜂窝);**2026-11-09 补记**:401 弹框、朋友圈海报生成、双击回顶、追更自动回顶、继续收听卡片点开,在 iOS 上**仍没有任何运行时读数**(模拟器无点击注入、真机 WDA 装不上);直播流的 UI 已由模拟器补上,**出声**仍只有真机可证(模拟器这一轮连内置引导音频都加载失败,见 §3) |
 
 **所以 TestFlight 链接目前还不可用**:缺的是 **Apple Developer Program 会员**(现在登录的是免费
 Personal Team,7 天有效的开发描述文件只够装自己的机器),不是代码。付费后按上节四条命令走。
