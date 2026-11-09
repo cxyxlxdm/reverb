@@ -90,6 +90,11 @@ enum TranscriptFormat {
     /// 与 Android 同一条口径。已下载/已缓存到本地的集压根走不到这里,离线转写照旧。
     var allowsTransfer: (() -> Bool)?
 
+    /// 私有订阅源的 `Authorization`:官方稿与 feed 同主机时才有值。
+    /// 由 `AppEnvironment` 注入仓库的 `authHeader(for:)` —— 与音频、feed 走同一个判据,
+    /// 不能在这里另写一套主机匹配(见 H253)。
+    var authHeaderProvider: ((String) -> String?)?
+
     /// `nonisolated`: `diskUsageBytes()` 要在后台扫它,而本类整体是 `@MainActor`
     /// (否则 `Self.subdir` 的读取就是一次跨 actor 访问,Swift 6 语言模式下直接报错)。
     nonisolated private static let subdir: URL = {
@@ -175,7 +180,8 @@ enum TranscriptFormat {
         if !episode.transcriptUrl.isEmpty {
             if !stale() { state = .fetchingOfficial }
             let fetched = await TranscriptFetcher.fetch(url: episode.transcriptUrl,
-                                                        declaredType: episode.transcriptType)
+                                                        declaredType: episode.transcriptType,
+                                                        authHeader: authHeaderProvider?(episode.transcriptUrl))
             if stale() { return }
             if let fetched, !fetched.isEmpty {
                 // 发布方给的时间轴不能假定排好;出口统一夹一次(硬规矩 10)

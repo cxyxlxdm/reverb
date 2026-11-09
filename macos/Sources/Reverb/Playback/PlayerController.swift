@@ -121,6 +121,9 @@ final class PlayerController: ObservableObject {
     /// 播放缓存:流式起播之后由它把整集落到本机,下次直接本地起播。
     /// 与 `localFileProvider`(用户点名下载的那份)是两条独立的路,见 `AudioCacheManager` 顶部。
     private var audioCache: AudioCacheManager?
+    /// 私有订阅源的凭据账本。音频直链不在 feed 主机上时**不带**认证 ——
+    /// 口令只发给源自己,见 `FeedAuthStore.headerForUrl`。
+    private var feedAuth: FeedAuthStore?
     /// 视频源(伪地址)的最后一跳是**现取直链**。注入的是仓库里那**同一个** `BilibiliSource` ——
     /// 候选流缓存与探活游标都在它身上,换实例等于每次起播重新摸一遍 PCDN。
     var resolvePseudoUrl: ((String) async -> BilibiliSource.ResolvedStream?)?
@@ -318,6 +321,8 @@ final class PlayerController: ObservableObject {
     func bindListenStats(_ s: ListenStatsStore) { self.listenStats = s }
 
     func bindAudioCache(_ c: AudioCacheManager) { audioCache = c }
+
+    func bindFeedAuth(_ s: FeedAuthStore) { feedAuth = s }
 
     // MARK: - 播放态跨启动(playback_state.json)
 
@@ -652,6 +657,14 @@ final class PlayerController: ObservableObject {
         let local = downloaded ?? cached
         if cached != nil { audioCache?.touch(episode.id) }
 
+        // 私有订阅源:同主机(或互为子域)的音频直链要带 `Authorization`(见 H253)。
+        // **只在流式这一路算** —— 本地下载件 / 缓存件不再联网,带不带头都一样;
+        // 而跨主机的音频(第三方 CDN)**刻意不带**:口令只发给源自己。
+        var streamAuth: [String: String] = [:]
+        if local == nil, let a = feedAuth?.headerForUrl(url.absoluteString) {
+            streamAuth["Authorization"] = a
+        }
+
         if let resolved {
             // 解析结果里还带着**这一 P 的真实时长**:搜索给多 P 视频的是整条总和
             // (见 `BilibiliSource.ResolvedStream`)。它必须在起播前落进这一集的元数据,
@@ -681,22 +694,25 @@ final class PlayerController: ObservableObject {
             // 缓存必须在解析之后:缓存模块拿的是 `audioUrl`,伪地址它拉不下来
             // (会当成畸形 URL 立刻失败,而账本里留一条永远下不完的条目)。
             // 头也要一起给:CDN 认 UA + `Referer`,缺一个 403(见 `BilibiliSource.uaBrowser`)。
+            var streamHeaders = BilibiliSource.streamHeaders
+            for (k, v) in streamAuth { streamHeaders[k] = v }
             if !isRadio {
                 var cachedCopy = ep
                 cachedCopy.audioUrl = resolved.url
-                audioCache?.cache(cachedCopy, headers: BilibiliSource.streamHeaders)
+                audioCache?.cache(cachedCopy, headers: streamHeaders)
             }
             attach(ep, url: url, source: source, resumeMs: resumeMs,
                    autoplay: autoplay, isRadio: isRadio,
-                   assetHeaders: BilibiliSource.streamHeaders,
+                   assetHeaders: streamHeaders,
                    assetMime: BilibiliSource.streamMime)
             return
         }
 
         // 只有真正在走流式时才排一次整集落缓存。电台那一路不缓存 —— 它是漫游,
         // 下一集由随机推荐决定;把每一集都留在盘上等于用 300 MB 换一份听不回去的清单。
-        if local == nil && !isRadio && !episode.isLive { audioCache?.cache(episode) }
-        attach(episode, url: url, source: source, resumeMs: resumeMs, autoplay: autoplay, isRadio: isRadio)
+        if local == nil && !isRadio && !episode.isLive { audioCache?.cache(episode, headers: streamAuth) }
+        attach(episode, url: url, source: source, resumeMs: resumeMs, autoplay: autoplay,
+               isRadio: isRadio, assetHeaders: streamAuth)
     }
 
     /**

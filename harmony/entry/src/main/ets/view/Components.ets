@@ -1478,3 +1478,145 @@ export struct ConfirmDialog {
     .height('100%')
   }
 }
+
+/**
+ * 私有订阅源的登录请求(feed 返回 401 时由发现页 / 频道详情页组建)。
+ *
+ * 与 Android `ui/components/FeedAuthDialog.kt`、macOS `UI/FeedAuthSheet.swift` 同一组文案、
+ * 同一条校验:用户名非空才可提交(口令可以为空)。凭据只随请求发给源自己,见 `FeedAuthStore`。
+ */
+export class FeedAuthSpec {
+  feedUrl: string = '';
+  /// true = 本机已存过这个源的凭据但仍是 401 —— 显示错误行并预填用户名。
+  failed: boolean = false;
+  initialUsername: string = '';
+  onSubmit: (user: string, pass: string) => void = () => {};
+
+  constructor(feedUrl: string, failed: boolean, initialUsername: string,
+              onSubmit: (user: string, pass: string) => void) {
+    this.feedUrl = feedUrl;
+    this.failed = failed;
+    this.initialUsername = initialUsername;
+    this.onSubmit = onSubmit;
+  }
+}
+
+/**
+ * 只取主机:说明文案里要的是「哪个源要口令」,路径与查询串既不必要也可能带 token。
+ * feedUrl 到这里之前已经过 `PodcastRepository.cleanUrl`(去掉 userinfo),这里再兜一次 @ 即可。
+ */
+function feedHost(url: string): string {
+  const noScheme = url.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '');
+  const slash = noScheme.indexOf('/');
+  const authority = slash >= 0 ? noScheme.substring(0, slash) : noScheme;
+  const at = authority.lastIndexOf('@');
+  return at >= 0 ? authority.substring(at + 1) : authority;
+}
+
+/**
+ * 登录框本体:整屏遮罩 + 居中卡片(标题 / 说明 / 可选错误行 / 用户名 / 密码 / 取消 / 保存并重试)。
+ *
+ * 与 `ConfirmDialog` 同一条约束:调用方写在 `if (this.authPrompt !== null)` 里,
+ * 组件因此总在 spec 从 null 变成非 null 时新建,`spec` 走普通成员就够新。
+ */
+@Component
+export struct FeedAuthDialog {
+  @Prop scheme: Scheme;
+  @Prop fontScale: number;
+  spec: FeedAuthSpec = new FeedAuthSpec('', false, '', () => {});
+  onDismiss: () => void = () => {};
+
+  /// 两个输入框的值要活在本组件里 —— spec 是普通成员,不参与观察。
+  @State username: string = '';
+  @State password: string = '';
+
+  aboutToAppear(): void {
+    this.username = this.spec.initialUsername;
+  }
+
+  private canSubmit(): boolean {
+    return this.username.trim().length > 0;
+  }
+
+  /// **先收框再动手**:保存后要联网重试一次,框还挂着像没反应(与 ConfirmDialog 同式)。
+  private submit(): void {
+    if (!this.canSubmit()) return;
+    const run = this.spec.onSubmit;
+    const u = this.username.trim();
+    const p = this.password;
+    this.onDismiss();
+    run(u, p);
+  }
+
+  build() {
+    Stack() {
+      Column()
+        .width('100%').height('100%')
+        .backgroundColor(withAlpha('#000000', 0.45))
+        .onClick(() => this.onDismiss())
+      Column() {
+        Text(L.s('feed_auth_title'))
+          .fontSize(TypeScale.titleMedium * this.fontScale)
+          .fontColor(this.scheme.onBackground)
+          .alignSelf(ItemAlign.Start)
+          .margin({ bottom: 12 })
+        Text(L.f('feed_auth_message', feedHost(this.spec.feedUrl)))
+          .fontSize(TypeScale.body * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .alignSelf(ItemAlign.Start)
+        if (this.spec.failed) {
+          Text(L.s('feed_auth_wrong'))
+            .fontSize(TypeScale.body * this.fontScale)
+            .fontColor(this.scheme.error)
+            .alignSelf(ItemAlign.Start)
+            .margin({ top: 8 })
+        }
+        /*
+         * 两个输入框直接写在这里,不抽成带值参数的 @Builder —— 那种 @Builder 只求值一次
+         * (见 H29/H145),输入内容不会跟着状态走。宁可多写十行。
+         */
+        Column({ space: 8 }) {
+          TextInput({ placeholder: L.s('feed_auth_user'), text: this.username })
+            .placeholderColor(this.scheme.onSurfaceVariant)
+            .fontColor(this.scheme.onBackground)
+            .fontSize(TypeScale.body * this.fontScale)
+            .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.10))
+            .borderRadius(10)
+            .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+            .width('100%')
+            .onChange((v: string) => { this.username = v; })
+          TextInput({ placeholder: L.s('feed_auth_pass'), text: this.password })
+            .type(InputType.Password)
+            .placeholderColor(this.scheme.onSurfaceVariant)
+            .fontColor(this.scheme.onBackground)
+            .fontSize(TypeScale.body * this.fontScale)
+            .backgroundColor(withAlpha(this.scheme.onSurfaceVariant, 0.10))
+            .borderRadius(10)
+            .padding({ left: 12, right: 12, top: 10, bottom: 10 })
+            .width('100%')
+            .onChange((v: string) => { this.password = v; })
+            .onSubmit(() => this.submit())
+        }
+        .margin({ top: 16 })
+        Row({ space: 22 }) {
+          Text(L.s('feed_auth_cancel'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .onClick(() => this.onDismiss())
+          Text(L.s('feed_auth_save'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.canSubmit() ? this.scheme.primary : this.scheme.outline)
+            .onClick(() => this.submit())
+        }
+        .margin({ top: 22 })
+        .alignSelf(ItemAlign.End)
+      }
+      .width('86%')
+      .padding({ left: 22, right: 22, top: 22, bottom: 16 })
+      .backgroundColor(this.scheme.surface)
+      .borderRadius(18)
+    }
+    .width('100%')
+    .height('100%')
+  }
+}

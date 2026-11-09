@@ -1,6 +1,7 @@
 package com.yuyin.reverb.data.remote
 
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.data.model.FeedCredential
 import com.yuyin.reverb.data.model.FeedResult
 import com.yuyin.reverb.data.model.Podcast
 import kotlinx.coroutines.Dispatchers
@@ -21,7 +22,8 @@ class PodcastRepository(
     private val client: okhttp3.OkHttpClient,
     private val cache: com.yuyin.reverb.data.local.PopularCacheStore,
     private val seed: com.yuyin.reverb.data.local.SeedCatalog,
-    private val feedCache: com.yuyin.reverb.data.local.FeedCacheStore
+    private val feedCache: com.yuyin.reverb.data.local.FeedCacheStore,
+    private val authStore: com.yuyin.reverb.data.local.FeedAuthStore
 ) {
     private val itunes = ITunesSource(client)
     private val fyyd = FyydSource(client)
@@ -32,6 +34,16 @@ class PodcastRepository(
     val bilibili = BilibiliSource(client)
     /** 直播流(A 档):粘一个音频流地址,直接当一路直播放。只在检索全部落空之后才探测。 */
     val live = LiveStreamSource(client)
+
+    /**
+     * 某个源回了 401 且手头没有可用凭据时发出它的 feedUrl。
+     *
+     * 用事件而不是改返回值:调用方有检索、详情页、订阅巡检、电台随机四类,把
+     * `FeedResult?` 改成 sealed 会把这条"只在界面上需要"的信号扩散到所有层。
+     * 没有界面在听时(后台巡检)tryEmit 丢了也无害 —— 下次进详情页会再触发一次。
+     */
+    private val _authRequired = kotlinx.coroutines.flow.MutableSharedFlow<String>(extraBufferCapacity = 8)
+    val authRequired: kotlinx.coroutines.flow.SharedFlow<String> = _authRequired
 
     private val log = com.yuyin.reverb.util.Logger
     private val TAG = "Repo"
@@ -63,9 +75,15 @@ class PodcastRepository(
 
         // 1) 直接是订阅源地址
         if (q.startsWith("http://", true) || q.startsWith("https://", true)) {
-            rss.fetch(q)?.let {
-                log.i(TAG, "search via RSS ok title='${it.podcast.title}'")
-                return SearchOutcome(listOf(it.podcast), "RSS")
+            // `https://user:pass@host/feed.xml` 是私有源最常见的粘贴形态(见 H253)。
+            // 凭据要从 URL 里拆出来:它不该进订阅、备份与日志,只该进本机凭据账本。
+            val (url, inline) = FeedCredential.splitUrl(q)
+            val fetched = rss.fetch(url, inline ?: authStore.get(url)) { _authRequired.tryEmit(url) }
+            if (fetched != null) {
+                // 只在**确实读到了内容**之后才落盘:401 的那对错凭据不该覆盖原有的
+                if (inline != null) authStore.save(url, inline)
+                log.i(TAG, "search via RSS ok title='${fetched.podcast.title}'")
+                return SearchOutcome(listOf(fetched.podcast), "RSS")
             }
         }
 
@@ -153,23 +171,36 @@ class PodcastRepository(
      * 解析某个 feed。成功则回写磁盘缓存；失败返回 null（旧缓存保留，由调用方决定是否用）。
      * 与 [cachedFeed] 配合成「先缓存秒开、再后台刷新、刷新失败退回缓存」。
      */
-    suspend fun feed(feedUrl: String): FeedResult? =
-        // 视频源不走 RSS 解析器:它的 feedUrl 是 `bilibili://video/<bvid>` 这种伪地址,
-        // 交给 OkHttp 会当场抛 IllegalArgumentException(不是「解析失败」)。
-        // 频道页因此要在这里分叉,而不是让它在下面统一落进 rss.fetch。
-        (if (BilibiliSource.isPseudo(feedUrl)) bilibili.feedOf(feedUrl) else rss.fetch(feedUrl)).also {
-            if (it == null) log.w(TAG, "feed empty/failed url=$feedUrl")
-            else {
-                log.i(TAG, "feed ok episodes=${it.episodes.size} title='${it.podcast.title}' url=$feedUrl")
-                feedCache.put(feedUrl, it)
-            }
+    suspend fun feed(feedUrl: String): FeedResult? {
+        // 兜底:OPML 导入 / 旧数据 / 界面里手工拼出来的地址都可能带着 userinfo。
+        // 缓存键与实际请求都用**去掉凭据**的那一份 —— 否则同一个源会因为"带没带口令"
+        // 变成两份缓存,而带口令的那份键会跟着导出备份走。
+        val (url, inline) = FeedCredential.splitUrl(feedUrl)
+        val result = if (BilibiliSource.isPseudo(url)) bilibili.feedOf(url)
+        else rss.fetch(url, inline ?: authStore.get(url)) { _authRequired.tryEmit(url) }
+        if (result != null && inline != null) authStore.save(url, inline)
+        if (result == null) log.w(TAG, "feed empty/failed url=$url")
+        else {
+            log.i(TAG, "feed ok episodes=${result.episodes.size} title='${result.podcast.title}' url=$url")
+            feedCache.put(url, result)
         }
+        return result
+    }
+
+    /** 界面在 401 弹框里点「保存」之后调用,然后自己重新拉一次。 */
+    fun saveAuth(feedUrl: String, username: String, password: String) {
+        authStore.save(cleanUrl(feedUrl), FeedCredential(username, password))
+    }
+
+    fun forgetAuth(feedUrl: String) = authStore.forget(cleanUrl(feedUrl))
+
+    private fun cleanUrl(raw: String): String = FeedCredential.splitUrl(raw).first
 
     /** 立即返回上次解析结果（可能过时，可能为 null），供进入详情页时秒开、断网时兜底。 */
-    fun cachedFeed(feedUrl: String): FeedResult? = feedCache.get(feedUrl)?.result
+    fun cachedFeed(feedUrl: String): FeedResult? = feedCache.get(cleanUrl(feedUrl))?.result
 
     /** 该 feed 缓存的落盘时刻（毫秒）；无缓存返回 0。用于「上次更新于 X」提示。 */
-    fun feedCachedAt(feedUrl: String): Long = feedCache.get(feedUrl)?.fetchedAt ?: 0L
+    fun feedCachedAt(feedUrl: String): Long = feedCache.get(cleanUrl(feedUrl))?.fetchedAt ?: 0L
 
     /**
      * 取一段纯文本（当前只用于「导入推荐订阅」拉官网那份 OPML）。

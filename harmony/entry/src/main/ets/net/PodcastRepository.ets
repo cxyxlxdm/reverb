@@ -1,12 +1,14 @@
 import taskpool from '@ohos.taskpool';
 import { Episode, Podcast, FeedResult, SearchOutcome } from '../model/Models';
-import { RssParser } from './RssParser';
+import { RssParser, FeedOutcome } from './RssParser';
 import { Http } from './Http';
 import { ITunesSource, AppleChartsSource, FyydSource, GpodderSource } from './Sources';
 import { fetchFeedConcurrent } from './FeedTask';
 import { PopularCacheStore } from '../store/Stores';
 import { SeedCatalog } from '../store/SeedCatalog';
 import { FeedCacheStore } from '../store/FeedCacheStore';
+import { FeedAuthStore } from '../store/FeedAuthStore';
+import { FeedCredential } from '../model/FeedCredential';
 import { Log } from '../util/Logger';
 import { CatalogFeedFilter } from './CatalogFeedFilter';
 import { BilibiliSource } from './BilibiliSource';
@@ -44,8 +46,18 @@ export class PodcastRepository {
   private seed: SeedCatalog;
   /// 频道详情(解析后的 RSS)缓存:详情页秒开,且断网时仍能看已访问过的频道
   private feedCache: FeedCacheStore;
+  /// 私有订阅源的凭据账本。与 `feedCache` 一样由仓库持有 —— 但**只在本机**,
+  /// 不随订阅列表导出,也不进备份(见 `FeedAuthStore` 类注释)。
+  readonly authStore: FeedAuthStore = new FeedAuthStore();
+  /**
+   * 401 挑战。用回调而不是被观察的状态:同一时刻可能有多个页面在场(发现页 / 频道详情),
+   * 而**只有发起这次请求的那一个该弹框** —— 由各页面自己按 feedUrl 认领(见 H253)。
+   * 页面在 `aboutToAppear` 里挂、`aboutToDisappear` 里撤。
+   */
+  authChallenge: ((feedUrl: string, failed: boolean) => void) | null = null;
   /// 同一 URL + 超时策略只允许一条真实网络/解析链；预检成功后详情直接复用 FeedCache。
-  private feedInFlight: Map<string, Promise<FeedResult | null>> = new Map<string, Promise<FeedResult | null>>();
+  /// 键里带凭据指纹 —— 用户改了口令之后,"上一次的失败链"不能被当成这一轮的结果复用。
+  private feedInFlight: Map<string, Promise<FeedOutcome>> = new Map<string, Promise<FeedOutcome>>();
   /**
    * 视频当播客听。播放前解析也走它(见 `PlayerController.resolvePseudoUrl`)——
    * 播放层与检索**共用这一个实例**,候选流缓存与探活游标才有意义。
@@ -193,17 +205,59 @@ export class PodcastRepository {
    * 只有 taskpool.execute 本身抛出调度/序列化/worker 初始化异常时才回落本线程一次。
    */
   async feed(feedUrl: string): Promise<FeedResult | null> {
-    const key = feedUrl.trim();
-    if (key.length === 0) return null;
+    // 凭据/网址从同一处拆分:搜索页粘进来的带 userinfo 的地址,与订阅里存的那份
+    // 必须收敛到同一个键 —— 否则缓存、凭据、备份会各认一个。(ArkTS 不支持解构声明)
+    const split = FeedCredential.splitUrl(feedUrl);
+    const url = split[0];
+    const inline = split[1];
+    if (url.length === 0) return null;
     // 视频源的 feedUrl 是 `bilibili://video/<bvid>` 这种伪地址:交给 RSS 解析器(它走
     // taskpool 里的 Http)会当场失败,所以在这里分叉,而不是让它统一落进 fetchFeedOnce。
     // 落盘缓存照写 —— 存的同样只有伪地址,不含会过期的直链(见 BilibiliSource 类注释第 2 条)。
-    if (BilibiliSource.isPseudo(key)) {
-      const result = await this.bilibili.feedOf(key);
-      if (result !== null && result.episodes.length > 0) this.feedCache.put(key, result);
+    if (BilibiliSource.isPseudo(url)) {
+      const result = await this.bilibili.feedOf(url);
+      if (result !== null && result.episodes.length > 0) this.feedCache.put(url, result);
       return result;
     }
-    return await this.feedWithTimeout(key, PodcastRepository.RSS_TIMEOUT_MS);
+    const credential = inline !== null ? inline : this.authStore.get(url);
+    const outcome = await this.feedWithTimeout(url, PodcastRepository.RSS_TIMEOUT_MS, credential);
+    if (outcome.result !== null && inline !== null) this.authStore.save(url, inline);
+    if (outcome.result === null && outcome.unauthorized) this.challenge(url);
+    return outcome.result;
+  }
+
+  /// 界面在 401 弹框里点「保存」之后调用,然后自己重新拉一次。
+  saveAuth(feedUrl: string, username: string, password: string): void {
+    this.authStore.save(this.cleanUrl(feedUrl), new FeedCredential(username, password));
+  }
+
+  /// 取消订阅时清掉这个源的凭据(AppContainer 把它接在 `SubscriptionStore.onRemoved` 上)。
+  forgetAuth(feedUrl: string): void {
+    this.authStore.forget(this.cleanUrl(feedUrl));
+  }
+
+  /// 输入框预填用。
+  credentialFor(feedUrl: string): FeedCredential | null {
+    return this.authStore.get(this.cleanUrl(feedUrl));
+  }
+
+  /// 音频 / 逐字稿取流时用的头:只有与已存源同主机(或互为子域)才给。
+  authHeader(url: string): string | null {
+    return this.authStore.headerForUrl(url);
+  }
+
+  /// 去掉 userinfo 的 URL(订阅/缓存/凭据共用这一个键)。
+  cleanUrl(raw: string): string {
+    return FeedCredential.splitUrl(raw)[0];
+  }
+
+  /// 401 → 交给发起这次请求的页面。`failed` 只有一种来源:本机对这个源已经存着凭据 ——
+  /// 那说明这次是**凭据不对**,输入框要显示错误行并预填用户名。
+  private challenge(feedUrl: string): void {
+    const clean = this.cleanUrl(feedUrl);
+    const failed = this.authStore.get(clean) !== null;
+    Log.w('Repo', `feed 需要认证 feed=${Log.endpoint(clean)} failed=${failed}`);
+    if (this.authChallenge !== null) this.authChallenge(clean, failed);
   }
 
   /** 搜索结果预检。失败缓存仅存两分钟；feed() 从不读取它。 */
@@ -241,8 +295,11 @@ export class PodcastRepository {
       if (this.probeStates.get(key) === FeedProbeState.AVAILABLE) return true;
 
       this.rememberProbeState(key, FeedProbeState.CHECKING);
-      const result = await this.feedWithTimeout(key, PodcastRepository.PROBE_TIMEOUT_MS);
-      if (result !== null) {
+      // 预检**静默**带上已存凭据:不弹框(预检是搜索结果的随手一测),
+      // 但已经有口令的私有源不该在列表里被标成「不可达」。
+      const outcome = await this.feedWithTimeout(key, PodcastRepository.PROBE_TIMEOUT_MS,
+        this.authStore.get(key));
+      if (outcome.result !== null) {
         this.clearProbeFailure(key);
         this.rememberProbeState(key, FeedProbeState.AVAILABLE);
         return true;
@@ -278,13 +335,16 @@ export class PodcastRepository {
     return state === undefined ? FeedProbeState.UNCHECKED : state;
   }
 
-  private async feedWithTimeout(feedUrl: string, timeoutMs: number): Promise<FeedResult | null> {
+  private async feedWithTimeout(feedUrl: string, timeoutMs: number,
+    credential: FeedCredential | null): Promise<FeedOutcome> {
     // 8s 预检与 12s 正式加载不能互相继承截止时间；相同策略的并发调用仍严格单飞。
-    const flightKey = `${timeoutMs}:${feedUrl}`;
+    // 键里带凭据指纹:用户改完口令重试时,不能复用上一把口令那条已失败的链。
+    const authKey = credential === null ? '' : credential.defaultHeader;
+    const flightKey = `${timeoutMs}:${feedUrl}:${authKey}`;
     const existing = this.feedInFlight.get(flightKey);
     if (existing !== undefined) return await existing;
 
-    const work = this.fetchFeedOnce(feedUrl, timeoutMs);
+    const work = this.fetchFeedOnce(feedUrl, timeoutMs, credential);
     this.feedInFlight.set(flightKey, work);
     try {
       return await work;
@@ -293,28 +353,31 @@ export class PodcastRepository {
     }
   }
 
-  private async fetchFeedOnce(feedUrl: string, timeoutMs: number): Promise<FeedResult | null> {
+  private async fetchFeedOnce(feedUrl: string, timeoutMs: number,
+    credential: FeedCredential | null): Promise<FeedOutcome> {
     const startedAt = Date.now();
-    let result: FeedResult | null = null;
+    const user = credential === null ? '' : credential.username;
+    const pass = credential === null ? '' : credential.password;
+    let outcome: FeedOutcome = { result: null, unauthorized: false };
     try {
-      const out: Object = await taskpool.execute(fetchFeedConcurrent, feedUrl, timeoutMs);
+      const out: Object = await taskpool.execute(fetchFeedConcurrent, feedUrl, timeoutMs, user, pass);
       // null 是 worker 已完成请求后的正常失败结果,这里直接结束,不可回落后二次请求。
       if (out === null || out === undefined) {
         Log.w('Repo', `host=${Http.host(feedUrl)} 阶段=worker返回空 耗时=${Date.now() - startedAt}ms`);
-        return null;
+        return outcome;
       }
-      result = out as FeedResult;
+      outcome = out as FeedOutcome;
     } catch (_e) {
       Log.w('Repo', `host=${Http.host(feedUrl)} 阶段=worker异常回落 耗时=${Date.now() - startedAt}ms`);
-      result = await RssParser.fetch(feedUrl, timeoutMs);
+      outcome = await RssParser.fetchOutcome(feedUrl, timeoutMs, user, pass);
     }
-    if (result !== null) {
-      if (result.episodes.length > 0) this.feedCache.put(feedUrl, result);
+    if (outcome.result !== null) {
+      if (outcome.result.episodes.length > 0) this.feedCache.put(feedUrl, outcome.result);
       // 正式详情或后台刷新成功也要清掉较早的短期负缓存,否则搜索仍会错误显示不可达。
       this.clearProbeFailure(feedUrl);
       this.rememberProbeState(feedUrl, FeedProbeState.AVAILABLE);
     }
-    return result;
+    return outcome;
   }
 
   private validProbeFailure(feedUrl: string): ProbeFailure | null {

@@ -203,9 +203,14 @@ class SettingsStore(context: Context) {
          *       **1.0.7 的直播流没有 +1**:它不引入任何有名有姓的第三方 —— 请求的就是用户
          *       自己粘贴的那条流地址,与「粘 RSS」同一类,同意页正文第一段已写明
          *       「直接请求发布方或托管方」。所以只改自述(docs/PRIVACY.md 与 privacy.html),不重问。
+         *   4 = 未发版(私有订阅)。不引入新的网络地址,但**新增一类本机保存、并随请求发出去的
+         *       数据**:用户为某个源输入的用户名与密码(HTTP Basic),只发给该源自己的主机。
+         *       这是"改变数据的收集或用途",按上面的口径要 +1。同意页多一段「私有订阅」。
+         *       ⚠️ macOS/iOS 那一侧此时已因「桌面补上应用内更新」停在 4,本轮一起到 5 ——
+         *       同一个功能在四端都有,不该一端重问、一端不重问(见 Stores.swift 的说明)。
          *
          * 改这个数之后**必须重新打包**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
          */
-        const val PRIVACY_VERSION = 3
+        const val PRIVACY_VERSION = 4
     }
 }

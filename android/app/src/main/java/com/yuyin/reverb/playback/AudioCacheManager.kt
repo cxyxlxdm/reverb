@@ -41,6 +41,7 @@ object AudioCacheManager {
     private const val BUDGET_BYTES = 300L * 1024 * 1024
 
     private lateinit var client: OkHttpClient
+    private lateinit var feedAuth: com.yuyin.reverb.data.local.FeedAuthStore
     private lateinit var store: AudioCacheStore
     private lateinit var dir: File
     private lateinit var appCtx: Context
@@ -62,7 +63,9 @@ object AudioCacheManager {
 
     private const val TAG = "AudioCache"
 
-    fun init(context: Context, client: OkHttpClient, store: AudioCacheStore, settings: SettingsStore) {
+    fun init(context: Context, client: OkHttpClient, store: AudioCacheStore, settings: SettingsStore,
+             feedAuth: com.yuyin.reverb.data.local.FeedAuthStore) {
+        this.feedAuth = feedAuth
         this.client = client
         this.store = store
         this.settings = settings
@@ -164,6 +167,11 @@ object AudioCacheManager {
         } else {
             req.header("User-Agent", "Reverb/1.0 (Android podcast client)")
         }
+        // 私有源的音频与 feed 同主机时带同一对凭据;视频源那一族地址不会命中(见 FeedAuthStore)
+        if (::feedAuth.isInitialized) {
+            feedAuth.headerForUrl(url)?.let { req.header("Authorization", it) }
+        }
+
         val call = client.newCall(req.build())
         try {
             call.execute().use { resp ->

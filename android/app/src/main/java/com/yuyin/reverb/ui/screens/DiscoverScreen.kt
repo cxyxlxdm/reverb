@@ -115,6 +115,7 @@ import com.yuyin.reverb.ui.REGION_OPTIONS
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.playback.RadioStation
 import com.yuyin.reverb.ui.components.EpisodeListItem
+import com.yuyin.reverb.ui.components.FeedAuthDialog
 import com.yuyin.reverb.ui.components.GLASS_CHIPS_TOP_PAD
 import com.yuyin.reverb.ui.components.GlassChipsRow
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
@@ -323,6 +324,16 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
                 vm.saveOrder(it)
                 showReorder = false
             }
+        )
+    }
+
+    // 粘进来的是私有源且被打回 401:弹一次凭据,保存后用同一地区重搜
+    vm.authPrompt?.let { prompt ->
+        FeedAuthDialog(
+            feedUrl = prompt.feedUrl,
+            failed = prompt.failed,
+            onDismiss = vm::dismissAuth,
+            onSubmit = vm::submitAuth
         )
     }
 }

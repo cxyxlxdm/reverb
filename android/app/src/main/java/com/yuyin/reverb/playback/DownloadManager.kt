@@ -2,6 +2,7 @@ package com.yuyin.reverb.playback
 
 import android.content.Context
 import com.yuyin.reverb.data.local.DownloadStore
+import com.yuyin.reverb.data.local.FeedAuthStore
 import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.DownloadStatus
 import com.yuyin.reverb.data.model.Episode
@@ -24,16 +25,19 @@ object DownloadManager {
     private lateinit var dir: File
     private lateinit var appCtx: Context
     private var settings: SettingsStore? = null
+    private lateinit var feedAuth: FeedAuthStore
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private const val TAG = "Download"
 
     private val _states = MutableStateFlow<Map<String, DownloadStatus>>(emptyMap())
     val states: StateFlow<Map<String, DownloadStatus>> = _states
 
-    fun init(context: Context, client: OkHttpClient, store: DownloadStore, settings: SettingsStore) {
+    fun init(context: Context, client: OkHttpClient, store: DownloadStore, settings: SettingsStore,
+             feedAuth: FeedAuthStore) {
         this.client = client
         this.store = store
         this.settings = settings
+        this.feedAuth = feedAuth
         this.appCtx = context.applicationContext
         dir = File(context.filesDir, "downloads").apply { mkdirs() }
         _states.value = store.downloads.value.associate { it.episode.id to DownloadStatus.Completed }
@@ -90,10 +94,12 @@ object DownloadManager {
         scope.launch {
             try {
                 val target = File(dir, fileName(id, episode.audioUrl))
-                val req = Request.Builder()
+                val builder = Request.Builder()
                     .url(episode.audioUrl)
                     .header("User-Agent", "Reverb/1.0 (Android podcast client)")
-                    .build()
+                // 私有源的音频与 feed 同主机时带同一对凭据(见 FeedAuthStore 第 2 条口径)
+                feedAuth.headerForUrl(episode.audioUrl)?.let { builder.header("Authorization", it) }
+                val req = builder.build()
                 client.newCall(req).execute().use { resp ->
                     val body = resp.body
                     if (!resp.isSuccessful || body == null) {

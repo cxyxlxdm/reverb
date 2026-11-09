@@ -12,8 +12,8 @@ enum TranscriptFetcher {
     /// 8 MB:再离谱的逐字稿也到不了这个量级,超过就是链接指错了东西
     static let maxBytes = 8 * 1024 * 1024
 
-    static func fetch(url: String, declaredType: String) async -> [TranscribedSegment]? {
-        guard let data = await download(url) else { return nil }
+    static func fetch(url: String, declaredType: String, authHeader: String? = nil) async -> [TranscribedSegment]? {
+        guard let data = await download(url, authHeader: authHeader) else { return nil }
         guard let text = String(data: data, encoding: .utf8)
                 ?? String(data: data, encoding: .isoLatin1) else {
             Log.w("Transcript", "稿子不是文本 endpoint=\(Log.endpoint(url))")
@@ -29,13 +29,17 @@ enum TranscriptFetcher {
 
     // MARK: - 下载
 
-    private static func download(_ urlString: String) async -> Data? {
+    /// - Parameter authHeader: 私有订阅源的 `Authorization`。官方稿通常与 feed 同主机,
+    ///   但也可能挂在第三方对象存储上 —— 那种情况调用方已经按主机判过,**不会**带过来。
+    private static func download(_ urlString: String, authHeader: String?) async -> Data? {
         guard let url = URL(string: urlString) else {
             Log.w("Transcript", "非法 URL: \(urlString)")
             return nil
         }
+        var req = URLRequest(url: url)
+        if let authHeader { req.setValue(authHeader, forHTTPHeaderField: "Authorization") }
         do {
-            let (bytes, response) = try await HTTP.session.bytes(for: URLRequest(url: url))
+            let (bytes, response) = try await HTTP.session.bytes(for: req)
             if let http = response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
                 Log.w("Transcript", "http \(http.statusCode) endpoint=\(Log.endpoint(urlString))")
                 return nil

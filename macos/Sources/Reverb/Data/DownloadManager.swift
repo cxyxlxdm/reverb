@@ -9,6 +9,8 @@ import Foundation
     @Published private(set) var active: Set<String> = []
 
     private let store: DownloadStore
+    /// 私有订阅源的凭据:下载请求与 feed 请求带着同一份(仅同主机 / 互为子域,见 H253)。
+    private let feedAuth: FeedAuthStore?
     private var episodesByTask: [Int: Episode] = [:]
     /// episodeId -> 已记录的进度里程碑(25/50/75),避免重复打点。
     private var loggedMilestone: [String: Int] = [:]
@@ -28,8 +30,9 @@ import Foundation
         URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     }()
 
-    init(store: DownloadStore) {
+    init(store: DownloadStore, feedAuth: FeedAuthStore? = nil) {
         self.store = store
+        self.feedAuth = feedAuth
         super.init()
     }
 
@@ -51,7 +54,12 @@ import Foundation
         active.insert(ep.id)
         progress[ep.id] = 0
         loggedMilestone[ep.id] = 0
-        let task = session.downloadTask(with: url)
+        var req = URLRequest(url: url)
+        // 直链与 feed 不同主机时不带凭据(见 `FeedAuthStore.headerForUrl`)。
+        if let auth = feedAuth?.headerForUrl(ep.audioUrl) {
+            req.setValue(auth, forHTTPHeaderField: "Authorization")
+        }
+        let task = session.downloadTask(with: req)
         episodesByTask[task.taskIdentifier] = ep
         task.resume()
     }

@@ -10,7 +10,7 @@ import { FeedProbeState } from '../net/PodcastRepository';
 import { BilibiliSource } from '../net/BilibiliSource';
 import { LiveStream } from '../net/LiveStream';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
-import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, LIST_MENU_LONG_PRESS_MS } from './Components';
+import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, LIST_MENU_LONG_PRESS_MS, FeedAuthDialog, FeedAuthSpec } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
 import { PlayerController } from '../playback/PlayerController';
 import { SettingsStore } from '../store/SettingsStore';
@@ -138,6 +138,18 @@ export struct DiscoverPage {
    */
   @State liveEpisode: Episode | null = null;
   @State searched: boolean = false;
+  /**
+   * 私有订阅源的 401 挑战(非 null 即弹登录框)。
+   *
+   * 与 ConfirmDialog 同一条约束:组件只在 null → 非 null 那一次新建,spec 走普通成员。
+   * 触发点是「粘了一条要认证的订阅地址搜一下」—— 只有这一路会真正解析 feed;
+   * 目录检索得到的源不经 `feed()`,预检那一路也是**静默**的。
+   */
+  @State authPrompt: FeedAuthSpec | null = null;
+  /// 本页挂上仓库回调之前的那一个;离开时原样还回去(详情页可能压在它上面)。
+  private previousChallenge: ((feedUrl: string, failed: boolean) => void) | null = null;
+  /// 本页挂上去的那一个。离开时只撤自己这份 —— 页面栈里可能有后来者已经接走了。
+  private installedChallenge: ((feedUrl: string, failed: boolean) => void) | null = null;
   // 网络返回顺序不可控;只允许最后一次提交的结果落到界面。
   private searchGeneration: number = 0;
 
@@ -146,12 +158,34 @@ export struct DiscoverPage {
   aboutToAppear(): void {
     this.cats = this.app.categoryStore.ordered();
     this.initSlots(this.cats.length);
+    // 私有订阅源的 401 挑战只认**本页当前这次 URL 搜索**:详情页可能同时挂着,
+    // 它的事它自己接(两页都按 feedUrl 认领,谁发起的谁弹框)。见 H253。
+    this.previousChallenge = this.app.repository.authChallenge;
+    const claim = (feedUrl: string, failed: boolean): void => {
+      if (this.app.repository.cleanUrl(this.query.trim()) !== feedUrl) return;
+      const cred = this.app.repository.credentialFor(feedUrl);
+      this.authPrompt = new FeedAuthSpec(feedUrl, failed,
+        cred === null ? '' : cred.username,
+        (user: string, pass: string) => {
+          this.app.repository.saveAuth(feedUrl, user, pass);
+          this.runSearch();
+        });
+    };
+    this.installedChallenge = claim;
+    this.app.repository.authChallenge = claim;
     // `CATALOG=false` 的降级渠道**不拉榜单** —— 那是内容目录请求,而且界面上压根不展示它。
     // 漏了这一句的后果不是报错,是"看不见的目录请求"仍然在发,抓包一看就露。
     if (Features.CATALOG) this.loadCategory(0, false);
     // 反过来,`CATALOG=false` 的降级渠道的首屏主体是「最新」,进页就得按需刷一次。
     // refreshIfStale 自带订阅集签名判断与防重入,和音阁那边同时调用不会重复拉。
     else this.refreshInbox(false);
+  }
+
+  aboutToDisappear(): void {
+    // 只还回自己挂上去的那一个:离开时可能已经有别的页压在它上面,不能把别人的接走。
+    if (this.app.repository.authChallenge === this.installedChallenge) {
+      this.app.repository.authChallenge = this.previousChallenge;
+    }
   }
 
   /// 三份按位置并行的数组(榜单 / 加载态 / 内置标记)按分类数开槽。
@@ -642,6 +676,16 @@ export struct DiscoverPage {
       // 分类排序框(与 Android 的发现页 endAction 同义):草稿态在页内,保存才落盘。
       if (this.reorderShown) {
         this.reorderDialog()
+      }
+
+      // 私有订阅源的登录框(见 `authPrompt`)。挂在根 Stack 最后 ⇒ 遮罩盖住整页。
+      if (this.authPrompt !== null) {
+        FeedAuthDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          spec: this.authPrompt,
+          onDismiss: () => { this.authPrompt = null; }
+        })
       }
     }
     .width('100%')

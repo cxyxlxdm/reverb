@@ -1,15 +1,27 @@
 import Foundation
 
 /// RSS/Atom 播客源解析器。下载 feed 并用 XMLParser 解析为频道 + 分集。
-/// 任何失败或空结果返回 nil。
 final class RssParser {
+
+    /// 取回结果。**401 必须与"传输/解析失败"分开**:前者要弹用户名密码输入框,
+    /// 后者只该显示加载失败 —— 混成一个 nil 的话,用户看到的永远是「加载失败」,
+    /// 以为链接坏了(见 H253)。
+    enum Outcome {
+        case success(FeedResult)
+        case unauthorized
+        case failed
+    }
+
     /// 拉取并解析 feed。频道 id 与 feedUrl 均记为传入的 feedUrl。
-    func fetch(_ feedUrl: String) async -> FeedResult? {
+    /// - Parameter auth: 已存 / 用户刚输入的凭据。nil = 这个源还没有凭据。
+    func fetch(_ feedUrl: String, auth: FeedCredential? = nil) async -> Outcome {
         let t0 = Date()
         Log.d("RSS", "fetch \(feedUrl)")
-        guard let data = await HTTP.data(feedUrl), !data.isEmpty else {
+        let fetched = await download(feedUrl, auth: auth)
+        if case .unauthorized = fetched { return .unauthorized }
+        guard case .data(let data) = fetched, !data.isEmpty else {
             Log.w("RSS", "fetch 空数据 \(feedUrl) \(Log.ms(t0))")
-            return nil
+            return .failed
         }
 
         let delegate = RssDelegate()
@@ -18,13 +30,13 @@ final class RssParser {
         parser.delegate = delegate
         guard parser.parse() else {
             Log.e("RSS", "fetch 解析失败 \(feedUrl) \(Log.ms(t0))", error: parser.parserError)
-            return nil
+            return .failed
         }
 
         let channelTitle = delegate.channelTitle.trimmed
         guard !channelTitle.isEmpty || !delegate.items.isEmpty else {
             Log.w("RSS", "fetch 空频道 \(feedUrl) \(Log.ms(t0))")
-            return nil
+            return .failed
         }
 
         let channelImage = firstNonEmpty(delegate.channelImageHref, delegate.channelImageUrl)
@@ -68,10 +80,50 @@ final class RssParser {
 
         guard !episodes.isEmpty || !channelTitle.isEmpty else {
             Log.w("RSS", "fetch 无有效内容 \(feedUrl) \(Log.ms(t0))")
-            return nil
+            return .failed
         }
         Log.i("RSS", "fetch \"\(channelTitle)\" → \(episodes.count) 单集 \(Log.ms(t0))")
-        return FeedResult(podcast: podcast, episodes: episodes)
+        return .success(FeedResult(podcast: podcast, episodes: episodes))
+    }
+
+    // MARK: - 下载
+
+    private enum Download {
+        case data(Data)
+        case unauthorized
+        case failed
+    }
+
+    /// 下载 feed 原文。**先 ISO-8859-1、401 再 UTF-8**(与 Android `RssParser` /
+    /// AntennaPod `BasicAuthorizationInterceptor` 同一条兜底):RFC 7617 没有规定字符集,
+    /// 两种服务器都真实存在。
+    ///
+    /// 401 只有两种可能:没带凭据,或凭据不对 —— 两种都要交给界面问一次。
+    /// 静默失败在这里是最坏的结果,用户只会看到「加载失败」,然后以为链接坏了。
+    private func download(_ feedUrl: String, auth: FeedCredential?) async -> Download {
+        let first = await attempt(feedUrl, authorization: auth?.header(utf8: false))
+        guard let first else { return .failed }
+        if (200...299).contains(first.code) { return .data(first.data) }
+        guard first.code == 401 else { return .failed }
+        guard let auth, auth.encodingDiffers else { return .unauthorized }
+        // 门槛是「两串字节真的不同」而不是「有非 Latin-1 字符」:`é` / `ß` 这类
+        // Latin-1 表示得了的字符两串就不同,服务器按 UTF-8 解时只有第二发能过。
+        // 纯 ASCII 与中文口令两串相同(中文在 Swift 里 ISO 编码失败、直接落成 UTF-8),
+        // 不重复发同一个头。
+        let second = await attempt(feedUrl, authorization: auth.header(utf8: true))
+        guard let second else { return .failed }
+        if (200...299).contains(second.code) { return .data(second.data) }
+        return second.code == 401 ? .unauthorized : .failed
+    }
+
+    private func attempt(_ feedUrl: String, authorization: String?) async -> (data: Data, code: Int)? {
+        var headers: [String: String] = [:]
+        if let authorization { headers["Authorization"] = authorization }
+        guard let r = await HTTP.fetch(feedUrl, headers: headers) else { return nil }
+        if !(200...299).contains(r.code) {
+            Log.w("RSS", "http \(r.code) endpoint=\(Log.endpoint(feedUrl))")
+        }
+        return r
     }
 
     // MARK: - 工具

@@ -1,0 +1,82 @@
+import SwiftUI
+
+/// 私有订阅源的登录框:feed 返回 401 时由发现页 / 频道详情页弹出。
+///
+/// 与 Android `ui/components/FeedAuthDialog.kt` 同一组文案、同一条校验:
+/// 用户名非空才可提交(口令可以为空);凭据只随请求发给源自己,见 `FeedAuthStore`。
+struct FeedAuthSheet: View {
+    let feedUrl: String
+    /// true = 本机已存过这个源的凭据,但仍是 401 —— 显示错误行、预填用户名。
+    let failed: Bool
+    let initialUsername: String
+    var onSubmit: (String, String) -> Void
+    var onCancel: () -> Void
+
+    @State private var username: String
+    @State private var password = ""
+    @FocusState private var focus: Field?
+
+    private enum Field { case user, pass }
+
+    init(feedUrl: String, failed: Bool, initialUsername: String,
+         onSubmit: @escaping (String, String) -> Void,
+         onCancel: @escaping () -> Void) {
+        _username = State(initialValue: initialUsername)
+        self.feedUrl = feedUrl
+        self.failed = failed
+        self.initialUsername = initialUsername
+        self.onSubmit = onSubmit
+        self.onCancel = onCancel
+    }
+
+    /// 输入框里只给主机:「https://user@host/feed.xml?token=…」整串既不必要也可能带 token。
+    private var host: String {
+        URLComponents(string: feedUrl)?.host ?? feedUrl
+    }
+
+    private var canSubmit: Bool {
+        !username.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func submit() {
+        guard canSubmit else { return }
+        onSubmit(username.trimmingCharacters(in: .whitespacesAndNewlines), password)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(NSLocalizedString("需要用户名和密码", comment: "私有订阅源登录框标题"))
+                .font(.headline)
+            Text(String(format: NSLocalizedString("「%@」要求先验证身份才能读取。凭据只保存在这台设备上，不会写进备份，也不会随订阅导出。", comment: "私有订阅源登录框说明"), host))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if failed {
+                Text(NSLocalizedString("这对用户名和密码没有通过，再核对一下。", comment: "私有订阅源登录失败"))
+                    .font(.callout)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            TextField(NSLocalizedString("用户名", comment: ""), text: $username)
+                .textFieldStyle(.roundedBorder)
+                .focused($focus, equals: .user)
+                .onSubmit { focus = .pass }
+            SecureField(NSLocalizedString("密码", comment: ""), text: $password)
+                .textFieldStyle(.roundedBorder)
+                .focused($focus, equals: .pass)
+                .onSubmit { submit() }
+            HStack(spacing: 12) {
+                Spacer()
+                Button(NSLocalizedString("取消", comment: ""), role: .cancel) { onCancel() }
+                    .keyboardShortcut(.cancelAction)
+                Button(NSLocalizedString("保存并重试", comment: "")) { submit() }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!canSubmit)
+            }
+        }
+        .padding(24)
+        .frame(width: 440)
+        .onAppear { focus = .user }
+    }
+}

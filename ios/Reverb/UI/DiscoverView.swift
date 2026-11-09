@@ -72,6 +72,8 @@ struct DiscoverView: View {
     @State private var liveEpisode: Episode?
     /// 仅 Debug:`-search` 钩子写下的查询词,用来挡住搜索框复位带来的清空。
     @State private var debugQuery = ""
+    /// 私有订阅源的 401 挑战(见 `FeedAuthChallenge` / H253)。
+    @State private var authPrompt: FeedAuthChallenge?
     /// 「加入待播」的结果提示:入队落在待播页,当前页看不出任何变化,不提示等于没按上。
     @State private var toast: String?
     @State private var toastToken = 0
@@ -142,6 +144,24 @@ struct DiscoverView: View {
             } onCancel: {
                 showReorder = false
             }
+        }
+        // 只认**用户刚粘的那条地址**:追更的后台巡检也会触发 401,那一路不该在发现页弹框。
+        .onReceive(env.repository.authRequired) { challenge in
+            guard FeedCredential.splitUrl(submittedQuery).url == challenge.feedUrl else { return }
+            authPrompt = challenge
+        }
+        .sheet(item: $authPrompt) { challenge in
+            FeedAuthSheet(
+                feedUrl: challenge.feedUrl,
+                failed: challenge.failed,
+                initialUsername: env.repository.credential(for: challenge.feedUrl)?.username ?? "",
+                onSubmit: { user, pass in
+                    env.repository.saveAuth(challenge.feedUrl, username: user, password: pass)
+                    authPrompt = nil
+                    runSearch(submittedQuery)
+                },
+                onCancel: { authPrompt = nil }
+            )
         }
         .overlay(alignment: .top) { TopToast(text: toast) }
         // 地区换了榜单就该跟着换:数据是按 region 取的缓存键,不重载会把上一地区的

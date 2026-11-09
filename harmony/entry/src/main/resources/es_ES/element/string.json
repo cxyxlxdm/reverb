@@ -849,6 +849,34 @@
       "value": "Borra todos los episodios de la cola «A continuación». No se puede deshacer."
     },
     {
+      "name": "feed_auth_title",
+      "value": "Hace falta iniciar sesión"
+    },
+    {
+      "name": "feed_auth_message",
+      "value": "«%1$s» pide un usuario y una contraseña antes de poder leerse. Las credenciales se quedan en este dispositivo: no se incluyen en las copias de seguridad ni en las suscripciones exportadas."
+    },
+    {
+      "name": "feed_auth_user",
+      "value": "Usuario"
+    },
+    {
+      "name": "feed_auth_pass",
+      "value": "Contraseña"
+    },
+    {
+      "name": "feed_auth_save",
+      "value": "Guardar y reintentar"
+    },
+    {
+      "name": "feed_auth_cancel",
+      "value": "Cancelar"
+    },
+    {
+      "name": "feed_auth_wrong",
+      "value": "Ese usuario y esa contraseña no se han aceptado. Compruébalos e inténtalo de nuevo."
+    },
+    {
       "name": "set_share_log",
       "value": "Compartir registros"
     },
@@ -1227,6 +1255,10 @@
     {
       "name": "privacy_consent_video",
       "value": "Enlace de vídeo (opcional). Pega un enlace de página de vídeo o un identificador BV en el buscador y ese vídeo se reproduce como un episodio: la app consulta la API pública del sitio de vídeo (api.bilibili.com) para obtener el título, la portada y la dirección de audio, y luego reproduce en streaming desde su red de distribución (*.bilivideo.com y similares), guardando el audio en caché local como cualquier otro episodio. Las solicitudes no inician sesión y no llevan ningún identificador de usuario; para obtener la dirección de audio se envían con un User-Agent de navegador y la página de origen del sitio de vídeo, de modo que el sitio ve esos datos y tu dirección IP. Estos episodios no se pueden descargar; su caché automática se borra junto con el resto desde «Borrar caché»."
+    },
+    {
+      "name": "privacy_consent_auth",
+      "value": "Fuentes privadas (opcional). Algunas fuentes RSS autoalojadas exigen un usuario y una contraseña (autenticación básica HTTP). Cuando una de ellas los pide, la app los solicita una vez y los envía solo al dominio de esa fuente (incluidos sus subdominios), para su RSS, audio, descargas y transcripciones oficiales; nunca a una red de distribución de audio ajena. Las credenciales se guardan solo en este dispositivo, no se incluyen en copias de seguridad, exportaciones OPML ni registros, y se eliminan al cancelar la suscripción. Una fuente http:// sin cifrar envía la contraseña sin cifrar; conviene usar https://."
     },
     {
       "name": "privacy_consent_asr",

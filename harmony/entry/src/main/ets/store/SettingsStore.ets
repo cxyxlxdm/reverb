@@ -25,10 +25,14 @@ export class SettingsStore {
    *       **1.0.7 的直播流没有 +1**:它不引入任何有名有姓的第三方 —— 请求的就是用户自己
    *       粘贴的那条流地址,与「粘 RSS」同一类,同意页正文已写明「直接请求发布方或托管方」。
    *       所以只改自述(docs/PRIVACY.md 与 privacy.html),不重问同意。
+   *   4 = 未发版(私有订阅)。不引入新的网络地址,但**新增一类本机保存、并随请求发出去的数据**:
+   *       用户为某个源输入的用户名与密码(HTTP Basic),只发给该源自己的主机。
+   *       这是"改变数据的收集或用途",按上面的口径要 +1。同意页多一段「私有订阅」。
+   *       Android 同步到 4;macOS / iOS 原来因桌面应用内更新停在 4,本轮一起到 5。
    *
    * 改这个数之后**必须重新打包两端**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
    */
-  static readonly PRIVACY_VERSION: number = 3;
+  static readonly PRIVACY_VERSION: number = 4;
 
   /// 0 跟随系统 / 1 浅色(宣纸) / 2 深色(水墨) / 3 纯白
   /// **默认 2(水墨)**,与 Android `theme_mode` 的默认值一致 —— 品牌主观感是水墨,

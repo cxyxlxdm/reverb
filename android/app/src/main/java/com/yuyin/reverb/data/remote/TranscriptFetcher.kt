@@ -21,7 +21,11 @@ import kotlin.math.roundToInt
  * 支持三种带时间轴的格式:Podcast Index JSON / WebVTT / SRT。HTML 与纯文本稿不收
  * (没有时间轴,做不了跟播放高亮,见 `RssParser.transcriptRank`)。
  */
-class TranscriptFetcher(private val client: OkHttpClient) {
+class TranscriptFetcher(
+    private val client: OkHttpClient,
+    /** 按地址查私有源凭据(同主机才给)。默认 null 供测试/无容器调用点使用。 */
+    private val authHeader: (String) -> String? = { null }
+) {
 
     private val TAG = "Transcript"
 
@@ -45,10 +49,11 @@ class TranscriptFetcher(private val client: OkHttpClient) {
         }
 
     private fun download(url: String): String? = try {
-        val req = Request.Builder()
+        val builder = Request.Builder()
             .url(url)
             .header("User-Agent", "Reverb/1.0 (Android podcast client)")
-            .build()
+        authHeader(url)?.let { builder.header("Authorization", it) }
+        val req = builder.build()
         client.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) {
                 com.yuyin.reverb.util.Logger.w(

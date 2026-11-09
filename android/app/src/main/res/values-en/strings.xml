@@ -78,6 +78,7 @@
     <string name="guide_card_sub">30 sec · bundled, plays offline</string>
     <string name="privacy_consent_title">Privacy policy</string>
     <string name="privacy_consent_catalog">Show search and charts. This build contacts public APIs for Apple Podcasts search (itunes.apple.com), Apple charts (rss.marketingtools.apple.com), fyyd.de and gpodder.net. Those requests carry no credentials and no user identifiers.</string>
+    <string name="privacy_consent_auth">Private feeds (optional). Some self-hosted RSS feeds require a username and password (HTTP Basic authentication). When such a feed asks, the app prompts once and sends those credentials back only to that feed\'s own host (including its subdomains), for its RSS, audio, downloads and official transcripts — never to an unrelated audio CDN. Credentials are stored only on this device, are not included in backups, OPML exports or logs, and are deleted when you unsubscribe. A plain http:// feed sends the password unencrypted; prefer https://.</string>
     <string name="privacy_consent_video">Video links (optional). Paste a video page link or a BV ID into the search field and that video is played as an episode: the app asks the video site\'s public API (api.bilibili.com) for the title, cover and audio address, then streams from its content delivery network (*.bilivideo.com and similar) and caches the audio locally like any other episode. The requests do not sign in and carry no user identifiers; to obtain the audio address they are sent with a browser User-Agent and the video site\'s referring page, so the site sees those and your IP address. Episodes from video links cannot be downloaded; their automatic cache is cleared together with everything else by \"Clear cache\".</string>
     <string name="privacy_consent_body">Reverb processes most data on your device. It has no developer backend, account, ads, analytics, attribution, third-party login or push, crash reporting, or cross-app tracking. Subscriptions, history, favorites, downloads, playback cache, listening statistics, settings, a random installation ID, and runtime logs are processed locally and are not automatically uploaded to the developer. Android uses open-source foundations such as AndroidX, OkHttp, and Coil, but no SDKs for those reporting purposes. Since 1.0.2, if backup is enabled in system settings (Android cloud backup or vendor device migration), the operating system copies subscriptions, favorites, history, download records (links only), stamps, notes, listening statistics, and settings to your own system cloud account or new device; audio, transcript and chart caches, and logs are not included, and the switch lives in system settings.\n\nWhen online, search terms, region, or category are sent to public directories such as Apple, fyyd, and gpodder. RSS, artwork, audio, and transcripts are requested directly from publishers or hosts, which exposes your IP address, User-Agent, and requested resource to them. Logs may contain show or episode identifiers and the host names of accessed services; they leave the app only when you choose to share or export them. Read the full policy for details.\n\nTapping "Agree and continue" means you have read and accept this policy.</string>
     <string name="privacy_read_full">Read the full privacy policy</string>
@@ -427,4 +428,13 @@
     <string name="widget_description">Shows where you left off — tap to keep listening</string>
     <string name="widget_progress_time">%1$s / %2$s</string>
     <string name="widget_live">LIVE</string>
+
+    <!-- Private feed (HTTP Basic): shown when the server answers 401 (see H253) -->
+    <string name="feed_auth_title">Sign-in required</string>
+    <string name="feed_auth_message">“%1$s” asks for a username and password before it can be read. Credentials stay on this device — they are not included in backups or exported subscriptions.</string>
+    <string name="feed_auth_user">Username</string>
+    <string name="feed_auth_pass">Password</string>
+    <string name="feed_auth_save">Save and retry</string>
+    <string name="feed_auth_cancel">Cancel</string>
+    <string name="feed_auth_wrong">That username and password were not accepted. Please check them and try again.</string>
 </resources>

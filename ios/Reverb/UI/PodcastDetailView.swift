@@ -17,6 +17,8 @@ struct PodcastDetailView: View {
     @State private var shareImage: UIImage?
     @State private var showShare = false
     @StateObject private var selection = EpisodeSelection()
+    /// 私有订阅源的 401 挑战(见 `FeedAuthChallenge` / H253)。
+    @State private var authPrompt: FeedAuthChallenge?
 
     private var display: Podcast { loaded ?? podcast }
     private var accent: Color { Theme.accent(settings.accentIndex) }
@@ -104,6 +106,24 @@ struct PodcastDetailView: View {
             .task { await renderShareCard() }
         }
         .task(id: podcast.id) { await load() }
+        // 只有**本页这个源**的 401 才弹框:同一时刻别处(发现页、追更巡检)也可能在拉 feed。
+        .onReceive(env.repository.authRequired) { challenge in
+            guard env.repository.cleanUrl(podcast.feedUrl) == challenge.feedUrl else { return }
+            authPrompt = challenge
+        }
+        .sheet(item: $authPrompt) { challenge in
+            FeedAuthSheet(
+                feedUrl: challenge.feedUrl,
+                failed: challenge.failed,
+                initialUsername: env.repository.credential(for: challenge.feedUrl)?.username ?? "",
+                onSubmit: { user, pass in
+                    env.repository.saveAuth(challenge.feedUrl, username: user, password: pass)
+                    authPrompt = nil
+                    Task { await load(force: true) }
+                },
+                onCancel: { authPrompt = nil }
+            )
+        }
     }
 
     private var header: some View {

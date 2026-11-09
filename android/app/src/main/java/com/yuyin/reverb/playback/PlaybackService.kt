@@ -14,6 +14,7 @@ import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.yuyin.reverb.MainActivity
+import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.remote.BilibiliSource
 
 /**
@@ -37,13 +38,22 @@ class PlaybackService : MediaSessionService() {
         // 所有播客主机;而这里只需要给它自己那一族地址。ResolvingDataSource 恰好是"按这一次的
         // 地址改 DataSpec"的位置 —— 补的是 `httpRequestHeaders`,`DefaultHttpDataSource` 会照单设上
         // (它自己的 userAgent 为 null,不会再把 User-Agent 覆盖回去)。
+        // 私有源的音频:凭据账本里与某个 feed 同主机的地址要带 Authorization。
+        // 与视频源那一族共用这个"按本次地址改 DataSpec"的位置(见上方注释);
+        // 两者**可能同时命中**——视频地址不会落进私有源账本,但两个判断各自独立,
+        // 所以这里合并成一份 header 而不是先后 set(后一次会把前一次整表顶掉)。
+        val feedAuth = (application as ReverbApp).container.feedAuthStore
         val dataSourceFactory = ResolvingDataSource.Factory(DefaultDataSource.Factory(this)) { spec ->
-            if (BilibiliSource.needsStreamHeaders(spec.uri.toString())) {
-                spec.buildUpon()
-                    .setHttpRequestHeaders(BilibiliSource.streamHeaders())
-                    .build()
-            } else {
+            val url = spec.uri.toString()
+            val bili = BilibiliSource.needsStreamHeaders(url)
+            val auth = feedAuth.headerForUrl(url)
+            if (!bili && auth == null) {
                 spec
+            } else {
+                val headers = HashMap<String, String>()
+                if (bili) headers.putAll(BilibiliSource.streamHeaders())
+                if (auth != null) headers["Authorization"] = auth
+                spec.buildUpon().setHttpRequestHeaders(headers).build()
             }
         }
         val exo = ExoPlayer.Builder(this)

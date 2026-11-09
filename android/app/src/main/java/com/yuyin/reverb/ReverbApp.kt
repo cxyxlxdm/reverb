@@ -52,9 +52,19 @@ class AppContainer(app: Application) {
     val feedCache = FeedCacheStore(app)
 
     // 全链路零配置：Apple + fyyd.de + gpodder.net + RSS/OPML，均免费无需 Key。
-    val repository = PodcastRepository(httpClient, popularCache, seedCatalog, feedCache)
+    /**
+     * 私有源凭据(HTTP Basic)。单独一份账本、**不进系统备份与手动备份**,
+     * 只发给源自己(同主机)的 feed / 音频 / 逐字稿请求。见 H253。
+     */
+    val feedAuthStore = com.yuyin.reverb.data.local.FeedAuthStore(app)
 
-    val subscriptionStore = SubscriptionStore(app)
+    // (私有源是用户自己带凭据的那一类,不改变"公共目录零配置"这条。)
+    val repository = PodcastRepository(httpClient, popularCache, seedCatalog, feedCache, feedAuthStore)
+
+    val subscriptionStore = SubscriptionStore(app).also { sub ->
+        // 退订即丢弃这个源的凭据(见 SubscriptionStore.onRemoved 的注释)
+        sub.onRemoved = { podcast -> feedAuthStore.forget(podcast.feedUrl) }
+    }
     val inboxStore = InboxStore(app)
     val categoryStore = CategoryStore(app)
     val downloadStore = DownloadStore(app)
@@ -76,7 +86,7 @@ class AppContainer(app: Application) {
     val settingsStore = SettingsStore(app)
 
     // 转写:先取发布方自己的逐字稿,取不到才在引擎可用时走本机识别(见 asrEngine 那条注释)
-    val transcriptFetcher = TranscriptFetcher(httpClient)
+    val transcriptFetcher = TranscriptFetcher(httpClient) { url -> feedAuthStore.headerForUrl(url) }
     val transcriptStore = TranscriptStore(app, transcriptFetcher)
     /**
      * 离线识别引擎。**只有一份包,所以它不带 null 那一支了** —— 合并前商店那个 flavor 的
@@ -102,10 +112,12 @@ class ReverbApp : Application(), Configuration.Provider {
         com.yuyin.reverb.util.Logger.init(this)
         container = AppContainer(this)
 
-        DownloadManager.init(this, container.httpClient, container.downloadStore, container.settingsStore)
+        DownloadManager.init(this, container.httpClient, container.downloadStore, container.settingsStore,
+            container.feedAuthStore)
         // 缓存的 init 不发任何网络请求(只建目录 + 一次对账扫盘),所以与同意门无关,放这里没问题;
         // 真正拉音频要等用户点播放,那时门早已过了。
-        AudioCacheManager.init(this, container.httpClient, container.audioCacheStore, container.settingsStore)
+        AudioCacheManager.init(this, container.httpClient, container.audioCacheStore, container.settingsStore,
+            container.feedAuthStore)
         PlayerController.bindHistory(container.historyStore)
         // 视频源的直链要现取(2 小时失效),所以播放层要握着一个能联网的对象;
         // 与 repo 共用同一个 client,不另建连接池。
