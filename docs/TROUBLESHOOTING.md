@@ -12610,3 +12610,46 @@ tab 页展开 **155px**、收束 **155px**、频道页 **155px**、待播页 **1
   所以这里可以直接读节点高度;但"三处都要量"和"按页面 × 状态检查"这两条与 Android 完全一样。
 - ⚠️ `barReserve`(页面让位量)跟着多 8vp。它按**展开态恒定**,与收不收束无关 —— 统一后展开与收束同高,
   这条口径反而更顺:不再需要解释"为什么收束了还让着播放条的位置"。
+
+---
+
+### H255. macOS 关掉窗口后点 Dock 图标叫不回来 —— SwiftUI 的 `WindowGroup` 不会替你重建最后一扇窗
+
+**现象**(2026-11-09,`macos` 1.0.8)。点左上角红点关掉主窗口后,进程仍在 Dock 里,但再点 Dock 图标
+没有任何反应;从 Finder 再打开一次也一样。`osascript … activate` 之后 AX 里仍是 **0 扇窗**,
+只能 ⌘Q 退出再重开。启动阶段不存在这个问题:关了窗再 ⌘Q、重新打开,主窗照常出来。
+
+**根因**。红点关的是窗口不是进程(macOS 标准行为),把窗口叫回来靠
+`NSApplicationDelegate.applicationShouldHandleReopen(_:hasVisibleWindows:)`。本工程的 `AppDelegate`
+只实现了深链的 `application(_:open:)`,没实现这一条;而 SwiftUI 的 `WindowGroup` 在最后一扇窗关闭后
+**不会自己重建窗口**,也不会代为处理 reopen ⇒ 系统把事件交给 app,却没有东西负责把窗口摆回来。
+
+**修法**(`macos/Sources/Reverb/ReverbApp.swift`)。
+1. `AppDelegate.applicationShouldHandleReopen`:无可见窗口时按代价从小到大做 ——
+   最小化的窗口先 `deminiaturize`;窗口对象还在 `NSApp.windows` 里就 `makeKeyAndOrderFront`;
+   都找不到才用 `openWindow(id: "main")` 让 SwiftUI 重建。最后 `activate(ignoringOtherApps:)`。
+2. `WindowGroup` 补 `id: "main"`,内容上挂一个零尺寸的 `WindowReopenBridge`,在窗口**还活着**时把
+   `@Environment(\.openWindow)` 存进 `WindowReopener.shared`。不能改成在 `WindowGroup` 内容上挂
+   `.onReceive` 监听重建通知:关掉最后一扇窗后内容视图已销毁,那条监听也跟着没了 —— 而它恰恰只在
+   "没有可见窗口"时才被需要。
+3. 有意不覆盖的一种情形:只开着设置窗口、主窗已关时点 Dock,仍按 macOS 常规只激活 app,不强行拉出主窗。
+   `hasVisibleWindows` 是"有没有可见窗口"的语义,不是"用户眼前有没有主界面"。
+
+**验收**(本机,真实 `.app`;`swift build -c release` 后把新二进制换进 `build/Reverb.app` 并 ad-hoc 签名)。
+- 修复前:关闭主窗 → AX 窗口数 0 → `activate` 后仍 0。
+- 修复后:关闭 → 点 Dock 图标(`AXPress` Dock 的 `UI element "Reverb"`)→ 窗口回来
+  (`count of windows` = 1),日志 `[Window] Dock 重开主窗口 ok`;最小化 → 点 Dock 同样恢复;
+  先关主窗、再开一次设置窗并关掉,点 Dock 回来的是**主窗**而不是设置窗。连点/重复切换多次均稳定。
+- ⚠️ 本轮**没有**重打 `macos/dist/` 里的 dmg(发布物只在该次 release 构建时替换);上面跑的是
+  `build/Reverb.app`,不是 `dist/` 里那份 1.0.8。
+
+**教训 / 可复用的规律**。
+① **加日志时要打"入口参数",不要只打成功路径。** 第一版只在成功分支写日志,`guard` 提前返回时
+   一行都不留,取证时看起来像"回调根本没被调用",差点把方向带到"SwiftUI 吞了这个事件"。
+   先记录 `hasVisibleWindows` 与 `NSApp.windows` 的数量/可见/最小化三态,再决定走哪条分支。
+② **关窗、最小化、全屏是三条不同的路径,不能用一个 `hasVisibleWindows` 概括。** 最小化的窗口在 AX
+   里数不到,但仍在 `NSApp.windows` 里;`isVisible` / `isMiniaturized` 要分开读。
+③ **SwiftUI 的 `openWindow` 是 environment 值,窗口没了就拿不到。** 要"窗口关掉后还能开窗",必须在
+   窗口存活期间把它缓存下来;这与会随视图销毁的 `.onReceive` 是两回事。
+④ **别按 AX 按钮序号猜红绿灯**:实测 `button 1` 关闭、`button 2` **全屏**、`button 3` 才最小化。
+   按"1 关 / 2 最小化 / 3 缩放"的旧印象操作,会把窗口送进全屏再退出,看起来像"窗口被关掉了"。

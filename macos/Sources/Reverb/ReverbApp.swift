@@ -43,7 +43,7 @@ struct ReverbApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             // 首次启动的隐私同意门:未同意时 `RootView` 根本不构建,
             // 发现页那些联网 `.task` 也就一次都发不出去(M11)。
             PrivacyGate {
@@ -55,6 +55,9 @@ struct ReverbApp: App {
             .environmentObject(env.downloads)
             .environmentObject(env.downloadManager)
             .environmentObject(env.listenStats)
+            // 把 `openWindow` 留一份给 AppDelegate:`applicationShouldHandleReopen`
+            // 是纯 AppKit 回调,拿不到 SwiftUI 的环境值(见类注释)。
+            .background(WindowReopenBridge())
         }
         .defaultSize(width: 1240, height: 860)
         .windowToolbarStyle(.unified)
@@ -97,6 +100,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Log.i("DeepLink", "系统投递 scheme=\(url.scheme ?? "-") host=\(url.host ?? "-")")
             DeepLinkInbox.shared.post(url)
         }
+    }
+
+    /// 点 Dock 图标 / 在 Finder 里再打开一次时,把主窗口叫回来。
+    ///
+    /// 背景:红点只关窗口、不退出进程(macOS 的标准行为),但 SwiftUI 的 `WindowGroup`
+    /// 不会在用户点 Dock 图标时自己重建那扇窗 —— 2026-11-09 实测:关掉后 `activate`
+    /// 与点 Dock 图标都停在 0 扇窗,界面再也出不来,只能 ⌘Q 重开。
+    ///
+    /// 两条路按代价排序:
+    /// ① 窗口对象还在 `NSApp.windows` 里时,直接 `makeKeyAndOrderFront`;
+    /// ② 已被释放时(例如先关了窗又开过设置窗口),用 `WindowReopener` 里存下的
+    ///    `openWindow(id: "main")` 让 SwiftUI 重建 —— 这个环境动作必须在窗口
+    ///    **还活着**时取,关窗之后 `WindowGroup` 的内容视图已经销毁,再没有地方能监听。
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        // 最小化单独处理:窗口在 AX 里已经数不到,用户看到的就是"点 Dock 没反应"。
+        // (实测点 Dock 时 AppKit 有时会先自动把它 deminiaturize,所以下面那条
+        // `makeKeyAndOrderFront` 也能恢复;这一支是不依赖那个副作用的显式路径。)
+        if let mini = sender.windows.first(where: { $0.canBecomeMain && $0.isMiniaturized }) {
+            mini.deminiaturize(nil)
+            mini.makeKeyAndOrderFront(nil)
+            sender.activate(ignoringOtherApps: true)
+            Log.i("Window", "Dock 重开:从最小化恢复")
+            return true
+        }
+        guard !flag else { return true }
+        if let window = sender.windows.first(where: { $0.canBecomeMain }) {
+            window.makeKeyAndOrderFront(nil)
+        } else if let open = WindowReopener.shared.open {
+            open(id: "main")
+        } else {
+            // 极早期(窗口从未建过)不该走到这里;留一行日志,免得下次又只能靠猜。
+            Log.w("Window", "Dock 重开失败:既没有可复用的窗口,也没有 openWindow 动作")
+            return true
+        }
+        sender.activate(ignoringOtherApps: true)
+        Log.i("Window", "Dock 重开主窗口 ok")
+        return true
+    }
+}
+
+/// 在窗口还活着时把 SwiftUI 的 `openWindow` 动作存下来,供 AppDelegate 重建主窗口。
+///
+/// 为什么不在 `WindowGroup` 内容上挂 `.onReceive`:关掉最后一扇窗之后内容视图即销毁,
+/// 那条监听也跟着没了 —— 而 `applicationShouldHandleReopen` 恰恰只在没有可见窗口时才需要它。
+@MainActor
+final class WindowReopener {
+    static let shared = WindowReopener()
+    var open: OpenWindowAction?
+}
+
+/// 零尺寸的桥接视图:只为拿到 `@Environment(\.openWindow)`。
+private struct WindowReopenBridge: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        Color.clear
+            .frame(width: 0, height: 0)
+            .onAppear { WindowReopener.shared.open = openWindow }
     }
 }
 
