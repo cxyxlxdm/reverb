@@ -20,9 +20,11 @@
 >   的 tap 手势里做 380ms 双击窗,鸿蒙接 `HdsTabs.onTabBarClick`,iOS 在 `UITabBar` 上装两击手势;
 >   三端都是"每格一个计数器、各列只消费自己那一个"(音阁六个分段各有滚动容器)。
 > - 追更自动回顶的判据是**头一条 id 变了**,不是条数;首次装配不滚,避免冷启动一进来就跳。
-> - 验收状态:三端编译门全过(Android `compileReleaseKotlin` / 鸿蒙 `assembleHap` / iOS `build-ios.sh`);
->   iOS 模拟器日志确认双击探针挂在 `UITabBar(items=4)` 上,**双击动作本身仍需真机手指补验**
->   (本机 Xcode 27 无 `Simulator.app`、`simctl` 无触摸注入)。Android / 鸿蒙未装机点过。
+> - 验收状态:三端编译门全过(Android `compileReleaseKotlin` / 鸿蒙 `assembleHap` / iOS `build-ios.sh`)。
+>   **Android 已在 Pixel 3 真机验收**(11-09,同证书 release 包覆盖安装):发现分类列表、搜索「单集」「节目」、
+>   追更、音阁历史五处双击回顶生效;单击已选中 tab 不跳;追更在头一条变化后自动回顶,头一条不变时切回不跳。
+>   **鸿蒙未装机点过**;iOS 模拟器日志确认双击探针挂在 `UITabBar(items=4)` 上,
+>   双击动作本身仍需真机手指补验(本机 Xcode 27 无 `Simulator.app`、`simctl` 无触摸注入)。
 > - 逐条坑见 `docs/TROUBLESHOOTING.md` H248。四端 `dist/` 本轮都没有重打。
 
 ---
