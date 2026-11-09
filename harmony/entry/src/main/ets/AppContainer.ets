@@ -17,6 +17,7 @@ import { NoteStore } from './store/NoteStore';
 import { PlaybackStateStore } from './store/PlaybackStateStore';
 import { CategoryStore } from './store/CategoryStore';
 import { TranscriptStore } from './store/TranscriptStore';
+import { WidgetUpdater } from './widget/WidgetUpdater';
 import { SpeechTranscriber } from './playback/SpeechTranscriber';
 import { DownloadManager } from './playback/DownloadManager';
 import { AudioCacheManager } from './playback/AudioCacheManager';
@@ -131,6 +132,9 @@ export class AppContainer {
     // (与 Android AppContainer 的启动日志同口径)。只报 id 与条数,不落标题。
     const snap = this.playbackState.snapshot;
     Log.i('App', `会话态 upNext=${snap.upNext.length} 上次在播=${snap.current === null ? '-' : snap.current.id}`);
+
+    // 冷启动把桌面卡片对齐一次(纯本地:只读历史/会话两份 JSON,不联网、不碰权限)。
+    WidgetUpdater.request(this.settings, true);
 
     // 以上全是**本地读写**,不联网、不读系统网络信息,可以在同意隐私政策之前做。
     // 联网相关的装配一律推到 startGated(同意后由 Index 调用)。

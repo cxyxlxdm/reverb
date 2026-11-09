@@ -51,6 +51,10 @@ final class AppEnvironment: ObservableObject {
         // 续播起点要从历史读。它内部只在「当前没有在播的」时执行,重复调用是安全的。
         player.restoreState()
 
+        // 「继续收听」卡片:扩展是独立进程,只能读共享目录里 App 写的那一份 JSON,
+        // 所以由这里启动推送(冷启动恢复出来的播放态不会再发一次 `$current`,start 里会主动写一次)。
+        WidgetBridge.shared.start(player: player, history: history, settings: settings)
+
         // 把低频本地存储的变更转发到自身,使观察 env 的视图能即时刷新(订阅/收藏/印记/批注/历史/下载)。
         // 不转发高频的 player(每 0.5s 进度)/settings,以免整树无谓重渲。
         for pub in [subscriptions.objectWillChange, favorites.objectWillChange,

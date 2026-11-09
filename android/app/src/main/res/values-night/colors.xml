@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 小组件深色档。只定义小组件用到的键,其余颜色继续回落到 values/colors.xml。 -->
+    <color name="widget_bg">#161D20</color>
+    <color name="widget_border">#243034</color>
+    <color name="widget_text">#F2F2ED</color>
+    <color name="widget_text_secondary">#9AA8A6</color>
+    <color name="widget_accent">#7FD1C0</color>
+    <color name="widget_track">#1F2A2E</color>
+</resources>

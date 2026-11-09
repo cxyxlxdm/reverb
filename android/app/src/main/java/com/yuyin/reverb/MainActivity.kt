@@ -9,6 +9,7 @@ import com.yuyin.reverb.data.local.JsonWriter
 import com.yuyin.reverb.util.LocaleUtil
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -21,6 +22,8 @@ import com.yuyin.reverb.update.SelfUpdate
 class MainActivity : ComponentActivity() {
     // 每次收到「打开播放页」意图就自增，ReverbRoot 监听此信号并导航
     private var openPlayerSignal by mutableIntStateOf(0)
+    // 小组件带过来的那一集:冷启动时播放器还没恢复,播放页要靠它装载成暂停态再进
+    private var openEpisodeId by mutableStateOf<String?>(null)
 
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(LocaleUtil.wrap(newBase))
@@ -29,7 +32,10 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
-        if (intent?.getBooleanExtra(EXTRA_OPEN_PLAYER, false) == true) openPlayerSignal++
+        if (intent?.getBooleanExtra(EXTRA_OPEN_PLAYER, false) == true) {
+            openPlayerSignal++
+            openEpisodeId = intent?.getStringExtra(EXTRA_OPEN_EPISODE)
+        }
 
         val app = application as ReverbApp
         val settings = app.container.settingsStore
@@ -43,7 +49,7 @@ class MainActivity : ComponentActivity() {
             val accepted by settings.privacyAccepted.collectAsStateWithLifecycle()
             ReverbTheme(mode = mode, fontScale = fontScale, accentIndex = accent) {
                 if (accepted) {
-                    ReverbRoot(openPlayerSignal = openPlayerSignal)
+                    ReverbRoot(openPlayerSignal = openPlayerSignal, openEpisodeId = openEpisodeId)
                 } else {
                     PrivacyConsentScreen(
                         onAccept = {
@@ -69,6 +75,8 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         super.onStop()
         JsonWriter.flush()
+        // 进度与封面都在本地上,退后台后让小组件读一次最新的 history.json(flush 之后)。
+        com.yuyin.reverb.widget.WidgetRefresh.request(this, force = true)
     }
 
     /**
@@ -95,10 +103,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) openPlayerSignal++
+        if (intent.getBooleanExtra(EXTRA_OPEN_PLAYER, false)) {
+            openPlayerSignal++
+            openEpisodeId = intent.getStringExtra(EXTRA_OPEN_EPISODE)
+        }
     }
 
     companion object {
         const val EXTRA_OPEN_PLAYER = "open_player"
+        /** 小组件那一条对应的集 id;没有它时只能开「正在播的那一集」(通知栏那条老路径)。 */
+        const val EXTRA_OPEN_EPISODE = "open_episode"
     }
 }

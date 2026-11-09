@@ -41,7 +41,36 @@
 		1F5D398D5F8FABAAB7319584 /* guide_intro.m4a in Resources */ = {isa = PBXBuildFile; fileRef = D8312527917CCF29180C9DD6 /* guide_intro.m4a */; };
 		DE74722481C4638535DF4F53 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = 45CCF702804816ED60659C81 /* Localizable.strings */; };
 		B1A0C7D3E5F2468A9B0C1D2E /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = D1A0C7D3E5F2468A9B0C1D2E /* InfoPlist.strings */; };
+		B1C2D3E4F5A6000000000003 /* ReverbWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000002 /* ReverbWidget.swift */; };
+		B1C2D3E4F5A6000000000005 /* WidgetState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000004 /* WidgetState.swift */; };
+		B1C2D3E4F5A6000000000006 /* WidgetState.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000004 /* WidgetState.swift */; };
+		B1C2D3E4F5A600000000000F /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A600000000000E /* Localizable.strings */; };
+		B1C2D3E4F5A6000000000016 /* ReverbWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000010 /* ReverbWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B1C2D3E4F5A6000000000018 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = BE9050B66E42C4CE3BDAAE49 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B1C2D3E4F5A6000000000011;
+			remoteInfo = ReverbWidget;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B1C2D3E4F5A6000000000015 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B1C2D3E4F5A6000000000016 /* ReverbWidget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		06D645AA12CA8E99941EEAEE /* 余音.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "余音.app"; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -81,10 +110,31 @@
 		E61C09ED0FB26960F64DCD26 /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = "Localization/es.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		54B4E3F726DDF8FECA970CAE /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = "Localization/fr.lproj/Localizable.strings"; sourceTree = "<group>"; };
 		05290369027576BF77C37D65 /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh-Hant; path = "Localization/zh-Hant.lproj/Localizable.strings"; sourceTree = "<group>"; };
+		B1C2D3E4F5A600000000000E /* Localizable.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				B1C2D3E4F5A600000000000A /* en */,
+				B1C2D3E4F5A600000000000B /* es */,
+				B1C2D3E4F5A600000000000C /* fr */,
+				B1C2D3E4F5A600000000000D /* zh-Hant */,
+			);
+			name = Localizable.strings;
+			sourceTree = "<group>";
+		};
 		C1A0C7D3E5F2468A9B0C1D2E /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = "Localization/en.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		C2A0C7D3E5F2468A9B0C1D2E /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = "Localization/es.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		C3A0C7D3E5F2468A9B0C1D2E /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = "Localization/fr.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
 		C4A0C7D3E5F2468A9B0C1D2E /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh-Hant; path = "Localization/zh-Hant.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
+		B1C2D3E4F5A6000000000002 /* ReverbWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReverbWidget/ReverbWidget.swift; sourceTree = "<group>"; };
+		B1C2D3E4F5A6000000000004 /* WidgetState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../macos/Sources/WidgetContract/WidgetState.swift"; sourceTree = "<group>"; };
+		B1C2D3E4F5A6000000000007 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = ReverbWidget/Info.plist; sourceTree = "<group>"; };
+		B1C2D3E4F5A6000000000008 /* ReverbWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = ReverbWidget/ReverbWidget.entitlements; sourceTree = "<group>"; };
+		B1C2D3E4F5A6000000000009 /* Reverb.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Reverb.entitlements; sourceTree = "<group>"; };
+		B1C2D3E4F5A600000000000A /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = ReverbWidget/en.lproj/Localizable.strings; sourceTree = "<group>"; };
+		B1C2D3E4F5A600000000000B /* es */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = es; path = ReverbWidget/es.lproj/Localizable.strings; sourceTree = "<group>"; };
+		B1C2D3E4F5A600000000000C /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = ReverbWidget/fr.lproj/Localizable.strings; sourceTree = "<group>"; };
+		B1C2D3E4F5A600000000000D /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh-Hant; path = ReverbWidget/zh-Hant.lproj/Localizable.strings; sourceTree = "<group>"; };
+		B1C2D3E4F5A6000000000010 /* ReverbWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ReverbWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -103,6 +153,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B1C2D3E4F5A6000000000013 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -110,6 +167,7 @@
 			isa = PBXGroup;
 			children = (
 				87EA06BF6F608DB1D0DB4551 /* Reverb */,
+				B1C2D3E4F5A6000000000001 /* Widget */,
 				65699DD94EE4229D5CED4923 /* SharedSources */,
 				45CCF702804816ED60659C81 /* Localizable.strings */,
 				D1A0C7D3E5F2468A9B0C1D2E /* InfoPlist.strings */,
@@ -168,8 +226,22 @@
 			isa = PBXGroup;
 			children = (
 				06D645AA12CA8E99941EEAEE /* 余音.app */,
+				B1C2D3E4F5A6000000000010 /* ReverbWidget.appex */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		B1C2D3E4F5A6000000000001 /* Widget */ = {
+			isa = PBXGroup;
+			children = (
+				B1C2D3E4F5A6000000000002 /* ReverbWidget.swift */,
+				B1C2D3E4F5A6000000000004 /* WidgetState.swift */,
+				B1C2D3E4F5A6000000000007 /* Info.plist */,
+				B1C2D3E4F5A600000000000E /* Localizable.strings */,
+				B1C2D3E4F5A6000000000009 /* Reverb.entitlements */,
+				B1C2D3E4F5A6000000000008 /* ReverbWidget.entitlements */,
+			);
+			name = Widget;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -182,10 +254,12 @@
 				188D744C946098A1993B6011 /* Sources */,
 				A11016BB193FC2B8B9B738A8 /* Frameworks */,
 				04F7EEC86290D3C1ECD0EF12 /* Resources */,
+				B1C2D3E4F5A6000000000015 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				B1C2D3E4F5A6000000000017 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				87EA06BF6F608DB1D0DB4551 /* Reverb */,
@@ -194,6 +268,23 @@
 			productName = Reverb;
 			productReference = 06D645AA12CA8E99941EEAEE /* 余音.app */;
 			productType = "com.apple.product-type.application";
+		};
+		B1C2D3E4F5A6000000000011 /* ReverbWidget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1C2D3E4F5A600000000001B /* Build configuration list for PBXNativeTarget "ReverbWidget" */;
+			buildPhases = (
+				B1C2D3E4F5A6000000000012 /* Sources */,
+				B1C2D3E4F5A6000000000013 /* Frameworks */,
+				B1C2D3E4F5A6000000000014 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ReverbWidget;
+			productName = ReverbWidget;
+			productReference = B1C2D3E4F5A6000000000010 /* ReverbWidget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -206,6 +297,9 @@
 				LastUpgradeCheck = 2700;
 				TargetAttributes = {
 					337E66148933C784BCB35139 = {
+						CreatedOnToolsVersion = 27.0;
+					};
+					B1C2D3E4F5A6000000000011 = {
 						CreatedOnToolsVersion = 27.0;
 					};
 				};
@@ -229,6 +323,7 @@
 			projectRoot = "";
 			targets = (
 				337E66148933C784BCB35139 /* Reverb */,
+				B1C2D3E4F5A6000000000011 /* ReverbWidget */,
 			);
 		};
 /* End PBXProject section */
@@ -242,6 +337,14 @@
 				1F5D398D5F8FABAAB7319584 /* guide_intro.m4a in Resources */,
 				DE74722481C4638535DF4F53 /* Localizable.strings in Resources */,
 				B1A0C7D3E5F2468A9B0C1D2E /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1C2D3E4F5A6000000000014 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1C2D3E4F5A600000000000F /* Localizable.strings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -282,10 +385,28 @@
 				79C4FF1BA9454EDAD1C665C7 /* TranscriptStore.swift in Sources */,
 				BD75885B1BC0DBBCCC89AD8A /* AudioCacheManager.swift in Sources */,
 				9402068902C81CA39A9EF03A /* PlayerController.swift in Sources */,
+				B1C2D3E4F5A6000000000005 /* WidgetState.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1C2D3E4F5A6000000000012 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B1C2D3E4F5A6000000000003 /* ReverbWidget.swift in Sources */,
+				B1C2D3E4F5A6000000000006 /* WidgetState.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B1C2D3E4F5A6000000000017 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B1C2D3E4F5A6000000000011 /* ReverbWidget */;
+			targetProxy = B1C2D3E4F5A6000000000018 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		45CCF702804816ED60659C81 /* Localizable.strings */ = {
@@ -400,6 +521,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Reverb.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -422,6 +544,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Reverb.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = "";
@@ -433,6 +556,50 @@
 				MARKETING_VERSION = 1.0.7;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yuyin.reverb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B1C2D3E4F5A6000000000019 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ReverbWidget/ReverbWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ReverbWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuyin.reverb.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		B1C2D3E4F5A600000000001A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = ReverbWidget/ReverbWidget.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ReverbWidget/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
+				MARKETING_VERSION = 1.0.7;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yuyin.reverb.widget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -456,6 +623,15 @@
 			buildConfigurations = (
 				CF890261629D19CBDC0F5EB5 /* Debug */,
 				5C31EBB70C3FF69EC92B7CE1 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B1C2D3E4F5A600000000001B /* Build configuration list for PBXNativeTarget "ReverbWidget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B1C2D3E4F5A6000000000019 /* Debug */,
+				B1C2D3E4F5A600000000001A /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

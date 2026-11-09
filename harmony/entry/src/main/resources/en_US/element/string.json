@@ -1435,6 +1435,38 @@
     {
       "name": "batch_added_none",
       "value": "Those episodes are already in Up next"
+    },
+    {
+      "name": "widget_name",
+      "value": "Reverb · Continue listening"
+    },
+    {
+      "name": "widget_name_medium",
+      "value": "Reverb · Continue (M)"
+    },
+    {
+      "name": "widget_name_large",
+      "value": "Reverb · Continue (L)"
+    },
+    {
+      "name": "widget_description",
+      "value": "Shows where you left off — tap to keep listening"
+    },
+    {
+      "name": "widget_continue",
+      "value": "CONTINUE LISTENING"
+    },
+    {
+      "name": "widget_empty_title",
+      "value": "Pick an episode"
+    },
+    {
+      "name": "widget_empty_sub",
+      "value": "Your last episode shows up here"
+    },
+    {
+      "name": "widget_live",
+      "value": "LIVE"
     }
   ]
 }

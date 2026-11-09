@@ -418,4 +418,13 @@
     <string name="update_is_latest">Ya tienes la versión %1$s</string>
     <string name="update_check_failed">No se pudo comprobar. Revisa la conexión y vuelve a intentarlo.</string>
     <string name="update_title_repack">El paquete de %1$s se volvió a publicar</string>
+
+    <!-- Widget Seguir escuchando -->
+    <string name="widget_name">Reverb · Seguir escuchando</string>
+    <string name="widget_continue">SEGUIR ESCUCHANDO</string>
+    <string name="widget_empty_title">Elige un episodio</string>
+    <string name="widget_empty_sub">Tu último episodio aparecerá aquí</string>
+    <string name="widget_description">Muestra dónde lo dejaste; toca para seguir escuchando</string>
+    <string name="widget_progress_time">%1$s / %2$s</string>
+    <string name="widget_live">EN DIRECTO</string>
 </resources>

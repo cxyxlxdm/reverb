@@ -22,6 +22,9 @@ struct RootView: View {
     @State private var dissolveTick = 0
     @State private var dissolveRect = CGRect.zero
     @State private var barGhost = false
+    /// 卡片深链打开播放页。**不能复用 `NowPlayingBar` 里那个 `showPlayer`**:卡片点开时
+    /// 播放条才刚刚因为 `prepare` 有了 current,那条 sheet 根本没被构建过。
+    @State private var showPlayerFromURL = false
 
     var body: some View {
         ZStack {
@@ -108,6 +111,42 @@ struct RootView: View {
         // 「current 有无」翻转的统一动画源:驱动上面那条塌陷过渡(出现/消失两个方向),
         // 曲线与另两端收束 morph 的手感同档(欠阻尼小弹簧)。
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: player.current != nil)
+        // 卡片点开:`reverb://player?id=<episodeId>`(scheme 在 Info.plist 的 CFBundleURLTypes 里声明)。
+        // 系统投递先进 `DeepLinkInbox`(见 ReverbApp.swift 的 AppDelegate 与那里的实测注释);
+        // 这里接两路:后续到达走订阅,「RootView 还没出现就投递」的那次由 onAppear 取走。
+        .onReceive(DeepLinkInbox.shared.$arrival.compactMap { $0 }) { _ in
+            // 走 takePending 而不是直接用发布值:不清空的话,下一次 onAppear
+            // (换语言会重建这棵树)会把同一条旧深链再执行一遍。
+            if let url = DeepLinkInbox.shared.takePending() { openFromWidget(url) }
+        }
+        .onAppear {
+            if let url = DeepLinkInbox.shared.takePending() { openFromWidget(url) }
+        }
+        .sheet(isPresented: $showPlayerFromURL) {
+            PlayerView(onOpenChannel: { pod in
+                showPlayerFromURL = false
+                path.append(pod)
+            })
+                .environmentObject(env)
+                .environmentObject(player)
+                .environmentObject(settings)
+                .environmentObject(env.transcripts)
+                .themedSheet(settings)
+        }
+    }
+
+    /// 卡片深链:**只装载不播放** —— 冷启动时当前集可能还不是卡片那条,所以要显式 `prepare`
+    /// (与 iOS / Android 的 `EXTRA_OPEN_EPISODE` 同一条理由,见 PlayerController.prepare)。
+    /// 重复到达无副作用:`prepare` 自带同 id 短路,`showPlayerFromURL` 是幂等的置位。
+    private func openFromWidget(_ url: URL) {
+        guard url.scheme == "reverb", url.host == "player" else { return }
+        let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "id" }?.value ?? ""
+        if !id.isEmpty, player.current?.id != id,
+           let ep = env.history.history.first(where: { $0.episode.id == id })?.episode {
+            player.prepare(ep)
+        }
+        showPlayerFromURL = true
     }
 }
 

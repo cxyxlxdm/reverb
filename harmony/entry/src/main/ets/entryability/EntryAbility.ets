@@ -7,14 +7,41 @@ import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { SettingsStore } from '../store/SettingsStore';
 import { JsonFile } from '../store/JsonFile';
 import { Theme } from '../theme/Theme';
+import { WidgetRoute } from '../widget/WidgetRoute';
 import { Log } from '../util/Logger';
 
 /// 入口 Ability。负责建窗、铺满全屏(内容自行避让状态栏),并把 context 交给存储层。
 export default class EntryAbility extends UIAbility {
   private stage: window.WindowStage | null = null;
 
-  onCreate(_want: Want, _launchParam: AbilityConstant.LaunchParam): void {
+  onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     Log.i('App', '启动 余音 Reverb(鸿蒙端)');
+    this.handleWidgetWant(want);
+  }
+
+  /**
+   * 热启动(应用已在后台 / 已在桌面)。服务卡片用 `router` 动作拉起 EntryAbility 时走这里,
+   * 必须在 onNewWant 里也读一次 —— 只写 onCreate 的话,第二次点卡片什么都不会发生。
+   */
+  onNewWant(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
+    this.handleWidgetWant(want);
+  }
+
+  /**
+   * 卡片点击:卡片侧带 `reverbWidget: 'player'`,这里往 AppStorage 写一个**递增计数**,
+   * 外壳(Index)以 `@StorageLink` 观察它,变了就进播放页。
+   *
+   * 为什么走 AppStorage 而不是直接在这里导航:入口 Ability 拿不到外壳的 `NavPathStack`;
+   * 而冷启动时 onCreate 早于 `loadContent`,写进 AppStorage 正好让外壳第一帧就能读到。
+   * 用计数而不是布尔:连点两次要各触发一次(布尔第二次没有变化,@Watch 不响)。
+   */
+  private handleWidgetWant(want: Want): void {
+    const p = want.parameters;
+    if (p === undefined) return;
+    if (p[WidgetRoute.PARAM_KEY] !== WidgetRoute.PLAYER) return;
+    const cur = AppStorage.get<number>(WidgetRoute.OPEN_PLAYER);
+    AppStorage.setOrCreate(WidgetRoute.OPEN_PLAYER, (cur === undefined ? 0 : cur) + 1);
+    Log.i('App', '服务卡片要求打开播放页');
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {

@@ -131,3 +131,41 @@ App 日志与 `~/Library/Application Support/Reverb/` 下的 JSON 现读。
 现象/根因/取舍与**复跑 A/B 的完整形状**记在 **H215**;10-26 晚间准备跑那轮 A/B 时屏幕进入锁定态,
 而解锁按固定边界归维护者本人 ⇒ **这一条的状态是"只过到 `swift build -c release` exit 0"**。
 ⚠️ 它动了 `Sources/`,所以 `dist/` 那份 15:50 的 1.0.6 dmg 现在比源码旧,发版前必须按硬规矩 20 重打(本轮按"先不发布"没打)。
+
+---
+
+## 七、2026-11-09 跨端同时新增:继续收听小组件 / 服务卡片
+
+**这一项不是缺口** —— 四端是同一轮一起做的。单列在这里,是因为 macOS 的落点与手机三端**形态差得最多**,
+下次盘一致性时别拿手机的「服务卡片」去要求桌面。
+
+| 端 | 形态 | 数据怎么到卡片 | 点击 |
+|---|---|---|---|
+| Android | AppWidgetProvider + RemoteViews(小 / 中 / 大,另有一档竖长方块) | 进程内直接写布局,20 s 节流刷新 | `PendingIntent` 带 `EXTRA_OPEN_PLAYER` / `EXTRA_OPEN_EPISODE` |
+| 鸿蒙 | FormExtensionAbility + ArkUI 卡片(2×2 / 2×4 / 4×4) | `WidgetUpdater` 20 s 节流写共享 JSON,**700 ms 强制放行**一次 | `postCardAction` 走 `WidgetRoute` |
+| iOS | WidgetKit extension(`ReverbWidget.appex`),small / medium / large | App 侧 `WidgetBridge` 写 **App Group** 容器,`WidgetCenter` 刷新 | `.widgetURL(reverb://player?id=…)` → App 外层 `.onOpenURL` → `DeepLinkInbox` |
+| macOS | WidgetKit extension(`ReverbWidget.appex`),small / medium / large | App 侧 `WidgetBridge` 写 **`~/Library/Application Support/Reverb/widget/`**,`WidgetCenter` 刷新 | `.widgetURL` → **AppKit `application(_:open:)`**,见下 |
+
+**macOS 的三处形态差异(都是平台约束,不是偷工)**:
+
+1. **没有 App Group。** 本端是 ad-hoc 签名自分发,而 App Group 与 Team 前缀绑定 —— 免费/无 Team
+   装不上这项能力。所以卡片契约(`Sources/WidgetContract/WidgetState.swift`)在 macOS 上走
+   `~/Library/Application Support/Reverb/widget/widget_state.json`,路径用 `getpwuid` 现取真实家目录
+   (sandbox 下 `NSHomeDirectory()` 是容器路径,不是用户家目录),Info.plist 里配一条
+   `temporary-exception.files.home-relative-path.read-only` 让扩展读得到。iOS 走正常 App Group。
+2. **扩展是手工装进 `.app` 的。** SwiftPM 不产 `.appex`,由 `package.sh` 组装进 `Contents/PlugIns/`、
+   拷版本号、**先单独签 appex(带 entitlements)再签外层**(不能 `--deep`)。`verify-bundle.sh` 新增五组断言,
+   `selftest-verify.sh` 为每类失败形状各加一道变异。
+3. **深链的接收点在 AppKit 代理,不在视图。** 见 H249:`.onOpenURL` 那次"没被调用"不是接线坏了,
+   是本机停在同意门后面、`RootView` 根本没建。接收点提前到 `AppDelegate` 之后,同意门还在时也能收、
+   先缓冲进 `DeepLinkInbox`,界面就绪再消费。
+
+**验收状态(2026-11-09)**:macOS `./package.sh` exit 0(dmg 内含 appex、五组断言全过),
+运行时 `pluginkit` 认得这个扩展、启动 App 会写出 `widget_state.json`(真实历史数据)、
+系统投递的 URL 在代理里打出了 `scheme=reverb host=player`。
+**没验**:把卡片真正加到通知中心看渲染;点卡片后播放页是否弹出 —— 本机卡在同意门(未点同意)
+且屏幕锁定,两者都归人。iOS 侧:模拟器 Debug 包已装、appex 已注册,App Group 容器可用、`widget_state.json`
+真的写出了真实数据(读到 `余音使用引导 / 0:00 / 0:32`);`simctl openurl` 能唤起系统
+「在"余音"中打开?」确认框,**确认那一下点不了**。主屏渲染未看。真机 / TestFlight 的 App Group
+需要付费 Apple Developer Program(签名结果未实测);缺容器时代码只记一行日志、卡片退回空态(见 H250)。鸿蒙只有编译门(`assembleHap`),真机 `hdc list targets` 为空。
+Android 已装机验收:三种尺寸渲染、空态、点卡片回播放页;鸿蒙只有编译门,iOS 模拟器只到"扩展被系统登记"这一层。

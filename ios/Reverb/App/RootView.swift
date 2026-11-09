@@ -93,6 +93,28 @@ struct RootView: View {
                 .environmentObject(settings)
                 .environmentObject(player)
         }
+        // 卡片深链 `reverb://player[?id=…]`。接收点在 `ReverbApp` 的 `.onOpenURL`(同意门外),
+        // 这里只消费 `DeepLinkInbox`:后续到达走订阅,「RootView 还没出现就投递」的那次
+        // 由 onAppear 取走(与 macOS 同形,见 H249)。
+        .onReceive(DeepLinkInbox.shared.$arrival.compactMap { $0 }) { _ in
+            if let url = DeepLinkInbox.shared.takePending() { openFromWidget(url) }
+        }
+        .onAppear {
+            if let url = DeepLinkInbox.shared.takePending() { openFromWidget(url) }
+        }
+    }
+
+    /// 带 id 时先按历史装载成暂停态再开播放页 —— 与 Android 的 `EXTRA_OPEN_EPISODE` 同一条:
+    /// **不自动播放**。重复到达无副作用:`prepare` 同 id 短路,`showPlayer` 是幂等置位。
+    private func openFromWidget(_ url: URL) {
+        guard url.scheme == "reverb", url.host == "player" else { return }
+        let id = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+            .queryItems?.first { $0.name == "id" }?.value ?? ""
+        if !id.isEmpty, player.current?.id != id,
+           let ep = env.history.history.first(where: { $0.episode.id == id })?.episode {
+            player.prepare(ep)
+        }
+        showPlayer = true
     }
 }
 

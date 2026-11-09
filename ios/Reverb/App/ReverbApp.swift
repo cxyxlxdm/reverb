@@ -19,6 +19,10 @@ struct ReverbApp: App {
             .environmentObject(env.downloadManager)
             .environmentObject(env.listenStats)
             .environmentObject(env.transcripts)
+            // 深链挂在**同意门外面**:未同意时 `RootView` 不存在,挂在它身上的
+            // `.onOpenURL` 也不会存在,卡片点进来的那一次会被丢掉(macOS 上踩过,见 H249)。
+            // 这里先收进 `DeepLinkInbox`,等同意后 `RootView` 出现再由 onAppear 取走。
+            .onOpenURL { DeepLinkInbox.shared.post($0) }
         }
         .onChange(of: scenePhase) { _, phase in
             // `AppSupport.save` 是去抖 + 后台编码落盘(见 Stores.swift 顶部),
@@ -30,4 +34,14 @@ struct ReverbApp: App {
             }
         }
     }
+}
+/// 卡片深链的缓冲区。与 macOS 那份(`macos/Sources/Reverb/ReverbApp.swift`)同形:
+/// 系统投递时 `RootView` 可能还不存在(首次启动的同意门未过),先存着,等界面就绪再取。
+@MainActor
+final class DeepLinkInbox: ObservableObject {
+    static let shared = DeepLinkInbox()
+    @Published private(set) var arrival: URL?
+    private var pending: URL?
+    func post(_ url: URL) { pending = url; arrival = url }
+    func takePending() -> URL? { defer { pending = nil }; return pending }
 }

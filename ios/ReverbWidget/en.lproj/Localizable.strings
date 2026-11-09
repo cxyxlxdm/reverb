@@ -1,0 +1,7 @@
+/* 卡片画廊里的名字与说明。正文(标题/频道/时间/空态)由 App 按当前界面语言写进组容器,
+   这里只有系统卡片库必须自己显示的那几条(与 Android `widget_*` 同一批文案)。 */
+"继续收听" = "CONTINUE LISTENING";
+"余音 · 继续收听" = "Reverb · Continue listening";
+"挑一集开始听" = "Pick an episode";
+"上次听到哪一集，会出现在这里" = "Your last episode shows up here";
+"显示上次听到的节目与进度，点一下接着听" = "Shows where you left off — tap to keep listening";

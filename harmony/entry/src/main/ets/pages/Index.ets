@@ -33,6 +33,7 @@ import { PlayerController } from '../playback/PlayerController';
 import { Podcast, Episode, emptyPodcast } from '../model/Models';
 import { Log } from '../util/Logger';
 import { L } from '../util/L';
+import { WidgetRoute } from '../widget/WidgetRoute';
 import type common from '@ohos.app.ability.common';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import window from '@ohos.window';
@@ -122,6 +123,11 @@ struct Index {
    * @Watch 那一下是给状态栏/导航条的:它们不在组件树里,主题跟着翻了、图标色不会自己翻。
    */
   @StorageLink(Theme.SYSTEM_DARK_KEY) @Watch('onSystemDarkChanged') systemDark: boolean = false;
+  /**
+   * 服务卡片要求打开播放页时,**EntryAbility** 往 AppStorage 里 +1(见 `WidgetRoute`)。
+   * 冷启动时 onCreate 早于本页构建,@StorageLink 的初值就是那一格;热启动则靠 @Watch。
+   */
+  @StorageLink(WidgetRoute.OPEN_PLAYER) @Watch('onWidgetOpenPlayer') widgetOpen: number = 0;
   @State stack: NavPathStack = new NavPathStack();
   /// 当前要展示的频道(进详情页前设置;ArkTS 的 NavPathStack 传参用 param,这里用状态更直观)
   @State detailSeed: Podcast = emptyPodcast();
@@ -194,6 +200,7 @@ struct Index {
     this.readInsets();
     this.applySystemBar();
     this.applyColorMode();
+    this.openPlayerIfRequested();
     Log.i('UI', `外壳就绪 systemDark=${this.systemDark}`);
   }
 
@@ -228,6 +235,27 @@ struct Index {
    */
   private onSystemDarkChanged(): void {
     this.applySystemBar();
+  }
+
+  /// 热启动:卡片被点击时 EntryAbility 会把计数 +1,@Watch 收到就走同一条路。
+  private onWidgetOpenPlayer(): void {
+    this.openPlayerIfRequested();
+  }
+
+  /**
+   * 从服务卡片进播放页。
+   *
+   * 先把计数复位再导航:换语言会重建这棵 `@Entry` 树,不复位的话新树 `aboutToAppear`
+   * 又会拿同一个计数再跳一次。
+   * 延迟 100ms 是给 `Navigation` 的:冷启动时本方法跑在 `aboutToAppear` 里,
+   * 此刻组件树还没挂出来,直接 `pushPathByName` 会被丢掉。
+   * 没有在播的集(空态卡片)就留在首页 —— 空卡本来就不该把人带进一个空播放页。
+   */
+  private openPlayerIfRequested(): void {
+    if (this.widgetOpen <= 0) return;
+    this.widgetOpen = 0;
+    if (this.player.current === null) return;
+    setTimeout(() => { this.stack.pushPathByName('player', null); }, 100);
   }
 
   /// 读状态栏/手势导航条避让高度与**窗口宽**(px→vp)。窗口设了全屏布局,故需自行避让;

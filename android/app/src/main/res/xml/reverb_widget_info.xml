@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2×2 起步、可双向拉伸;三档布局由 Provider 按宿主给的 minWidth/minHeight 选。
+     updatePeriodMillis=0:内容只在 App 内播放状态变化时主动推(见 WidgetRefresh),
+     系统定时刷新对「上次听到哪」这件事没有意义,只会白耗电。 -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:description="@string/widget_description"
+    android:initialLayout="@layout/widget_small"
+    android:maxResizeWidth="500dp"
+    android:maxResizeHeight="500dp"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="110dp"
+    android:previewLayout="@layout/widget_small"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:updatePeriodMillis="0"
+    android:widgetCategory="home_screen" />

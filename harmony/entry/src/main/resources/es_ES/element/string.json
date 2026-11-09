@@ -1435,6 +1435,38 @@
     {
       "name": "batch_added_none",
       "value": "Los episodios elegidos ya están en la cola"
+    },
+    {
+      "name": "widget_name",
+      "value": "Reverb · Seguir escuchando"
+    },
+    {
+      "name": "widget_name_medium",
+      "value": "Seguir escuchando (M)"
+    },
+    {
+      "name": "widget_name_large",
+      "value": "Seguir escuchando (L)"
+    },
+    {
+      "name": "widget_description",
+      "value": "Muestra dónde lo dejaste; toca para seguir escuchando"
+    },
+    {
+      "name": "widget_continue",
+      "value": "SEGUIR ESCUCHANDO"
+    },
+    {
+      "name": "widget_empty_title",
+      "value": "Elige un episodio"
+    },
+    {
+      "name": "widget_empty_sub",
+      "value": "Tu último episodio aparecerá aquí"
+    },
+    {
+      "name": "widget_live",
+      "value": "EN DIRECTO"
     }
   ]
 }

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- 卡片扩展跑在独立进程,读不到 App 的沙箱;两边共用这一个组容器。
+	     免费 Personal Team 没有这项能力(签名会报 does not support the App Groups
+	     capability),上真机/TestFlight 需要 Apple Developer Program 会员 —— 见 docs/IOS.md -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.yuyin.reverb</string>
+	</array>
+</dict>
+</plist>

@@ -1435,6 +1435,38 @@
     {
       "name": "batch_added_none",
       "value": "所選都已在待播裡"
+    },
+    {
+      "name": "widget_name",
+      "value": "餘音 · 繼續收聽"
+    },
+    {
+      "name": "widget_name_medium",
+      "value": "餘音 · 繼續收聽(中)"
+    },
+    {
+      "name": "widget_name_large",
+      "value": "餘音 · 繼續收聽(大)"
+    },
+    {
+      "name": "widget_description",
+      "value": "顯示上次聽到的節目與進度,點一下接著聽"
+    },
+    {
+      "name": "widget_continue",
+      "value": "繼續收聽"
+    },
+    {
+      "name": "widget_empty_title",
+      "value": "挑一集開始聽"
+    },
+    {
+      "name": "widget_empty_sub",
+      "value": "上次聽到哪一集,會出現在這裡"
+    },
+    {
+      "name": "widget_live",
+      "value": "直播"
     }
   ]
 }

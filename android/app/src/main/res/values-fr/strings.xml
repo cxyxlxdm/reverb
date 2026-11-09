@@ -418,4 +418,13 @@
     <string name="update_is_latest">Vous avez déjà la version %1$s</string>
     <string name="update_check_failed">Échec de la vérification. Vérifiez la connexion et réessayez.</string>
     <string name="update_title_repack">Le paquet de %1$s a été republié</string>
+
+    <!-- Widget Reprendre l\'écoute (XML: l\'apostrophe doit être échappée) -->
+    <string name="widget_name">Reverb · Reprendre l\'écoute</string>
+    <string name="widget_continue">REPRENDRE L\'ÉCOUTE</string>
+    <string name="widget_empty_title">Choisissez un épisode</string>
+    <string name="widget_empty_sub">Votre dernier épisode apparaîtra ici</string>
+    <string name="widget_description">Affiche où vous en étiez ; touchez pour reprendre</string>
+    <string name="widget_progress_time">%1$s / %2$s</string>
+    <string name="widget_live">EN DIRECT</string>
 </resources>

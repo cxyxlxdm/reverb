@@ -36,6 +36,18 @@
     <true/>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.entertainment</string>
+    <!-- 「继续收听」卡片点开用的深链。没有这一段,卡片上的 .widgetURL 会被系统丢掉。 -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>com.yuyin.reverb</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>reverb</string>
+            </array>
+        </dict>
+    </array>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>

@@ -71,6 +71,7 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
 ## 这一版有什么 / 没有什么
 
 **有**:四格(发现 / 追更 / 音阁 / 设置)、频道详情与订阅、播放页、后台播放 + 锁屏遥控、
+**主屏「继续收听」小组件**(WidgetKit,见下一节)、
 倍速 / 快进快退 / 睡眠定时 / 播放模式 / 自动续播、单集下载、逐字稿(iOS 26 本机离线转写 + 发布方逐字稿)、
 节目笔记、听觉印记、收听统计、B 站视频与直播流、收藏/历史/待播/批注、备份与 OPML、隐私同意门、
 主题与语言(5 语种)。
@@ -80,6 +81,37 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
 - **应用内更新** —— App Store/TestFlight 自己管;其余各端那种「查 GitHub Releases」在这里没有意义。
 - **投播** —— 其余各端也没有,不在这一版。
 - **桌面式三格外壳** —— iOS 用系统 TabView(触屏 + 安全区)。
+
+---
+
+## 主屏小组件(WidgetKit)
+
+- **target**:`ReverbWidget`(`.appex`,嵌入 App 的 `PlugIns/`)。`ios/ReverbWidget/Info.plist` 的
+  `NSExtensionPointIdentifier = com.apple.widgetkit-extension`;三档尺寸 `.systemSmall/.systemMedium/.systemLarge`。
+- **状态契约只有一份**:`../macos/Sources/WidgetContract/WidgetState.swift`,iOS 两个 target 与 macOS 的 SwiftPM target 编译同一文件
+  (改字段要四端一起想;`public init()` 必须写在类型体里,见 H252)。
+- **共享数据用 App Group `group.com.yuyin.reverb`**:App 侧 `Reverb/App/WidgetBridge.swift` 写 `widget_state.json` + 压缩后的封面,
+  扩展只读。两份 entitlements(`ios/Reverb.entitlements`、`ios/ReverbWidget/ReverbWidget.entitlements`)都已接入工程。
+- ⚠️ **App Group 在真机签名上要付费 Apple Developer Program 的 profile**;模拟器不校验这项 entitlement。
+  2026-11-09 在 iPad Pro 13-inch (M5) 模拟器上实测(adhoc 安装、`TeamIdentifier=not set`):
+  `simctl listapps` 能看到 `group.com.yuyin.reverb` 的容器映射,App 真的写出了
+  `widget_state.json`(211 B,内容含 `余音使用引导 / 0:00 / 0:32`、`empty:false`)。
+  **免费 Personal Team 装真机 / TestFlight 时预计拿不到这项能力(未实测签名结果)**;
+  代码里缺容器时只记一行 `[Widget] 没有 App Group 容器,卡片只能显示空态(免费团队签名没有这项能力)`,
+  卡片退回空态、App 照常可用。
+- **点击**:卡片 `.widgetURL(reverb://player?id=<episodeId>)`。App 侧的 `.onOpenURL` 挂在**同意门外面**
+  (`ReverbApp` 的外层视图),收到的 URL 先进 `DeepLinkInbox`;`RootView` 就绪后再取走并装载成暂停态、
+  开播放页。**不能只挂在 `RootView` 上** —— 首次启动未同意时它不存在,卡片那一次会被丢掉(macOS 上
+  实际踩过,见 H249)。
+  注意用 `simctl openurl` 验时,iOS 会弹系统确认「在"余音"中打开?」—— 那是跨 App 打开的统一提示,**卡片点击不弹**,
+  但也意味着这一步的自动化需要有人在模拟器上点一下。
+- **编译门已覆盖扩展**:`build-ios.sh` 现在断言 `PlugIns/ReverbWidget.appex` 存在、扩展点正确、版本/构建号与主包一致、
+  4 套 `.lproj` 都能 lint 且含画廊文案(见脚本 `5b` 段)。
+
+**验收状态(2026-11-09)**:编译门 exit 0;模拟器上扩展能被系统登记,App Group 容器与
+`widget_state.json` 都真实落盘(见上一条的读数),bundle 内 appex 结构与断言一致。
+**没验过**:主屏上把卡片加出来看渲染、点卡片后播放页是否弹出(`simctl openurl` 会弹系统确认框,
+需要人点一下);真机 / TestFlight 的 App Group 受付费会员限制,签名结果未实测。
 
 ---
 

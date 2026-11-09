@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>zh-Hans</string>
+    <key>CFBundleDisplayName</key>
+    <string>余音</string>
+    <key>CFBundleExecutable</key>
+    <string>ReverbWidget</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.yuyin.reverb.widget</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>zh-Hans</string>
+        <string>zh-Hant</string>
+        <string>en</string>
+        <string>fr</string>
+        <string>es</string>
+    </array>
+    <key>CFBundleName</key>
+    <string>ReverbWidget</string>
+    <key>CFBundlePackageType</key>
+    <string>XPC!</string>
+    <!-- 版本两项由 package.sh 从 Reverb.app 的 Info.plist 抄过来(单一来源),
+         这里写的是占位值;appex 与宿主版本不一致时 WidgetKit 不装载。 -->
+    <key>CFBundleShortVersionString</key>
+    <string>0</string>
+    <key>CFBundleVersion</key>
+    <string>0</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>13.0</string>
+    <key>NSExtension</key>
+    <dict>
+        <key>NSExtensionPointIdentifier</key>
+        <string>com.apple.widgetkit-extension</string>
+    </dict>
+</dict>
+</plist>

@@ -74,6 +74,20 @@
             </intent-filter>
         </service>
 
+        <!-- 「继续收听」桌面小组件。导出给系统(APPWIDGET_UPDATE 由 launcher 广播),
+             组件本身只读本地快照、不初始化网络组件(见 widget/WidgetState 的注释)。 -->
+        <receiver
+            android:name=".widget.ReverbWidgetProvider"
+            android:exported="true"
+            android:label="@string/widget_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/reverb_widget_info" />
+        </receiver>
+
         <!-- 分享图片(剪藏卡片 / 听觉足迹海报)导出到缓存目录,经 FileProvider 授予临时读权限 -->
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -14,6 +14,11 @@ export class JsonFile {
     JsonFile.dir = filesDir;
   }
 
+  /** 应用私有目录。服务卡片的 UI 侧刷新(WidgetUpdater)要它来回算封面缓存路径。 */
+  static root(): string {
+    return JsonFile.dir;
+  }
+
   private static path(name: string): string {
     return `${JsonFile.dir}/${name}`;
   }

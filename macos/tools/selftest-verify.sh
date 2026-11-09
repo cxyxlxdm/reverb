@@ -63,19 +63,69 @@ cat > "$WORK/Info.plist" <<'EOF'
 </dict></plist>
 EOF
 
+# 卡片扩展的假产物:Info.plist 版本与宿主一致(不一致本来就是一条断言),扩展点写对。
+cat > "$WORK/appex-Info.plist" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleExecutable</key><string>ReverbWidget</string>
+<key>CFBundleIdentifier</key><string>com.example.fake.widget</string>
+<key>CFBundlePackageType</key><string>XPC!</string>
+<key>CFBundleShortVersionString</key><string>1.0.4</string>
+<key>CFBundleVersion</key><string>1000004</string>
+<key>NSExtension</key><dict>
+<key>NSExtensionPointIdentifier</key><string>com.apple.widgetkit-extension</string>
+</dict>
+</dict></plist>
+EOF
+
+# 正向用例的 entitlements:沙箱 + 共享目录只读例外(真包由 Widget/ReverbWidget.entitlements 提供)
+cat > "$WORK/widget.entitlements" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.security.app-sandbox</key><true/>
+<key>com.apple.security.temporary-exception.files.home-relative-path.read-only</key>
+<array><string>/Library/Application Support/Reverb/widget/</string></array>
+</dict></plist>
+EOF
+# 变异 11 用:只有沙箱、没有只读例外
+cat > "$WORK/widget-no-exception.entitlements" <<'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>com.apple.security.app-sandbox</key><true/>
+</dict></plist>
+EOF
+
+APPEX_REL="Contents/PlugIns/ReverbWidget.appex"
+
+# 先签内层(带 entitlements)、再签外层,与 package.sh 同一顺序。
+# 用 --deep 签外层会把内层重签成同一套参数,只读例外就没了 —— 那时几乎每条变异都会"顺带"多报一条。
+resign() {
+  local B="$1" ents="${2:-$WORK/widget.entitlements}"
+  codesign --force --sign - --entitlements "$ents" "$B/$APPEX_REL" >/dev/null 2>&1 || true
+  codesign --force --sign - "$B" >/dev/null 2>&1
+}
+
 # 从「一切都好」的模板复制一份再破坏一处 —— 保证每个变异用例的失败只归因于那一处。
 build_good() {
-  local B="$1"
+  local B="$1" A
   rm -rf "$B"
-  mkdir -p "$B/Contents/MacOS" "$B/Contents/Resources"
+  A="$B/$APPEX_REL"
+  mkdir -p "$B/Contents/MacOS" "$B/Contents/Resources" "$A/Contents/MacOS" "$A/Contents/Resources"
   cp "$WORK/all_univ" "$B/Contents/MacOS/Fake"
   cp "$WORK/Info.plist" "$B/Contents/Info.plist"
+  cp "$WORK/all_univ" "$A/Contents/MacOS/ReverbWidget"
+  cp "$WORK/appex-Info.plist" "$A/Contents/Info.plist"
   local l
   for l in "${LANGS[@]}"; do
-    mkdir -p "$B/Contents/Resources/$l.lproj"
+    mkdir -p "$B/Contents/Resources/$l.lproj" "$A/Contents/Resources/$l.lproj"
     printf '"k" = "v";\n' > "$B/Contents/Resources/$l.lproj/Localizable.strings"
+    # 键必须是「继续收听」:verify 用 plutil 取它来证明画廊文案真的可解析
+    printf '"继续收听" = "x";\n' > "$A/Contents/Resources/$l.lproj/Localizable.strings"
   done
-  codesign --force --deep --sign - "$B" >/dev/null 2>&1
+  resign "$B"
 }
 
 PASS=0 FAIL=0
@@ -113,25 +163,25 @@ WANT_FAILS=0 expect "positive" "$GOOD" 0 "全部断言通过" "${VARGS[@]}"
 echo "==> 变异 1:二进制少一个判据词(noteComposer)—— 架构仍是两个,所以只有词判据该失败"
 M="$WORK/M1.app"; build_good "$M"
 cp "$WORK/less_univ" "$M/Contents/MacOS/Fake"
-codesign --force --deep --sign - "$M" >/dev/null 2>&1
+resign "$M"
 WANT_FAILS=1 expect "missing-word" "$M" 1 "「noteComposer」在二进制里 0 命中" "${VARGS[@]}"
 
 echo "==> 变异 2:一份 .strings 语法坏(少了分号)"
 M="$WORK/M2.app"; build_good "$M"
 printf '"k" = "v"\n' > "$M/Contents/Resources/fr.lproj/Localizable.strings"
-codesign --force --deep --sign - "$M" >/dev/null 2>&1   # 改完资源要重签,否则这条变异会连签名一起坏掉(实测会多报一条)
+resign "$M"   # 改完资源要重签,否则这条变异会连签名一起坏掉(实测会多报一条)
 WANT_FAILS=1 expect "bad-strings" "$M" 1 "lint 不过" "${VARGS[@]}"
 
 echo "==> 变异 3:整个 .lproj 少一套(删掉 zh-Hant)—— 剩下的都 lint OK,只打印的版本看不出来"
 M="$WORK/M3.app"; build_good "$M"
 rm -rf "$M/Contents/Resources/zh-Hant.lproj"
-codesign --force --deep --sign - "$M" >/dev/null 2>&1   # 同上:变异只该破坏一处判据
+resign "$M"   # 同上:变异只该破坏一处判据
 WANT_FAILS=1 expect "missing-language" "$M" 1 "缺 zh-Hant.lproj" "${VARGS[@]}"
 
 echo "==> 变异 4:期望两个架构、实际只有 arm64(1.0.2 那个包的形状)"
 M="$WORK/M4.app"; build_good "$M"
 cp "$WORK/all_a" "$M/Contents/MacOS/Fake"
-codesign --force --deep --sign - "$M" >/dev/null 2>&1
+resign "$M"
 WANT_FAILS=1 expect "arm64-only" "$M" 1 "缺 x86_64" "${VARGS[@]}"
 
 echo "==> 变异 4b:期望单架构、实际 universal(多出来的架构也该拦 —— 文件名与构建口径会不一致)"
@@ -140,7 +190,7 @@ WANT_FAILS=1 expect "extra-arch" "$GOOD" 1 "多出 x86_64" arm64 --langs "${LANG
 echo "==> 变异 5:Info.plist 缺 CFBundleVersion"
 M="$WORK/M5.app"; build_good "$M"
 plutil -remove CFBundleVersion "$M/Contents/Info.plist" >/dev/null 2>&1
-codesign --force --deep --sign - "$M" >/dev/null 2>&1
+resign "$M"
 WANT_FAILS=1 expect "no-build-version" "$M" 1 "Info.plist 的 CFBundleVersion" "${VARGS[@]}"
 
 echo '==> 变异 6:签完名再改二进制(签名失效)。前一版只跑 `codesign -dvv` 打印描述,拦不住这个'
@@ -151,8 +201,38 @@ WANT_FAILS=1 expect "bad-signature" "$M" 1 "codesign --verify 不通过" "${VARG
 echo '==> 变异 7:Info.plist 没有 CFBundleExecutable(前置检查,直接退出 —— 走到下面那套判据毫无意义)'
 M="$WORK/M7.app"; build_good "$M"
 plutil -remove CFBundleExecutable "$M/Contents/Info.plist" >/dev/null 2>&1
-codesign --force --deep --sign - "$M" >/dev/null 2>&1
+resign "$M"
 WANT_FAILS=1 WANT_EARLY=1 expect "no-executable-key" "$M" 1 "没有 CFBundleExecutable" "${VARGS[@]}"
+
+echo "==> 变异 9:整个 .appex 没装进 PlugIns(App 照跑,只是小组件库里查无此项)"
+M="$WORK/M9.app"; build_good "$M"
+rm -rf "$M/Contents/PlugIns"
+resign "$M"
+WANT_FAILS=1 expect "no-appex" "$M" 1 "缺 Contents/PlugIns/ReverbWidget.appex" "${VARGS[@]}"
+
+echo "==> 变异 10:扩展点写错(系统会把它当另一种扩展,卡片不会出现)"
+M="$WORK/M10.app"; build_good "$M"
+plutil -replace NSExtension.NSExtensionPointIdentifier -string com.apple.widgetkit-extension-typo \
+  "$M/$APPEX_REL/Contents/Info.plist" >/dev/null 2>&1
+resign "$M"
+WANT_FAILS=1 expect "bad-extension-point" "$M" 1 "NSExtensionPointIdentifier 是" "${VARGS[@]}"
+
+echo "==> 变异 11:只带沙箱、丢掉共享目录只读例外(不报错,只是卡片永远空态)"
+M="$WORK/M11.app"; build_good "$M"
+resign "$M" "$WORK/widget-no-exception.entitlements"
+WANT_FAILS=1 expect "no-read-exception" "$M" 1 "只读例外" "${VARGS[@]}"
+
+echo "==> 变异 12:扩展版本与宿主不一致(WidgetKit 会拒绝装载)"
+M="$WORK/M12.app"; build_good "$M"
+plutil -replace CFBundleVersion -string 1000005 "$M/$APPEX_REL/Contents/Info.plist" >/dev/null 2>&1
+resign "$M"
+WANT_FAILS=1 expect "appex-version-mismatch" "$M" 1 "卡片扩展的 CFBundleVersion=" "${VARGS[@]}"
+
+echo "==> 变异 13:扩展少一套语言(画廊名字在该语言下退回键名)"
+M="$WORK/M13.app"; build_good "$M"
+rm -rf "$M/$APPEX_REL/Contents/Resources/zh-Hant.lproj"
+resign "$M"
+WANT_FAILS=1 expect "appex-missing-language" "$M" 1 "卡片扩展缺 zh-Hant.lproj" "${VARGS[@]}"
 
 echo "==> 变异 8:词表本身写错(类别与字节数不符)。这一组验的不是产品,是「配置错」那三条断言有没有牙齿"
 # 为什么要有这一组:2026-10-24 那次 universal 出包报 9 条「改动没进包」,真相是 9 个词全落在

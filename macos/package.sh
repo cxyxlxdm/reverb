@@ -34,17 +34,23 @@ for a in "${ARCHS[@]}"; do
   [ "$prev" = "--arch" ] && EXPECTED+=("$a")
   prev="$a"
 done
-ARCHS_OUT="$(lipo -archs "$BINDIR/$APP" 2>/dev/null || echo '')"
-echo "==> 架构断言:lipo -archs = '${ARCHS_OUT}'(期望:${EXPECTED[*]})"
-for want in "${EXPECTED[@]}"; do
-  case " $ARCHS_OUT " in
-    *" $want "*) echo "   ok: $want" ;;
-    *) echo "   ✗ 缺 $want —— 这个包在对应芯片的 Mac 上跑不起来,不出 dmg。"
-       echo "     多 --arch 走 xcbuild,**只有完整 Xcode 有,CLT 没有**(2026-09-30 在 CLT-only 机器上实测:"
-       echo "     error: xcbuild executable ... does not exist)。遇到这种机器请退回:分别 --arch 编译两次再 lipo -create 合并。"
-       exit 1 ;;
-  esac
-done
+assert_archs() {
+  local bin="$1" label="$2" got
+  got="$(lipo -archs "$bin" 2>/dev/null || echo '')"
+  echo "==> 架构断言:$label lipo -archs = '${got}'(期望:${EXPECTED[*]})"
+  for want in "${EXPECTED[@]}"; do
+    case " $got " in
+      *" $want "*) echo "   ok: $want" ;;
+      *) echo "   ✗ $label 缺 $want —— 这个包在对应芯片的 Mac 上跑不起来,不出 dmg。"
+         echo "     多 --arch 走 xcbuild,**只有完整 Xcode 有,CLT 没有**(2026-09-30 在 CLT-only 机器上实测:"
+         echo "     error: xcbuild executable ... does not exist)。遇到这种机器请退回:分别 --arch 编译两次再 lipo -create 合并。"
+         exit 1 ;;
+    esac
+  done
+}
+[ -x "$BINDIR/ReverbWidget" ] || { echo "   ✗ 找不到 $BINDIR/ReverbWidget —— SwiftPM 没编出卡片扩展(检查 Package.swift 的 ReverbWidget target)"; exit 1; }
+assert_archs "$BINDIR/$APP" "主程序"
+assert_archs "$BINDIR/ReverbWidget" "卡片扩展"
 
 BUNDLE="build/${APP}.app"
 echo "==> assemble $BUNDLE"
@@ -73,8 +79,28 @@ else
   echo "   ⚠ 缺 Resources/guide_intro.m4a,首启不显示引导入口(跑 shared/guide/sync.sh 补上)"
 fi
 
+# ---- 卡片扩展(WidgetKit)---------------------------------------------------
+# SwiftPM 只会给出一个可执行文件,不认 .appex 这种 bundle;这里把它按宿主 App 的布局装进去:
+#   Reverb.app/Contents/PlugIns/ReverbWidget.appex/Contents/{Info.plist,MacOS/,Resources/}
+# 扩展的 Info.plist 里版本两项**从宿主抄**:WidgetKit 发现版本不一致时不会装载,
+# 而版本号在本仓库有四处要手改(AGENTS.md),不能让第五处再成为漏改点。
+APPEX="$BUNDLE/Contents/PlugIns/ReverbWidget.appex"
+echo "==> assemble $APPEX"
+rm -rf "$APPEX"
+mkdir -p "$APPEX/Contents/MacOS" "$APPEX/Contents/Resources"
+cp "$BINDIR/ReverbWidget" "$APPEX/Contents/MacOS/ReverbWidget"
+cp Widget/Info.plist "$APPEX/Contents/Info.plist"
+cp -R Widget/Localization/*.lproj "$APPEX/Contents/Resources/"
+APP_VER="$(plutil -extract CFBundleShortVersionString raw "$BUNDLE/Contents/Info.plist")"
+APP_BUILD="$(plutil -extract CFBundleVersion raw "$BUNDLE/Contents/Info.plist")"
+plutil -replace CFBundleShortVersionString -string "$APP_VER" "$APPEX/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$APP_BUILD" "$APPEX/Contents/Info.plist"
+
 echo "==> ad-hoc codesign"
-codesign --force --deep --sign - "$BUNDLE"
+# 顺序要紧:先签内层 appex(带 entitlements),再签外层 app。
+# 外层**不带 --deep** —— 带它会把内层按同一套参数重签一遍,沙箱与只读例外就丢了(卡片读不到数据)。
+codesign --force --sign - --entitlements Widget/ReverbWidget.entitlements "$APPEX"
+codesign --force --sign - "$BUNDLE"
 
 # ---- 解包验收(硬规矩 1)---------------------------------------------------
 # 断言在 ./verify-bundle.sh 里,不在这里:那个脚本要能脱离 swift build 单独跑,
@@ -102,7 +128,7 @@ ln -s /Applications "$STAGE/Applications"
 # 架构标记**由 EXPECTED 推导,不再写死 universal** —— 1.0.2 那个包正是"名字叫 universal、
 # 实际 arm64 单架构"才让 Intel 用户装不上却看不出来;写死的字符串只会重复同一个错误。
 mkdir -p dist
-VER="$(plutil -extract CFBundleShortVersionString raw "$BUNDLE/Contents/Info.plist")"
+VER="$APP_VER"
 if [ "${#EXPECTED[@]}" -gt 1 ]; then TAG="universal"; else TAG="${EXPECTED[0]}"; fi
 DMG="dist/余音-Reverb-${VER}-${TAG}.dmg"
 rm -f "$DMG"
