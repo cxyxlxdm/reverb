@@ -307,8 +307,8 @@ export struct PodcastDetailPage {
       await new Promise<void>((resolve: () => void) => setTimeout(resolve, 48));
       const ui = this.getUIContext();
       const ctx = ui.getHostContext() as common.UIAbilityContext;
-      const png = await snapshotToPng(ui, ctx, 'reverb-channel-card', 'reverb-channel.png');
-      if (png === null || !await Files.shareImage(ctx, L.s('channel_share'), png)) {
+      const png = await snapshotToPng(ui, ctx, 'reverb-moments-card', 'reverb-moments.png');
+      if (png === null || !await Files.shareImage(ctx, L.s('moments_poster'), png)) {
         this.showToast(L.s('share_failed'));
       }
     } finally {
@@ -334,7 +334,7 @@ export struct PodcastDetailPage {
               color: this.sharing ? this.scheme.outline : this.scheme.primary })
           }
           .width(40).height(40).justifyContent(FlexAlign.Center)
-          .accessibilityText(L.s('channel_share'))
+          .accessibilityText(L.s('moments_poster'))
           .onClick(() => { this.shareChannel(); })
         }
         .width('100%')
@@ -426,9 +426,9 @@ export struct PodcastDetailPage {
 
       // 与播放页剪藏相同:组件必须实际参与渲染才能被 componentSnapshot 捕获。
       ChannelShareCard({
-        scheme: this.scheme, fontScale: this.fontScale, podcast: this.display()
+        scheme: this.scheme, podcast: this.display()
       })
-        .id('reverb-channel-card')
+        .id('reverb-moments-card')
         .position({ x: -2000, y: 0 })
 
       // 多选浮条:只在有勾选时组合(与各列"没内容就不摆动作"同一条规矩)。

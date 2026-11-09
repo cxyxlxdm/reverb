@@ -15,7 +15,7 @@
     <string name="saved_ok">已保存到相册</string>
     <string name="saved_fail">保存失败</string>
     <string name="clip_share">分享此刻</string>
-    <string name="channel_share">分享频道</string>
+    <string name="moments_poster">朋友圈海报</string>
     <string name="share_failed">分享图片生成失败</string>
     <string name="stamp_add">盖章 · 听觉印记</string>
     <string name="stamp_edit">改章 · 听觉印记</string>

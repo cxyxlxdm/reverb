@@ -160,8 +160,8 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                                 ShareCards.share(
                                     context,
                                     bitmap,
-                                    "reverb-channel-${kotlin.math.abs(podcast.feedUrl.hashCode())}.png",
-                                    context.getString(R.string.channel_share)
+                                    "reverb-moments-${kotlin.math.abs(podcast.feedUrl.hashCode())}.png",
+                                    context.getString(R.string.moments_poster)
                                 )
                             } catch (_: Exception) {
                                 Toast.makeText(context, R.string.share_failed, Toast.LENGTH_SHORT).show()
@@ -171,7 +171,7 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                         }
                     }
                 ) {
-                    Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.channel_share))
+                    Icon(Icons.Rounded.Share, contentDescription = stringResource(R.string.moments_poster))
                 }
             }
         }

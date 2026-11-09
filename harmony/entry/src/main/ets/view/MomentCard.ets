@@ -62,19 +62,23 @@ export struct MomentCard {
   }
 }
 
-/// 频道分享卡:频道 Logo + 频道名 + 简介(最多四行,超出省略)+ App 落款,
+/// 朋友圈海报:频道 Logo + 频道名 + 简介(最多四行,超出省略)+ App 落款,
 /// 不携带可能含私有凭据的 RSS 地址。
+///
+/// 3:4(360×480 vp,3x 屏截图即 1080×1440):微信朋友圈的单图预览按 3:4 收,
+/// 原来 320×500 的比例在信息流里会先被裁掉上下两头。
+/// 字号**不乘 fontScale**:海报是拿出去的文件,不是界面;用户调大字号不该把
+/// 固定高度的海报撑破(标题三行 + 简介四行的最坏情形已按 1.0 倍排好)。
 @Component
 export struct ChannelShareCard {
   @Prop scheme: Scheme;
-  @Prop fontScale: number;
   @Prop podcast: Podcast;
 
   build() {
-    Column({ space: 20 }) {
-      Artwork({ scheme: this.scheme, url: this.podcast.artworkUrl, dim: 190, corner: 20 })
+    Column({ space: 14 }) {
+      Artwork({ scheme: this.scheme, url: this.podcast.artworkUrl, dim: 170, corner: 20 })
       Text(this.podcast.title)
-        .fontSize(22 * this.fontScale)
+        .fontSize(22)
         .fontWeight(FontWeight.Bold)
         .fontColor(this.scheme.onBackground)
         .maxLines(3)
@@ -83,7 +87,7 @@ export struct ChannelShareCard {
         .width('100%')
       if (this.podcast.description.length > 0) {
         Text(this.podcast.description)
-          .fontSize(13 * this.fontScale)
+          .fontSize(13)
           .fontColor(this.scheme.onSurfaceVariant)
           .lineHeight(19)
           .maxLines(4)
@@ -93,13 +97,12 @@ export struct ChannelShareCard {
       }
       Blank()
       Text('余音 · Reverb')
-        .fontSize(12 * this.fontScale)
+        .fontSize(12)
         .fontColor(this.scheme.onSurfaceVariant)
     }
-    .width(320)
-    // 简介最多四行(4×19)+标题三行的最坏情形装不下 410,放宽到 500;短内容由 Blank 撑开
-    .height(500)
-    .padding(26)
+    .width(360)
+    .height(480)
+    .padding(22)
     .backgroundColor(this.scheme.surface)
     .border({ width: 1, color: withAlpha(this.scheme.primary, 0.18) })
     .borderRadius(20)

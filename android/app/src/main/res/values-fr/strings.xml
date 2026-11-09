@@ -15,7 +15,7 @@
     <string name="saved_ok">Enregistré dans la galerie</string>
     <string name="saved_fail">Échec de l\'enregistrement</string>
     <string name="clip_share">Partager cet instant</string>
-    <string name="channel_share">Partager l’émission</string>
+    <string name="moments_poster">Affiche pour Moments</string>
     <string name="share_failed">Impossible de créer l’image à partager</string>
     <string name="stamp_add">Sceau · Empreinte d\'écoute</string>
     <string name="stamp_edit">Modifier le sceau · Empreinte d\'écoute</string>

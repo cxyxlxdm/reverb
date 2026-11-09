@@ -1037,8 +1037,8 @@
       "value": "分享此刻"
     },
     {
-      "name": "channel_share",
-      "value": "分享频道"
+      "name": "moments_poster",
+      "value": "朋友圈海报"
     },
     {
       "name": "share_failed",

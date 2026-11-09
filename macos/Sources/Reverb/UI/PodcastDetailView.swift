@@ -110,11 +110,11 @@ struct PodcastDetailView: View {
                     ShareLink(item: shareCardURL) {
                         Image(systemName: "square.and.arrow.up")
                     }
-                    .help("分享")
+                    .help("朋友圈海报")
                 } else {
                     Image(systemName: "square.and.arrow.up")
                         .foregroundStyle(.tertiary)
-                        .help("分享")
+                        .help("朋友圈海报")
                 }
             }
             // 频道页也能批量入队(Android / 鸿蒙 2026-10-17 补的同一栏)。

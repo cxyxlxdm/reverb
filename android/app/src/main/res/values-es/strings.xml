@@ -15,7 +15,7 @@
     <string name="saved_ok">Guardado en la galería</string>
     <string name="saved_fail">Error al guardar</string>
     <string name="clip_share">Compartir este momento</string>
-    <string name="channel_share">Compartir programa</string>
+    <string name="moments_poster">Póster para Moments</string>
     <string name="share_failed">No se pudo crear la imagen para compartir</string>
     <string name="stamp_add">Sello · Marca de escucha</string>
     <string name="stamp_edit">Editar sello · Marca de escucha</string>

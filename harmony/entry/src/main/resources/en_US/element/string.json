@@ -1037,8 +1037,8 @@
       "value": "Share this moment"
     },
     {
-      "name": "channel_share",
-      "value": "Share show"
+      "name": "moments_poster",
+      "value": "Moments poster"
     },
     {
       "name": "share_failed",
