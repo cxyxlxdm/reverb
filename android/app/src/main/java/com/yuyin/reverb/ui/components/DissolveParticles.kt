@@ -130,7 +130,7 @@ private fun DrawScope.drawShard(s: Shard, lifeMs: Long) {
  */
 private fun spawn(rect: Rect, darks: List<Color>, primary: Color): List<Shard> {
     val rnd = Random.Default
-    val step = rect.height / 8.5f // 条高 52dp ⇒ 步长约 6dp;别的几何按条高比例
+    val step = rect.height / 8.5f // 条高 48/56dp ⇒ 步长约 6~6.6dp;别的几何按条高比例
     val out = ArrayList<Shard>(1400)
     var y = rect.top
     while (y < rect.bottom) {
