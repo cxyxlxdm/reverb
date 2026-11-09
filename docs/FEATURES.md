@@ -118,6 +118,8 @@ macOS 走 dmg 自行分发,不涉及应用商店,**没有渠道差异**;端与�
 > iOS 用一个零尺寸 `UIViewRepresentable` 找到 `UITabBar` 装两击手势(格子按 `bounds.width / items.count` 等分)。
 > 三端都是**每格一个计数器**,由各页按自己当前那一段/那一列去消费 —— 音阁六个分段各有自己的滚动容器,
 > 用一个共享计数器会让屏外那一列被"滚"一次。macOS 没有底部 tab,不在这一条里。
+> 「追更」的自动回顶同样**挂在数据变化上**(Android `LaunchedEffect` / iOS `onChange` / 鸿蒙 `@Watch`),
+> 不是写在刷新方法末尾 —— 鸿蒙页签内容常驻,退订、别处刷新都不会再触发一次"进页",只比对自己刷的那次会漏。
 > 实现坑(为什么不能共用滚动状态、iOS 为什么不能用零高锚点做 `List`、探针为什么要关 `delaysTouchesEnded`)
 > 见 `docs/TROUBLESHOOTING.md` **H248**。
 
