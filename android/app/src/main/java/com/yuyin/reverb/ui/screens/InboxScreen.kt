@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -47,7 +48,7 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun InboxBody(topPad: Dp = Dp(0f)) {
+fun InboxBody(topPad: Dp = Dp(0f), scrollTopToken: Int = 0) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
     val episodes by container.inboxStore.episodes.collectAsStateWithLifecycle()
@@ -55,6 +56,30 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     val pullState = rememberPullToRefreshState()
+    val listState = rememberLazyListState()
+
+    // 双击底部 tab 回顶(见 `ReverbRoot.MainShell` 的三颗 token)。
+    LaunchedEffect(scrollTopToken) {
+        if (scrollTopToken > 0) listState.animateScrollToItem(0)
+    }
+    /**
+     * **内容更新了就从顶部看起**,不要把用户晾在"上次打开的位置"。
+     *
+     * 判据是**列表头那条的 id 变了** —— 也就是刷新真的插进了新集。`LazyColumn` 带 key 时
+     * 会按 key 锚定当前可见项,不处理的话新集插在头上、视口仍钉着旧的那条,
+     * 用户看到的是"更新了但也看不到新内容"。判 id 而不是判列表长度:换源/排序变化也可能
+     * 让长度不变而内容全换,那种情况同样该回顶。
+     *
+     * 首次为 null 时只记不跳(`prev == null`):进页时列表本来就该停在它该停的地方
+     * (冷启动就是顶部),而**这一趟刷新如果带来新头**,下一次 effect 就会跳 —— 两条分开。
+     */
+    var lastHeadId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(episodes.firstOrNull()?.id) {
+        val head = episodes.firstOrNull()?.id
+        val prev = lastHeadId
+        lastHeadId = head
+        if (prev != null && head != null && head != prev) listState.animateScrollToItem(0)
+    }
 
     // 多选(批量加入待播)的已选集合。放在这一层而不是行里:行会被 LazyColumn 回收,
     // 且「全选」要一次改整列。空集 = 不在选择模式。
@@ -93,7 +118,8 @@ fun InboxBody(topPad: Dp = Dp(0f)) {
     ) {
         when {
             episodes.isNotEmpty() -> LazyColumn(
-                Modifier.fillMaxSize(),
+                state = listState,
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
                     top = topPad,
                     bottom = 24.dp + LocalGlassBottomPad.current +
@@ -175,12 +201,12 @@ const val TAG_INBOX = "inbox"
  * (`Components.kt PlayModeButton`)。位置从分段条右端搬到标题栏,功能不能因为搬家而丢。
  */
 @Composable
-fun FeedScreen() {
+fun FeedScreen(scrollTopToken: Int = 0) {
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
             title = stringResource(R.string.nav_feed),
             action = { PlayModeButton(TAG_INBOX) }
         )
-        InboxBody()
+        InboxBody(scrollTopToken = scrollTopToken)
     }
 }

@@ -1,5 +1,6 @@
 package com.yuyin.reverb.ui.components
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -190,6 +191,12 @@ private const val DAMP_PILL = 0.70f
 /** response 0.42s ⇒ (2π/0.42)² ≈ 224。 */
 private const val SPRING_STIFFNESS = 224f
 
+/**
+ * 双击 tab 的时间窗(毫秒)。取 380ms:比系统的双击判定(约 300–500ms)
+ * 中间偏紧一点 —— 太宽会把"点一下没反应、再补一下"读成双击,太窄又要求手速。
+ */
+private const val DOUBLE_TAP_MS = 380L
+
 // ———————————————————————————— 折射(鸿蒙第 0.5 层):尚未落地 ————————————————————————————
 /**
  * 鸿蒙那一层把栏背后的内容按径向位移场搬进透镜里。Android **还没做**,卡在**取源**
@@ -322,7 +329,16 @@ fun GlassNavBar(
      * Android 这边天然能做,就用与播放条形变同一条曲线(同 [MINI_MORPH_DAMP]),
      * 否则栏自己缩、播放条滑过来,两条曲线不同步会看出散架。
      */
-    collapsed: Boolean = false
+    collapsed: Boolean = false,
+    /**
+     * **双击当前 tab**。普通点按在 [selected] 那一格上本来无事可做(页面已经在那一格),
+     * 所以那一下只用来攒双击:两次点在同一格、间隔 ≤ [DOUBLE_TAP_MS] 才回调。
+     *
+     * 为什么不在 MainShell 的 `select()` 里判:栏里**只有切格**才调 `onSelect`
+     * (`commitIdx != currentSelected` 那一条),点当前格根本不上报 —— 双击的第一下
+     * 到不了外壳。判定必须贴着 tap 探测器,那里才知道这一次点的是哪一格。
+     */
+    onDoubleTap: (Int) -> Unit = {}
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val density = LocalDensity.current
@@ -331,6 +347,12 @@ fun GlassNavBar(
     // 捕获旧 selected 会把提交送到上一个 tab 上
     val currentSelected by rememberUpdatedState(selected)
     val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentOnDoubleTap by rememberUpdatedState(onDoubleTap)
+    /**
+     * 双击判据:[0] 上一次点中当前 tab 的时刻,[1] 那一格。
+     * 用 `LongArray` 而不是 state —— 它只在手势回调里读写,不该触发重组(同 [previewTarget])。
+     */
+    val lastTabTap = remember { LongArray(2) { -1L } }
     // 同一条理由:收束态的判据活在整个手势回调里,不能读按下那一刻的旧值
     val currentCollapsed by rememberUpdatedState(collapsed)
 
@@ -626,7 +648,24 @@ fun GlassNavBar(
                                 val commitIdx = if (previewIdx >= 0) previewIdx else idx
                                 previewIdx = -1
                                 nearIdx = -1
-                                if (commitIdx != currentSelected) currentOnSelect(commitIdx)
+                                if (commitIdx != currentSelected) {
+                                    // 切格这一下可能是双击的第一下;下一格上的时间窗不该继承它
+                                    lastTabTap[0] = -1L
+                                    lastTabTap[1] = -1L
+                                    currentOnSelect(commitIdx)
+                                } else {
+                                    val now = SystemClock.uptimeMillis()
+                                    if (lastTabTap[1] == commitIdx.toLong() &&
+                                        now - lastTabTap[0] in 0..DOUBLE_TAP_MS) {
+                                        // 一次双击只触发一次:清掉时间窗,第三下重新算
+                                        lastTabTap[0] = -1L
+                                        lastTabTap[1] = -1L
+                                        currentOnDoubleTap(commitIdx)
+                                    } else {
+                                        lastTabTap[0] = now
+                                        lastTabTap[1] = commitIdx.toLong()
+                                    }
+                                }
                             } else if (!released && !dragging) {
                                 // 拖拽/系统取消:预览作废,药丸回选中位
                                 previewIdx = -1

@@ -36,6 +36,22 @@ export struct DiscoverPage {
   /// 从栏下滚过才被糊出来(`barOverlap(true)`)。
   @Prop bottomPad: number = 0;
   /**
+   * 双击底部「发现」时外壳递增这个数,本页据此把**当前可见的**那一列滚回顶部。
+   *
+   * 为什么是"当前可见"而不是"全部":本页同时挂着的 List 有五列(零订阅引导 / 有订阅首屏 /
+   * 分类榜 / 直播结果 / 搜索两个分段),而屏幕上看得到的永远只有一列 ——
+   * 逐列判断见 `onScrollTopToken`。
+   */
+  @Prop @Watch('onScrollTopToken') scrollTopToken: number = 0;
+  /// 各列自己的 Scroller。分类榜一列一个(`Swiper` 带 `cachedCount(1)`,
+  /// 相邻页的 List 同时活着,一个 Scroller 只能绑一个 List ⇒ 不能共用)。
+  private starterScroller: Scroller = new Scroller();
+  private homeScroller: Scroller = new Scroller();
+  private catScrollers: Scroller[] = [];
+  private liveScroller: Scroller = new Scroller();
+  private searchPodcastsScroller: Scroller = new Scroller();
+  private searchEpisodesScroller: Scroller = new Scroller();
+  /**
    * 把这一帧的滚动量(vp,向下为正)交给外壳,由它决定播放条收不收进栏(`Index.feedScroll`)。
    *
    * 每一处**竖向**滚动容器都要挂(`.onDidScroll`),漏一处就是从那一屏往下滚不收起 ——
@@ -151,6 +167,39 @@ export struct DiscoverPage {
     this.lists = l;
     this.loadingFlags = f;
     this.seedFlags = sd;
+    // 分类榜一列一个 Scroller。只在分类数变了才重建 —— 保留已有实例,
+    // 免得每次进页把各页的滚动位置清掉。
+    if (this.catScrollers.length !== n) {
+      const sc: Scroller[] = [];
+      for (let i = 0; i < n; i++) sc.push(new Scroller());
+      this.catScrollers = sc;
+    }
+  }
+
+  /**
+   * 双击底部「发现」→ 把**当前可见**的那一列滚回顶部。
+   *
+   * 这四条分支必须与 `build()` 里那层 `if` 的判断顺序**逐条对齐**(searched → 降级渠道 → 分类榜):
+   * 判据一旦比界面窄一格,就会出现"点了没反应"或"滚了屏外那一列"(后者在本端是无声的 ——
+   * `scrollEdge` 对没绑到界面上的 Scroller 是空操作)。
+   */
+  onScrollTopToken(): void {
+    if (this.searched) {
+      if (this.liveEpisode !== null
+        && this.searchPodcasts.length === 0 && this.searchEpisodes.length === 0) {
+        this.liveScroller.scrollEdge(Edge.Top);
+      } else if (this.searchTab === 0) {
+        this.searchPodcastsScroller.scrollEdge(Edge.Top);
+      } else {
+        this.searchEpisodesScroller.scrollEdge(Edge.Top);
+      }
+    } else if (!Features.CATALOG) {
+      if (this.subscriptions.subscriptions.length === 0) this.starterScroller.scrollEdge(Edge.Top);
+      else this.homeScroller.scrollEdge(Edge.Top);
+    } else {
+      const s = this.catScrollers[this.catIndex];
+      if (s !== undefined) s.scrollEdge(Edge.Top);
+    }
   }
 
   /**
@@ -808,7 +857,7 @@ export struct DiscoverPage {
    */
   @Builder
   starterOnboarding() {
-    List() {
+    List({ scroller: this.starterScroller }) {
       ListItem() {
         Column({ space: 6 }) {
           Text(L.s('starter_title'))
@@ -872,7 +921,7 @@ export struct DiscoverPage {
   @Builder
   homeFeed() {
     Refresh({ refreshing: this.inbox.refreshing }) {
-      List() {
+      List({ scroller: this.homeScroller }) {
         if (this.continueEntries().length > 0) {
           ListItem() {
             this.continueStrip()
@@ -1050,7 +1099,7 @@ export struct DiscoverPage {
         } else if (this.lists[idx].length === 0) {
           EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('discover_empty') })
         } else {
-          List() {
+          List({ scroller: this.catScrollers[idx] }) {
             // 顶部占位:给玻璃分段条让出高度。不用 contentStartOffset —— 实测它是
             // 「初始滚动位」语义而不是内容留白:列表随数据到位重建后首项会被顶到条背后,
             // 静止时只剩一条缝露在条外。占位 ListItem 是纯布局,保证首项停在条下方。
@@ -1225,7 +1274,7 @@ export struct DiscoverPage {
           .fontColor(this.scheme.onSurfaceVariant)
           .width('100%')
           .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 8, bottom: 4 })
-        List() {
+        List({ scroller: this.liveScroller }) {
           ListItem() {
             EpisodeListItem({
               scheme: this.scheme, fontScale: this.fontScale, episode: ep,
@@ -1285,7 +1334,7 @@ export struct DiscoverPage {
             text: this.searchRssFailed ? L.s('search_rss_failed') : L.s('search_no_shows')
           }).layoutWeight(1)
         } else {
-          List() {
+          List({ scroller: this.searchPodcastsScroller }) {
             ForEach(this.searchPodcasts, (p: Podcast, idx: number) => {
               ListItem() {
                 PodcastListItem({
@@ -1312,7 +1361,7 @@ export struct DiscoverPage {
         } else if (this.searchEpisodes.length === 0) {
           EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('search_no_episodes') }).layoutWeight(1)
         } else {
-          List() {
+          List({ scroller: this.searchEpisodesScroller }) {
             ForEach(this.searchEpisodes, (e: Episode) => {
               ListItem() {
                 EpisodeListItem({

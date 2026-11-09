@@ -43,6 +43,11 @@ export struct FeedPage {
   @Prop fontScale: number;
   /// 底部栏悬浮,列表要让出的空间(与音阁/发现同一口径,Index 算好传入)
   @Prop bottomPad: number = 0;
+  /**
+   * 双击底部「追更」格回顶的触发器(Index 递增,见那里的 `onTabBarClick`)。
+   * 只认"变了":首次挂载时 `@Watch` 不会回调,所以不需要挡第一趟。
+   */
+  @Prop @Watch('onScrollTopToken') scrollTopToken: number = 0;
   /// 滚动量交给外壳,由它决定播放条收不收进底部栏(见 DiscoverPage 同名注释)
   onScrollDy: (dy: number, st: ScrollState) => void = () => {};
   /**
@@ -73,6 +78,9 @@ export struct FeedPage {
   @State picked: Set<string> = new Set();
 
   private app: AppContainer = AppContainer.get();
+  /// 这一页列表的滚动控制器。双击回顶([onScrollTopToken])与「更新了就从顶部看起」
+  /// ([refreshInbox])都靠它,所以必须是字段而不是每次 build 新建。
+  private scroller: Scroller = new Scroller();
 
   aboutToAppear(): void {
     // 进页即按需刷新(订阅集未变则跳过,避免切 tab 反复全量刷)。
@@ -86,9 +94,24 @@ export struct FeedPage {
   private async refreshInbox(force: boolean): Promise<void> {
     const subs = this.subscriptions.subscriptions;
     if (subs.length === 0) return;
+    // 刷之前记下"第一条是谁":刷完若头上换了人,说明真的有新集插进来。
+    // 不记长度而记 id —— 换源/排序变化也可能让长度不变而内容全换,那种也该回顶。
+    const headBefore: string = this.inbox.episodes.length > 0 ? this.inbox.episodes[0].id : '';
     if (force) await this.inbox.refresh(subs, this.app.repository);
     else await this.inbox.refreshIfStale(subs, this.app.repository);
+    const headAfter: string = this.inbox.episodes.length > 0 ? this.inbox.episodes[0].id : '';
+    // **内容更新了就从顶部看起**,不要把用户晾在"上次打开的位置"(用户 2026-11-09 的反馈)。
+    // List 的滚动位是像素量,新集插在头上时它不会自己动 —— 不处理就是"明明更新了却看不见"。
+    // `headBefore === ''` 只出现在首刷(那时列表还没东西,本来就在顶上),不滚。
+    if (headBefore.length > 0 && headAfter.length > 0 && headBefore !== headAfter) {
+      this.scroller.scrollEdge(Edge.Top);
+    }
     Log.i('Feed', `追更:当前 ${this.inbox.episodes.length} 条`);
+  }
+
+  /// 双击底部「追更」→ 回顶(见 [scrollTopToken])。
+  onScrollTopToken(): void {
+    this.scroller.scrollEdge(Edge.Top);
   }
 
   build() {
@@ -115,7 +138,7 @@ export struct FeedPage {
                 EmptyHint({ scheme: this.scheme, fontScale: this.fontScale, text: L.s('empty_inbox') })
               }
             } else {
-              List() {
+              List({ scroller: this.scroller }) {
                 ForEach(this.inbox.episodes, (e: Episode) => {
                   ListItem() {
                     EpisodeListItem({

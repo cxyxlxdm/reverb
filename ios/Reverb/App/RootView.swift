@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// 根视图:四格 Tab(发现 / 追更 / 音阁 / 设置),每格自带 `NavigationStack`。
 /// 迷你播放条挂在内容底部、Tab 栏之上;点开是全屏播放页。
@@ -15,6 +16,12 @@ struct RootView: View {
     @State private var inboxPath = NavigationPath()
     @State private var libraryPath = NavigationPath()
     @State private var settingsPath = NavigationPath()
+    /// 双击底部 tab 回顶:每一格自己一个计数器,改哪个就只让哪一页滚。
+    /// 为什么不用"滚到第 0 项"的共享状态:三页各有一批滚动容器(音阁一段一个),
+    /// 由各页按自己当前那一段去解释这个数,外壳不掺和(与 Android 三个 token 同形)。
+    @State private var discoverTopToken = 0
+    @State private var inboxTopToken = 0
+    @State private var libraryTopToken = 0
 
     init() {
         #if DEBUG
@@ -37,21 +44,39 @@ struct RootView: View {
 
     var body: some View {
         TabView(selection: $tab) {
-            TabRoot(path: $discoverPath, showPlayer: $showPlayer) { DiscoverView() }
+            TabRoot(path: $discoverPath, showPlayer: $showPlayer) {
+                DiscoverView(scrollTopToken: discoverTopToken)
+            }
                 .tabItem { Label("发现", systemImage: "sparkles") }
                 .tag(Tab.discover)
 
-            TabRoot(path: $inboxPath, showPlayer: $showPlayer) { InboxView() }
+            TabRoot(path: $inboxPath, showPlayer: $showPlayer) {
+                InboxView(scrollTopToken: inboxTopToken)
+            }
                 .tabItem { Label("追更", systemImage: "tray.full") }
                 .tag(Tab.inbox)
 
-            TabRoot(path: $libraryPath, showPlayer: $showPlayer) { LibraryView() }
+            TabRoot(path: $libraryPath, showPlayer: $showPlayer) {
+                LibraryView(scrollTopToken: libraryTopToken)
+            }
                 .tabItem { Label("音阁", systemImage: "books.vertical") }
                 .tag(Tab.library)
 
             TabRoot(path: $settingsPath, showPlayer: $showPlayer) { SettingsView() }
                 .tabItem { Label("设置", systemImage: "gearshape") }
                 .tag(Tab.settings)
+        }
+        // 双击当前那颗 tab → 那一格滚回顶部。探针不画东西、不占位,
+        // 作用只是在 UITabBar 上装一个两击手势(为什么必须走这一层见 `TabBarDoubleTapProbe`)。
+        .background {
+            TabBarDoubleTapProbe { idx in
+                switch idx {
+                case 0: discoverTopToken += 1
+                case 1: inboxTopToken += 1
+                case 2: libraryTopToken += 1
+                default: break   // 设置页没有长列表,双击不做任何事
+                }
+            }
         }
         .tint(Theme.accent(settings.accentIndex))
         .preferredColorScheme(Theme.colorScheme(settings.themeMode))
@@ -119,5 +144,99 @@ private struct TabRoot<Content: View>: View {
         }
         .animation(.spring(response: 0.32, dampingFraction: 0.86), value: player.current != nil)
         .tint(Theme.accent(settings.accentIndex))
+    }
+}
+
+/**
+ 双击底部 tab 的探针。
+ 
+ 为什么必须走 UIKit 这一层:SwiftUI 的 `TabView` 只在**真的换格**时触发 `selection` 变化,
+ 点当前这颗 tab 没有任何回调 —— 与 Android `GlassNavBar`(点已选中的那颗不走 `onSelect`)
+ 和鸿蒙 `onTabBarClick`(@since 6.0.0 才提供原始点击)是同一条限制。三端都只能自己在
+ 底栏层接一次点击。
+ 
+ 探针本身宽高 0、不绘制:它存在的唯一目的是拿到窗口里的 `UITabBar`,在上面装一个
+ **两击**手势(`numberOfTapsRequired = 2`,系统自己按双击间隔判时,与 Android/鸿蒙那个 380ms
+ 窗口等价)。`cancelsTouchesInView` 与 `delaysTouchesEnded` 都关掉 —— 第一下必须照常切格,
+ 不能被"等第二下"拖慢。
+ 
+ 哪个格子被点:按 `bounds.width / items.count` 等分算。⚠️ 不要去遍历 `subviews` 找
+ `UITabBarButton` 的 frame:那要按私有类名匹配,系统一改名就静默失效;系统 tab 栏的格子
+ 本来就是等分的,等分法只依赖公开 API。
+ */
+private struct TabBarDoubleTapProbe: UIViewRepresentable {
+    let onDoubleTap: (Int) -> Void
+
+    func makeUIView(context: Context) -> ProbeView {
+        let view = ProbeView()
+        view.onDoubleTap = onDoubleTap
+        return view
+    }
+
+    func updateUIView(_ view: ProbeView, context: Context) {
+        view.onDoubleTap = onDoubleTap
+    }
+
+    final class ProbeView: UIView {
+        var onDoubleTap: ((Int) -> Void)?
+        /// 已经装过手势的那一条 tab 栏。换窗口/换控制器时重装,同一根不重复装。
+        private weak var observedBar: UITabBar?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            attachIfNeeded()
+        }
+
+        /// `didMoveToWindow` 可能早于 SwiftUI 建出 `UITabBarController`,所以布局期再试一次;
+        /// `observedBar` 那层判断保证反复调用只装一次。
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            attachIfNeeded()
+        }
+
+        private func attachIfNeeded() {
+            guard let root = window?.rootViewController,
+                  let tabs = Self.findTabBarController(in: root) else { return }
+            let bar = tabs.tabBar
+            guard bar !== observedBar else { return }
+            let tap = UITapGestureRecognizer(target: self, action: #selector(handle(_:)))
+            tap.numberOfTapsRequired = 2
+            tap.cancelsTouchesInView = false
+            tap.delaysTouchesEnded = false
+            tap.delegate = self
+            bar.addGestureRecognizer(tap)
+            observedBar = bar
+            // 挂没挂上是这条功能唯一「看不见」的一步(真触摸没法自动注入),留一行日志给验收。
+            Log.i("TabBar", "双击回顶探针已挂上 items=\(bar.items?.count ?? 0)")
+        }
+
+        @objc private func handle(_ gesture: UITapGestureRecognizer) {
+            guard let bar = observedBar, let items = bar.items, !items.isEmpty else { return }
+            let point = gesture.location(in: bar)
+            guard bar.bounds.width > 0 else { return }
+            let slice = bar.bounds.width / CGFloat(items.count)
+            let index = min(max(Int(point.x / slice), 0), items.count - 1)
+            Log.i("TabBar", "双击 tab idx=\(index) → 回顶")
+            onDoubleTap?(index)
+        }
+
+        private static func findTabBarController(in vc: UIViewController) -> UITabBarController? {
+            if let tabs = vc as? UITabBarController { return tabs }
+            for child in vc.children {
+                if let found = findTabBarController(in: child) { return found }
+            }
+            if let presented = vc.presentedViewController {
+                return findTabBarController(in: presented)
+            }
+            return nil
+        }
+    }
+}
+
+extension TabBarDoubleTapProbe.ProbeView: UIGestureRecognizerDelegate {
+    /// 与 tab 栏自己的点击处理并存:两击被识别时也不抢掉系统的选中逻辑。
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool {
+        true
     }
 }
