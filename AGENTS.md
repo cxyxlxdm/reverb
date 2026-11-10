@@ -55,9 +55,12 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 (不签名)exit 0、六条判据全过;当晚 Xcode 登录后建了开发证书
 (`Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`,Team `J4YCBW8ZG7`,**免费 Personal Team**),
 iPhone 16 Pro 已配对,Debug 与 Release 都装上并跑过(四个 tab / 播放页 / 后台音频)。
-但 **archive / export / upload 仍一次都没跑过**:免费 Personal Team 拿不到分发描述文件,
+但 **archive / export / upload 仍没跑通**:免费 Personal Team 拿不到分发描述文件,
 TestFlight 还要求 **Apple Developer Program 会员** + App Store Connect 里有 `com.yuyin.reverb`
-的 App 记录。逐条与现状表见 `docs/IOS.md`;别把"编译过了"当成"能传 TestFlight"。
+的 App 记录。**2026-11-10 试过一次 `--archive`**:11-02 那份开发描述文件已到期(2026-11-09 14:57:39 UTC),
+Xcode 又没有任何已登录账号,直接报 `No Accounts` / `No profiles for 'com.yuyin.reverb'` ——
+于是只出了编译门全过的**未签名** ipa(`ios/dist/reverb-ios-1.0.7-1-unsigned.ipa`,归档用,装不上真机)。
+逐条与现状表见 `docs/IOS.md`;别把"编译过了"当成"能传 TestFlight"。
 
 ⚠️ **上面那条许可检查是 10-24 下午新加的,起因是一次看起来"仓库坏了"的假象。** 本人装完 Xcode 之后
 `/usr/bin/git` 开始只回许可提示,而它是这台机器**唯一的 git**(brew 没装 git)——

@@ -385,7 +385,7 @@ privacy_version -int <当前版本>` 走的是 cfprefsd,2026-11-09 实测可用(
 | Debug / Release 编译 | ✅ 均 exit 0 |
 | `./build-ios.sh` 编译门 | ✅ exit 0,六条判据全过(处理量由脚本自己打印) |
 | 签名身份 | ✅ 已建 `Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`;Team = `J4YCBW8ZG7`(**免费 Personal Team**);`DEVELOPMENT_TEAM` 仍不写进工程,只走命令行 |
-| archive / export / upload | ❌ 仍未跑过。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员(`--archive` 也没试过) |
+| archive / export / upload | ❌ 仍未跑通。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员。**2026-11-10 试了 `--archive`**:报 `No Accounts: Add a new account in Accounts settings.` 与 `No profiles for 'com.yuyin.reverb'` —— 11-02 那份开发描述文件已于 **2026-11-09 14:57:39 UTC 到期**,而 Xcode 现在没有任何已登录账号,重签要维护者先登录(见下) |
 | iOS 模拟器运行时 | ✅ 已装 iOS 27.2;iPhone 17 模拟器上跑过(见上节) |
 | 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动。**2026-11-09**:1.0.7(1) 在机上,截图与 App 日志都取得到;但重新拉起被 `FBSOpenApplicationErrorDomain error 3` 拒(当时锁屏;免费 7 天描述文件 11-02 装、可能到期),WDA runner 仍 `host_command_failed` ⇒ 点击类验收仍缺 |
 | 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊;同日**真机**复跑:设置三段 / 追更与音阁空态 / 英文界面 / 权限说明本地化 / 后台音频 / 冷启动暂停态时长(H247);**11-08 真机**补验音阁历史多选浮条;**11-09 模拟器**补验 B 站过滤读数、直播流结果行与播放页直播态(无进度条 / 无倍速 / 上下集置灰)、直播不记历史 |
@@ -393,6 +393,17 @@ privacy_version -int <当前版本>` 走的是 cfprefsd,2026-11-09 实测可用(
 
 **所以 TestFlight 链接目前还不可用**:缺的是 **Apple Developer Program 会员**(现在登录的是免费
 Personal Team,7 天有效的开发描述文件只够装自己的机器),不是代码。付费后按上节四条命令走。
+
+**2026-11-10 的归档包**:`./build-ios.sh` 的编译门仍然 exit 0(七条判据全过),但归档走不通,
+于是把编译产物直接打成 `ios/dist/reverb-ios-1.0.7-1-unsigned.ipa`(2,623,640 B,
+sha256 `ec57dc9f…856483f61`)。**它没有签名** —— `codesign -dv Payload/Reverb.app` 报
+`code object is not signed at all`,装不上真机,只用于归档与包内结构校验(解包核过:1.0.7(1) /
+arm64 / 4 套 `.lproj` / `UIBackgroundModes` 含 audio / `ReverbWidget.appex` 在位)。
+这份 ipa 与 Android apk、macOS dmg 一起挂在公开仓 `cxyxlxdm/revert-cast` 的 `1.0.7` release 上,
+release 正文与公开仓 README 都写明了「不能直接安装」。
+**要换成能装的**:在 Xcode 里登录 Apple 账号(任一个人 Team 即可)→ 确认
+`security find-identity -v -p codesigning` 能列出开发证书 → `DEVELOPMENT_TEAM=J4YCBW8ZG7
+./build-ios.sh --archive`,再决定是走 `--export` 还是 TestFlight。
 
 ---
 
