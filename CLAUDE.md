@@ -42,8 +42,9 @@
 
 ## 验证
 
-**本仓库没有自动化测试,也没有 CI。** 所以"改完了"必须按 `AGENTS.md`「验证」那张表逐端挣出来 ——
-Android 两渠道编译 + 装机、鸿蒙 `assembleHap` + 装机、macOS 整模块 typecheck 且改前改后都为 0 错误。
+**本仓库有纯逻辑单测(Android JUnit / 鸿蒙 hypium / Swift XCTest),没有 UI 测试与 CI。**
+单测覆盖四端共享判据;界面与行为仍要按 `AGENTS.md`「验证」那张表逐端挣出来 ——
+Android release 编译 + 装机、鸿蒙 `assembleHap` + 装机、macOS 整模块 typecheck 且改前改后都为 0 错误。
 
 三条最容易踩的:
 

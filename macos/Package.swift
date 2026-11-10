@@ -26,6 +26,13 @@ let package = Package(
             name: "ReverbWidget",
             dependencies: ["WidgetContract"],
             path: "Sources/ReverbWidget"
+        ),
+        // 只测共享层(Data / Playback)里的纯判据与编解码。UI 需要真机/屏幕,不在这里。
+        // iOS 直接编译同一批源码,所以这一套也代表 iOS 的共享层行为。
+        .testTarget(
+            name: "ReverbTests",
+            dependencies: ["Reverb"],
+            path: "Tests/ReverbTests"
         )
     ]
 )

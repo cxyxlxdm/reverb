@@ -35,8 +35,8 @@ android {
         applicationId "com.yuyin.reverb.android"
         minSdk 26
         targetSdk 34
-        versionCode 9
-        versionName "1.0.8"
+        versionCode 8
+        versionName "1.0.7"
         vectorDrawables {
             useSupportLibrary true
         }
@@ -148,4 +148,9 @@ dependencies {
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
+
+    // 纯 JVM 单测(不碰 Android 框架):src/test 下的 .kt 覆盖各端共享的判据与编解码。
+    // org.json 在 android.jar 里是 Stub,单测要真实实现才能验 EpisodeJson 这类往返。
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }

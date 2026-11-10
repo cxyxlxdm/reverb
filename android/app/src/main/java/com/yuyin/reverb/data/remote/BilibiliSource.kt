@@ -171,7 +171,7 @@ class BilibiliSource(private val client: OkHttpClient) {
          * 太严会把语义相近的结果全删掉。**全删空时调用方要退回原列表**(见 [searchEpisodes]),
          * 宁可留杂音也不要给用户一屏空白。
          */
-        private fun isTitleRelevant(title: String, keyword: String): Boolean {
+        internal fun isTitleRelevant(title: String, keyword: String): Boolean {
             val k = relevanceKey(keyword)
             if (k.isEmpty()) return true
             val t = relevanceKey(title)
