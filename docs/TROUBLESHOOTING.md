@@ -12681,7 +12681,8 @@ Android(`ViewModels.kt`)与 macOS(`DiscoverView.runSearch`)都是**并行发、�
 **验收**(模拟器 + 真网络 + 本机 Basic 认证夹具 `127.0.0.1:8765`,夹具形状见 `docs/IOS.md` 当日记录)。
 - 修复前:`-search http://127.0.0.1:8765/feed.xml` → 屏上只有「没有找到」,日志里没有 `[Repo] search`。
 - 修复后:
-  - 同一地址弹出认证框,`[Repo] search … feed 需要认证 failed=false`;
+  - 同一地址弹出认证框,日志里先有 `[Repo] search queryWords=…`,
+    再有 `[Repo] feed 需要认证 feed=… failed=false`;
   - 以 `http://reverb:secret@127.0.0.1:8765/feed.xml` 粘贴 → `[FeedAuth] save feed=…`,
     杀掉重开 → `[FeedAuth] 装载 1 条源凭据` 且 `[RSS] fetch "私有源验收" → 1 单集`
     (服务端记录先 401 后 200)⇒ 凭据跨启动留存;
