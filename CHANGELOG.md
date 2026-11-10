@@ -8,12 +8,21 @@
 
 ---
 
-## 1.0.7 — 待发布
+## 1.0.7 — 2026-11-10
 
-> **版本号说明**:1.0.7 尚未对外发布。此前曾把 B 站搜索的标题强相关过滤单独升到 1.0.8 并出过
-> Android / macOS 两端包,但那个版本也没有发出去 —— 现已退回 1.0.7(Android `versionCode 8`、
+> **版本号说明**:此前曾把 B 站搜索的标题强相关过滤单独升到 1.0.8 并出过
+> Android / macOS 两端包,但那个版本没有发出去 —— 现已退回 1.0.7(Android `versionCode 8`、
 > macOS build 4),1.0.8 的安装包与 CHANGELOG 小节一并删除。本节按落地批次排列,先是最新一批,
 > 再往下是 2026-11-01 起累积的内容。
+>
+> **发版记录(2026-11-10)**:公开分发仓 `cxyxlxdm/revert-cast` 已建 tag `1.0.7`,附
+> `reverb.apk`(65,180,564 B)、`Reverb.dmg`(5,481,722 B,universal)与
+> `reverb-ios-1.0.7-1-unsigned.ipa`(2,623,640 B)。三份 `digest` 与本地 `shasum -a 256` 逐字相等,
+> `releases/latest` 已指向 1.0.7。**iOS 那份没有签名**:本机唯一的开发描述文件 2026-11-09 到期、
+> Xcode 当前无已登录账号,`--archive` 报 `No Accounts` / `No profiles for 'com.yuyin.reverb'`,
+> 因此只出了编译门全过的未签名包(`codesign -dv` 报 `code object is not signed at all`),
+> 只作归档,**装不上真机**;Android / macOS 两端不受影响。
+> 鸿蒙 1.0.7 商店包与 kit 在 `harmony/dist/`(2026-11-10 重打),由维护者次日自行上传应用商店。
 
 ### iOS:粘贴 RSS / 视频链接能搜到了(修复,2026-11-10)
 
