@@ -731,23 +731,31 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 
 ---
 
-## 验证:没有自动化测试,所以怎么自证
+## 验证:单测 + 按端自证
 
-**现状说清楚:本仓库没有单元测试、没有 UI 测试、没有 CI。** 唯一的自动化是
-`macos/tools/selftest-verify.sh` —— 它验的是打包断言脚本本身,不是产品。
+**现状说清楚:有单元测试(只测纯逻辑),没有 UI 测试,没有 CI。** 三套单测覆盖的正是
+四端**共享判据** —— 同一份订阅在四端显示的日期、同一段 shownotes 的清洗结果、同一份逐字稿
+的时间轴不变式、直播流入口判定:
 
-所以"改完了"这个结论只能靠下面这张表挣出来,而且**必须按端说,不能互相顶替**:
+| 端 | 命令 | 判据 |
+|---|---|---|
+| Android(`app/src/test`) | `cd android && ./gradlew :app:testReleaseUnitTest` | `app/build/test-results/testReleaseUnitTest/*.xml` 里 failures / errors 都为 0 |
+| 鸿蒙(`entry/src/test`) | `export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk && /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw test --mode module -p product=default -p buildMode=debug --no-daemon` | `entry/.test/default/intermediates/test/coverage_data/test_result.txt` 末行 `Failure: 0, Error: 0`。⚠️ 断言失败时 hvigor **仍打 BUILD SUCCESSFUL**,别拿退出码当判据 |
+| Swift 共享层(`macos/Tests/ReverbTests`,iOS 直接编译同一批源码) | `cd macos && swift test` | XCTest 汇总 exit 0 |
+
+`macos/tools/selftest-verify.sh` 仍然只验打包断言脚本本身;单测也验不了界面与播放 ——
+所以"改完了"这个结论还要靠下面这张表按端挣出来,而且**必须按端说,不能互相顶替**:
 
 | 改了什么 | 最小自证 | 不够的 |
 |---|---|---|
-| Android 任意 Kotlin | `./gradlew :app:compileReleaseKotlin -q` exit 0(合并 flavor 后只有一份 release,H205) | 只跑 debug 变体 |
+| Android 任意 Kotlin | `:app:testReleaseUnitTest` 全绿 + `./gradlew :app:compileReleaseKotlin -q` exit 0(合并 flavor 后只有一份 release,H205) | 只跑 debug 变体 |
 | Android 界面 / 播放 / 缓存 | 上面 + **装机跑一遍**对应路径 | 只看编译通过 |
 | 降级档相关(动 `CATALOG` / `SPECTRUM` / `HAS_ENGINE`) | 上面 + **解包 grep**(硬规矩 1)。**合并前这一行写的是「渠道裁剪相关」——渠道没了,但这条自证更严了:降级现在只是一行常量,改完不验包就没人拦得住** | 只改代码不验包 |
-| 鸿蒙任意 `.ets` | `assembleHap` BUILD SUCCESSFUL | 只跑 IDE 预览 |
+| 鸿蒙任意 `.ets` | `hvigorw test` 全绿 + `assembleHap` BUILD SUCCESSFUL | 只跑 IDE 预览 |
 | 鸿蒙界面 / 播放 | 上面 + **debug hap 装机** | 只编译 |
 | 新增 native 类型包 | 上面 + `ohpm install` | 漏了报 `arkts-no-any-unknown`(H61) |
-| macOS 任意 Swift | **整模块 typecheck,改前改后都必须是 0 错误** | "改前改后都是同样 4 条"**证明不了**其余文件被检查过(H128) |
-| iOS 任意 Swift(含共享层) | `cd ios && ./build-ios.sh` exit 0(编译门不需要证书)+ 产物判据;同改 `macos/Sources/Reverb/{Data,Playback}` 时 macOS 侧也要过 | 只跑模拟器变体 / 只看编译通过 |
+| macOS 任意 Swift | `swift test` 全绿 + **整模块 typecheck,改前改后都必须是 0 错误** | "改前改后都是同样 4 条"**证明不了**其余文件被检查过(H128) |
+| iOS 任意 Swift(含共享层) | `swift test`(共享层)+ `cd ios && ./build-ios.sh` exit 0(编译门不需要证书)+ 产物判据;同改 `macos/Sources/Reverb/{Data,Playback}` 时 macOS 侧也要过 | 只跑模拟器变体 / 只看编译通过 |
 | iOS 界面 / 播放 / 后台 | 上面 + **模拟器(或真机签名包)实跑**对应路径 | 只编译;本机 2026-11-02 只跑过模拟器,真机未跑 |
 | 文档 | 数字与条数用 `grep -c` 现算 | 凭印象写"18 条" |
 

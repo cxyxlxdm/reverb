@@ -8,7 +8,12 @@
 
 ---
 
-## 未发版 — 版本号待定
+## 1.0.7 — 待发布
+
+> **版本号说明**:1.0.7 尚未对外发布。此前曾把 B 站搜索的标题强相关过滤单独升到 1.0.8 并出过
+> Android / macOS 两端包,但那个版本也没有发出去 —— 现已退回 1.0.7(Android `versionCode 8`、
+> macOS build 4),1.0.8 的安装包与 CHANGELOG 小节一并删除。本节按落地批次排列,先是最新一批,
+> 再往下是 2026-11-01 起累积的内容。
 
 ### macOS 关掉窗口后点 Dock 图标能叫回来了(修复)
 
@@ -136,21 +141,9 @@
 >   真机 / TestFlight 的 App Group 需要付费 Apple Developer Program(未实测签名结果);
 >   **macOS** `pluginkit -m -i com.yuyin.reverb.widget` 能看到扩展、App 运行即写出 `widget_state.json`、系统向进程投递深链成功(日志 `[DeepLink]`),
 >   但**通知中心里加卡片看渲染、点卡片开播放页这两步没做** —— 本机停在隐私同意页(存的是 `privacy_version 3`,当前要求 4)且屏幕锁着,需要人点一下同意再验。
-> - 逐条坑见 `docs/TROUBLESHOOTING.md` H249–H251。四端 `dist/` 只有 macOS 本轮重打过(1.0.8,含扩展)。
+> - 逐条坑见 `docs/TROUBLESHOOTING.md` H249–H251。四端 `dist/` 随 1.0.7 一起重打。
 
 ---
-
-## 1.0.8 — 2026-11-08
-
-### 重新发布 Android 与 macOS
-
-- 把 1.0.7 之后的两端改动打进安装包：B 站单集搜索按标题强相关过滤，不再混入无关推荐；一条都不相关时退回原列表。
-- Android 升到 versionCode 9 / 1.0.8，macOS 升到 1.0.8（build 5）；可直接覆盖安装，数据不丢。
-- 鸿蒙与 iOS 本轮没有出包，版本仍停在 1.0.7。
-
----
-
-## 1.0.7 — 2026-11-01
 
 ### 新增 iOS 版(TestFlight 分发)
 

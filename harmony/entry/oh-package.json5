@@ -8,5 +8,9 @@
   "dependencies": {
     // native 音频解码模块(给系统语音识别喂 PCM)。类型声明在 src/main/cpp/types/
     "libreverb_pcm.so": "file:./src/main/cpp/types/libreverb_pcm"
+  },
+  "devDependencies": {
+    // 本地单测框架(src/test)。只进构建机,不进 app 包。
+    "@ohos/hypium": "1.0.30"
   }
 }
