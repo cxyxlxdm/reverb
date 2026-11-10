@@ -56,6 +56,9 @@ struct DiscoverView: View {
     /// 榜单与搜索结果两个 `ScrollView` 共用这一个锚点 id:它们互斥(屏上永远只有一个),
     /// 所以 `scrollTo` 不会指到屏外那个容器上。
     private static let topAnchor = "discover-top"
+    /// 「单集」那一节的锚点,只给 Debug 的 `-search-episodes` 验收钩子用:模拟器没有触摸注入,
+    /// 搜索结果里的单集行(带「B 站」/「Apple」来源角标)在首屏之下,滚不到就截不到。
+    private static let episodesAnchor = "discover-episodes"
 
     @State private var selected = DiscoverCategory.all[0]
     @State private var showReorder = false
@@ -72,6 +75,8 @@ struct DiscoverView: View {
     @State private var liveEpisode: Episode?
     /// 仅 Debug:`-search` 钩子写下的查询词,用来挡住搜索框复位带来的清空。
     @State private var debugQuery = ""
+    /// 仅 Debug:`-search-episodes` 带上它之后,搜索完成即滚到「单集」那一节(模拟器无法注入触摸)。
+    @State private var debugScrollEpisodes = false
     /// 私有订阅源的 401 挑战(见 `FeedAuthChallenge` / H253)。
     @State private var authPrompt: FeedAuthChallenge?
     /// 「加入待播」的结果提示:入队落在待播页,当前页看不出任何变化,不提示等于没按上。
@@ -126,6 +131,7 @@ struct DiscoverView: View {
             // 与 RootView 的 `-start-tab` 同一类验收钩子:中文关键词没法用 `simctl`
             // 或 adb 注入,所以留一个启动即搜索的参数,Release / TestFlight 里不存在。
             let args = ProcessInfo.processInfo.arguments
+            debugScrollEpisodes = args.contains("-search-episodes")
             if let i = args.firstIndex(of: "-search"), i + 1 < args.count {
                 // 必须等 `.searchable` 挂上再赋值:`.task` 先跑时设进去的值会被搜索框的
                 // 初始绑定复位成空串,连带 `onChange` 把 `submittedQuery` 也清掉。
@@ -343,8 +349,24 @@ struct DiscoverView: View {
     // MARK: - 搜索
 
     private var searchContent: some View {
-        ScrollView {
-            Color.clear.frame(height: 0).id(Self.topAnchor)
+        ScrollViewReader { proxy in
+            ScrollView { searchResults }
+                // 仅 Debug:模拟器没有触摸注入,`-search-episodes` 让「单集」那一节滚进首屏。
+                .onChange(of: searchEpisodes) { _, eps in
+                    #if DEBUG
+                    guard debugScrollEpisodes, !eps.isEmpty else { return }
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                        proxy.scrollTo(Self.episodesAnchor, anchor: .top)
+                    }
+                    #endif
+                }
+        }
+    }
+
+    @ViewBuilder
+    private var searchResults: some View {
+                Color.clear.frame(height: 0).id(Self.topAnchor)
             if let live = liveEpisode, searchPodcasts.isEmpty && searchEpisodes.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("直播流").font(.headline)
@@ -352,7 +374,9 @@ struct DiscoverView: View {
                         episode: live,
                         isCurrent: player.current?.id == live.id,
                         isPlaying: player.isPlaying,
-                        sourceTag: "直播",
+                        // 行内已经有 `isLive` 那颗强调色「直播」角标,这里不再传来源标签 ——
+                        // 两行都传会并排出现两颗一模一样的「直播」(2026-11-10 模拟器截图抓出来的)。
+                        sourceTag: nil,
                         coverOpensChannel: false,
                         onPlay: { player.playOrToggle(live, queue: [live]) }
                     )
@@ -389,7 +413,7 @@ struct DiscoverView: View {
                     }
                     if !searchEpisodes.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("单集").font(.headline).padding(.bottom, 4)
+                            Text("单集").font(.headline).padding(.bottom, 4).id(Self.episodesAnchor)
                             ForEach(searchEpisodes) { ep in
                                 RoomyEpisodeRow(
                                     episode: ep,
@@ -408,7 +432,6 @@ struct DiscoverView: View {
                 .padding(.horizontal, Metrics.pagePadding)
                 .padding(.top, 8)
             }
-        }
     }
 
     private var searchSourceLabel: String {
@@ -427,16 +450,16 @@ struct DiscoverView: View {
         searchEpisodes = []
         searchSource = ""
         if LiveStream.looksLikeStream(q) {
-            // 直播流与目录搜索是**互斥**的两种结果形态(与 Android `DiscoverState.Live`
-            // 同一条:那边识别成流之后根本不发目录请求)。原先这里两条路一起跑,
-            // 于是"粘一个流地址却搜出几个同名播客"时,直播那一块被条件挡在结果后面、看不见。
+            // 探针与目录检索**并行发**,这一支不许 return。
+            // `looksLikeStream` 是廉价预判(任何 http(s) 都算候选),真正的判据在探针里;
+            // 早退会把"粘 RSS / 粘视频链接"这两条路一起吞掉 —— 探针必然判它不是流,
+            // 用户看到的就是「没有找到」(2026-11-10 模拟器验 401 流程时抓出来的,见 H256)。
+            // 与 Android `ViewModels.kt` / macOS `DiscoverView.runSearch` 同一条形状。
             Task {
                 let live = await LiveStream.resolve(q)
                 guard submittedQuery == q else { return }
                 liveEpisode = live
-                searching = false
             }
-            return
         }
         Task {
             async let podsTask = env.repository.search(q, region: env.region)

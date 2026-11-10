@@ -12654,3 +12654,51 @@ tab 页展开 **155px**、收束 **155px**、频道页 **155px**、待播页 **1
    窗口存活期间把它缓存下来;这与会随视图销毁的 `.onReceive` 是两回事。
 ④ **别按 AX 按钮序号猜红绿灯**:实测 `button 1` 关闭、`button 2` **全屏**、`button 3` 才最小化。
    按"1 关 / 2 最小化 / 3 缩放"的旧印象操作,会把窗口送进全屏再退出,看起来像"窗口被关掉了"。
+
+### H256. iOS 发现页粘 RSS / 视频链接一律「没有找到」—— `looksLikeStream` 只是便宜预判,早退把另外两条路一起吞了
+
+**现象**(2026-11-10,iOS 模拟器 iPhone 17 / iOS 27.2,1.0.7)。
+发现页搜索框粘贴一个需要 HTTP Basic 认证的 RSS 地址(或一条 B 站视频链接),页面停在
+初始空态文案「没有找到」;同一个地址在 Android / macOS 上分别能进「需要认证」弹窗、出搜索结果。
+同一轮还并发一个纯界面问题:识别成直播流时,结果行并排出现**两颗一模一样的「直播」角标**。
+
+**根因**。`runSearch` 先问 `LiveStream.looksLikeStream(q)`,而它只看 URL 形状 ——
+**任何 http(s) 都算候选**(它只配用来省一次探针网络请求,真正的判据在 `LiveStream.resolve`
+的 Content-Type / HLS 检查里)。早先为了让"粘流地址"时不混出目录结果,这一支在启动探针后
+直接 `return`,于是 `repository.search(...)` 根本没发出去。探针随后判定它不是流
+(或发现需要认证),`liveEpisode` 落空 —— 屏幕上只剩空态文案,401 挑战也就永远挂不出来。
+Android(`ViewModels.kt`)与 macOS(`DiscoverView.runSearch`)都是**并行发、不早退**,
+探针结果只在状态仍是 Loading / Empty 时才覆盖;iOS 这一处与另外两端漂了,而且旧注释还写着
+"与 Android 同一条" —— 注释替漂移站了台。
+第二颗角标的来源:`RoomyEpisodeRow` 自己会在 `episode.isLive` 时画强调色「直播」,
+调用点又额外传了 `sourceTag: "直播"`。
+
+**修法**(`ios/Reverb/UI/DiscoverView.swift`)。
+1. 去掉早退:探针与 `repository.search` / `searchEpisodes` 并行;探针结果只写 `liveEpisode`
+   (为 nil 就什么都不做),目录结果照常落地。
+2. 直播结果行改 `sourceTag: nil`,「直播」这颗角标交给 `isLive` 统一画。
+
+**验收**(模拟器 + 真网络 + 本机 Basic 认证夹具 `127.0.0.1:8765`,夹具形状见 `docs/IOS.md` 当日记录)。
+- 修复前:`-search http://127.0.0.1:8765/feed.xml` → 屏上只有「没有找到」,日志里没有 `[Repo] search`。
+- 修复后:
+  - 同一地址弹出认证框,`[Repo] search … feed 需要认证 failed=false`;
+  - 以 `http://reverb:secret@127.0.0.1:8765/feed.xml` 粘贴 → `[FeedAuth] save feed=…`,
+    杀掉重开 → `[FeedAuth] 装载 1 条源凭据` 且 `[RSS] fetch "私有源验收" → 1 单集`
+    (服务端记录先 401 后 200)⇒ 凭据跨启动留存;
+  - 反例对照:`https://www.example.com/`(同样是 http(s),既不是流也不是 RSS)→ 仍走完目录检索
+    并落在「没有找到」,没有卡在直播态;
+  - 正样本:`-search <HLS 地址>` → `[Live] 直播流确认 … hls=true`,结果行只剩一颗「直播」;
+  - 回归:`-search 罗翔说刑法` 出 17 条 B 站视频行、`dropped_irrelevant=2`;`学习资料` 为
+    `count=8 dropped_irrelevant=9`(读数随对方搜索结果浮动,判据是 `dropped_irrelevant` 非 0 + 行内「B 站」角标)。
+- `./build-ios.sh`(Release 编译门)exit 0、七条判据全过 —— 这一轮加的 `-search-episodes` 与
+  自动滚动都在 `#if DEBUG` 里,没进 Release。
+
+**教训 / 可复用的规律**。
+① **"便宜预判"只配决定要不要发探针,不配决定要不要发别的请求。** 基于 URL 形状的分支必须
+   能同时通向多种结果形态;要做"互斥",靠结果落地时的优先级判断,不是分支里的 `return`。
+② **三端同一条逻辑的漂移往往只发生在一端,而且注释会替漂移站台。** 注释里点了对面的文件名,
+   改之前就按那个文件读一遍;这次 Android 那边确实是不早退的。
+③ **模拟器没有触摸注入不等于验不了交互路径。** "启动参数 + 内联凭据 + 本机夹具"三段拼起来
+   就能脚本化跑完整条 401 流程,取证全靠日志切片的行偏移。
+④ **同一个语义出现两颗一样的角标,先查组件自己画了什么,再查调用点传了什么** —— 这次的重复
+   不是布局问题,是两处都在画。
