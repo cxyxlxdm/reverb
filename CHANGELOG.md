@@ -217,7 +217,14 @@
 >   `WifiManager.MulticastLock`、关闭即释放;实测 Pixel 3 上系统 `mdnssd` 由此恢复收发组播,
 >   0.7 秒发现对端(见 H276)。配对确认需要**两端各点一次**,只点一端 30 秒后报「连接已结束」。
 > - 验收:Mate 60 ↔ Pixel 3(同一 Wi-Fi,debug 包);两端互列、配对码一致、两侧都报
->   「同步完成 / 两端已经一致」。release 包尚未重打,包内权限数以重打后的 `aapt2` 读数为准。
+>   「同步完成 / 两端已经一致」。
+> - **2026-11-13 晚已按本批改动重打两端发布包并跑解包验收**:Android `reverb.apk`
+>   270,259,537 B @20:53:24 sha256 `df219ec7…`,`aapt2 dump permissions` **12 项**
+>   (含 `CHANGE_WIFI_MULTICAST_STATE`),`lan_peers_hint` 与新提示的中文串在
+>   `resources.arsc` 各 1、组播锁 tag `reverb-lan-sync` 在 dex 1;鸿蒙 `reverb.app`
+>   182,007,977 B @20:53:42 sha256 `192bf598…` + `reverb-symbol.zip` 14,952,820 B,
+>   `module.json` 为 release、1.0.8 / 1000008,新提示的简繁两串在 `resources.index` 内。
+>   两端 `-newer` 判据均 0 命中。
 
 ### Android:章节(Podcasting 2.0)(2026-11-11)
 
