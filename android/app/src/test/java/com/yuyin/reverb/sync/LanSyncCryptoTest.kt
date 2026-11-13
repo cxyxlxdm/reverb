@@ -105,9 +105,6 @@ class LanSyncCryptoTest {
         val ba = LanSyncCrypto.sharedSecret(b.private, aRaw)
         assertEquals(32, ab.size)
         assertArrayEquals(ab, ba)
-        // 私钥落盘再读回还能用:身份是跨启动复用的,每次启动换密钥会让已配对记录全失效。
-        val restored = LanSyncCrypto.decodePrivateKey(LanSyncCrypto.encodePrivateKey(a.private))
-        assertArrayEquals(ab, LanSyncCrypto.sharedSecret(restored, bRaw))
     }
 
     @Test

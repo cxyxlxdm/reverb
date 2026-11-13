@@ -226,6 +226,28 @@
 >   `module.json` 为 release、1.0.8 / 1000008,新提示的简繁两串在 `resources.index` 内。
 >   两端 `-newer` 判据均 0 命中。
 
+### 局域网同步:手动地址可用、配对码每轮都会变(2026-11-13)
+
+- 鸿蒙同步面板里手动填入对方地址后,「连接」不再一直是灰的 —— 输入即变亮、可以点。
+- 同一对设备每次配对的六位码都会变化(此前无论配几次都显示同一个码)。
+
+> **工程要点**
+> - 「连接」永远灰:按钮的 `enabled` 作为 `@Builder` 按值参数只求值一次,首帧 `manual` 为空
+>   即冻成 `false`;改为在按钮那层直接读 `this.manual`(见 H277)。真机验证要用
+>   `uinput -K -t` 走键盘驱动,`uitest uiInput inputText` 不触发 ArkUI `onChange`。
+> - 配对码恒定:三端都把长期身份密钥当会话密钥做 ECDH,静态共享密钥 ⇒ 恒定 SAS、无前向保密;
+>   身份缩到 `{deviceId, name, createdAt}`,`greet()` 内现生成临时 P-256 密钥对,
+>   删掉已无人调用的私钥编解码 helper(见 H278)。
+> - 验收:鸿蒙 `hvigorw test` 45 条 0 失败;Android `:app:testReleaseUnitTest` 与
+>   `:app:compileReleaseKotlin` exit 0;`swift test` 61 条 0 失败;`ios/build-ios.sh` 编译门全过。
+>   真机连续两轮配对:SAS `974 870` → `020 444`,两端各自一致,两次都跑到「同步完成 /
+>   两端已经一致」;修复前连续几轮都是 `897 003`。
+> - 两端发布包按本批改动重打:Android `reverb.apk` **270,259,537 B @11-13 21:24:43**
+>   sha256 `7d2b0813…`,`aapt2 dump permissions` **12 项**,解包读数 4 / 1 / 13;
+>   鸿蒙 `reverb.app` **182,007,692 B @21:30:29** sha256 `7dd43a10…`、`reverb-symbol.zip`
+>   **14,952,613 B** sha256 `5dc5384a…`,嵌套 hap 内模型+词表 2、native 库 3。
+>   两端 `-newer` 判据均 0 命中。
+
 ### Android:章节(Podcasting 2.0)(2026-11-11)
 
 - 发布方在 RSS 里给了 `<podcast:chapters>` 的单集,播放页进度条上方多一行**当前章节名**;

@@ -13701,3 +13701,78 @@ Wi-Fi 驱动在未持有 `WifiManager.MulticastLock` 时会过滤组播帧;系�
    看到"Android 压根不问"才指向接收侧过滤。
 ④ 验收要落到"两端列表 + 实际配对",不能停在"日志里有一条发现" ——
    发现成功但配对失败,和"没发现"是两回事。
+
+### H277. 鸿蒙同步面板的「连接」永远灰:状态被当 @Builder 按值参数传了一次
+
+**现象**。2026-11-13 夜验手动地址兜底:鸿蒙面板的 `TextInput` 里明明有 `192.168.6.228`
+(`uitest dumpLayout` 里文字在、光标在),右侧「连接」始终是 38% 透明度的灰、点了没有任何反应;
+Android 同场景输入后立刻变亮可点。这不是渲染慢 —— 等十秒再 dump 还是灰的。
+
+**根因**。那颗按钮当时走的是共用 `@Builder actionButton(label, color, enabled, onTap)`,
+调用点写 `this.manual.trim().length > 0` 算 `enabled`。ArkUI V1 的 `@Builder` 参数是**按值**的:
+第一次进入 `listeningBody` 时 `manual` 还是空串,`enabled` 就在那次求值里冻成 `false`;
+之后 `@State manual` 变化只让外层重跑,`@Builder` 的形参不会重新求值 ——
+而 `onClick` 里恰好有 `if (enabled) onTap()` 这一层闸,于是"看起来是灰的、点也不响"。
+同一族的坑见 H6 / H19 / H27 / H29,这次只是换成了布尔量、症状是"按钮没反应"。
+
+**修法**。把这颗按钮从 `actionButton` 里拿出来,在 `listeningBody` 里直接内联 `Text`,
+颜色与点击闸都**当场读 `this.manual`**(`listeningBody` 本身随 `@State` 重跑,读到的是最新值)。
+常量态的三颗按钮(取消 / 一致 / 关闭)继续用 `actionButton` —— 它们的 `enabled` 恒 `true`,
+不经过状态,也就没有这个问题。代码旁注释见 `LanSyncDialog.ets` 的 `listeningBody`。
+
+**验收(2026-11-13,真机 Mate 60)**。重打 debug hap 覆盖安装后:输入前按钮像素为灰;
+用 `uinput -K -t '192.168.6.228'` 逐字符输入后按钮变为主色青,点击立即进入 CONNECTING;
+随后与 Pixel 3 完成配对与同步(见 FEATURES「手动地址兜底与临时密钥补验」)。
+
+**教训 / 可复用的规律**。
+
+① **"值传进 @Builder" = 拍一张快照。** 只要参数依赖 `@State`,它就不会跟着变。
+   要么在 builder 体内直接读 `this.x`,要么用按引用传参;写在调用点的表达式不算数。
+② **别把"状态"和"状态的表现"分两处算。** 颜色读的是最新值、闸门读的是冻结值,
+   就会出现"变亮了但点不动"这种更迷惑的形态 —— 这次两者同源,所以现象是"全灰且无反应"。
+③ **输入框里有字 ≠ 状态已更新。** `uitest uiInput inputText` 只往输入法通道塞文本,
+   不触发 ArkUI 的 `onChange`(2026-11-13 实测,同轮踩到)。真机验这类联动要用
+   `uinput -K -t '<text>'` 走键盘驱动,再以按钮颜色 / 可点性作判据。
+④ 这类"永远灰"的判据不要用"看起来像灰的"口头描述,拿截图取按钮区域像素或
+   `dumpLayout` 的节点属性,改前改后各记一次。
+
+### H278. 配对码每轮都一样:长期身份密钥被当成了会话密钥,注释与文档却在写"每次临时 ECDH"
+
+**现象**。2026-11-13 夜,同一对设备(Pixel 3 ↔ Mate 60)在**不同时间**做了多轮配对,
+六位码一直停在 `897 003`(当晚先验手动兜底、再用 release 包复验发现与配对,中间还重启过应用)。
+按设计配对码应当是"这一次会话"的证据,每轮都该不同。
+
+**根因**。三端的 `LanSyncIdentity` 都把一对**长期** P-256 密钥写进 `lan_sync.json`
+(鸿蒙 / Android / Apple 同构),而 `LanSyncSession.greet` 直接拿这对身份密钥做 ECDH 的 hello。
+静态 ECDH ⇒ 共享密钥恒定 ⇒ HKDF 输入恒定 ⇒ SAS 恒定;会话密钥也恒定,
+**没有前向保密**。更糟的是代码注释与 ARCHITECTURE / FEATURES 一直写着"每次连接双方临时 ECDH",
+文档与实现对不上 —— 这类偏差不会被任何编译门或单测发现,因为每端自己算出来的都"一致"。
+
+**修法(三端同改)**。
+- 身份缩到 `{deviceId, name, createdAt}`:`lan_sync.json` 不再有 `publicKey` / `privateKey` 字段;
+  旧文件里多出来的字段读时忽略、下次 `persist` 自然消失(身份里没有不可再生的东西)。
+- `greet()` 里**现场生成**临时密钥对(鸿蒙 `cryptoFramework`、Android `KeyPairGenerator("EC")`、
+  Apple `P256.KeyAgreement.PrivateKey()`),算出共享密钥后不再保留;
+  `LanSyncCrypto` 里随之删掉已无人调用的 `encodePrivateKey` / `decodePrivateKey`(三端)。
+- 单测同步:`material()` 夹具去掉密钥字段;`LanSyncCryptoTest` 的私钥编解码往返用例删除,
+  随机两把钥匙仍可互算共享密钥的用例保留。
+
+**验收(2026-11-13,真机)**。
+① 鸿蒙 `hvigorw test`:`Tests run: 45, Failure: 0, Error: 0, Pass: 45`;
+   Android `:app:testReleaseUnitTest` 与 `:app:compileReleaseKotlin` exit 0;
+   `swift test` 61 条 0 失败;`ios/build-ios.sh` 编译门全过。
+② 重打并覆盖安装鸿蒙 hap、重打 Android release 并 `install -r` 后**连续配对两轮**:
+   第一轮两端都是 `974 870`,点两次确认后两侧「同步完成 / 两端已经一致」;
+   点「再同步一次」再配一轮,两端都是 `020 444`,同样跑完。
+   与修复前的 `897 003` 两次读数都不同 —— 这就是"密钥不再跨会话复用"的直接证据。
+
+**教训 / 可复用的规律**。
+
+① **"两端数字一致"证明不了"每次都不一样"。** 一致性判据要跑一次;新鲜性判据必须跨两次
+   会话各取一次读数再比。只验一轮,静态密钥和临时密钥长得一模一样。
+② **注释/文档写着的安全属性,要回到代码里找它靠什么成立。** 这里三处文档写着"临时 ECDH",
+   实现却指向 `identity.privateKey`;review 时 grep 一下"密钥是从哪来的"比读注释有用。
+③ **身份(我是谁)与会话密钥(这一次谈什么)必须分开。** 设备 id 要稳定(服务名与去重都靠它),
+   密钥要一次性 —— 把两者塞进同一个对象,迟早有人顺手拿来复用。
+④ **前向保密不是 ECDH 自带的属性。** ECDH 用长期钥就退化成静态 DH:泄漏一次密钥,
+   历史会话全部可解,配对码也失去"这次是新的"的含义。

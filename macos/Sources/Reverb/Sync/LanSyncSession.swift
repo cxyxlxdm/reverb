@@ -97,12 +97,15 @@ final class LanSyncSession {
 
     private func greet() async throws -> Data {
         let nonce = LanSyncCrypto.randomBytes(16)
+        // **每次会话现生成一对临时密钥**(H278)。曾经直接拿身份里的长期密钥做 ECDH,
+        // 于是同一对设备每轮配对码都一样、也没有前向保密 —— 与注释和文档的承诺相反。
+        let ephemeral = LanSyncCrypto.generatePrivateKey()
         try await channel.sendPlain([
             "t": "hello",
             "v": LanSyncWire.version,
             "id": identity.deviceId,
             "name": identity.name,
-            "pub": LanSyncCrypto.base64(identity.publicKey),
+            "pub": LanSyncCrypto.base64(LanSyncCrypto.encodePublicKey(ephemeral.publicKey)),
             "nonce": LanSyncCrypto.base64(nonce)
         ])
         let hello: [String: Any]
@@ -138,7 +141,7 @@ final class LanSyncSession {
         }
         let clientNonce = initiator ? nonce : peerNonce
         let serverNonce = initiator ? peerNonce : nonce
-        let shared = try LanSyncCrypto.sharedSecret(identity.privateKey, peerPublicKeyRaw: peerPub)
+        let shared = try LanSyncCrypto.sharedSecret(ephemeral, peerPublicKeyRaw: peerPub)
         channel.useKey(LanSyncCrypto.sessionKey(shared: shared, clientNonce: clientNonce, serverNonce: serverNonce))
         let raw = (hello["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         peerName = String(raw.prefix(64)).isEmpty ? "设备" : String(raw.prefix(64))

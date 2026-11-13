@@ -88,13 +88,16 @@ class LanSyncSession(
 
     private fun greet() {
         val nonce = LanSyncCrypto.randomBytes(NONCE_BYTES)
+        // **每次会话现生成一对临时密钥**(H278)。曾经直接拿身份里的长期密钥做 ECDH,
+        // 于是同一对设备每轮配对码都一样、也没有前向保密 —— 与注释和文档的承诺相反。
+        val ephemeral = LanSyncCrypto.generateKeyPair()
         channel.sendPlain(
             LanSyncWire.json(
                 "t" to "hello",
                 "v" to LanSyncWire.VERSION,
                 "id" to identity.deviceId,
                 "name" to identity.name,
-                "pub" to LanSyncCrypto.base64(identity.publicKey),
+                "pub" to LanSyncCrypto.base64(LanSyncCrypto.encodePublicKey(ephemeral.public)),
                 "nonce" to LanSyncCrypto.base64(nonce)
             )
         )
@@ -125,7 +128,7 @@ class LanSyncSession(
         }
         val clientNonce = if (initiator) nonce else peerNonce
         val serverNonce = if (initiator) peerNonce else nonce
-        shared = LanSyncCrypto.sharedSecret(identity.privateKey, peerPub)
+        shared = LanSyncCrypto.sharedSecret(ephemeral.private, peerPub)
         channel.useKey(LanSyncCrypto.sessionKey(shared, clientNonce, serverNonce))
         peerName = hello.optString("name").trim().take(64).ifBlank { "设备" }
     }

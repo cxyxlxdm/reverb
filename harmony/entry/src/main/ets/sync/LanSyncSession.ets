@@ -108,12 +108,15 @@ export class LanSyncSession {
 
   private async greet(): Promise<void> {
     const nonce = LanSyncCrypto.randomBytes(16);
+    // **每次会话现生成一对临时密钥**(H278)。曾经直接拿身份里的长期密钥做 ECDH,
+    // 于是同一对设备每轮配对码都一样、也没有前向保密 —— 与注释和文档的承诺相反。
+    const ephemeral = await LanSyncCrypto.generateKeyPair();
     const hello: Record<string, Object> = {};
     hello['t'] = 'hello';
     hello['v'] = LanSyncWire.VERSION;
     hello['id'] = this.identity.deviceId;
     hello['name'] = this.identity.name;
-    hello['pub'] = LanSyncCrypto.base64(this.identity.publicKey);
+    hello['pub'] = LanSyncCrypto.base64(LanSyncCrypto.encodePublicKey(ephemeral.pubKey));
     hello['nonce'] = LanSyncCrypto.base64(nonce);
     await this.channel.sendPlain(JSON.stringify(hello));
 
@@ -139,7 +142,7 @@ export class LanSyncSession {
     }
     const clientNonce = this.initiator ? nonce : peerNonce;
     const serverNonce = this.initiator ? peerNonce : nonce;
-    this.shared = await LanSyncCrypto.sharedSecret(this.identity.privateKey, peerPub);
+    this.shared = await LanSyncCrypto.sharedSecret(ephemeral.priKey, peerPub);
     this.sessionKeyCache = await LanSyncCrypto.sessionKey(this.shared, clientNonce, serverNonce);
     // 密钥在 hello 之后立刻装上:后续 confirm / request / 快照全部是密封帧。
     // 放在人眼比对**之前**是对的 —— Android 也是先装密钥再弹配对码,配对码只是

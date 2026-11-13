@@ -1,15 +1,18 @@
 import Foundation
-import CryptoKit
 
 #if os(iOS)
 import UIKit
 #endif
 
-/// 本机在局域网里的**长期身份**:一串设备 id + 一对 P-256 密钥。
+/// 本机在局域网里的**长期身份**:只有一串设备 id 与显示名。
 ///
 /// 与 Android `LanSyncIdentity.kt` 同一个形状,但**文件格式不跨端**:它只在本机读写,
-/// 从不进备份、不上传、不写日志。私钥丢了没有任何别处能补 —— 代价只是旧的配对记录失效,
-/// 而 P0 本来就不持久化配对记录。
+/// 从不进备份、不上传、不写日志。
+///
+/// ⚠️ **这里不存密钥**。旧版本曾把一对长期 P-256 密钥也写进来并直接拿去做 ECDH,
+/// 结果同一对设备每次配对的六位码都一样、也没有前向保密(H278)。现在密钥对在
+/// **每次会话里现生成**(见 `LanSyncSession.greet`),身份只负责"我是谁"。
+/// 旧文件里多出来的 publicKey/privateKey 会被忽略,下次写入时自然消失。
 ///
 /// 设备 id 要跨启动稳定,否则同一台机器每次打开同步都换一个名字,对端列表里会出现一串
 /// "幽灵设备"。文件放在 `AppSupport.dir`(与其它 store 同目录),失败时按"没有身份"重建。
@@ -17,13 +20,8 @@ final class LanSyncIdentity {
     struct Material {
         let deviceId: String
         let name: String
-        let publicKey: Data
-        let privateKey: P256PrivateKey
         let createdAt: Date
     }
-
-    /// 只为了避免在共享代码里写很长的 CryptoKit 泛型名;类型本身仍是 CryptoKit 的。
-    typealias P256PrivateKey = P256.KeyAgreement.PrivateKey
 
     private let file = AppSupport.dir.appendingPathComponent("lan_sync.json")
     private let lock = NSLock()
@@ -40,13 +38,10 @@ final class LanSyncIdentity {
 
     private func loadOrCreate() -> Material {
         if let m = read() { return m }
-        let key = LanSyncCrypto.generatePrivateKey()
         let id = LanSyncCrypto.randomBytes(8).map { String(format: "%02x", $0) }.joined()
         let m = Material(
             deviceId: id,
             name: defaultName(),
-            publicKey: LanSyncCrypto.encodePublicKey(key.publicKey),
-            privateKey: key,
             createdAt: Date()
         )
         persist(m)
@@ -59,21 +54,14 @@ final class LanSyncIdentity {
               let o = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               (o["version"] as? Int) == 1,
               let id = o["deviceId"] as? String,
-              id.count == 16,
-              let pub = (o["publicKey"] as? String).flatMap(LanSyncCrypto.unbase64),
-              let priv = (o["privateKey"] as? String).flatMap(LanSyncCrypto.unbase64),
-              priv.count == 32,
-              pub.count == LanSyncCrypto.publicKeyBytes else {
+              id.count == 16 else {
             return nil
         }
-        guard let key = try? LanSyncCrypto.decodePrivateKey(priv) else { return nil }
         let name = (o["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let created = (o["createdAt"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? Date()
         return Material(
             deviceId: id,
             name: name.isEmpty ? defaultName() : name,
-            publicKey: pub,
-            privateKey: key,
             createdAt: created
         )
     }
@@ -83,8 +71,6 @@ final class LanSyncIdentity {
             "version": 1,
             "deviceId": m.deviceId,
             "name": m.name,
-            "publicKey": LanSyncCrypto.base64(m.publicKey),
-            "privateKey": LanSyncCrypto.base64(m.privateKey.rawRepresentation),
             "createdAt": m.createdAt.timeIntervalSince1970
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: o, options: [.prettyPrinted]) else { return }

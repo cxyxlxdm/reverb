@@ -48,14 +48,6 @@ enum LanSyncCrypto {
         }
     }
 
-    static func decodePrivateKey(_ raw: Data) throws -> P256.KeyAgreement.PrivateKey {
-        do {
-            return try P256.KeyAgreement.PrivateKey(rawRepresentation: raw)
-        } catch {
-            throw LanSyncException(.io, "本机私钥读取失败", error)
-        }
-    }
-
     /// ECDH,返回 32 字节 X 坐标。CryptoKit 的 `SharedSecret` 就是这个值(不是带前缀的 KDF 输出)。
     static func sharedSecret(_ privateKey: P256.KeyAgreement.PrivateKey, peerPublicKeyRaw: Data) throws -> Data {
         let peer = try decodePublicKey(peerPublicKeyRaw)

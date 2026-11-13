@@ -192,12 +192,9 @@ class LanSyncSessionTest {
     }
 
     private fun identity(id: String, name: String): LanSyncIdentity.Material {
-        val pair = LanSyncCrypto.generateKeyPair()
         return LanSyncIdentity.Material(
             deviceId = id.padEnd(16, '0').take(16),
             name = name,
-            publicKey = LanSyncCrypto.encodePublicKey(pair.public),
-            privateKey = pair.private,
             createdAt = 0
         )
     }
