@@ -3,6 +3,7 @@ import { JsonFile } from './JsonFile';
 import { Codec } from './Codec';
 import { J } from '../net/Http';
 import { Log } from '../util/Logger';
+import { SyncTombstones } from '../sync/SyncTombstones';
 
 /// 订阅 / 收藏 / 历史 / 热门榜缓存。均为 @Observed,界面直接观察;
 /// 每次改动先改内存态再落盘(与 Android/macOS 同一范式)。
@@ -45,12 +46,17 @@ export class SubscriptionStore {
   toggle(p: Podcast): void {
     const idx = this.subscriptions.findIndex((x: Podcast) => x.feedUrl === p.feedUrl);
     const next = this.subscriptions.slice();
+    // 取消订阅记墓碑,重新订阅清墓碑(与 Android `SubscriptionStore.toggle` 同一条)。
+    // 不记的话,另一台设备下一次同步会把它原样带回来,而且永远删不掉。
+    const tombKey = SyncTombstones.subscriptionKey(p.feedUrl, p.id);
     if (idx >= 0) {
       next.splice(idx, 1);
+      SyncTombstones.record(SyncTombstones.SUBSCRIPTIONS, tombKey);
       Log.i('Store', `取消订阅 "${p.title}"`);
       if (this.onRemoved !== null) this.onRemoved(p);
     } else {
       next.unshift(p);
+      SyncTombstones.clear(SyncTombstones.SUBSCRIPTIONS, tombKey);
       Log.i('Store', `订阅 "${p.title}"`);
     }
     this.subscriptions = next;
@@ -61,7 +67,13 @@ export class SubscriptionStore {
   addAll(items: Podcast[]): void {
     const next = this.subscriptions.slice();
     for (let i = 0; i < items.length; i++) {
-      if (!next.some((x: Podcast) => x.feedUrl === items[i].feedUrl)) next.push(items[i]);
+      if (!next.some((x: Podcast) => x.feedUrl === items[i].feedUrl)) {
+        next.push(items[i]);
+        // 从对端/备份带进来的条目 = 本端现在确实有它,旧墓碑必须作废,
+        // 否则下一次同步会把它再删一次(Android `addAll` 同一处理)。
+        SyncTombstones.clear(SyncTombstones.SUBSCRIPTIONS,
+          SyncTombstones.subscriptionKey(items[i].feedUrl, items[i].id));
+      }
     }
     this.subscriptions = next;
     this.persist();
@@ -103,7 +115,13 @@ export class FavoriteStore {
   toggle(e: Episode): void {
     const idx = this.favorites.findIndex((x: Episode) => x.id === e.id);
     const next = this.favorites.slice();
-    if (idx >= 0) next.splice(idx, 1); else next.unshift(e);
+    if (idx >= 0) {
+      next.splice(idx, 1);
+      SyncTombstones.record(SyncTombstones.FAVORITES, e.id);
+    } else {
+      next.unshift(e);
+      SyncTombstones.clear(SyncTombstones.FAVORITES, e.id);
+    }
     this.favorites = next;
     this.persist();
   }
@@ -112,7 +130,10 @@ export class FavoriteStore {
   addAll(items: Episode[]): void {
     const next = this.favorites.slice();
     for (let i = 0; i < items.length; i++) {
-      if (!next.some((x: Episode) => x.id === items[i].id)) next.push(items[i]);
+      if (!next.some((x: Episode) => x.id === items[i].id)) {
+        next.push(items[i]);
+        SyncTombstones.clear(SyncTombstones.FAVORITES, items[i].id);
+      }
     }
     this.favorites = next;
     this.persist();

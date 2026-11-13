@@ -1547,6 +1547,162 @@
     {
       "name": "widget_live",
       "value": "LIVE"
+    },
+    {
+      "name": "set_lan_sync",
+      "value": "LAN sync"
+    },
+    {
+      "name": "set_lan_sync_sub",
+      "value": "Merge subscriptions, favorites, stamps, notes and progress with another device on the same Wi-Fi"
+    },
+    {
+      "name": "lan_title",
+      "value": "LAN sync"
+    },
+    {
+      "name": "lan_own_name",
+      "value": "This device: %1$s"
+    },
+    {
+      "name": "lan_waiting",
+      "value": "Waiting for another device…"
+    },
+    {
+      "name": "lan_no_wifi",
+      "value": "No Wi-Fi address found. Connect to the same Wi-Fi as the other device first."
+    },
+    {
+      "name": "lan_own_address",
+      "value": "This device's address, for manual entry on the other device"
+    },
+    {
+      "name": "lan_peers",
+      "value": "Nearby devices"
+    },
+    {
+      "name": "lan_no_peers",
+      "value": "No devices found yet. Make sure the other device has this page open; if discovery fails, type the address shown on its screen."
+    },
+    {
+      "name": "lan_manual_hint",
+      "value": "Other device's address, e.g. 192.168.1.5:47820"
+    },
+    {
+      "name": "lan_connect",
+      "value": "Connect"
+    },
+    {
+      "name": "lan_connecting",
+      "value": "Connecting to %1$s…"
+    },
+    {
+      "name": "lan_confirm_title",
+      "value": "Check the pairing code"
+    },
+    {
+      "name": "lan_confirm_body",
+      "value": "The six digits must match exactly on both devices. If they differ, cancel — someone may be in the middle."
+    },
+    {
+      "name": "lan_confirm_peer",
+      "value": "Other device: %1$s"
+    },
+    {
+      "name": "lan_confirm_accept",
+      "value": "They match, start sync"
+    },
+    {
+      "name": "lan_cancel",
+      "value": "Cancel"
+    },
+    {
+      "name": "lan_syncing",
+      "value": "Syncing with %1$s…"
+    },
+    {
+      "name": "lan_stage_sending",
+      "value": "Sending data"
+    },
+    {
+      "name": "lan_stage_receiving",
+      "value": "Receiving data"
+    },
+    {
+      "name": "lan_stage_merging",
+      "value": "Merging data"
+    },
+    {
+      "name": "lan_done_title",
+      "value": "Sync complete"
+    },
+    {
+      "name": "lan_done_with",
+      "value": "Merged with %1$s"
+    },
+    {
+      "name": "lan_done_added",
+      "value": "Added: %1$d subscriptions · %2$d favorites · %3$d stamps · %4$d notes · %5$d history · %6$d stats"
+    },
+    {
+      "name": "lan_done_nothing",
+      "value": "Both devices are already identical; nothing new."
+    },
+    {
+      "name": "lan_failed_title",
+      "value": "Sync failed"
+    },
+    {
+      "name": "lan_fail_connect",
+      "value": "Can't reach the other device. Check that both are on the same Wi-Fi and its page is open; you can also type the address shown on its screen."
+    },
+    {
+      "name": "lan_fail_version",
+      "value": "The two devices run different versions. Update both to the same version."
+    },
+    {
+      "name": "lan_fail_protocol",
+      "value": "The other device's response did not match the protocol; stopped."
+    },
+    {
+      "name": "lan_fail_decrypt",
+      "value": "Encryption check failed; stopped."
+    },
+    {
+      "name": "lan_fail_io",
+      "value": "Network interrupted; stopped."
+    },
+    {
+      "name": "lan_fail_cancelled",
+      "value": "Cancelled."
+    },
+    {
+      "name": "lan_fail_peer_cancelled",
+      "value": "The other device cancelled this sync."
+    },
+    {
+      "name": "lan_scope",
+      "value": "Only subscriptions, favorites, stamps, notes, history and listening stats are synced; downloads and settings are not included. Unsubscribing, removing favorites and deleting stamps or notes also sync to the other device."
+    },
+    {
+      "name": "lan_close",
+      "value": "Close"
+    },
+    {
+      "name": "lan_again",
+      "value": "Sync again"
+    },
+    {
+      "name": "lan_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "lan_tip",
+      "value": "Tap the other device on either one; you don't need to tap on both."
+    },
+    {
+      "name": "privacy_consent_lan",
+      "value": "Local network sync (optional). After you open “Local network sync” in Settings, the app advertises a service name (including this device's name and a short random identifier) on the same Wi-Fi and temporarily opens a TCP port; both stop when the page closes. After you tap the other device or enter its address, each device shows a six-digit pairing code, and transfer starts only when you confirm both screens match. The transfer carries the same six sections as a full backup (subscriptions, favourites, stamps, notes, history and listening stats, with stats merged per device); it excludes audio, binary caches, private-feed usernames and passwords, app settings and the play queue. Data is encrypted with keys negotiated between the two devices (ECDH P-256 and AES-256-GCM) and goes directly only between the two paired devices — never through any server, and never uploaded to the developer. Deletions also sync: when you unsubscribe, remove a favorite, or delete a stamp or note on one device, this device records which kind, which item and when, and sends it with the sync so the other device deletes it too; the record stays only on this device and is cleared after 90 days. A deletion record takes precedence over the other device's data: if the other device re-added the same item just before syncing, it is still deleted this time."
     }
   ]
 }

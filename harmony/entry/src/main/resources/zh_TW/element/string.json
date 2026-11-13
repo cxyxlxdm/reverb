@@ -1547,6 +1547,162 @@
     {
       "name": "widget_live",
       "value": "直播"
+    },
+    {
+      "name": "set_lan_sync",
+      "value": "區域網路同步"
+    },
+    {
+      "name": "set_lan_sync_sub",
+      "value": "在同一 Wi-Fi 下與另一台裝置合併訂閱、收藏、印記、批註與進度"
+    },
+    {
+      "name": "lan_title",
+      "value": "區域網路同步"
+    },
+    {
+      "name": "lan_own_name",
+      "value": "本機:%1$s"
+    },
+    {
+      "name": "lan_waiting",
+      "value": "等待另一台裝置…"
+    },
+    {
+      "name": "lan_no_wifi",
+      "value": "沒有找到 Wi-Fi 位址。請先連線與另一台裝置相同的 Wi-Fi。"
+    },
+    {
+      "name": "lan_own_address",
+      "value": "本機位址,可讓對方手動輸入"
+    },
+    {
+      "name": "lan_peers",
+      "value": "附近的裝置"
+    },
+    {
+      "name": "lan_no_peers",
+      "value": "還沒發現裝置。確認對方也打開了這個頁面;找不到就直接輸入對方螢幕上顯示的位址。"
+    },
+    {
+      "name": "lan_manual_hint",
+      "value": "對方位址,如 192.168.1.5:47820"
+    },
+    {
+      "name": "lan_connect",
+      "value": "連線"
+    },
+    {
+      "name": "lan_connecting",
+      "value": "正在連線 %1$s…"
+    },
+    {
+      "name": "lan_confirm_title",
+      "value": "核對配對碼"
+    },
+    {
+      "name": "lan_confirm_body",
+      "value": "兩台裝置上的六位數字必須完全相同。不同就取消,可能有人在中間。"
+    },
+    {
+      "name": "lan_confirm_peer",
+      "value": "對方:%1$s"
+    },
+    {
+      "name": "lan_confirm_accept",
+      "value": "一致,開始同步"
+    },
+    {
+      "name": "lan_cancel",
+      "value": "取消"
+    },
+    {
+      "name": "lan_syncing",
+      "value": "正在與 %1$s 同步…"
+    },
+    {
+      "name": "lan_stage_sending",
+      "value": "傳送資料"
+    },
+    {
+      "name": "lan_stage_receiving",
+      "value": "接收資料"
+    },
+    {
+      "name": "lan_stage_merging",
+      "value": "合併資料"
+    },
+    {
+      "name": "lan_done_title",
+      "value": "同步完成"
+    },
+    {
+      "name": "lan_done_with",
+      "value": "已與 %1$s 合併"
+    },
+    {
+      "name": "lan_done_added",
+      "value": "新增:訂閱 %1$d · 收藏 %2$d · 印記 %3$d · 批註 %4$d · 歷史 %5$d · 統計 %6$d"
+    },
+    {
+      "name": "lan_done_nothing",
+      "value": "兩端已經一致,沒有新增內容。"
+    },
+    {
+      "name": "lan_failed_title",
+      "value": "同步失敗"
+    },
+    {
+      "name": "lan_fail_connect",
+      "value": "連不上對方。確認兩台裝置在同一 Wi-Fi、對方頁面開著;也可以改用對方螢幕上顯示的位址。"
+    },
+    {
+      "name": "lan_fail_version",
+      "value": "兩台裝置的版本不一致,先升級到同一版本。"
+    },
+    {
+      "name": "lan_fail_protocol",
+      "value": "對方的回應不符合預期,已中止。"
+    },
+    {
+      "name": "lan_fail_decrypt",
+      "value": "加密校驗失敗,已中止。"
+    },
+    {
+      "name": "lan_fail_io",
+      "value": "網路中斷,已中止。"
+    },
+    {
+      "name": "lan_fail_cancelled",
+      "value": "已取消。"
+    },
+    {
+      "name": "lan_fail_peer_cancelled",
+      "value": "對方取消了這次同步。"
+    },
+    {
+      "name": "lan_scope",
+      "value": "只同步訂閱、收藏、印記、批註、歷史與收聽統計;下載與設定不參與。取消訂閱、取消收藏、刪除印記與批註也會同步到另一台裝置。"
+    },
+    {
+      "name": "lan_close",
+      "value": "關閉"
+    },
+    {
+      "name": "lan_again",
+      "value": "再同步一次"
+    },
+    {
+      "name": "lan_retry",
+      "value": "重試"
+    },
+    {
+      "name": "lan_tip",
+      "value": "在任意一台裝置上點對方即可,不需要兩台都點。"
+    },
+    {
+      "name": "privacy_consent_lan",
+      "value": "區域網路同步（選填）。在設定裡開啟「區域網路同步」後,本應用會在同一 Wi-Fi 內廣播一個服務名稱（含本機裝置名稱與一段隨機識別碼）,並暫時開啟一個 TCP 埠,頁面關閉即停止。你點按對方裝置或輸入對方位址後,兩端會各自顯示一組六位數配對碼,只有你確認兩邊螢幕一致才開始傳輸。傳送的是「完整備份」裡的六個分區（訂閱、收藏、印記、批註、歷史與收聽統計,其中統計按裝置識別碼合併）,不含音訊、二進位快取、私有訂閱的使用者名稱與密碼、應用程式設定或播放佇列;資料以兩端臨時協商的金鑰加密（ECDH P-256 與 AES-256-GCM）,只在兩台已配對的裝置之間直傳,不經過任何伺服器,也不上傳給開發者。刪除也會同步:在一台裝置上退訂、取消收藏、刪除印記或批註時,本機會記下「哪一類、哪一條、什麼時候刪的」,隨同一次同步傳給對端讓對端也刪;這份記錄只存在本機,90 天後自動清除。刪除記錄優先於對端的資料,若另一台在同步前才剛重新加入同一條,這一次仍會被刪除。"
     }
   ]
 }

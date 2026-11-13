@@ -1547,6 +1547,162 @@
     {
       "name": "widget_live",
       "value": "EN DIRECT"
+    },
+    {
+      "name": "set_lan_sync",
+      "value": "Synchronisation réseau local"
+    },
+    {
+      "name": "set_lan_sync_sub",
+      "value": "Fusionner abonnements, favoris, sceaux, notes et progression avec un autre appareil sur le même Wi-Fi"
+    },
+    {
+      "name": "lan_title",
+      "value": "Synchronisation réseau local"
+    },
+    {
+      "name": "lan_own_name",
+      "value": "Cet appareil : %1$s"
+    },
+    {
+      "name": "lan_waiting",
+      "value": "En attente d'un autre appareil…"
+    },
+    {
+      "name": "lan_no_wifi",
+      "value": "Aucune adresse Wi-Fi trouvée. Connectez-vous d'abord au même Wi-Fi que l'autre appareil."
+    },
+    {
+      "name": "lan_own_address",
+      "value": "Adresse de cet appareil, à saisir sur l'autre"
+    },
+    {
+      "name": "lan_peers",
+      "value": "Appareils à proximité"
+    },
+    {
+      "name": "lan_no_peers",
+      "value": "Aucun appareil trouvé pour l'instant. Vérifiez que l'autre appareil a cette page ouverte ; sinon, saisissez l'adresse affichée sur son écran."
+    },
+    {
+      "name": "lan_manual_hint",
+      "value": "Adresse de l'autre appareil, ex. 192.168.1.5:47820"
+    },
+    {
+      "name": "lan_connect",
+      "value": "Connecter"
+    },
+    {
+      "name": "lan_connecting",
+      "value": "Connexion à %1$s…"
+    },
+    {
+      "name": "lan_confirm_title",
+      "value": "Vérifiez le code d'appairage"
+    },
+    {
+      "name": "lan_confirm_body",
+      "value": "Les six chiffres doivent être identiques sur les deux appareils. S'ils diffèrent, annulez : quelqu'un peut être au milieu."
+    },
+    {
+      "name": "lan_confirm_peer",
+      "value": "Autre appareil : %1$s"
+    },
+    {
+      "name": "lan_confirm_accept",
+      "value": "Ils correspondent, lancer la synchronisation"
+    },
+    {
+      "name": "lan_cancel",
+      "value": "Annuler"
+    },
+    {
+      "name": "lan_syncing",
+      "value": "Synchronisation avec %1$s…"
+    },
+    {
+      "name": "lan_stage_sending",
+      "value": "Envoi des données"
+    },
+    {
+      "name": "lan_stage_receiving",
+      "value": "Réception des données"
+    },
+    {
+      "name": "lan_stage_merging",
+      "value": "Fusion des données"
+    },
+    {
+      "name": "lan_done_title",
+      "value": "Synchronisation terminée"
+    },
+    {
+      "name": "lan_done_with",
+      "value": "Fusionné avec %1$s"
+    },
+    {
+      "name": "lan_done_added",
+      "value": "Ajouts : %1$d abonnements · %2$d favoris · %3$d sceaux · %4$d notes · %5$d historique · %6$d statistiques"
+    },
+    {
+      "name": "lan_done_nothing",
+      "value": "Les deux appareils sont déjà identiques ; rien de nouveau."
+    },
+    {
+      "name": "lan_failed_title",
+      "value": "Échec de la synchronisation"
+    },
+    {
+      "name": "lan_fail_connect",
+      "value": "Impossible de joindre l'autre appareil. Vérifiez que les deux sont sur le même Wi-Fi et que sa page est ouverte ; vous pouvez aussi saisir l'adresse affichée sur son écran."
+    },
+    {
+      "name": "lan_fail_version",
+      "value": "Les deux appareils n'ont pas la même version. Mettez-les à jour vers la même version."
+    },
+    {
+      "name": "lan_fail_protocol",
+      "value": "La réponse de l'autre appareil ne respecte pas le protocole ; arrêt."
+    },
+    {
+      "name": "lan_fail_decrypt",
+      "value": "La vérification du chiffrement a échoué ; arrêt."
+    },
+    {
+      "name": "lan_fail_io",
+      "value": "Réseau interrompu ; arrêt."
+    },
+    {
+      "name": "lan_fail_cancelled",
+      "value": "Annulé."
+    },
+    {
+      "name": "lan_fail_peer_cancelled",
+      "value": "L'autre appareil a annulé cette synchronisation."
+    },
+    {
+      "name": "lan_scope",
+      "value": "Seuls les abonnements, favoris, sceaux, notes, historique et statistiques d'écoute sont synchronisés ; téléchargements et réglages sont exclus. Se désabonner, retirer un favori ou supprimer un sceau ou une note se synchronise aussi vers l'autre appareil."
+    },
+    {
+      "name": "lan_close",
+      "value": "Fermer"
+    },
+    {
+      "name": "lan_again",
+      "value": "Synchroniser à nouveau"
+    },
+    {
+      "name": "lan_retry",
+      "value": "Réessayer"
+    },
+    {
+      "name": "lan_tip",
+      "value": "Touchez l'autre appareil depuis l'un des deux ; inutile de le faire sur les deux."
+    },
+    {
+      "name": "privacy_consent_lan",
+      "value": "Synchronisation en réseau local (facultative). Après avoir ouvert « Synchronisation en réseau local » dans les réglages, l'application annonce un nom de service (comprenant le nom de cet appareil et un court identifiant aléatoire) sur le même Wi-Fi et ouvre temporairement un port TCP ; les deux s'arrêtent à la fermeture de la page. Après avoir touché l'autre appareil ou saisi son adresse, chaque appareil affiche un code d'appairage à six chiffres ; le transfert ne commence qu'une fois que vous avez confirmé que les deux écrans concordent. Le transfert contient les six mêmes sections qu'une sauvegarde complète (abonnements, favoris, empreintes, notes, historique et statistiques d'écoute, ces dernières fusionnées par appareil) ; il exclut l'audio, les caches binaires, les identifiants des flux privés, les réglages et la file de lecture. Les données sont chiffrées avec des clés négociées entre les deux appareils (ECDH P-256 et AES-256-GCM) et circulent directement entre les deux appareils appairés — jamais via un serveur, jamais vers le développeur. Les suppressions sont aussi synchronisées : lorsque vous vous désabonnez, retirez un favori ou supprimez un sceau ou une note sur un appareil, celui-ci note de quelle catégorie, quel élément et quand, puis l'envoie à la synchronisation pour que l'autre le supprime aussi ; cet enregistrement reste uniquement sur cet appareil et est effacé après 90 jours. L'enregistrement de suppression prime sur les données de l'autre appareil : si celui-ci a réajouté le même élément juste avant la synchronisation, il est quand même supprimé cette fois."
     }
   ]
 }

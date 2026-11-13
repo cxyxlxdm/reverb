@@ -64,7 +64,9 @@ export struct PrivacyConsentPage {
         Scroll(this.bodyScroller) {
           // 逐字稿那段单独一条串再拼上来,与 Android 侧同一结构(那端因为分渠道必须拆开,
           // 本端拆开是为了两端文案能逐段对照,改动时不容易只改一边)
-          Text(`${L.s('privacy_consent_body')}\n\n${L.s('privacy_consent_auth')}\n\n${L.s('privacy_consent_video')}\n\n${L.s('privacy_consent_asr')}`)
+          // 局域网同步那一段是 2026-11-13 补的:之前只写了「六分区/加密/不经服务器」,
+          // 没写删除墓碑随后补齐 —— 与 Android `privacy_consent_lan` 同一份文案。
+          Text(`${L.s('privacy_consent_body')}\n\n${L.s('privacy_consent_auth')}\n\n${L.s('privacy_consent_video')}\n\n${L.s('privacy_consent_asr')}\n\n${L.s('privacy_consent_lan')}`)
             .fontSize(TypeScale.bodyLarge * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
             .lineHeight(TypeScale.bodyLarge * this.fontScale * 1.7)

@@ -1547,6 +1547,162 @@
     {
       "name": "widget_live",
       "value": "EN DIRECTO"
+    },
+    {
+      "name": "set_lan_sync",
+      "value": "Sincronización por LAN"
+    },
+    {
+      "name": "set_lan_sync_sub",
+      "value": "Fusiona suscripciones, favoritos, sellos, notas y progreso con otro dispositivo en la misma Wi-Fi"
+    },
+    {
+      "name": "lan_title",
+      "value": "Sincronización por LAN"
+    },
+    {
+      "name": "lan_own_name",
+      "value": "Este dispositivo: %1$s"
+    },
+    {
+      "name": "lan_waiting",
+      "value": "Esperando a otro dispositivo…"
+    },
+    {
+      "name": "lan_no_wifi",
+      "value": "No se encontró ninguna dirección Wi-Fi. Conéctate primero a la misma Wi-Fi que el otro dispositivo."
+    },
+    {
+      "name": "lan_own_address",
+      "value": "Dirección de este dispositivo, para introducirla en el otro"
+    },
+    {
+      "name": "lan_peers",
+      "value": "Dispositivos cercanos"
+    },
+    {
+      "name": "lan_no_peers",
+      "value": "Aún no se ha encontrado ningún dispositivo. Comprueba que el otro tenga esta página abierta; si no aparece, escribe la dirección que muestra su pantalla."
+    },
+    {
+      "name": "lan_manual_hint",
+      "value": "Dirección del otro dispositivo, p. ej. 192.168.1.5:47820"
+    },
+    {
+      "name": "lan_connect",
+      "value": "Conectar"
+    },
+    {
+      "name": "lan_connecting",
+      "value": "Conectando con %1$s…"
+    },
+    {
+      "name": "lan_confirm_title",
+      "value": "Comprueba el código de emparejamiento"
+    },
+    {
+      "name": "lan_confirm_body",
+      "value": "Los seis dígitos deben coincidir exactamente en ambos dispositivos. Si no coinciden, cancela: puede haber alguien en medio."
+    },
+    {
+      "name": "lan_confirm_peer",
+      "value": "Otro dispositivo: %1$s"
+    },
+    {
+      "name": "lan_confirm_accept",
+      "value": "Coinciden, iniciar sincronización"
+    },
+    {
+      "name": "lan_cancel",
+      "value": "Cancelar"
+    },
+    {
+      "name": "lan_syncing",
+      "value": "Sincronizando con %1$s…"
+    },
+    {
+      "name": "lan_stage_sending",
+      "value": "Enviando datos"
+    },
+    {
+      "name": "lan_stage_receiving",
+      "value": "Recibiendo datos"
+    },
+    {
+      "name": "lan_stage_merging",
+      "value": "Fusionando datos"
+    },
+    {
+      "name": "lan_done_title",
+      "value": "Sincronización completada"
+    },
+    {
+      "name": "lan_done_with",
+      "value": "Fusionado con %1$s"
+    },
+    {
+      "name": "lan_done_added",
+      "value": "Añadidos: %1$d suscripciones · %2$d favoritos · %3$d sellos · %4$d notas · %5$d historial · %6$d estadísticas"
+    },
+    {
+      "name": "lan_done_nothing",
+      "value": "Ambos dispositivos ya coinciden; no hay nada nuevo."
+    },
+    {
+      "name": "lan_failed_title",
+      "value": "Error de sincronización"
+    },
+    {
+      "name": "lan_fail_connect",
+      "value": "No se puede conectar con el otro dispositivo. Comprueba que ambos estén en la misma Wi-Fi y que su página esté abierta; también puedes escribir la dirección que muestra su pantalla."
+    },
+    {
+      "name": "lan_fail_version",
+      "value": "Los dos dispositivos tienen versiones distintas. Actualiza ambos a la misma versión."
+    },
+    {
+      "name": "lan_fail_protocol",
+      "value": "La respuesta del otro dispositivo no cumple el protocolo; se detuvo."
+    },
+    {
+      "name": "lan_fail_decrypt",
+      "value": "Falló la comprobación de cifrado; se detuvo."
+    },
+    {
+      "name": "lan_fail_io",
+      "value": "Se interrumpió la red; se detuvo."
+    },
+    {
+      "name": "lan_fail_cancelled",
+      "value": "Cancelado."
+    },
+    {
+      "name": "lan_fail_peer_cancelled",
+      "value": "El otro dispositivo canceló esta sincronización."
+    },
+    {
+      "name": "lan_scope",
+      "value": "Solo se sincronizan suscripciones, favoritos, sellos, notas, historial y estadísticas de escucha; descargas y ajustes quedan fuera. Cancelar una suscripción, quitar un favorito o borrar sellos y notas también se sincroniza con el otro dispositivo."
+    },
+    {
+      "name": "lan_close",
+      "value": "Cerrar"
+    },
+    {
+      "name": "lan_again",
+      "value": "Sincronizar de nuevo"
+    },
+    {
+      "name": "lan_retry",
+      "value": "Reintentar"
+    },
+    {
+      "name": "lan_tip",
+      "value": "Toca el otro dispositivo en cualquiera de los dos; no hace falta tocarlo en ambos."
+    },
+    {
+      "name": "privacy_consent_lan",
+      "value": "Sincronización en red local (opcional). Al abrir «Sincronización en red local» en Ajustes, la aplicación anuncia un nombre de servicio (con el nombre de este dispositivo y un identificador aleatorio corto) en la misma Wi-Fi y abre temporalmente un puerto TCP; ambos se detienen al cerrar la página. Cuando tocas el otro dispositivo o escribes su dirección, cada dispositivo muestra un código de emparejamiento de seis cifras, y la transferencia solo empieza cuando confirmas que ambas pantallas coinciden. La transferencia lleva las mismas seis secciones que una copia completa (suscripciones, favoritos, sellos, notas, historial y estadísticas de escucha, estas últimas fusionadas por dispositivo); excluye audio, cachés binarias, el usuario y la contraseña de fuentes privadas, los ajustes y la cola de reproducción. Los datos se cifran con claves negociadas entre ambos dispositivos (ECDH P-256 y AES-256-GCM) y viajan directamente solo entre los dos dispositivos emparejados: nunca pasan por un servidor ni se suben al desarrollador. Las eliminaciones también se sincronizan: al darse de baja, quitar un favorito o borrar un sello o una nota en un dispositivo, este anota de qué tipo, qué elemento y cuándo, y lo envía en la sincronización para que el otro también lo borre; ese registro queda solo en este dispositivo y se borra a los 90 días. El registro de borrado prevalece sobre los datos del otro dispositivo: si el otro volvió a añadir el mismo elemento justo antes de sincronizar, esta vez también se borra."
     }
   ]
 }

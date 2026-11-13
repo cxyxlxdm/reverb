@@ -367,6 +367,11 @@ RFC 6762 单播回来 —— 不经过 AP 的组播转发,所以「组播只丢�
 两路结果在控制器里取并集、互不清空;系统 NSD 侧另有解析超时、队列去重与
 `FAILURE_ALREADY_ACTIVE` 退避 —— 那个 API 没有取消接口,一次不回调会卡住全局解析槽位。
 
+**四端跑的是同一份协议**(鸿蒙 2026-11-13 并入):`sync/LanSyncCrypto` / `LanSyncMerge` /
+`SyncTombstones` 在和谐侧各有一份 ArkTS 实现,键派生用系统的 `cryptoFramework`(EC + ECDH +
+HKDF + AES-GCM)。**HKDF 的 spec 有个坑:`algName` 只能写基名 `'HKDF'`**,写成 `'HKDF|SHA256'`
+(与 `createKdf` 的参数同形)会在 `JsKdfGenerateSecret` 里报 `build context fail.`,症状像网络问题(见 H273)。
+
 **密钥不依赖平台证书体系。** 每台设备一份安装级身份:16 位十六进制设备 id +
 长期 P-256 密钥对,存 `Application Support/Reverb/lan_sync.json`(私钥只在本地)。
 每次连接双方临时 ECDH,共享密钥经 HKDF-SHA256 派生会话密钥;
