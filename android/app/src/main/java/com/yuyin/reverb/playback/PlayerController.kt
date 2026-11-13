@@ -18,6 +18,7 @@ import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.remote.BilibiliSource
 import com.yuyin.reverb.widget.WidgetRefresh
+import com.yuyin.reverb.widget.WidgetRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -79,6 +80,12 @@ object PlayerController {
     private var bilibiliSource: BilibiliSource? = null
     private var listenStats: com.yuyin.reverb.data.local.ListenStatsStore? = null
     private var stateStore: com.yuyin.reverb.data.local.PlaybackStateStore? = null
+    /**
+     * 卡片按「上一集 / 下一集」时补上下文用:**只读**本地频道缓存,不联网。
+     * 卡片从历史里起播时队列只有一集,不补的话两个键在长度为 1 的队列上必然无动作
+     * (鸿蒙 H267 ③ 是同一个根因,修法也照那边:懒补、不覆盖已有的多集上下文)。
+     */
+    private var feedEpisodes: ((String) -> List<Episode>)? = null
     // 累计收听时长的基线：仅统计“同一集、播放中、合理正向增量”的内容毫秒
     private var lastCountedPosMs = 0L
     private var lastCountedEpId = ""
@@ -445,6 +452,13 @@ object PlayerController {
     fun bindListenStats(s: com.yuyin.reverb.data.local.ListenStatsStore) { listenStats = s }
 
     /**
+     * 频道整列(只读本地缓存)。卡片起播的单集上下文靠它补全,与鸿蒙
+     * `PlayerController.expandContextFromFeed` 同一条。**不绑定也不影响播放** ——
+     * 只是上一集 / 下一集在没有上下文时保持无动作。
+     */
+    fun bindFeedEpisodes(loader: (String) -> List<Episode>) { feedEpisodes = loader }
+
+    /**
      * 跨启动的播放态存储(「正在播哪一集 / 它来自哪一列 / 排好的 up next」)。
      * 没绑上时持久化与恢复都静默跳过 —— 单测与预览场景不需要它。
      */
@@ -513,6 +527,45 @@ object PlayerController {
     }
 
     /**
+     * 等控制器连上再执行一次动作(桌面卡片的播放 / 上一集 / 下一集走这里)。
+     *
+     * 为什么不能直接调 [togglePlayPause]:小组件进程常是**冷启动**,
+     * `init()` 的 `MediaController` 连接与 `restoreState()` 都是异步的;
+     * 控制器为 null 时 [togglePlayPause] 直接 return,表现就是"点了没反应"。
+     * 连上之后 [restoreState] 已经同步跑完(它就在同一个监听器里),此时
+     * `current` 要么是可操作的那一集,要么真的没有会话 —— 由调用方决定怎么兜底。
+     *
+     * 用主线程 handler 轮询而不是协程:调用方可能是广播接收器,没有现成的作用域;
+     * 120ms 一次、最多 6 秒,代价可以忽略。
+     */
+    fun runWhenReady(
+        timeoutMs: Long = 6_000,
+        onTimeout: (() -> Unit)? = null,
+        action: () -> Unit
+    ) {
+        if (controller != null) {
+            action()
+            return
+        }
+        val deadline = System.currentTimeMillis() + timeoutMs
+        val poll = object : Runnable {
+            override fun run() {
+                if (controller != null) {
+                    action()
+                    return
+                }
+                if (System.currentTimeMillis() >= deadline) {
+                    log.w(TAG, "runWhenReady 超时 ${timeoutMs}ms,动作放弃")
+                    onTimeout?.invoke()
+                    return
+                }
+                handler.postDelayed(this, 120)
+            }
+        }
+        handler.post(poll)
+    }
+
+    /**
      * 冷启动把上次退出时的播放态读回来。用户报的是「加入队列的节目下次打开 app 就消失」,
      * 而一起丢的其实是同一份内存里的三样东西:`up next`、**正在播哪一集**、
      * 以及**这一集来自哪一列**(后者决定上/下一集与「播完自动接下一集」)。
@@ -544,6 +597,9 @@ object PlayerController {
         }
         queue = if (snap.context.any { it.id == cur.id }) snap.context else listOf(cur)
         queueIndex = queue.indexOfFirst { it.id == cur.id }.coerceAtLeast(0)
+        // 卡片从历史起播、或上一版留下的是单集上下文时,这里补成同一节目的整列。
+        // 必须在 applyPlayMode 之前:随机表要按补全后的队列洗。
+        expandContextFromFeed(cur)
         _activeListTag.value = snap.listTag
         // 先按那一列存着的模式建好随机表,再装载(顺序错了会让随机模式的下一集指回原列表)
         applyPlayMode(modeFor(snap.listTag))
@@ -560,8 +616,12 @@ object PlayerController {
         override fun onIsPlayingChanged(isPlaying: Boolean) {
             _isPlaying.value = isPlaying
             if (isPlaying) { playbackStarted = true; startTicker() } else { stopTicker(); saveProgress(); listenStats?.flush() }
-            // 播放/暂停直接改变小组件那条「继续收听」的状态,不节流。
-            appContext?.let { WidgetRefresh.request(it, force = true) }
+            // 播放/暂停直接改变小组件那条「继续收听」的状态与图标,不节流。
+            // 先把这一位落盘:卡片进程只认 `widget_state.json`,读不到本进程的 StateFlow。
+            appContext?.let {
+                WidgetRuntime.writePlaying(it, isPlaying)
+                WidgetRefresh.request(it, force = true)
+            }
         }
 
         override fun onPlaybackStateChanged(playbackState: Int) {
@@ -793,9 +853,13 @@ object PlayerController {
             if (radioPos in 0 until radioHistory.lastIndex) {
                 radioPos++; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true)
             } else advanceRadio()
-        } else if (_userQueue.value.isNotEmpty()) {
-            playQueueAt(0) // 用户队列优先:取队首播放
-        } else advanceQueue()
+        } else {
+            // 卡片起播的单集上下文先补成整列,否则这个键会被点、被处理,但什么都不会发生。
+            _current.value?.let { expandContextFromFeed(it) }
+            if (_userQueue.value.isNotEmpty()) {
+                playQueueAt(0) // 用户队列优先:取队首播放
+            } else advanceQueue()
+        }
     }
 
     /** 上一集:列表回退一集(随机模式沿随机表回退);电台回退到刚听过的那期。 */
@@ -804,12 +868,39 @@ object PlayerController {
         if (_radioMode.value) {
             if (radioPos > 0) { radioPos--; updateNavFlags(); playEpisode(radioHistory[radioPos], isRadio = true) }
         } else {
+            _current.value?.let { expandContextFromFeed(it) }
             val pi = prevQueueIndex() ?: return
             if (_playMode.value == PlayMode.SHUFFLE) shufflePos--
             queueIndex = pi
             updateNavFlags()
             playEpisode(queue[queueIndex], isRadio = false)
         }
+    }
+
+    /**
+     * 把单集上下文补成同一节目的整列(只读 [feedEpisodes] = 本地频道缓存,不联网)。
+     *
+     * 三条边界,与鸿蒙 H267 的同一处逐条对应:
+     *  - **只在队列长度为 1 时补**:用户从列表点开的那一列就是答案,永远不替换;
+     *  - 缓存里找不到这一集(频道没访问过 / 已过缓存期)就保持原样 —— 按键仍无动作,
+     *    但不会更糟,也不会因此发一个网络请求;
+     *  - 补完要把随机表重洗、导航标志刷新、快照重写,否则重启后上下集又变回灰的。
+     *
+     * 入口是 [next] / [previous] 两条懒路径与 [restoreState];**不在 [prepare] 里补** ——
+     * 点卡片只该装载那一集,补上下文是"用户按了上下键"时才需要的动作。
+     */
+    private fun expandContextFromFeed(ep: Episode) {
+        if (queue.size > 1) return
+        val list = feedEpisodes?.invoke(ep.feedUrl).orEmpty()
+        if (list.size <= 1) return
+        val idx = list.indexOfFirst { it.id == ep.id }
+        if (idx < 0) return
+        queue = list
+        queueIndex = idx
+        if (_playMode.value == PlayMode.SHUFFLE) rebuildShuffleOrder() else clearShuffleOrder()
+        updateNavFlags()
+        persistState()
+        log.i(TAG, "上下文补全 ctx=${list.size}@$idx feed='${ep.feedUrl}'")
     }
 
     /**
@@ -1035,6 +1126,9 @@ object PlayerController {
             c.playWhenReady = false
             c.prepare()
             c.setPlaybackSpeed(_speed.value)
+            // 卡片上的图标要立刻翻回 ▶:这一条路径可能不触发 onIsPlayingChanged
+            // (播放器此前就停在暂停态时没有"变化"可言)。
+            appContext?.let { WidgetRuntime.writePlaying(it, false) }
             // 进度线先按历史位置画出来:真正的位置要等 READY 那次 seek,而 READY 之前
             // 这一格是 0 —— 播放条上"0:00 / 42:10"会被读成进度丢了(而它其实只是还没落位)。
             _position.value = pendingSeekMs
@@ -1127,6 +1221,7 @@ object PlayerController {
         _playbackError.value = null
         _current.value = null
         _isPlaying.value = false
+        appContext?.let { WidgetRuntime.writePlaying(it, false) }
         queue = emptyList()
         queueIndex = 0
         persistState()
@@ -1327,6 +1422,9 @@ object PlayerController {
         _position.value = c.currentPosition.coerceAtLeast(0)
         if (c.duration > 0) _duration.value = c.duration
         _liveStream.value = c.isCurrentMediaItemLive
+        // 启动后第一次拿到真值:**用它覆盖盘上可能过期的 `playing`**
+        // (上次进程被杀时停在播放中,卡片会一直画 ❚❚ 直到这里)。见 WidgetRuntime 的边界说明。
+        appContext?.let { WidgetRuntime.writePlaying(it, c.isPlaying) }
         if (c.isPlaying) startTicker()
     }
 
@@ -1348,8 +1446,9 @@ object PlayerController {
             countListening()
             tickCount++
             if (tickCount % 10 == 0) saveProgress() // 每约 5 秒落一次进度
-            // 小组件的进度条 20 秒刷一次就够(时间文字只到分钟级),不必跟着 5 秒的落盘走。
-            if (tickCount % 40 == 0) appContext?.let { WidgetRefresh.request(it) }
+            // 小组件的进度条 5 秒刷一次(0.1% 一档才走得连续),并**错开落盘那一拍**:
+            // 同一 tick 推会读到刚排队还没写下去的 history,卡片永远落后一跳(鸿蒙 H267 ①)。
+            if (tickCount % 10 == 5) appContext?.let { WidgetRefresh.request(it) }
             if (c.isPlaying) handler.postDelayed(this, 500)
         }
     }

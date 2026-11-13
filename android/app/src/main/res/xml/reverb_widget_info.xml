@@ -1,11 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 2×2 起步、可双向拉伸;三档布局由 Provider 按宿主给的 minWidth/minHeight 选。
      updatePeriodMillis=0:内容只在 App 内播放状态变化时主动推(见 WidgetRefresh),
-     系统定时刷新对「上次听到哪」这件事没有意义,只会白耗电。 -->
+     系统定时刷新对「上次听到哪」这件事没有意义,只会白耗电。
+
+     maxResizeWidth 为什么给到 1000dp(2026-11-13 实测,见 H271):
+     Launcher 把上限算成 maxSpanX = min(桌面列数, ceil(maxResizeWidth / 该 profile 的 cell 宽)),
+     而 **initSpans 取所有 profile 的最小值** —— 手机横屏的 cell 比竖屏宽得多
+     (Pixel 3:竖屏 getCellSize().x=201px,横屏≈423px)。500dp=1375px 时
+     ceil(1375/423)=4 ⇒ 5 列的桌面竖屏下也永远只能拉到 4 列(横屏那条把上限按死了)。
+     5 列要 ≥4×423px=1692px=615dp;1000dp 留了余量,同时仍被桌面列数封顶。
+     高度不改:500dp 在竖屏已够 5 行(ceil(1375/306)=5),本组件的设计上限是 4×4。 -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:description="@string/widget_description"
     android:initialLayout="@layout/widget_small"
-    android:maxResizeWidth="500dp"
+    android:maxResizeWidth="1000dp"
     android:maxResizeHeight="500dp"
     android:minWidth="110dp"
     android:minHeight="110dp"

@@ -246,6 +246,14 @@
 "简介" = "Notas";
 "暂无简介" = "Sin notas";
 "转录" = "Transcripción";
+
+/* 逐字稿搜索与导出(与 Android / 鸿蒙同一组文案) */
+"搜索逐字稿" = "Buscar en la transcripción";
+"无匹配" = "Sin resultados";
+"上一处" = "Coincidencia anterior";
+"下一处" = "Coincidencia siguiente";
+"导出逐字稿" = "Exportar transcripción";
+"纯文本 (.txt)" = "Texto sin formato (.txt)";
 "中文" = "Chino";
 "正在准备音频…" = "Preparando audio…";
 "正在下载语言模型…" = "Descargando modelo de idioma…";
@@ -260,6 +268,11 @@
 "正在获取发布方提供的逐字稿…" = "Obteniendo la transcripción del editor…";
 "这一集发布方提供了逐字稿" = "El editor ofrece una transcripción de este episodio";
 "查看逐字稿" = "Ver transcripción";
+
+/* Chapters · 章节(发布方给的章表,Podcasting 2.0) */
+"章节" = "Capítulos";
+"这一集没有章节" = "Este episodio no tiene capítulos";
+"章节加载失败，点按重试" = "No se pudieron cargar los capítulos. Toca para reintentar";
 
 // 收听时长
 "收听时长" = "Tiempo de escucha";
@@ -313,10 +326,12 @@
 "· 离线下载：下载的单集长期留在本机" = "· Sin conexión: los episodios descargados se quedan en este Mac";
 "· 播放缓存：播过的单集自动留在本机，下次直接本地起播；断网时已加载的列表与封面仍可浏览，可在设置一键清除" = "· Caché de reproducción: los episodios que escuchas se quedan en este Mac y la próxima vez empiezan en local; las listas y portadas ya cargadas siguen visibles sin conexión y se borran desde Ajustes";
 "· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播，以及系统媒体键与「正在播放」" = "· Reproducción: velocidad, retroceso y avance, temporizador, modos (en orden / repetir uno / aleatorio), reproducción automática, teclas multimedia y «Reproduciendo ahora»";
-"· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）" = "· Transcripción: muestra la transcripción del editor cuando existe; si no, convierte el episodio en texto en este Mac con resaltado según el progreso (la transcripción local requiere macOS 26)";
+"· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）；支持全文搜索，可导出为文本或 Markdown 分享" = "· Transcripción: muestra la transcripción del editor cuando existe; si no, convierte el episodio en texto en este Mac con resaltado según el progreso (la transcripción local requiere macOS 26); búsqueda en todo el texto y exportación como texto o Markdown para compartir";
 "· 批注：记下这一秒和此刻的一句话；音阁「批注」栏把它们连成时间线，点一下从那一句接着听" = "· Notas: marca ese segundo con una frase; la sección Notas de la Biblioteca las une en una línea de tiempo: haz clic en una para seguir desde esa frase";
 "· 节目笔记：播放页横滑查看简介" = "· Notas del programa: desliza en el reproductor para leer la descripción";
+"· 章节：发布方给了章表的单集，播放页进度条上方显示当前章节，点开可跳转；章表取一次后离线也能看" = "· Capítulos: en los episodios cuyo editor incluye una lista de capítulos, el capítulo actual aparece sobre la barra de progreso; toca para saltar. La lista se guarda en caché, así que funciona sin conexión";
 "· 备份：勾选分区导出或恢复备份（与手机端格式互通），也能导入导出 OPML" = "· Copia de seguridad: exporta o restaura las secciones elegidas (compatible con las apps móviles) e importa o exporta OPML";
+"· 局域网同步：在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度" = "· Sincronización en red local: fusiona suscripciones, favoritos, sellos, notas y progreso con otro dispositivo en la misma Wi-Fi";
 "· 外观：深色 / 浅色 / 跟随系统、字号、主题配色、多语言" = "· Apariencia: oscuro / claro / sistema, tamaño de texto, color de acento, varios idiomas";
 "设计理念" = "Diseño";
 "美学上取「水墨 + 青瓷 + 梁金」的底色，名字与图标呼应「余音绕梁」——声波环绕横梁，余韵不散。" = "La estética se inspira en la tinta, el celadón y el oro de las vigas — el nombre y el icono evocan «un eco girando entre las vigas»: ondas sonoras alrededor de una viga, que no se apagan.";
@@ -372,3 +387,40 @@
 "密码" = "Contraseña";
 "保存并重试" = "Guardar y reintentar";
 "这对用户名和密码没有通过，再核对一下。" = "Ese usuario y esa contraseña no se han aceptado. Compruébalos e inténtalo de nuevo.";
+
+/* 局域网同步(2026-11-11)。键名是简中原文;插值按 SwiftUI 的 key 规则写成 %@ / %lld。 */
+"局域网" = "Red local";
+"局域网同步" = "Sincronización en red local";
+"在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度" = "Combina suscripciones, favoritos, sellos, notas y progreso con otro dispositivo en la misma Wi-Fi";
+"等待另一台设备…" = "Esperando a otro dispositivo…";
+"正在连接 %@…" = "Conectando con %@…";
+"本机：%@" = "Este dispositivo: %@";
+"没有找到 Wi-Fi 地址。请先连接与另一台设备相同的 Wi-Fi。" = "No se encontró una dirección Wi-Fi. Primero conéctate a la misma Wi-Fi que el otro dispositivo.";
+"本机地址，可让对方手动输入" = "Dirección de este dispositivo: el otro puede introducirla a mano";
+"附近的设备" = "Dispositivos cercanos";
+"还没发现设备。确认对方也打开了这个页面；找不到就直接输入对方屏幕上显示的地址。" = "Aún no se encontraron dispositivos. Comprueba que el otro también tenga esta pantalla abierta; si no aparece, introduce la dirección que muestra su pantalla.";
+"对方地址，如 192.168.1.5:47820" = "Dirección del otro dispositivo, p. ej. 192.168.1.5:47820";
+"连接" = "Conectar";
+"在任意一台设备上点对方即可，不需要两台都点。" = "Toca el otro dispositivo en cualquiera de los dos; no hace falta en ambos.";
+"核对配对码" = "Comprueba el código de emparejamiento";
+"对方：%@" = "Otro dispositivo: %@";
+"两台设备上的六位数字必须完全相同。不同就取消，可能有人在中间。" = "Los seis dígitos deben coincidir exactamente en ambos dispositivos. Si no coinciden, cancela: puede haber alguien en medio.";
+"正在与 %@ 同步…" = "Sincronizando con %@…";
+"发送数据" = "Enviando datos";
+"接收数据" = "Recibiendo datos";
+"合并数据" = "Combinando datos";
+"同步完成" = "Sincronización completada";
+"已与 %@ 合并" = "Combinado con %@";
+"新增：订阅 %lld · 收藏 %lld · 印记 %lld · 批注 %lld · 历史 %lld · 统计 %lld" = "Añadido: %lld suscripciones · %lld favoritos · %lld sellos · %lld notas · %lld historial · %lld estadísticas";
+"两端已经一致，没有新增内容。" = "Ambos dispositivos ya coinciden: no hay nada nuevo.";
+"同步失败" = "Error de sincronización";
+"连不上对方。确认两台设备在同一 Wi-Fi、对方页面开着；也可以改用对方屏幕上显示的地址。" = "No se puede conectar con el otro dispositivo. Comprueba que ambos estén en la misma Wi-Fi y que su pantalla esté abierta; también puedes usar la dirección que muestra.";
+"两台设备的版本不一致，先升级到同一版本。" = "Los dispositivos tienen versiones distintas. Actualiza ambos a la misma versión.";
+"对方的回应不符合预期，已中止。" = "La respuesta del otro dispositivo no es la esperada. Detenido.";
+"加密校验失败，已中止。" = "Falló la comprobación del cifrado. Detenido.";
+"网络中断，已中止。" = "Se interrumpió la conexión. Detenido.";
+"已取消。" = "Cancelado.";
+"对方取消了这次同步。" = "El otro dispositivo canceló la sincronización.";
+"只同步订阅、收藏、印记、批注、历史与收听统计；下载与设置不参与。删除目前不会同步：在一台设备上取消订阅后，另一台同步时可能把它带回来。" = "Solo se sincronizan suscripciones, favoritos, sellos, notas, historial y estadísticas de escucha; descargas y ajustes quedan fuera. Las eliminaciones aún no se sincronizan: si cancelas una suscripción en un dispositivo, puede volver al sincronizar el otro.";
+"再同步一次" = "Sincronizar otra vez";
+"一致，开始同步" = "Coinciden: empezar";

@@ -2,6 +2,7 @@ package com.yuyin.reverb.data.local
 
 import android.content.Context
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.sync.SyncTombstones
 import com.yuyin.reverb.util.Logger
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,6 +66,8 @@ class NoteStore(context: Context) {
             _notes.value = list
             persist(list)
             Logger.i("NoteStore", "add id=${note.id} pos=${note.positionMs}ms len=${body.length} total=${list.size}")
+            // 新批注不可能与旧删除同 id(UUID),这一行只是把"重新添加就清墓碑"的规则补齐。
+            SyncTombstones.clear(SyncTombstones.NOTES, note.id)
         }
         return note
     }
@@ -75,6 +78,7 @@ class NoteStore(context: Context) {
             _notes.value = list
             persist(list)
             Logger.i("NoteStore", "remove id=$id total=${list.size}")
+            SyncTombstones.record(SyncTombstones.NOTES, id)
         }
     }
 
@@ -88,6 +92,8 @@ class NoteStore(context: Context) {
             for (n in items) if (list.none { it.id == n.id }) list.add(n)
             _notes.value = normalize(list)
             persist(_notes.value)
+            // 恢复/同步并入 = 重新写回这条批注,清掉墓碑(理由同 SubscriptionStore.addAll)。
+            items.forEach { SyncTombstones.clear(SyncTombstones.NOTES, it.id) }
         }
     }
 

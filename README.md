@@ -74,7 +74,7 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 - `docs/ARCHITECTURE.md` — **核心技术实现**(分层、播放链路、持久化、渠道隔离、native 模块、性能规律)
 - `docs/HISTORY.md` — **开发历程**(顺序与因果,以及哪里返了工)
 - `docs/ROADMAP.md` — **进度、遗留问题与演进方向**(各端到哪一步、哪些路径还没验过、以后可能往哪走)
-- `docs/TRANSCRIPT.md` — 逐字稿 / 语音转文字的实现与取舍(含鸿蒙将来换三方引擎的路子)
+- `docs/TRANSCRIPT.md` — 逐字稿 / 语音转文字的实现与取舍(含鸿蒙接入 sherpa-onnx 的落地记录)
 - `docs/IOS.md` — **iOS 端**:与 macOS 的共享层、工程结构、编译门、TestFlight 前置条件与流程、本机现状
 - `docs/TROUBLESHOOTING.md` — 踩坑记录:现象、根因、修法、可复用的规律
 - `docs/PRIVACY.md` — 隐私政策(与 `site/reverb/privacy.html` 必须同步)
@@ -99,8 +99,8 @@ update/         WorkManager 订阅更新巡检 + 新集通知
 ```bash
 cd android
 export JAVA_HOME=/Users/cxyxl/Library/Java/JavaVirtualMachines/jdk-21.0.12.1+1.jdk/Contents/Home   # 绝对路径,原因见下方说明
-./tools/build-asr.sh                # 备齐离线识别的 .so 与模型(不入版本管理,缺了打包会报错)
-./build-release.sh                  # 唯一那份 → dist/reverb.apk(约 65 MB,含语音模型;同时交大陆应用市场与 GitHub Releases)
+./tools/build-asr.sh                # 备齐离线识别的模型/词表/jar/两个 .so(不入版本管理,缺了打包会报错)
+./build-release.sh                  # 唯一那份 → dist/reverb.apk(1.0.8 起约 270 MB,含 239 MB 语音模型;同时交大陆应用市场与 GitHub Releases)
                                     # 2026-10-18 合并 flavor 后没有 `--store` 了(见 H205)
 ./gradlew :app:assembleDebug        # 只要一个能装的 debug 包
 ```

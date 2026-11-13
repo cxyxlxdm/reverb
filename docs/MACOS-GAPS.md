@@ -139,12 +139,12 @@ App 日志与 `~/Library/Application Support/Reverb/` 下的 JSON 现读。
 **这一项不是缺口** —— 四端是同一轮一起做的。单列在这里,是因为 macOS 的落点与手机三端**形态差得最多**,
 下次盘一致性时别拿手机的「服务卡片」去要求桌面。
 
-| 端 | 形态 | 数据怎么到卡片 | 点击 |
+| 端 | 形态 | 数据怎么到卡片 | 点击 / 控制 |
 |---|---|---|---|
-| Android | AppWidgetProvider + RemoteViews(小 / 中 / 大,另有一档竖长方块) | 进程内直接写布局,20 s 节流刷新 | `PendingIntent` 带 `EXTRA_OPEN_PLAYER` / `EXTRA_OPEN_EPISODE` |
-| 鸿蒙 | FormExtensionAbility + ArkUI 卡片(2×2 / 2×4 / 4×4) | `WidgetUpdater` 20 s 节流写共享 JSON,**700 ms 强制放行**一次 | `postCardAction` 走 `WidgetRoute` |
-| iOS | WidgetKit extension(`ReverbWidget.appex`),small / medium / large | App 侧 `WidgetBridge` 写 **App Group** 容器,`WidgetCenter` 刷新 | `.widgetURL(reverb://player?id=…)` → App 外层 `.onOpenURL` → `DeepLinkInbox` |
-| macOS | WidgetKit extension(`ReverbWidget.appex`),small / medium / large | App 侧 `WidgetBridge` 写 **`~/Library/Application Support/Reverb/widget/`**,`WidgetCenter` 刷新 | `.widgetURL` → **AppKit `application(_:open:)`**,见下 |
+| Android | AppWidgetProvider + RemoteViews(小 / 中 / 大,另有一档竖长方块) | 进程内直接写布局,约 5 s 刷新、0.1% 步进;`widget_state.json` 记播放态 | `PendingIntent` 带 `EXTRA_OPEN_PLAYER` / `EXTRA_OPEN_EPISODE`;按键走显式广播 + `goAsync()` |
+| 鸿蒙 | FormExtensionAbility + ArkUI 卡片(2×2 / 2×4 / 4×4) | `WidgetUpdater` 约 5 s 推送写共享 JSON,**700 ms 强制放行**一次 | `postCardAction` 走 `WidgetRoute`(播放键走 `call` + callee) |
+| iOS | WidgetKit extension(`ReverbWidget.appex`),small / medium / large | App 侧 `WidgetBridge` 写 **App Group** 容器,`WidgetCenter` 刷新,约 5 s | `.widgetURL(reverb://player?id=…)` → App 外层 `.onOpenURL` → `DeepLinkInbox`;控制键经 `AudioPlaybackIntent`(17+) 交回 App |
+| macOS | WidgetKit extension(`ReverbWidget.appex`),small / medium / large | App 侧 `WidgetBridge` 写 **`~/Library/Application Support/Reverb/widget/`**,`WidgetCenter` 刷新,约 5 s | `.widgetURL` → **AppKit `application(_:open:)`**,见下;控制键同样经 `AudioPlaybackIntent`(14+) |
 
 **macOS 的三处形态差异(都是平台约束,不是偷工)**:
 
@@ -159,13 +159,15 @@ App 日志与 `~/Library/Application Support/Reverb/` 下的 JSON 现读。
 3. **深链的接收点在 AppKit 代理,不在视图。** 见 H249:`.onOpenURL` 那次"没被调用"不是接线坏了,
    是本机停在同意门后面、`RootView` 根本没建。接收点提前到 `AppDelegate` 之后,同意门还在时也能收、
    先缓冲进 `DeepLinkInbox`,界面就绪再消费。
+4. **macOS 13 没有可交互的卡片。** 控制键依赖 App Intents 的 `Button(intent:)` / `AudioPlaybackIntent`
+   (macOS 14 起)。本包最低 13,低版本照常显示封面、进度与时间,但控制行不出现 —— 点卡片进播放页仍可用。
+   iOS 侧对应门槛是 17,本包最低就是 17,所以三档都带按键。
 
-**验收状态(2026-11-09)**:macOS `./package.sh` exit 0(dmg 内含 appex、五组断言全过),
-运行时 `pluginkit` 认得这个扩展、启动 App 会写出 `widget_state.json`(真实历史数据)、
-系统投递的 URL 在代理里打出了 `scheme=reverb host=player`。
-**没验**:把卡片真正加到通知中心看渲染;点卡片后播放页是否弹出 —— 本机卡在同意门(未点同意)
-且屏幕锁定,两者都归人。iOS 侧:模拟器 Debug 包已装、appex 已注册,App Group 容器可用、`widget_state.json`
-真的写出了真实数据(读到 `余音使用引导 / 0:00 / 0:32`);`simctl openurl` 能唤起系统
-「在"余音"中打开?」确认框,**确认那一下点不了**。主屏渲染未看。真机 / TestFlight 的 App Group
-需要付费 Apple Developer Program(签名结果未实测);缺容器时代码只记一行日志、卡片退回空态(见 H250)。鸿蒙只有编译门(`assembleHap`),真机 `hdc list targets` 为空。
-Android 已装机验收:三种尺寸渲染、空态、点卡片回播放页;鸿蒙只有编译门,iOS 模拟器只到"扩展被系统登记"这一层。
+**验收状态(2026-11-12)**:macOS `swift build --product ReverbWidget` exit 0;本机运行 App 写出新契约
+`widget_state.json`(无 `label`、`playing:false`、`percent:26.1`)。iOS 模拟器(iPhone 17 / iOS 27.2)
+App Group 容器可用,种子夹具读到 `percent:25.1` / `time:"4:11 / 16:41"`,封面副本
+`widget_art.jpg` 70,520 B;空态文件也没有 `label`。iOS 编译门 exit 0、appex 在包内。
+**没验**:把卡片真正加到主屏 / 通知中心看渲染、点控制键与点卡片后播放页是否弹出 ——
+本机没有 Simulator 图形界面,加卡片与确认框都需要人点一下。真机 / TestFlight 的 App Group
+需要付费 Apple Developer Program(签名结果未实测);缺容器时代码只记一行日志、卡片退回空态(见 H250)。
+Android 已装机验收四档渲染与全部按键;鸿蒙已真机验收三档与按键。

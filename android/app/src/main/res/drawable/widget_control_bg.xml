@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 2×2 压在封面上的那颗圆底播放键(与鸿蒙 filledButton 同形)。
+     行内三颗键不用它:那里是图标本身当点击区,底色透明。 -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <solid android:color="@color/widget_accent" />
+</shape>

@@ -327,7 +327,7 @@ macOS 端解码**不做秒/毫秒归一** —— 没有一端写秒,归一只会
 - Android:`allowBackup="true"` + `backup_rules.xml`(API≤30)+
   `data_extraction_rules.xml`(API31+,`cloud-backup` 与 `device-transfer` 两节)。
   **只写 include** —— 未列出的一律不进备份,音频、逐字稿、缓存、日志与
-  57 MB 语音模型被隐式排除(单应用云备份 25 MB 配额)。
+  随包的 239 MB 语音模型被隐式排除(单应用云备份 25 MB 配额)。
 - 鸿蒙:`module.json5` 声明 `type:"backup"` 扩展 +
   `resources/base/profile/backup_config.json` 白名单。注意路径是**虚拟沙箱**
   `/data/storage/el2/base/haps/entry/...`,且鸿蒙偏好文件**无 .xml 后缀**。
@@ -341,6 +341,60 @@ macOS 端解码**不做秒/毫秒归一** —— 没有一端写秒,归一只会
   两份 Android 规则文件必须同口径维护,只改一份就是给 API 分层埋雷(H84)。
 
 它是「备份/恢复」而非实时同步;`downloads.json` 恢复后音频不在,列表不会自动出现。
+
+### 局域网同步(1.0.8):复用备份 JSON,自己管传输
+
+目标只有一句:**两台设备在同一 Wi-Fi 下,一键把订阅/收藏/印记/批注/历史/收听统计合并成并集**。
+它不是"文件互传",双方跑完拿到的内容一致;也不经过任何服务器(约束一)。
+
+**传输层选 TCP,不选 WebSocket/HTTPS。** 四端都有 TCP socket 系统 API,而 WebSocket
+在 Android/鸿蒙上通常要引库或自己写握手,多一个库就多一条"三方 SDK"审查面。
+线格式自己定:**4 字节大端长度 + UTF-8 JSON**;握手帧明文,配对之后全部是密封信封
+`{"n":<nonce b64>,"c":<密文+tag b64>}`。单帧上限 8 MiB,快照切 256 KiB 块,整份上限 64 MiB。
+用长度前缀而不是换行:密文里任何字节都可能出现,包括 `0x0A`。
+
+**发现是 mDNS/DNS-SD(`_reverb._tcp`)+ 手动地址,两条都必须有。**
+访客 Wi-Fi、AP 隔离、企业网络经常让组播到不了对端;所以面板上永远显示本机地址,
+并保留手动输入 `IP:端口`。发现成功只影响"顺不顺",不影响"能不能"。
+服务名只放短 id(`Reverb-<8 hex>`),设备名放 TXT(`nm`)—— 服务名要参与主机名规则,
+中文与空格都要转义;TXT 原样传 UTF-8 省事。
+
+**Android 的发现是两条路并行**(2026-11-12,H265):系统 NSD + 自己发的 **QU 查询**。
+后者从临时端口向 `224.0.0.251:5353` 发一条类字段带 `0x8000` 的 PTR 查询,应答方按
+RFC 6762 单播回来 —— 不经过 AP 的组播转发,所以「组播只丢一个方向」的 AP 上也能用
+(实测 H3C:NSD 永远为空,QU 3 秒内列出 Mac)。只发查询、只收单播,不需要 `MulticastLock`
+或额外权限;报文编解码是 `MdnsCodec`(只认 PTR/SRV/TXT/A 四类与 IPv4)。
+两路结果在控制器里取并集、互不清空;系统 NSD 侧另有解析超时、队列去重与
+`FAILURE_ALREADY_ACTIVE` 退避 —— 那个 API 没有取消接口,一次不回调会卡住全局解析槽位。
+
+**密钥不依赖平台证书体系。** 每台设备一份安装级身份:16 位十六进制设备 id +
+长期 P-256 密钥对,存 `Application Support/Reverb/lan_sync.json`(私钥只在本地)。
+每次连接双方临时 ECDH,共享密钥经 HKDF-SHA256 派生会话密钥;
+同时从共享密钥派生**六位配对码(SAS)**,两台设备并排显示、由人核对一致才继续。
+没有 CA、没有 TOFU —— 局域网里任何设备都能冒充"附近的一台",六位码是唯一让人参与判断的一步。
+
+**数据复用备份 v1 的六个分区**,不为同步另造格式:
+`SUBSCRIPTIONS / FAVORITES / STAMPS / NOTES / HISTORY / LISTEN_STATS`。
+两端各自 `BackupManager.build` 出快照、传过去、再 `BackupManager.apply` 合并;
+返回**合并前后之差**作为"新增条数"。订阅按规范化后的 feed URL 去重
+(Apple `collectionId` 与 RSS `feedUrl` 会指向同一档)。
+
+**生命周期跟界面绑定**:打开面板才监听,关闭即停 socket;同一时刻只跑一个会话。
+两端同时点对方时,后到的连接会被拒绝并提示重试 —— 比两端各跑两个会话、弹两次码清楚。
+P0 不做锁屏/后台常驻。
+
+**删除靠墓碑账本传播(2026-11-12 补)**:六段里可删的四样(订阅 / 收藏 / 印记 / 批注)
+各在本地记一笔 `kind + id → deletedAt`,保留 90 天,文件 `sync_tombstones.json`
+(Android `sync/SyncTombstones.kt`、Apple `Sync/LanSyncTombstones.swift`,同一份契约)。
+快照多一个 `tombstones` 段;合并顺序固定为「先并墓碑 → 按墓碑删本地 → 过滤快照里的同 id 条目 → 常规 apply」,
+否则删掉的条目会在同一次同步里被对端原样带回来。订阅的键用归一化 feedUrl(与去重同一判据)。
+**取舍**:墓碑优先于对端快照 —— 订阅/收藏没有 `updatedAt`,"重新添加晚于删除"无法证明,
+要彻底解决得给每条记录带 HLC(研究文档 §5)。历史与收听统计不参与:前者 LWW、后者按设备取 max。
+
+**跨端范围**:Android 与 macOS/iOS 已落地;鸿蒙按调研计划
+(`docs/research/2026-11-11-lan-sync.md` Q5)**暂不并入**,等 `@ohos.net.mdns` 与
+Android/Apple 的真实互通先验过。iOS 与 macOS 共用 `macos/Sources/Reverb/Sync`
+与 `UI/LanSyncView.swift`,iOS 工程对这批共享文件是显式引用(见 H260/H261)。
 
 ---
 
@@ -357,9 +411,9 @@ macOS 端解码**不做秒/毫秒归一** —— 没有一端写秒,归一只会
 ### Android:一份包 + 三个备用闸
 
 ```
-app/src/main/     唯一的源码与资源:ASR 工厂(返回 WhisperEngine)、jniLibs/*.so、
-                  assets/模型与内置种子、AndroidManifest 里的 RECORD_AUDIO /
-                  REQUEST_INSTALL_PACKAGES、全套文案
+app/src/main/     唯一的源码与资源:ASR 工厂(返回 SenseVoiceEngine,1.0.8 前是 WhisperEngine)、
+                  libs/sherpa-onnx.jar + jniLibs/*.so、assets/sensevoice/ 模型与词表、
+                  内置种子、AndroidManifest 里的 RECORD_AUDIO / REQUEST_INSTALL_PACKAGES、全套文案
 app/src/{default,store}/   ← 已删除(H205)
 ```
 
@@ -368,12 +422,13 @@ app/src/{default,store}/   ← 已删除(H205)
 - **编译期常量 + R8**:`BuildConfig.CATALOG` / `BuildConfig.SPECTRUM` / `AsrFactory.HAS_ENGINE`
   三个 `const` 现在都是 `true`(= 功能全开)。它们不再是"渠道差异的实现",而是**合规回退时的
   一行降级闸**:某条口径要求收回目录、真实频谱或本机转写,把对应常量降到 `false`,R8 会折叠掉整支代码。
-- **⚠️ 这条降级只删代码,不删文件**(硬规矩 3):`.so`、57 MB 模型与内置种子在 `src/main` 里,
+- **⚠️ 这条降级只删代码,不删文件**(硬规矩 3):两个 `.so`、239 MB 模型与词表、内置种子在 `src/main` 里,
   降到 `false` 之后**包里仍然有它们**。真要做到「包里没有」,得把文件本身移出构建树
   (`tools/build-asr.sh` 是把它们放进来的那一步)。合并前这件事是靠 store 的 source set 天然保证的,
   现在那层保护没了 —— 所以降级档必须按下面那套解包 grep 重验一遍。
 - **文案侧**:合并前关于页与部分副标题在 `src/store/res` 里各有一套(资源**覆盖**,不是继承,见 H169);
-  合并时把两边都带进 `src/main/res`,五语各从 353 键变成 367 键。**改资源时数一下键数** ——
+  合并时把两边都带进 `src/main/res`,五语各从 353 键变成 367 键(1.0.8 换引擎后又加了三条许可,
+  2026-11-11 现数是 402)。**改资源时数一下键数** ——
   覆盖语义下漏一个键不会报错,只会静默用另一套。
 
 ### HarmonyOS:没有 DCE,降级必须移出编译树
@@ -389,13 +444,22 @@ app/src/{default,store}/   ← 已删除(H205)
 ### 验收方式写死在流程里
 
 ```bash
-# Android 唯一那份,当前期望(H205):四项全非 0
-unzip -l dist/reverb.apk | grep -icE 'lib/|whisper-model'              # 2
+# Android 唯一那份,当前期望(1.0.8 / H205):四项全非 0
+unzip -l dist/reverb.apk | grep -icE 'lib/|assets/sensevoice/'         # 4(两个 .so + 模型 + 词表)
 unzip -l dist/reverb.apk | grep -cE 'assets/seed_podcasts\.json'       # 1
-LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder' # 14
+unzip -p dist/reverb.apk classes.dex | LC_ALL=C grep -ao 'itunes.apple.com\|fyyd\|gpodder' | wc -l  # 13(4/5/4)
 "$SDK/build-tools/<ver>/aapt2" dump permissions dist/reverb.apk | wc -l  # 13(含 RECORD_AUDIO)
-# HarmonyOS 商店包:目录 URL 非 0,本机转写与真实频谱产物仍不存在
+# HarmonyOS 商店包:目录 URL 非 0;1.0.8 起本机转写产物也在(sherpa har 的 .so + rawfile 模型/词表),
+# 真实频谱产物仍不存在
+unzip -l dist/reverb.app 'resources/rawfile/sensevoice/*' | grep -cE 'model\.int8\.onnx|tokens\.txt'   # 2
+unzip -l dist/reverb.app | grep -cE 'libs/arm64-v8a/lib(sherpa|onnxruntime)'                            # 非 0
 ```
+
+> ⚠️ 1.0.8 之前这条写的是 `grep -icE 'lib/|whisper-model'` = 2、目录 URL = 14(那是**命中行数**)。
+> 换引擎之后**两个模型文件的名字与个数都变了**(whisper 一个 `.bin` → 模型 + 词表两份),
+> 而 dex 只有一份、R8 后的字符串布局也变了,所以期望值必须重算,不能照抄旧行。
+> 上面这组是 2026-11-11 在那份 270,119,993 B 的发布包上现跑出来的;目录 URL 改用
+> `grep -ao | wc -l` 按**出现次数**计(4 / 5 / 4),与"命中行数"不是同一算法。
 
 合并那一轮为了证明「合并包 == 在架的 default 包」,用的判据是 `aapt2 dump resources` 两份各 6405 行、
 `0x7f` 条目各 655 个、**整表 diff 为空**,zip 条目名各 173 个、diff 同样为空;并各注入一个负控制
@@ -441,10 +505,16 @@ startGated()  播放层、系统媒体会话、周期更新任务、电台配置
 ```
 TranscriptStore   状态机 + 缓存(三端同一 JSON 格式,带 version)
   ├── 官方稿      RSS 的 podcast:transcript,支持 SRT / WebVTT / Podcast Index JSON
-  └── 本机转写    macOS: SpeechAnalyzer | Android 自分发: whisper.cpp | 鸿蒙: 关闭
+  └── 本机转写    macOS: SpeechAnalyzer | Android / 鸿蒙: sherpa-onnx + SenseVoiceSmall
 TranscriptLines   断行与时间插值(所有来源共用同一份实现)
-TranscriptPane    第三页:跟读高亮 + 自动滚动 + 点句跳转
+TranscriptSearch  全文搜索:命中的句子 + 每句内的高亮区间(一次算完,渲染只查表)
+TranscriptExport  纯文本 / Markdown 两种导出(三端逐字节一致)
+TranscriptPane    第三页:跟读高亮 + 自动滚动 + 点句跳转 + 搜索条 / 导出菜单
 ```
+
+搜索与导出的分工是硬规矩 6 的直接应用:匹配**在查询变化时扫一遍**,结果是
+「命中句的下标 + 每句内的字符区间」;渲染侧每行只查一次表,当前句每帧重建高亮时不再回看稿子。
+全文搜索的语义、导出格式与三端一致性判据见 `TRANSCRIPT.md` 四。
 
 ### 设计一:缓存带版本号
 
@@ -460,7 +530,8 @@ TranscriptPane    第三页:跟读高亮 + 自动滚动 + 点句跳转
 (某个 token 没算出时刻、退化成 -1),它就永远满足条件,于是**高亮钉死不动**。
 
 与其在渲染侧每帧兜底,不如在**数据出口处**一次性保证「时刻全部 ≥ 0、起点单调不减」:
-Android 在 C++ 侧 `tidyWords` 做,共享的 `TranscriptLines.monotonic` 再兜一层
+Android 在 `SenseVoiceEngine.wordsFrom` 里做(1.0.8 前在 C++ 侧 `tidyWords`),
+共享的 `TranscriptLines.monotonic` 再兜一层
 (尤其覆盖发布方给的稿——别人生成的文件不能假定排好序)。
 
 > **鸿蒙的渲染侧不真的做整表回溯**(2026-10-06 起):逐字稿页每一行问的是
@@ -470,28 +541,79 @@ Android 在 C++ 侧 `tidyWords` 做,共享的 `TranscriptLines.monotonic` 再兜
 > "顶层算一次下标再往下传"的形状,而存成字段就要管失效。**整表回溯仍然在,只是留给
 > `autoScroll` —— 它要的是下标本身。上面那条不变式依赖一字未变**(见 H137)。
 
+### 章节表:与逐字稿同一种形状,但不进备份
+
+```
+RssParser          <podcast:chapters url type> 按 type 打分只留一条(JSON+chapters > JSON > 不要)
+Episode            chaptersUrl / chaptersType —— 必须随 Episode 一起落盘,否则重启后入口消失
+ChaptersFetcher    取一次 JSON(上限 1 MiB、带源凭据 UA、日志只记 endpoint);四端解析口径一致
+ChapterStore       Idle → Loading → Done / Empty / Failed,缓存带 version + url 双判据
+PlayerScreen/View  进度条上方一行当前章节;弹层列表点一条 seek(startMs)
+```
+
+只有两处与逐字稿不同,都是**故意**的:
+
+1. **按需取,不预取。** 逐字稿是第三页,滑到就要显示;章表藏在一次点按后面,
+   冷启动时没有人看得见那份列表,先请求一次只是白耗流量。
+2. **不进备份。** 章表能从 RSS 再取一遍,与音频 / 逐字稿缓存同待遇;备份只带
+   `chaptersUrl` 这个"哪里能取到"的地址。
+
+**缓存形态按端不同,判据同一条**:
+
+| 端 | 落点 | 形态 |
+|---|---|---|
+| Android | `filesDir/chapters/<hex16(集id)>.json` | 一集一个文件 |
+| 鸿蒙 | `filesDir/chapters_cache.json` | 单文件,最近 80 集按使用淘汰;请求带代次,晚回来的旧结果不覆盖刚换的那一集 |
+| macOS / iOS | `Application Support/Chapters/<sanitize(集id)>.json` | 一集一个文件;`version 1`;排除在 iCloud 备份外;读取是同步的(几 KB),命中即出 |
+
+苹果两端的 `ChapterStore` 是共享层的一个 `@MainActor ObservableObject`;
+`AppEnvironment` 把它的 `objectWillChange` 转发进自己的,所以观察 `env` 的视图
+不需要额外注入就能跟着刷新。入口按需取:macOS 是 popover,iOS 是 sheet。
+`PlayerView` 在切集时只调 `prepare(episodeId:)` 复位状态机(**不发请求**),
+真正的 `load(episode:)` 发生在弹层第一次出现时。
+
+**`Episode` 的新字段必须穿过每一份扁平快照。** 四端都不是"把 Episode 整个序列化":
+搜索 / 历史 / 下载 / 收藏 / 待播 / 播放态 / 备份各有一份 DTO 逐字段拷贝,
+`decodeIfPresent ?? ""` 让旧文件"读得进、不报错",漏列的新字段则永远回到默认值 ——
+章节入口冷启动后消失就是这么来的(见 H259)。苹果这一处还连带把此前一直漏的
+`transcriptUrl` / `transcriptType` 补上。
+
+不变式同样在**数据出口**保证:`ChaptersFetcher.parseChapters` 负责排序、同秒去重、
+负时刻夹 0 —— 渲染侧只做「从后往前找第一个 `startMs <= position`」,与逐字稿同一条前提。
+
+> ⚠️ **验收边界**:Android(Pixel 3)、鸿蒙(Mate 60)、iOS(iPhone 17 模拟器)都实跑过
+> 在线 / 缓存 / 空 / 失败四条("失败"指章表地址 404);**macOS 只过编译门与单测**,
+> 界面运行验收固定在另一台机器(见 `ROADMAP.md` 三-A),别把它当"四端界面都跑过"。
+
 ---
 
-## 九、两个 native 模块,以及为什么必须有
+## 九、本机识别的 native 面:Android 已无自写 C++,鸿蒙仍有一个
 
-### Android:`reverb_asr.cpp`(JNI ↔ whisper.cpp)
+### Android:不再有自写的 JNI(1.0.8 起)
 
-只做三件事:读模型、对一段 16k 单声道 float PCM 跑识别、把结果读出去。
-不做解码(在 Kotlin 侧 `PcmDecoder`)、不做分块(在 `WhisperEngine`)——
-**这一层越薄越好,C++ 每多一行,崩溃就多一处没有栈可看的地方。**
+whisper 时代这里有一个约 100 行的 `reverb_asr.cpp`,换引擎时**整层删掉了** ——
+sherpa-onnx 上游 AAR 自带 `classes.jar`(Kotlin API)与 arm64 的 `libsherpa-onnx-jni.so` + `libonnxruntime.so`,
+我们只需要 `app/libs/sherpa-onnx.jar`(245,045 B)+ 两个 `.so`(22,249,560 / 4,609,320 B)。
+收益不是"少写代码",而是**少一处崩溃时没有栈可看的地方**,也不用再维护 NDK 交叉编译。
 
-两个真机教出来的点:
+分工因此变成:音频解码在 Kotlin(`PcmDecoder`)、分块也在 Kotlin(`SenseVoiceEngine`),
+native 只做"吃 16k 单声道 float PCM、吐识别结果"。R8 这一侧有一条硬要求:
 
-- **`NewStringUTF` 会因非法 Modified UTF-8 直接 abort 整个进程**。
-  whisper 是字节级 BPE,**一个汉字可能被劈在两个 token 里**,半个字符交给 JNI 就崩。
-  所以拼接与 UTF-8 校验全在 C++ 侧做完,交出去的每条都已验证。
-- **库的日志必须接出来**。whisper 默认写 stderr,在 Android 上等于扔掉;
-  接到 logcat 之后,"参数被静默降级"这类问题才看得见。
+- **`-keep class com.k2fsa.sherpa.onnx.** { *; }`** —— JNI 按 `RegisterNatives` 查类名与方法名,
+  混淆后会 `UnsatisfiedLinkError`。这条只在 release 暴露,debug 包完全不报;
+  1.0.8 的签包验收就是靠"装 release、真转一集"发现的。
+
+whisper 时代的两条教训仍然成立,只是不再对应本端代码:`NewStringUTF` 与多字节 token 的边界
+(现在由上游 JNI 处理,但**词级时间戳的 token 仍可能不带空格**,组行时仍要自己拼)、
+以及 native 日志必须接出来(库静默降级只有日志能看见)。历史细节见 `HISTORY.md` / H59 / H60。
 
 ### HarmonyOS:`reverb_pcm.cpp`(NAPI ↔ 系统编解码)
 
 **ArkTS 层完全没有解封装/解码 API**(`AVPlayer` 拿不到 PCM,`AVTranscoder` 只能输出 AAC),
-而系统语音识别只吃裸 PCM——所以这一层不可省。
+而识别引擎(1.0.8 起是 sherpa-onnx)只吃 16k 单声道 PCM——所以这一层不可省。
+sherpa-onnx 本身以 **HarmonyOS har(1.13.3)** 引入,`.so` 由依赖带进包,
+不需要自己交叉编译;引擎装在 `playback/asr/AsrWorker.ets` 的 `ThreadWorker` 里,
+主线程只收片段与状态(为什么必须分开见 `TRANSCRIPT.md` 三)。
 
 用 API 20 起的**同步**编解码接口(`OH_AudioCodec_QueryInputBuffer` 那一套),
 于是整条链是一个普通循环,没有回调线程、没有条件变量。三个必须知道的点:
@@ -614,22 +736,25 @@ Compose 的 `consumed.y` **与手指方向反号**(向上划报负值),以及
 
 | | 命令 | 产物 |
 |---|---|---|
-| Android | `android/build-release.sh` | `dist/reverb.apk`(约 65 MB,含模型)+ mapping —— **唯一那份**,同时交大陆应用市场与 GitHub Releases(合并 flavor 前还有 `--store` 出的 3.9 MB 那份,H205) |
+| Android | `android/build-release.sh` | `dist/reverb.apk`(**1.0.8 起约 270 MB**,含 239 MB 模型;1.0.7 是约 65 MB)+ mapping —— **唯一那份**,同时交大陆应用市场与 GitHub Releases(合并 flavor 前还有 `--store` 出的 3.9 MB 那份,H205) |
 | HarmonyOS | `harmony/build-release.sh` | `dist/reverb.app`(约 952 KB)+ 符号包 |
 | macOS | `macos/package.sh` | dmg |
 
 几条刻意的构建约定:
 
-- **大产物不入版本管理**:whisper 的 `.so`(1.6 MB)与模型(57 MB)由
-  `android/tools/build-asr.sh` 一条命令重建(固定 whisper.cpp commit + 校验模型 sha256);
+- **大产物不入版本管理**:SenseVoiceSmall int8 模型(239,233,841 B)、词表(315,894 B)与
+  sherpa-onnx 的 `classes.jar` + 两个 `.so` 由 `android/tools/build-asr.sh` 一条命令备齐
+  (下载 + sha256 校验,`.jar` 从上游 AAR 里解出);
   `build-release.sh` 在引擎启用时检查它们在不在,缺了直接报错退出。
+  Gradle 另对 `.onnx` / `.bin` 开 `noCompress`,否则 `openFd` 拿不到长度、首次拷贝会变慢。
 - **打包脚本自带校验**:校验产物的 `applicationId` 与签名者 DN(调试证书直接 exit 1)。
   合并 flavor 前它还要判"这个包是哪一个渠道"——两个包同名同包名,搞错会传错处;
   现在只有那一份包,这一层判据随 `--store` 一起退出脚本(`build-release.sh:46` 注释)。
 - **鸿蒙默认清构建缓存**:hvigor 的资源编译任务会命中缓存——换过图标/字符串后照常
   `BUILD SUCCESSFUL`,但包里仍是旧资源(H39)。发布包一年打不了几次,宁可多等 10 秒。
-- **开发期工具与产物分开**:比如 `android/tools/asr-probe/`(主机端探针,把每个 token 的
-  时刻打出来)只用于开发,不进任何 APK。
+- **开发期工具与产物分开**:比如 `android/tools/glass-shot.sh`(截图)与
+  `play-button-check.sh`(播放键几何)只用于开发,不进任何 APK;ASR 的主机端探针
+  随 whisper 一起在 1.0.8 删除了,选型期的实测方法与读数留在研究文档里。
 
 ---
 

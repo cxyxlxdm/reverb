@@ -216,8 +216,8 @@ export struct SettingsPage {
             () => !this.settings.allowCellular,
             (on: boolean) => { this.settings.setAllowCellular(!on); })
           // 「逐字稿」总开关**只在有本机识别时才有意义**:那时它决定"任何一集都能转"。
-          // 本端 LOCAL_ASR = false,第三页仅在该集有官方稿时出现 —— 没有可开关的东西,
-          // 摆一个开了也不变的开关只会让人困惑(与 Android 大陆商店渠道同样不显示)。
+          // 1.0.8 起 `Features.LOCAL_ASR` 为 `true`(sherpa-onnx),所以这一行现在会显示;
+          // 常量仍是门:降到 `false` 时隐藏,而不是摆一个开了也不变的开关(同 Android 的降级档)。
           if (Features.LOCAL_ASR) {
             this.switchRow(L.s('set_transcription'), () => L.s('set_transcription_sub'),
               () => this.settings.transcriptionEnabled,

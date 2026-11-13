@@ -137,6 +137,20 @@ VER_NAME=$(sed -n 's/.*"versionName"[^"]*"\([^"]*\)".*/\1/p' AppScope/app.json5 
 VER_CODE=$(sed -n 's/.*"versionCode"[^0-9]*\([0-9]*\).*/\1/p' AppScope/app.json5 | head -1)
 echo "▸ 余音 Reverb  versionName=$VER_NAME  versionCode=$VER_CODE"
 
+# ── 离线识别产物闸门(硬规矩 3 / 16)──────────────────────────────────────
+# SenseVoice 的模型与词表(239 MB + 316 KB)不入版本管理,由 tools/build-asr.sh 备齐。
+# **缺了 hvigor 不会报错** —— 它只打它看见的 rawfile,应用照常编译、照常出包,
+# 要等装到手机上点「开始转写」才失败。所以在出包前 1 秒内判掉。
+ASR_DIR="entry/src/main/resources/rawfile/sensevoice"
+for f in model.int8.onnx tokens.txt; do
+  if [ ! -s "$ASR_DIR/$f" ]; then
+    echo "✗ 缺 $ASR_DIR/$f —— 没有它,本机转写会在手机上直接失败(而打包不会报警)。"
+    echo "  先跑:./tools/build-asr.sh"
+    exit 1
+  fi
+done
+echo "▸ 离线识别产物齐:$(du -h "$ASR_DIR/model.int8.onnx" | cut -f1) 模型 + $(du -h "$ASR_DIR/tokens.txt" | cut -f1) 词表"
+
 if [ "${1:-}" != "--fast" ]; then
   echo "▸ 清理构建缓存(避免资源走缓存,见脚本头部说明)"
   rm -rf build entry/build .hvigor/cache
@@ -263,6 +277,29 @@ if grep -aq debugKey "$HAP" 2>/dev/null; then
   echo "✗ 包内含 debugKey —— 这是**调试签名**,应用市场会拒。请检查 product=release 的签名配置。"
   exit 1
 fi
+
+# 硬规矩 1:包里有 / 没有以解包为准。上面只证明了磁盘上有模型 —— rawfile 是否真的
+# 被收进 hap 是另一回事(资源目录名写错不会有任何提示)。这里对最终 .hap 数条目,
+# 两份都必须在,缺一份就等于本机转写必失败。
+#
+# ⚠️ 别写成 `unzip -l "$HAP" | grep -q "$f"`(2026-11-13 实测,见 H272):
+# `grep -q` 一命中就关管道,`unzip` 还在写清单时会吃到 SIGPIPE(141),
+# 而本脚本 `set -o pipefail` ⇒ 整条管道判失败 ⇒ **包里明明有模型也报"没有"**。
+# 同一份 hap 空跑 40 次,4 次复现;第一次真跑就被它挡了下来,第二次又自己过了。
+# 清单先落文件,再对文件 grep —— 没有管道,也就没有这个竞态。
+HAP_LIST="$BUILD_TMP/hap.list"
+if ! unzip -l "$HAP" > "$HAP_LIST" 2>/dev/null; then
+  echo "✗ 读不出 hap 的条目清单 —— 这是解包工具或包结构的问题,不是「没有模型」。"
+  exit 1
+fi
+for f in sensevoice/model.int8.onnx sensevoice/tokens.txt; do
+  if ! grep -q "$f" "$HAP_LIST"; then
+    echo "✗ 最终包里没有 $f —— 磁盘上有但没被打进 hap,本机转写会在手机上失败。"
+    echo "  查 entry/src/main/resources/rawfile/ 的目录层级与 build-profile 的 resources 配置。"
+    exit 1
+  fi
+done
+echo "▸ 解包核对:模型与词表都在 hap 内"
 rm -rf "$BUILD_TMP"
 
 echo

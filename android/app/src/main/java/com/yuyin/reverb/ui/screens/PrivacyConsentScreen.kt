@@ -108,6 +108,12 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                          *
                          * 「私有订阅」是未发版那一轮追加的段落:它不引入新的网络地址,但**新增了一类
                          * 在本机保存、并会随请求发出去的数据(用户名与密码)** —— 按同一口径 +1。
+                         *
+                         * 「局域网同步」与私有订阅同属一个未发版版本,所以共用同一次 `PRIVACY_VERSION`
+                         * (没有再加一档):它新增的是**本机对外打开监听端口 + 把六个备份分区发给
+                         * 用户自己配对的另一台设备**,不是新的第三方地址;文案里写清加密、配对码
+                         * 与「删除不传播」,并把不含的东西(音频、口令、设置、队列)逐项列出。
+                         * **鸿蒙版没有这个功能,所以那一端的同意页不加这一段** —— 不描述没有发生的传输。
                          */
                         listOf(
                             stringResource(R.string.privacy_consent_body),
@@ -116,7 +122,8 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                             stringResource(R.string.privacy_consent_video),
                             stringResource(R.string.privacy_consent_update),
                             stringResource(R.string.privacy_consent_asr),
-                            stringResource(R.string.privacy_consent_mic)
+                            stringResource(R.string.privacy_consent_mic),
+                            stringResource(R.string.privacy_consent_lan)
                         ).filter { it.isNotBlank() }.joinToString("\n\n"),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

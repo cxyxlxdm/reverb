@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import AppIntents
 
 /// 「继续收听」桌面卡片(WidgetKit)。
 ///
@@ -65,12 +66,12 @@ struct ReverbProvider: TimelineProvider {
     /// 画廊预览用。**故意给一条假数据**:用户第一次看到卡片应该知道"这里会显示什么"。
     static var sample: WidgetState {
         var s = WidgetState()
-        s.label = NSLocalizedString("继续收听", comment: "卡片顶部小字")
         s.title = NSLocalizedString("余音 · 继续收听", comment: "卡片预览标题")
         s.podcast = NSLocalizedString("上次听到哪一集，会出现在这里", comment: "卡片预览副标题")
         s.time = "12:34 / 45:00"
-        s.percent = 28
+        s.percent = 28.0
         s.hasProgress = true
+        s.playing = true
         s.empty = false
         return s
     }
@@ -80,7 +81,6 @@ struct ReverbProvider: TimelineProvider {
 enum WidgetProviderDefaults {
     static var emptyState: WidgetState {
         var s = WidgetState()
-        s.label = NSLocalizedString("继续收听", comment: "卡片顶部小字")
         s.title = NSLocalizedString("挑一集开始听", comment: "卡片空态标题")
         s.podcast = NSLocalizedString("上次听到哪一集，会出现在这里", comment: "卡片空态副标题")
         s.empty = true
@@ -107,15 +107,18 @@ private struct Palette {
     let sub: Color
     let accent: Color
     let track: Color
+    /// 压在 accent 圆底上的图标色。深色档的 accent 是浅青,白图标会糊在一起,
+    /// 所以用深底那一档墨色(与鸿蒙 `onAccent()` 同一取舍)。
+    let onAccent: Color
 
     static func of(dark: Bool) -> Palette {
         dark
             ? Palette(bg: Color(hex: 0x161D20), text: Color(hex: 0xF2F2ED),
                       sub: Color(hex: 0x9AA8A6), accent: Color(hex: 0x7FD1C0),
-                      track: Color(hex: 0x1F2A2E))
+                      track: Color(hex: 0x1F2A2E), onAccent: Color(hex: 0x10181A))
             : Palette(bg: Color(hex: 0xFCFAF4), text: Color(hex: 0x1B2426),
                       sub: Color(hex: 0x66716F), accent: Color(hex: 0x3F8A7C),
-                      track: Color(hex: 0xE7E0D1))
+                      track: Color(hex: 0xE7E0D1), onAccent: Color(hex: 0xFFFFFF))
     }
 }
 
@@ -152,14 +155,25 @@ struct ReverbWidgetView: View {
 
     // MARK: 三档排法
 
+    /// 小卡:封面在上,播放键压在封面右下角(与鸿蒙 2×2 同一档);文字在下。
+    /// 1.0.8 起去掉了「继续收听」小字 —— 它不携带信息,还占掉小卡最缺的那一行。
     private var smallLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
-            artView(corner: 10)
-                .frame(maxWidth: .infinity)
-                .frame(height: 74)
-            labelText(size: 9)
-                .padding(.top, 8)
+            ZStack(alignment: .bottomTrailing) {
+                artView(corner: 10)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 74)
+                if !entry.state.empty {
+                    filledControlButton(.toggle, size: 15, dim: 28)
+                        .padding(6)
+                }
+            }
             titleText(size: 13, lines: 2)
+                .padding(.top, 8)
+            Text(entry.state.podcast)
+                .font(.system(size: 10))
+                .foregroundStyle(palette.sub)
+                .lineLimit(1)
                 .padding(.top, 2)
             Spacer(minLength: 0)
             if entry.state.hasProgress { progressBar }
@@ -174,14 +188,14 @@ struct ReverbWidgetView: View {
         .padding(12)
     }
 
+    /// 中卡:左封面、右文字;三颗键跟文字左对齐(与 Android `widget_medium` /
+    /// 鸿蒙 2×4 的排法一致)。
     private var mediumLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .center, spacing: 12) {
-                artView(corner: 8).frame(width: 78, height: 78)
+                artView(corner: 8).frame(width: 74, height: 74)
                 VStack(alignment: .leading, spacing: 2) {
-                    labelText(size: 9)
                     titleText(size: 15, lines: 2)
-                        .padding(.top, 2)
                     Text(entry.state.podcast)
                         .font(.system(size: 11))
                         .foregroundStyle(palette.sub)
@@ -190,6 +204,7 @@ struct ReverbWidgetView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
+            if !entry.state.empty { controlRow(size: 17, centered: false).padding(.top, 4) }
             Spacer(minLength: 0)
             if entry.state.hasProgress { progressBar }
             if !entry.state.time.isEmpty {
@@ -203,19 +218,19 @@ struct ReverbWidgetView: View {
         .padding(13)
     }
 
+    /// 大卡:封面当主视觉,文字与三颗键压在下面(与 Android `widget_large` 同构)。
     private var largeLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
             artView(corner: 12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            labelText(size: 10)
-                .padding(.top, 12)
             titleText(size: 17, lines: 2)
-                .padding(.top, 3)
+                .padding(.top, 12)
             Text(entry.state.podcast)
                 .font(.system(size: 12))
                 .foregroundStyle(palette.sub)
                 .lineLimit(1)
                 .padding(.top, 3)
+            if !entry.state.empty { controlRow(size: 24, centered: true).padding(.top, 4) }
             if entry.state.hasProgress { progressBar.padding(.top, 3) }
             if !entry.state.time.isEmpty {
                 Text(entry.state.time)
@@ -226,6 +241,16 @@ struct ReverbWidgetView: View {
             }
         }
         .padding(14)
+    }
+
+    /// 三颗键一行。中卡左对齐、大卡居中(与鸿蒙 `controlRow(size:align:)` 同一条)。
+    private func controlRow(size: CGFloat, centered: Bool) -> some View {
+        HStack(spacing: 14) {
+            controlButton(.previous, size: size)
+            controlButton(.toggle, size: size)
+            controlButton(.next, size: size)
+        }
+        .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
     }
 
     // MARK: 零件
@@ -250,14 +275,39 @@ struct ReverbWidgetView: View {
         }
     }
 
-    @ViewBuilder
-    private func labelText(size: CGFloat) -> some View {
-        if !entry.state.label.isEmpty {
-            Text(entry.state.label)
-                .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(palette.accent)
-                .lineLimit(1)
+    /// 播放态决定图标翻面。**必须在按钮闭包里现读 `entry.state.playing`**:
+    /// 与鸿蒙 `@Builder` 参数按值快照那条同因,把图标算好后传进去,状态翻了图标不翻。
+    private func icon(_ command: WidgetCommand) -> String {
+        switch command {
+        case .toggle: return entry.state.playing ? "pause.fill" : "play.fill"
+        case .previous: return "backward.end.fill"
+        case .next: return "forward.end.fill"
         }
+    }
+
+    /// 文字色的裸键(中卡 / 大卡那一行)。
+    private func controlButton(_ command: WidgetCommand, size: CGFloat) -> some View {
+        Button(intent: ReverbWidgetControlIntent(command)) {
+            Image(systemName: icon(command))
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(palette.text)
+                .frame(width: size + 14, height: size + 10)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 压在封面上的圆底键(小卡那一档)。图标色用 `onAccent` 保证深浅两档都读得清。
+    private func filledControlButton(_ command: WidgetCommand, size: CGFloat, dim: CGFloat) -> some View {
+        Button(intent: ReverbWidgetControlIntent(command)) {
+            Image(systemName: icon(command))
+                .font(.system(size: size, weight: .bold))
+                .foregroundStyle(palette.onAccent)
+                .frame(width: dim, height: dim)
+                .background(Circle().fill(palette.accent))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func titleText(size: CGFloat, lines: Int) -> some View {

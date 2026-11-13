@@ -198,6 +198,9 @@
     <string name="player_err_unplayable">這一集暫時播不了</string>
     <string name="shownotes">節目筆記</string>
     <string name="shownotes_empty">暫無節目筆記</string>
+    <string name="player_chapters">章節</string>
+    <string name="chapters_empty">這一集沒有章節</string>
+    <string name="chapters_failed">章節載入失敗，點按重試</string>
     <string name="note_add">寫批註</string>
     <string name="note_title">記下這一秒</string>
     <string name="note_hint">此刻想到什麼，寫下來</string>
@@ -247,6 +250,48 @@
     <string name="set_full_backup">完整備份</string>
     <string name="set_full_backup_sub">訂閱 · 批註 · 歷史等全部本機資料，用於換機 / 備份</string>
     <string name="set_restore">還原備份</string>
+
+    <!-- 區域網路同步：同一 Wi-Fi 直連 + 備份分區合併。 -->
+    <string name="sec_lan">區域網路</string>
+    <string name="set_lan_sync">區域網路同步</string>
+    <string name="set_lan_sync_sub">在同一 Wi-Fi 下與另一台裝置合併訂閱、收藏、印記、批註與進度</string>
+    <string name="lan_title">區域網路同步</string>
+    <string name="lan_own_name">本機：%1$s</string>
+    <string name="lan_waiting">等待另一台裝置…</string>
+    <string name="lan_no_wifi">沒有找到 Wi-Fi 位址。請先連上與另一台裝置相同的 Wi-Fi。</string>
+    <string name="lan_own_address">本機位址，可讓對方手動輸入</string>
+    <string name="lan_peers">附近的裝置</string>
+    <string name="lan_no_peers">還沒發現裝置。確認對方也開啟了這個頁面；找不到就直接輸入對方螢幕上顯示的位址。</string>
+    <string name="lan_peer_row">%1$s\n%2$s</string>
+    <string name="lan_manual_hint">對方位址，如 192.168.1.5:47820</string>
+    <string name="lan_connect">連線</string>
+    <string name="lan_connecting">正在連線 %1$s…</string>
+    <string name="lan_confirm_title">核對配對碼</string>
+    <string name="lan_confirm_body">兩台裝置上的六位數字必須完全相同。不同就取消，可能有人在中間。</string>
+    <string name="lan_confirm_peer">對方：%1$s</string>
+    <string name="lan_confirm_accept">一致，開始同步</string>
+    <string name="lan_cancel">取消</string>
+    <string name="lan_syncing">正在與 %1$s 同步…</string>
+    <string name="lan_stage_sending">傳送資料</string>
+    <string name="lan_stage_receiving">接收資料</string>
+    <string name="lan_stage_merging">合併資料</string>
+    <string name="lan_done_title">同步完成</string>
+    <string name="lan_done_with">已與 %1$s 合併</string>
+    <string name="lan_done_added">新增：訂閱 %1$d · 收藏 %2$d · 印記 %3$d · 批註 %4$d · 歷史 %5$d · 統計 %6$d</string>
+    <string name="lan_done_nothing">兩端已經一致，沒有新增內容。</string>
+    <string name="lan_failed_title">同步失敗</string>
+    <string name="lan_fail_connect">連不上對方。確認兩台裝置在同一 Wi-Fi、對方頁面開著；也可以改用對方螢幕上顯示的位址。</string>
+    <string name="lan_fail_version">兩台裝置的版本不一致，先升級到同一版本。</string>
+    <string name="lan_fail_protocol">對方的回應不符合預期，已中止。</string>
+    <string name="lan_fail_decrypt">加密校驗失敗，已中止。</string>
+    <string name="lan_fail_io">網路中斷，已中止。</string>
+    <string name="lan_fail_cancelled">已取消。</string>
+    <string name="lan_fail_peer_cancelled">對方取消了這次同步。</string>
+    <string name="lan_scope">只同步訂閱、收藏、印記、批註、歷史與收聽統計；下載與設定不參與。刪除目前不會同步：在一台裝置上取消訂閱後，另一台同步時可能把它帶回來。</string>
+    <string name="lan_close">關閉</string>
+    <string name="lan_again">再同步一次</string>
+    <string name="lan_retry">重試</string>
+    <string name="lan_tip">在任意一台裝置上點對方即可，不需要兩台都點。</string>
     <string name="set_restore_sub">從餘音備份檔匯入</string>
 
     <string name="set_theme">主題</string>
@@ -329,7 +374,7 @@
     <string name="about_h_what">這是什麼</string>
     <string name="about_p_what">餘音是一款輕量的播客用戶端。發現好節目、訂閱收聽、離線下載、隨時續播，專注「聽」本身。</string>
     <string name="about_h_features">主要功能</string>
-    <string name="about_p_features">· 發現：按地區與分類瀏覽每日熱門，可自訂分類排序、橫滑切換\n· 搜尋：按名稱或直接貼上 RSS 位址\n· 影片連結：貼上 B 站影片連結或 BV 號，直接當單集聽（不登入；影片來源的單集不提供下載）\n· 頻道分享：產生含 Logo、頻道名、簡介與餘音落款的圖片\n· 電台：隨機漫遊，或按時段與情境推薦\n· 追更：訂閱頻道播過的單集全在這一欄，按時間倒序一直往下翻，可下拉更新、單獨設定這一欄的播放模式\n· 音閣：訂閱、收藏、下載、待播、歷史、批註六欄管理\n· 批量與直達：點任意單集封面直達它所屬的頻道；追更、收藏、下載、歷史與頻道頁長按單集選「多選」，勾一批一次加入待播\n· 離線下載：下載的單集長期留在本機，可僅 Wi-Fi 下載\n· 播放快取：播過的單集自動留在本機，下次直接離線播放；斷網時已載入的清單與封面仍可瀏覽，可在設定一鍵清除\n· 逐字稿：本機離線轉寫，或直接讀發布方提供的稿\n· 播放：倍速、快進快退、睡眠定時、播放模式（順序 / 單曲循環 / 隨機）、自動續播、背景與鎖定畫面控制\n· 批註：聽到某一句有感觸，就記下那一秒和此刻的一句話；音閣「批註」欄把它們連成一條時間線，點一下從那一句接著聽\n· 節目筆記：播放頁橫滑查看\n· 訂閱更新提醒：有新一集時通知\n· 應用內更新：偵測到新版本可在本機下載並交給系統安裝（非 Wi-Fi 會先徵求同意）\n· 系統級備份：訂閱、收藏、歷史、下載記錄（僅連結）、印記、批註、收聽統計與設定隨系統備份與換機遷移，音訊與逐字稿不在備份內\n· 外觀：深色/淺色/跟隨系統、字級、主題配色、多語言</string>
+    <string name="about_p_features">· 發現：按地區與分類瀏覽每日熱門，可自訂分類排序、橫滑切換\n· 搜尋：按名稱或直接貼上 RSS 位址\n· 影片連結：貼上 B 站影片連結或 BV 號，直接當單集聽（不登入；影片來源的單集不提供下載）\n· 頻道分享：產生含 Logo、頻道名、簡介與餘音落款的圖片\n· 電台：隨機漫遊，或按時段與情境推薦\n· 追更：訂閱頻道播過的單集全在這一欄，按時間倒序一直往下翻，可下拉更新、單獨設定這一欄的播放模式\n· 音閣：訂閱、收藏、下載、待播、歷史、批註六欄管理\n· 批量與直達：點任意單集封面直達它所屬的頻道；追更、收藏、下載、歷史與頻道頁長按單集選「多選」，勾一批一次加入待播\n· 離線下載：下載的單集長期留在本機，可僅 Wi-Fi 下載\n· 播放快取：播過的單集自動留在本機，下次直接離線播放；斷網時已載入的清單與封面仍可瀏覽，可在設定一鍵清除\n· 逐字稿：本機離線轉寫(中文、英語、日語、韓語、粵語)，或直接讀發布方提供的稿；支援全文搜尋，可匯出為文字或 Markdown 分享\n· 播放：倍速、快進快退、睡眠定時、播放模式（順序 / 單曲循環 / 隨機）、自動續播、背景與鎖定畫面控制\n· 批註：聽到某一句有感觸，就記下那一秒和此刻的一句話；音閣「批註」欄把它們連成一條時間線，點一下從那一句接著聽\n· 節目筆記：播放頁橫滑查看\n· 章節：發布方給了章表的單集，播放頁進度條上方顯示當前章節，點開可跳轉；章表取一次後離線也能看\n· 訂閱更新提醒：有新一集時通知\n· 應用內更新：偵測到新版本可在本機下載並交給系統安裝（非 Wi-Fi 會先徵求同意）\n· 系統級備份：訂閱、收藏、歷史、下載記錄（僅連結）、印記、批註、收聽統計與設定隨系統備份與換機遷移，音訊與逐字稿不在備份內\n· 區域網路同步：在同一 Wi-Fi 下與另一台裝置合併訂閱、收藏、印記、批註與進度\n· 外觀：深色/淺色/跟隨系統、字級、主題配色、多語言</string>
     <string name="about_h_philosophy">設計理念</string>
     <string name="about_p_philosophy">美學上取「水墨 + 青瓷 + 梁金」的底色，名稱與圖示呼應「餘音繞梁」——聲波環繞橫梁，餘韻不散。\n\n取源上堅持全鏈路免費、無需登入、無需任何 API Key：檢索一律基於公開來源，最終始終回到發布方自己的 RSS，直接串流播放原始音訊——版權乾淨、成本為零。\n\n隱私上，訂閱、歷史和下載儲存在裝置本機，不會自動上傳給開發者，也不用於跨應用程式追蹤。</string>
 
@@ -340,8 +385,9 @@
     <string name="licenses_sources_note">本應用不提供節目目錄、不轉存也不代理任何音訊；音訊始終來自發布方的原始 RSS。</string>
     <string name="licenses_sources_note_catalog">以下為公開的播客目錄/檢索介面，僅用於檢索與榜單；音訊始終來自發布方原始 RSS，本應用不轉存、不代理。</string>
     <!-- 许可页与数据来源里"换语种要变"的四条。目录/接口名(Apple iTunes、fyyd.de、gpodder.net)与专有名词是五套同形,仍留在 LicensesScreen.kt 字面量里。 -->
-    <string name="lic_whisper">whisper.cpp(離線語音辨識)</string>
-    <string name="lic_whisper_model">Whisper 模型 ggml-base-q5_1(OpenAI)</string>
+    <string name="lic_sherpa">sherpa-onnx(離線語音辨識框架)</string>
+    <string name="lic_onnxruntime">ONNX Runtime(推論引擎)</string>
+    <string name="lic_sensevoice">SenseVoiceSmall 模型(FunASR)</string>
     <string name="src_publisher_rss">播客發布方自己的 RSS 位址</string>
     <string name="src_site_opml">本應用官網的推薦訂閱清單(OPML)</string>
     <string name="notif_channel_name">訂閱更新</string>
@@ -380,7 +426,7 @@
     <string name="batch_added">已加入待播 %1$d 集</string>
     <string name="batch_added_none">所選都已在待播裡</string>
     <string name="set_transcription">逐字稿</string>
-    <string name="set_transcription_sub">播放頁橫滑到第三頁看文字;沒有發布方提供的稿時,在本機離線轉寫</string>
+    <string name="set_transcription_sub">播放頁橫滑到第三頁看文字;沒有發布方提供的稿時,在本機離線轉寫(支援中文、英文、日文、韓文、粵語)</string>
     <string name="transcript_prompt">把這集音訊離線轉成文字</string>
     <string name="transcript_start">產生逐字稿</string>
     <string name="transcript_fetching">正在取得發布方提供的逐字稿…</string>
@@ -389,9 +435,20 @@
     <string name="transcript_running">正在辨識,第一句稍後出現…</string>
     <string name="transcript_failed">轉寫失敗,點按重試</string>
     <string name="transcript_none">這一集發布方未提供逐字稿,本版本也不含離線辨識</string>
+    <string name="transcript_lang_unsupported">本機離線轉寫目前只支援中文、英文、日文、韓文與粵語。這一集發布方也沒有提供逐字稿。</string>
     <string name="action_retry">重試</string>
     <string name="transcript_prompt_official">這一集發布方提供了逐字稿</string>
     <string name="transcript_show">檢視逐字稿</string>
+    <string name="transcript_search">搜尋逐字稿</string>
+    <string name="transcript_search_none">沒有符合的句子</string>
+    <string name="transcript_search_position">%1$d / %2$d</string>
+    <string name="transcript_search_prev">上一處</string>
+    <string name="transcript_search_next">下一處</string>
+    <string name="transcript_export">匯出逐字稿</string>
+    <string name="transcript_export_text">純文字 (.txt)</string>
+    <string name="transcript_export_markdown">Markdown (.md)</string>
+    <string name="transcript_export_failed">匯出失敗</string>
+    <string name="transcript_share_title">分享逐字稿</string>
     <string name="set_word_highlight">逐字高亮</string>
 
     <!-- ↓↓ 这两组串合并自原 src/default/res(2026-10-18 两个 flavor 合成一份包,见 H205):
@@ -400,9 +457,10 @@
          原先它们在自分发渠道的 source set 里,商店渠道另有一份同名覆盖;现在只有一份包、一份文案。
          ⚠️ 正文由同意页用 stringResource 取**纯文本**渲染:`**` 会原样上屏、`<b>` 会被 aapt
          收成样式跨度后再摊平(不掉字形也不加粗)⇒ 强调只能靠措辞与标点。 -->
-    <string name="privacy_consent_asr">離線語音轉文字。本版本內建離線語音辨識(開源元件 whisper.cpp 與隨附的辨識模型),將單集音訊轉成文字,全程在本機完成 —— 音訊不上傳、不離開裝置,也不經過任何伺服器。此功能可在設定中關閉。</string>
+    <string name="privacy_consent_asr">離線語音轉文字。本版本內建離線語音辨識(開源元件 sherpa-onnx 與隨附的 SenseVoiceSmall 模型),將單集音訊轉成文字,全程在本機完成 —— 音訊不上傳、不離開裝置,也不經過任何伺服器。辨識目前支援中文、英語、日語、韓語與粵語。此功能可在設定中關閉。</string>
     <string name="set_word_highlight_sub">跟讀時逐字點亮。本機辨識順帶就能算出逐字時間,不額外增加轉寫耗時</string>
     <string name="privacy_consent_mic">真實頻譜（可選）。在設定裡開啟「真實頻譜」後，封面的水墨聲波會跟隨實際音量起伏。這需要麥克風權限，系統會在你開啟時單獨徵求同意；音訊只在本機做頻譜計算：不錄製、不儲存、不外傳，關掉這個開關即不再使用。</string>
+    <string name="privacy_consent_lan">區域網路同步（選填）。在設定裡開啟「區域網路同步」後，本應用會在同一 Wi-Fi 內廣播一個服務名稱（含本機裝置名稱與一段隨機識別碼），並暫時開啟一個 TCP 埠，頁面關閉即停止。你點按對方裝置或輸入對方位址後，兩端會各自顯示一組六位數配對碼，只有你確認兩邊螢幕一致才開始傳輸。傳送的是「完整備份」裡的六個分區（訂閱、收藏、印記、批註、歷史與收聽統計，其中統計按裝置識別碼合併），不含音訊、二進位快取、私有訂閱的使用者名稱與密碼、應用程式設定或播放佇列；資料以兩端臨時協商的金鑰加密（ECDH P-256 與 AES-256-GCM），只在兩台已配對的裝置之間直傳，不經過任何伺服器，也不上傳給開發者。刪除不會同步：在一台裝置上退訂或刪掉的項目，只要另一台還保留，下次同步會把它帶回來。</string>
     <string name="privacy_consent_update">應用內更新（可選）。本版本啟動時會向 GitHub 的公開發佈頁介面（api.github.com）問一次「最新版是哪個」：請求只包含本應用自己的公開倉庫位址與目前版本號，不含帳號、任何識別碼、訂閱清單或收聽內容。只有那次的回應確實有更新版本時才會下載安裝包，且預設只在 Wi-Fi 下自動下載，網路按流量計費時會先徵求你的同意。下載完由系統安裝程式接手，本應用不自行安裝；這一步需要的「安裝未知應用」權限，系統會在你選擇安裝時單獨徵求同意。</string>
 
     <string name="update_title">發現新版本 %1$s</string>
@@ -422,7 +480,6 @@
 
     <!-- 繼續收聽小工具 -->
     <string name="widget_name">餘音 · 繼續收聽</string>
-    <string name="widget_continue">繼續收聽</string>
     <string name="widget_empty_title">挑一集開始聽</string>
     <string name="widget_empty_sub">上次聽到哪一集，會出現在這裡</string>
     <string name="widget_description">顯示上次聽到的節目與進度，點一下接著聽</string>

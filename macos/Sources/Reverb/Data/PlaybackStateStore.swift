@@ -143,8 +143,12 @@ final class PlaybackStateStore {
     }
 
     /// 条目序列化的本地形状。与 Android 的 `EpisodeJson` / 鸿蒙的 `Codec.episodeToJson`
-    /// 逐键对齐(`description` 在这里叫 `summary`,只为了让「列表条目不带简介」这件事在类型上可见);
-    /// 两端多写的 `transcriptUrl` / `transcriptType` 桌面没有对应字段,读的时候忽略即可。
+    /// 逐键对齐(`description` 在这里叫 `summary`,只为了让「列表条目不带简介」这件事在类型上可见)。
+    ///
+    /// ⚠️ **这里是一个静默丢弃器**:`episode` 只在下面显式列出的键上重建,没列的一律丢掉。
+    /// `transcriptUrl` / `transcriptType` / `chaptersUrl` / `chaptersType` 必须都在 ——
+    /// 漏了章节那两个键,重启后"正在播那一集"的章节入口整条消失;漏了逐字稿那两个,
+    /// 官方稿入口同样消失。Android 与鸿蒙都在这条上栽过(2026-11-11),别只加字段不加复制。
     private struct StoredEpisode: Codable {
         var id: String
         var title: String
@@ -155,9 +159,14 @@ final class PlaybackStateStore {
         var durationSec: Int
         var pubDate: String
         var feedUrl: String
+        var transcriptUrl: String
+        var transcriptType: String
+        var chaptersUrl: String
+        var chaptersType: String
 
         enum CodingKeys: String, CodingKey {
             case id, title, audioUrl, artworkUrl, podcastTitle, durationSec, pubDate, feedUrl
+            case transcriptUrl, transcriptType, chaptersUrl, chaptersType
             case summary = "description"
         }
 
@@ -171,6 +180,10 @@ final class PlaybackStateStore {
             durationSec = e.durationSec
             pubDate = e.pubDate
             feedUrl = e.feedUrl
+            transcriptUrl = e.transcriptUrl
+            transcriptType = e.transcriptType
+            chaptersUrl = e.chaptersUrl
+            chaptersType = e.chaptersType
         }
 
         init(from decoder: Decoder) throws {
@@ -184,12 +197,19 @@ final class PlaybackStateStore {
             durationSec = (try? c.decode(Int.self, forKey: .durationSec)) ?? 0
             pubDate = (try? c.decode(String.self, forKey: .pubDate)) ?? ""
             feedUrl = (try? c.decode(String.self, forKey: .feedUrl)) ?? ""
+            // 旧文件(以及 Android / 鸿蒙早期版本)没有这四键,缺键必须能读成空串
+            transcriptUrl = (try? c.decode(String.self, forKey: .transcriptUrl)) ?? ""
+            transcriptType = (try? c.decode(String.self, forKey: .transcriptType)) ?? ""
+            chaptersUrl = (try? c.decode(String.self, forKey: .chaptersUrl)) ?? ""
+            chaptersType = (try? c.decode(String.self, forKey: .chaptersType)) ?? ""
         }
 
         var episode: Episode {
             Episode(id: id, title: title, description: summary ?? "", audioUrl: audioUrl,
                     artworkUrl: artworkUrl, podcastTitle: podcastTitle,
-                    durationSec: durationSec, pubDate: pubDate, feedUrl: feedUrl)
+                    durationSec: durationSec, pubDate: pubDate, feedUrl: feedUrl,
+                    transcriptUrl: transcriptUrl, transcriptType: transcriptType,
+                    chaptersUrl: chaptersUrl, chaptersType: chaptersType)
         }
     }
 

@@ -10,6 +10,7 @@ import { PlaybackStateStore } from '../store/PlaybackStateStore';
 import { PlaybackClock } from './PlaybackClock';
 import { BilibiliSource, ResolvedStream } from '../net/BilibiliSource';
 import { WidgetUpdater } from '../widget/WidgetUpdater';
+import { WidgetRuntime } from '../widget/WidgetRuntime';
 import { Log } from '../util/Logger';
 
 /// 播放请求的 User-Agent。与 Http.ets 的 UA 同一形态 —— 不少播客 CDN 会按 UA 拒绝请求。
@@ -61,8 +62,9 @@ function onlyFallback(mode: PlayMode): Map<string, PlayMode> {
 }
 
 /**
- * 换掉 `audioUrl` 的副本。ArkTS 不支持对象展开,只能逐字段抄 —— 当前端口的
- * `Episode` 就这十一个字段,加字段时**这里漏抄会静默丢**。
+ * 换掉 `audioUrl` 的副本。ArkTS 不支持对象展开,只能逐字段抄 ——
+ * **给 `Episode` 加字段时这里漏抄会静默丢**(章节那次就是这么埋进去的:
+ * 视频集换直链之后章表入口消失,而界面没有任何报错)。
  *
  * 只在通知缓存时用:缓存模块拿 `audioUrl` 去下载,而视频集身上是 `bilibili://…` 伪地址,
  * 拉不下来(见 `playEpisode` 的解析段)。
@@ -72,7 +74,8 @@ function withAudioUrl(e: Episode, audioUrl: string): Episode {
     id: e.id, title: e.title, description: e.description, audioUrl: audioUrl,
     artworkUrl: e.artworkUrl, podcastTitle: e.podcastTitle, durationSec: e.durationSec,
     pubDate: e.pubDate, feedUrl: e.feedUrl,
-    transcriptUrl: e.transcriptUrl, transcriptType: e.transcriptType
+    transcriptUrl: e.transcriptUrl, transcriptType: e.transcriptType,
+    chaptersUrl: e.chaptersUrl, chaptersType: e.chaptersType
   };
 }
 
@@ -86,7 +89,8 @@ function withDuration(e: Episode, durationSec: number): Episode {
     id: e.id, title: e.title, description: e.description, audioUrl: e.audioUrl,
     artworkUrl: e.artworkUrl, podcastTitle: e.podcastTitle, durationSec: durationSec,
     pubDate: e.pubDate, feedUrl: e.feedUrl,
-    transcriptUrl: e.transcriptUrl, transcriptType: e.transcriptType
+    transcriptUrl: e.transcriptUrl, transcriptType: e.transcriptType,
+    chaptersUrl: e.chaptersUrl, chaptersType: e.chaptersType
   };
 }
 
@@ -167,6 +171,8 @@ export class PlayerController {
   private settings: SettingsStore | null = null;
   /// 播放态落盘(`playback_state.json`)。null = 尚未装配(AppContainer.boot 之后才有)。
   private stateStore: PlaybackStateStore | null = null;
+  /// 「按 feedUrl 取这一节目的那一列」(只读本地频道缓存)。null = 尚未注入,不做上下文补全。
+  private feedEpisodes: ((feedUrl: string) => Episode[]) | null = null;
   /**
    * **这一集在本会话里真的出声过**才允许把播放器位置回写进历史。
    *
@@ -311,6 +317,16 @@ export class PlayerController {
   }
 
   /**
+   * 注入「按 feedUrl 取这一节目缓存的那一列」。只给 `expandContextFromFeed` 用。
+   *
+   * 传进来的实现**只许读本地频道缓存**(`FeedCacheStore`),不许联网:桌面卡片上按一下
+   * 上一集/下一集不该触发一次 RSS 请求。AppContainer 里接的是 `feedCache.get(…).episodes`。
+   */
+  bindFeedEpisodes(provider: (feedUrl: string) => Episode[]): void {
+    this.feedEpisodes = provider;
+  }
+
+  /**
    * 把当前播放态写下去(落盘口径与裁剪见 `PlaybackStateStore.save`)。
    *
    * **电台模式例外:那一档没有可恢复的身份** —— 电台的「上一集/下一集」走的是内存里的
@@ -365,6 +381,10 @@ export class PlayerController {
     for (let i = 0; i < this.queue.length; i++) if (this.queue[i].id === cur.id) { idx = i; break; }
     this.queueIndex = idx;
     this.activeListTag = snap.listTag;
+    // 上一轮就是"单集上下文"时(从卡片或单集入口起播留下的),按本地频道缓存把它补全。
+    // 补在这里而不是等用户按上一集/下一集:恢复是唯一能一次补齐**并落盘**的时机,
+    // 界面上那两颗键的可用态(`updateNavFlags`)也就跟着对了。
+    this.expandContextFromFeed(cur);
     // 先按那一列存着的模式建好随机表,再装载(顺序错了会让随机模式的下一集指回原列表)
     this.applyPlayMode(this.modeFor(snap.listTag));
     // **上/下一集的可点状态要在这里刷一次,不是"反正播起来会刷"**:恢复走的是直接装载
@@ -1343,6 +1363,40 @@ export class PlayerController {
     return true;
   }
 
+  /**
+   * 上下文补全:队列里只有正在播的这一集时,顺手把**同一个节目的缓存列表**接上。
+   *
+   * 为什么需要(2026-11-12 用户报「卡片上点上一首下一首没反应」):`play(e)` 的队列**刻意**
+   * 只放这一集(`playAt` 的注释写清了理由),而冷启动恢复、卡片起播、发现页「继续收听」
+   * 这类单集入口都走它。于是 `prevQueueIndex()` 恒为 -1 —— 卡片的键点得到、`call` 也送到了,
+   * 播放器却无路可走,表现与"没反应"完全一样。真机上那一刻的 `playback_state.json`
+   * 是 `context.length=1`,而同一个节目的 `feed_cache.json` 里躺着 50 集。
+   *
+   * 只读**本地频道缓存**,不联网:卡片按一下不该触发 RSS 请求。缓存里没有这个节目、
+   * 或者当前这集已被缓存淘汰时返回 false,走法与以前一致(没有上一集/下一集)。
+   *
+   * 已有多集上下文时什么都不做 —— 那一列是用户起播时点的那一列,不能被这里的缓存替换掉。
+   *
+   * ⚠️ 参数是**显式传进来的那一集**,不是 `this.current`:冷启动恢复时 `this.current`
+   * 要到末尾 `startEpisode` 才落下来,读字段会让补全在恢复路径上静默失效
+   * (2026-11-12 第一版就这么写错,日志里 `ctx=1@0` 一条补全都没有)。
+   */
+  private expandContextFromFeed(e: Episode | null): boolean {
+    if (this.queue.length > 1) return true;
+    if (e === null || e.feedUrl.length === 0 || this.feedEpisodes === null) return false;
+    const list = this.feedEpisodes(e.feedUrl);
+    if (list.length <= 1) return false;
+    let idx = -1;
+    for (let i = 0; i < list.length; i++) if (list[i].id === e.id) { idx = i; break; }
+    if (idx < 0) return false;
+    this.queue = list;
+    this.queueIndex = idx;
+    // 随机模式要按新队列重洗(正在播的这一集钉在第一位,与 rebuildShuffleOrder 的口径一致)
+    if (this.playMode === PlayMode.SHUFFLE) this.rebuildShuffleOrder(); else this.clearShuffleOrder();
+    Log.i('Player', `上下文补全 ctx=${list.length}@${idx} feed='${e.feedUrl}'`);
+    return true;
+  }
+
   next(): void {
     if (this.radioMode) {
       if (this.radioPos >= 0 && this.radioPos < this.radioHistory.length - 1) {
@@ -1358,6 +1412,7 @@ export class PlayerController {
       this.consumeQueueAt(0);
       return;
     }
+    if (this.expandContextFromFeed(this.current)) this.updateNavFlags();
     this.advanceQueue();
   }
 
@@ -1370,6 +1425,7 @@ export class PlayerController {
       }
       return;
     }
+    if (this.expandContextFromFeed(this.current)) this.updateNavFlags();
     const pi = this.prevQueueIndex();
     if (pi < 0) return;
     if (this.playMode === PlayMode.SHUFFLE) this.shufflePos--;
@@ -1738,8 +1794,10 @@ export class PlayerController {
       this.countListening();
       this.clock.ticks += 1;
       if (this.clock.ticks % 10 === 0) this.saveProgress();   // 约每 5 秒
-      // 卡片进度约每 20 秒推一次(节流在 WidgetUpdater 里;这里 40 tick × 500ms)。
-      if (this.clock.ticks % 40 === 0) this.refreshWidget(false);
+      // 卡片进度约每 5 秒推一次(节流在 WidgetUpdater 里;这里 10 tick × 500ms)。
+      // 与落盘错开半个周期(ticks % 10 === 5):进度 5 秒落一次、卡片 5 秒推一次,
+      // 同一 tick 推会读到刚排队还没落盘的那一份,卡片永远落后一跳。
+      if (this.clock.ticks % 10 === 5) this.refreshWidget(false);
     }, 500);
   }
 
@@ -1809,6 +1867,10 @@ export class PlayerController {
    * 卡片要的深浅档位就在 settings 里,而 AppContainer 装好之后必然还有一次状态回调。
    */
   private refreshWidget(force: boolean): void {
+    // 卡片上的播放/暂停键要画哪一个:这一位不够格进 `playback_state.json`(与另两端共用的格式),
+    // 单独落一份极小的 `widget_state.json`;`writePlaying` 自己去重,播放中每 5 秒这次调用不会写盘。
+    // 用「意图」而不是 `isPlaying`:装载到一半时后者还是 false,而用户刚刚按下的明明是"播"。
+    WidgetRuntime.writePlaying(this.playbackDesiredPlaying);
     const s = this.settings;
     if (s === null) return;
     WidgetUpdater.request(s, force);

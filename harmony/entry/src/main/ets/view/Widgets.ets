@@ -110,6 +110,7 @@ export class Sym {
   static readonly playFill: Resource = $r('sys.symbol.play_fill');              // Rounded.PlayArrow
   static readonly pauseFill: Resource = $r('sys.symbol.pause_fill');            // Rounded.Pause
   static readonly close: Resource = $r('sys.symbol.xmark');                     // Rounded.Close
+  static readonly search: Resource = $r('sys.symbol.magnifyingglass');       // Rounded.Search
   static readonly up: Resource = $r('sys.symbol.chevron_up');                   // Rounded.KeyboardArrowUp
   static readonly down: Resource = $r('sys.symbol.chevron_down');               // Rounded.KeyboardArrowDown
   static readonly speed: Resource = $r('sys.symbol.slider_horizontal_2');       // Rounded.Tune(倍速)

@@ -129,7 +129,10 @@ export class PlaybackStateStore {
     return {
       'id': e.id, 'title': e.title, 'audioUrl': e.audioUrl, 'artworkUrl': e.artworkUrl,
       'podcastTitle': e.podcastTitle, 'durationSec': e.durationSec, 'pubDate': e.pubDate,
-      'feedUrl': e.feedUrl, 'transcriptUrl': e.transcriptUrl, 'transcriptType': e.transcriptType
+      'feedUrl': e.feedUrl, 'transcriptUrl': e.transcriptUrl, 'transcriptType': e.transcriptType,
+      // 章表地址必须在这里:冷启动恢复的"正在播那一集"就是播放页上那一集,
+      // 缺了它,重启后章节入口整条消失(Android 2026-11-11 装机验收抓到)
+      'chaptersUrl': e.chaptersUrl, 'chaptersType': e.chaptersType
     };
   }
 

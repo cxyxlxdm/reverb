@@ -14,6 +14,8 @@ final class EpisodeCodableTests: XCTestCase {
         XCTAssertFalse(episode.isLive, "老数据没有 isLive,不能读成直播")
         XCTAssertEqual(episode.transcriptUrl, "")
         XCTAssertEqual(episode.transcriptType, "")
+        XCTAssertEqual(episode.chaptersUrl, "", "老数据没有章表,不能凭空长出章节入口")
+        XCTAssertEqual(episode.chaptersType, "")
         XCTAssertEqual(episode.durationSec, 0)
     }
 
@@ -26,7 +28,9 @@ final class EpisodeCodableTests: XCTestCase {
             pubDate: "2026-11-10T08:00:00Z",
             feedUrl: "https://feed.example.com/rss", isLive: true,
             transcriptUrl: "https://feed.example.com/t.json",
-            transcriptType: "application/json"
+            transcriptType: "application/json",
+            chaptersUrl: "https://feed.example.com/chapters.json",
+            chaptersType: "application/json+chapters"
         )
         let data = try JSONEncoder().encode(episode)
         XCTAssertEqual(try JSONDecoder().decode(Episode.self, from: data), episode)

@@ -12,4 +12,17 @@ export class WidgetRoute {
   static readonly PLAYER: string = 'player';
   /// AppStorage 键:每次点击 +1。用计数而不是布尔,是为了"连点两次也要各触发一次"。
   static readonly OPEN_PLAYER: string = 'widgetOpenPlayer';
+
+  /**
+   * 卡片上三颗播放键走 `postCardAction` 的 **`call`** 动作(后台拉起 EntryAbility、不弹界面),
+   * 不跟"点卡片进播放页"的 `router` 混在一起:前者只动播放态,后者才换界面。
+   *
+   * 值同时是 `params.method` 与 `EntryAbility` 里 `callee.on(方法名, …)` 注册的键 ——
+   * 两边必须逐字一致,写错不报错,症状是"点了没反应"。
+   */
+  static readonly ACTION_TOGGLE: string = 'widgetToggle';
+  static readonly ACTION_PREV: string = 'widgetPrev';
+  static readonly ACTION_NEXT: string = 'widgetNext';
+  /// `postCardAction({action:'call'})` 里"调哪个方法"的键
+  static readonly METHOD_KEY: string = 'method';
 }

@@ -7,10 +7,10 @@ import { Log } from './Logger';
  *
  * 为什么要单独成一个东西(见 REVIEW-2026-10-25 中-3):同一段判据原先在本端**抄了两份**
  * (`DownloadManager.downloadGate()` 与 `AudioCacheManager.blockedByCellular()`),
- * 而第三条大流量路径 —— 本机识别前要下的那一整集音频(`SpeechTranscriber.downloadToCache`)——
- * 根本没接闸门。用户关了「仅在 Wi-Fi 下载」,下载与缓存都老实用 Wi-Fi,只有"转逐字稿"
- * 会在蜂窝上悄悄跑掉几十 MB。**判据抄第二份的时候漏掉第三个调用点是必然,不是偶然**
- * (体检 §4 模式 2「靠调用点自律的规矩必漏」)。
+ * 而第三条大流量路径 —— 本机识别前要下的那一整集音频(1.0.8 起是
+ * `playback/asr/SenseVoiceTranscriber.downloadToCache`)—— 根本没接闸门。用户关了
+ * 「仅在 Wi-Fi 下载」,下载与缓存都老实用 Wi-Fi,只有"转逐字稿"会在蜂窝上悄悄跑掉几十 MB。
+ * **判据抄第二份的时候漏掉第三个调用点是必然,不是偶然**(体检 §4 模式 2「靠调用点自律的规矩必漏」)。
  *
  * 判据本体与 `DownloadManager.downloadGate()` 逐条同口径,取值过程一字未改:
  *  - **只有 bearer 是蜂窝才拦**。连着 Wi-Fi 时本设备实测 `bearer=[1]`、
@@ -24,9 +24,9 @@ import { Log } from './Logger';
  * **`DownloadManager` 仍然用自己那一份,不是漏改**:它要把"没网"和"需要 Wi-Fi"
  * 区分成两个结果码给界面提示,而这里只有布尔。那份的判据改动要同步到本文件,反之亦然。
  *
- * ⚠️ 本端这台设备 `LOCAL_ASR=false`,识别路径当前不启用(见 `AppContainer`),
- * 所以 `SpeechTranscriber` 这一侧现在是**潜伏**的 —— 但翻开关之前它必须是接好的,
- * 否则一翻就在计费网络上跑流量。这正是体检里"翻开关前必修"那句的意思。
+ * ⚠️ 1.0.8 起 `Features.LOCAL_ASR` 已翻成 `true`,`SenseVoiceTranscriber` 在
+ * `AppContainer` 里真的被装配了 —— 这条闸门不再是"潜伏",而是**每次转写未下载的音频
+ * 都会经过**。体检里"翻开关前必修"那句说的就是这一步。
  */
 export async function blockedByCellular(settings: SettingsStore | null, tag: string): Promise<boolean> {
   try {

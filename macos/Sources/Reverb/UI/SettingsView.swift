@@ -70,6 +70,8 @@ private struct SettingsForm: View {
     @State private var prompt: Prompt = .none
     @State private var showAbout = false
     @State private var showLicenses = false
+    /// 局域网同步面板。打开时才创建控制器,关闭即停止监听(与 Android `showLanSync` 同口径)。
+    @State private var showLanSync = false
     /// 本视图所在窗口的激活态。**重算时机要挂在它上面,而不是只挂 `.onAppear`**:
     /// SwiftUI 的 `Settings` scene 关掉窗口是**隐藏、不销毁** ⇒ 一次运行里 `.onAppear` 只跑第一次,
     /// 第二次 ⌘, 打开时缓存与日志两个数还停在第一次那一刻(用户读到的是永不过期的假值,见 H215)。
@@ -164,6 +166,24 @@ private struct SettingsForm: View {
                 }
                 Button { importOPML() } label: {
                     Label("导入 OPML", systemImage: "tray.and.arrow.down")
+                }
+            }
+
+            // 单独一段:它不是"备份文件"的又一种格式,而是两台设备之间的实时合并
+            // (Android 那段注释同样说明了为什么不并进「备份」)。
+            Section("局域网") {
+                Button { showLanSync = true } label: {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("局域网同步")
+                            Text("在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    } icon: {
+                        Image(systemName: "wifi.router")
+                    }
+                    .contentShape(Rectangle())
                 }
             }
 
@@ -336,6 +356,9 @@ private struct SettingsForm: View {
                 .environmentObject(settings)
                 .tint(Theme.accent(settings.accentIndex))
                 .themedSheet(settings)
+        }
+        .sheet(isPresented: $showLanSync) {
+            LanSyncSheet(env: env)
         }
         .sheet(isPresented: $showLicenses) {
             LicensesView()

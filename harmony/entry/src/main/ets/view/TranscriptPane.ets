@@ -3,6 +3,30 @@ import { L } from '../util/L';
 import { PlayerController } from '../playback/PlayerController';
 import { TranscriptStore, TranscriptState } from '../store/TranscriptStore';
 import { TranscribedSegment, TranscribedWord } from '../model/Models';
+import { TranscriptSearch, SearchResult, SearchRange } from '../util/TranscriptSearch';
+import { TranscriptExport, TranscriptFormat } from '../util/TranscriptExport';
+import { Files } from '../util/Files';
+import { Log } from '../util/Logger';
+import common from '@ohos.app.ability.common';
+import { Glyph, Sym } from './Widgets';
+
+/**
+ * 一段要画的文字。`hit` = 落在搜索命中的区间里(贴底色);
+ * `spoken` = 落在"正在读的那个词"里(强调色 + 半粗)。两者可以同时为 true ——
+ * 底色与逐字高亮是两个维度,搜索时不该把跟读位置抹掉。
+ */
+class TextSlice {
+  text: string;
+  hit: boolean;
+  spoken: boolean;
+
+  constructor(text: string, hit: boolean, spoken: boolean) {
+    this.text = text;
+    this.hit = hit;
+    this.spoken = spoken;
+  }
+}
+
 
 /**
  * 播放页第三页:逐字稿。对应 Android `ui/screens/TranscriptPane.kt`、macOS `UI/TranscriptPage.swift`。
@@ -49,6 +73,26 @@ export struct TranscriptPane {
    */
   @State nowMs: number = 0;
 
+  // ---- 搜索与导出(与 Android `TranscriptPane` / Apple `TranscriptPage` 同一套行为) ----
+
+  /// 搜索条是否展开
+  @State searchOpen: boolean = false;
+  /// 原始输入;`trim` 之后的空串不触发匹配,免得整篇被涂亮
+  @State query: string = '';
+  /// 当前停在第几处命中(0 基)
+  @State cursor: number = 0;
+  @State result: SearchResult = new SearchResult();
+  /**
+   * 每个命中句的切片结果,**在搜索状态变化时算一次**。
+   *
+   * 不在渲染路径里切:当前句每 80ms 重渲一次,若每次都拿整句去切命中区间,
+   * 长稿 + 多命中会退化成"每档 × 每行 × 每区间"(硬规矩 6 那条乘法)。
+   */
+  @State slicesByIndex: Map<number, TextSlice[]> = new Map<number, TextSlice[]>();
+  @State exporting: boolean = false;
+  /// 上次计算命中时稿子的句数:流式识别会一直追加,句数变了得重算一次
+  private searchedCount: number = -1;
+
   /// 用户手指碰过列表的时刻:碰过就先别自动滚,免得往上翻看前文时被一次次拽回来
   @State private touchedAt: number = 0;
 
@@ -69,6 +113,7 @@ export struct TranscriptPane {
     const e = this.player.current;
     if (e === null) return;
     this.scrolledTo = -1;
+    this.closeSearch();
     this.store.prepare(e, this.uiLanguage);
   }
 
@@ -90,6 +135,8 @@ export struct TranscriptPane {
         if (this.player.positionMs !== this.anchorMs) this.resync();
         this.nowMs = this.anchorMs + (Date.now() - this.anchorAt);
         this.autoScroll();
+        // 流式识别会一直追加句子:句数变了就重算一次命中(不滚屏,理由见 recompute)
+        if (this.searchOpen && this.store.segments.length !== this.searchedCount) this.recompute(false);
       }, 80);
     } else if (!want && this.timer >= 0) {
       this.stopTimer();
@@ -110,6 +157,157 @@ export struct TranscriptPane {
     this.anchorMs = this.player.positionMs;
     this.anchorAt = Date.now();
     this.nowMs = this.anchorMs;
+  }
+
+  // MARK: - 搜索
+
+  /**
+   * 重算命中。`query` 或稿子变了才调 —— 不在 80ms 渲染心跳里做。
+   *
+   * @param scrollToFirst 输入关键词时把第一处滚进视线;流式追加引起的重算则为 false,
+   *                      否则每出一句都会把用户从正在看的位置拽走。
+   */
+  private recompute(scrollToFirst: boolean): void {
+    const q = this.query.trim();
+    const r = TranscriptSearch.find(this.store.segments, q);
+    const slices = new Map<number, TextSlice[]>();
+    for (const hit of r.hits) {
+      const seg = this.store.segments[hit.index];
+      if (seg !== undefined) slices.set(hit.index, this.slicesFrom(seg.text, hit.ranges));
+    }
+    this.searchedCount = this.store.segments.length;
+    this.result = r;
+    this.slicesByIndex = slices;
+    this.cursor = 0;
+    if (scrollToFirst && r.hits.length > 0) this.scrollToLine(r.hits[0].index);
+  }
+
+  private closeSearch(): void {
+    this.searchOpen = false;
+    this.query = '';
+    this.cursor = 0;
+    this.result = new SearchResult();
+    this.slicesByIndex = new Map<number, TextSlice[]>();
+    this.searchedCount = -1;
+  }
+
+  /// 上一处(-1) / 下一处(+1),循环;点一下就跳到那句开头(与另两端一致)
+  private step(delta: number): void {
+    const hits = this.result.hits;
+    if (hits.length === 0) return;
+    this.cursor = ((this.cursor + delta) % hits.length + hits.length) % hits.length;
+    const hit = hits[this.cursor];
+    const segs = this.store.segments;
+    if (hit.index < segs.length) this.player.seekTo(segs[hit.index].startMs);
+    this.scrollToLine(hit.index);
+  }
+
+  private scrollToLine(index: number): void {
+    try {
+      this.scroller.scrollToIndex(Math.max(index - 2, 0), true);
+    } catch (e) {
+      // 列表还没布局好等情况,忽略
+    }
+  }
+
+  /// 整句切成"命中/不命中"两种片段。命中区间由 `TranscriptSearch` 保证升序且不重叠。
+  private slicesFrom(text: string, ranges: SearchRange[]): TextSlice[] {
+    const out: TextSlice[] = [];
+    let at = 0;
+    for (const r of ranges) {
+      const start = Math.max(at, Math.min(r.start, text.length));
+      const end = Math.max(start, Math.min(r.end, text.length));
+      if (start > at) out.push(new TextSlice(text.substring(at, start), false, false));
+      if (end > start) out.push(new TextSlice(text.substring(start, end), true, false));
+      at = end;
+    }
+    if (at < text.length) out.push(new TextSlice(text.substring(at), false, false));
+    return out;
+  }
+
+  /**
+   * 当前句的切片:在**词边界**与**命中边界**上同时切。
+   *
+   * 只有当前句要这一层 —— 它既要贴搜索底色,又要保留"读到哪个词"的强调。
+   * 每 80ms 只算这一行(几十个字符),不构成硬规矩 6 说的那条乘法;
+   * 其余命中行用 `slicesByIndex` 的预算结果。
+   */
+  private piecesForCurrent(seg: TranscribedSegment, index: number): TextSlice[] {
+    const ranges = this.result.rangesByIndex.get(index);
+    const marks: SearchRange[] = ranges === undefined ? [] : ranges;
+    const pieces: TextSlice[] = [];
+    let offset = 0;
+    let ri = 0;
+    for (let k = 0; k < seg.words.length; k++) {
+      const w = seg.words[k];
+      const spoken = this.isSpokenWord(seg, k);
+      let left = w.text;
+      let local = 0;
+      while (left.length > 0) {
+        const abs = offset + local;
+        while (ri < marks.length && marks[ri].end <= abs) ri++;
+        if (ri >= marks.length) {
+          pieces.push(new TextSlice(left, false, spoken));
+          break;
+        }
+        const r = marks[ri];
+        const take = r.start > abs
+          ? Math.min(r.start - abs, left.length)
+          : Math.min(r.end - abs, left.length);
+        if (take <= 0) {
+          ri++;
+          continue;
+        }
+        pieces.push(new TextSlice(left.substring(0, take), r.start <= abs, spoken));
+        left = left.substring(take);
+        local += take;
+      }
+      offset += w.text.length;
+    }
+    return pieces;
+  }
+
+  private hasMarks(index: number): boolean {
+    return this.result.rangesByIndex.has(index);
+  }
+
+  private slicesOf(index: number): TextSlice[] {
+    const s = this.slicesByIndex.get(index);
+    return s === undefined ? [] : s;
+  }
+
+  // MARK: - 导出
+
+  private async exportAs(format: TranscriptFormat): Promise<void> {
+    if (this.exporting) return;
+    const e = this.player.current;
+    if (e === null || this.store.segments.length === 0) return;
+    this.exporting = true;
+    try {
+      const ui = this.getUIContext();
+      const ctx = ui.getHostContext() as common.UIAbilityContext;
+      const text = TranscriptExport.build(e, this.store.segments, format);
+      const name = TranscriptExport.fileName(e, format);
+      // `title` 传**集名**而不是「导出逐字稿」:ShareKit 拿它当分享卡与「另存为」的默认文件名
+      // (真机实测:传按钮文案时,存下来的文件就叫「导出逐字稿.txt」),而 Android 那边
+      // `EXTRA_SUBJECT` 与落盘文件名都是集名 —— 两端同一个文件不该有两个名字(见 H263)。
+      if (!await Files.shareText(ctx, e.title, name, text, '')) {
+        this.showToast(L.s('share_failed'));
+      }
+    } catch (err) {
+      Log.e('Transcript', `导出失败 ${(err as Error).message}`);
+      this.showToast(L.s('share_failed'));
+    } finally {
+      this.exporting = false;
+    }
+  }
+
+  private showToast(message: string): void {
+    try {
+      this.getUIContext().getPromptAction().showToast({ message: message });
+    } catch (e) {
+      Log.w('Transcript', `提示失败 ${(e as Error).message}`);
+    }
   }
 
   /**
@@ -133,6 +331,9 @@ export struct TranscriptPane {
 
   build() {
     Column() {
+      if (this.store.segments.length > 0) {
+        this.headBar()
+      }
       if (this.store.state === TranscriptState.Done || this.store.state === TranscriptState.Running) {
         // 已经有句子就显示列表(识别中也边出边看)。**还没有第一句时要给进度** ——
         // 否则这里渲染的是一个空列表,用户看见一整片空白,不知道是在算还是坏了
@@ -159,6 +360,10 @@ export struct TranscriptPane {
         this.progress(L.s('transcript_preparing_audio'))
       } else if (this.store.state === TranscriptState.Failed) {
         this.hint(L.s('transcript_failed'), L.s('action_retry'), true)
+      } else if (this.store.state === TranscriptState.UnsupportedLocale) {
+        // 引擎在,但不认这种语言(法语 / 西语界面),这一集也没有官方稿 —— 如实说,
+        // 不摆一个点了必然失败的重试按钮(与 Android 同一句)
+        this.hint(L.s('transcript_lang_unsupported'), '', false)
       } else {
         // Unsupported:这台设备没有可用的系统识别,这一集也没有官方稿 —— 如实说,不给没用的按钮
         this.hint(L.s('transcript_none'), '', false)
@@ -173,12 +378,79 @@ export struct TranscriptPane {
     return e !== null && e.transcriptUrl.length > 0;
   }
 
+  /// 顶部工具条:搜索中是一条输入框,平时是「搜索 + 导出」两个图标。
+  /// 文案与 Android / Apple 同一组键(硬规矩 5)。
+  @Builder
+  headBar() {
+    if (this.searchOpen) {
+      Row({ space: 8 }) {
+        TextInput({ text: this.query, placeholder: L.s('transcript_search') })
+          .layoutWeight(1)
+          .height(36)
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.onSurface)
+          .placeholderColor(withAlpha(this.scheme.onSurfaceVariant, 0.6))
+          .backgroundColor(withAlpha(this.scheme.onSurface, 0.08))
+          .borderRadius(16)
+          .padding({ left: 12, right: 12 })
+          .onChange((v: string) => {
+            this.query = v;
+            this.recompute(true);
+          })
+        Text(this.result.hits.length === 0
+          ? L.s('transcript_search_none')
+          : `${this.cursor + 1} / ${this.result.hits.length}`)
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+        Glyph({ symbol: Sym.up, dim: 18, color: this.result.hits.length === 0
+          ? withAlpha(this.scheme.onSurfaceVariant, 0.35) : this.scheme.onSurfaceVariant })
+          .accessibilityText(L.s('transcript_search_prev'))
+          .onClick(() => { this.step(-1); })
+        Glyph({ symbol: Sym.down, dim: 18, color: this.result.hits.length === 0
+          ? withAlpha(this.scheme.onSurfaceVariant, 0.35) : this.scheme.onSurfaceVariant })
+          .accessibilityText(L.s('transcript_search_next'))
+          .onClick(() => { this.step(1); })
+        Glyph({ symbol: Sym.close, dim: 18, color: this.scheme.onSurfaceVariant })
+          .accessibilityText(L.s('action_cancel'))
+          .onClick(() => { this.closeSearch(); })
+      }
+      .width('100%')
+      .padding({ left: 4, right: 4, bottom: 10 })
+    } else {
+      Row({ space: 14 }) {
+        Blank()
+        Glyph({ symbol: Sym.search, dim: 19, color: this.scheme.onSurfaceVariant })
+          .accessibilityText(L.s('transcript_search'))
+          .onClick(() => {
+            this.searchOpen = true;
+            this.recompute(false);
+          })
+        Glyph({ symbol: Sym.share, dim: 19, color: this.scheme.onSurfaceVariant })
+          .accessibilityText(L.s('transcript_export'))
+          .bindMenu(this.exportMenu())
+      }
+      .width('100%')
+      .padding({ left: 4, right: 4, bottom: 10 })
+    }
+  }
+
+  @Builder
+  exportMenu() {
+    Menu() {
+      MenuItem({ content: L.s('transcript_export_text') })
+        .onClick(() => { this.exportAs(TranscriptFormat.Text); })
+      MenuItem({ content: L.s('transcript_export_markdown') })
+        .onClick(() => { this.exportAs(TranscriptFormat.Markdown); })
+    }
+  }
+
   @Builder
   lines() {
     List({ space: 10, scroller: this.scroller }) {
       ForEach(this.store.segments, (seg: TranscribedSegment, index?: number) => {
         ListItem() {
-          this.lineText(seg, this.isCurrentLine(index === undefined ? -1 : index))
+          this.lineText(seg, index === undefined ? -1 : index,
+            this.isCurrentLine(index === undefined ? -1 : index))
         }
         // 点一句跳到那儿 —— 逐字稿最实用的一点
         .onClick(() => { this.player.seekTo(seg.startMs); })
@@ -214,6 +486,8 @@ export struct TranscriptPane {
    */
   private autoScroll(): void {
     if (!this.active) return;
+    // 搜索期间不跟读:用户正停在某一处命中上,播放每两句就把他拽走等于搜不了
+    if (this.searchOpen && this.query.trim().length > 0) return;
     const i = this.currentIndex();
     if (i < 0 || i === this.scrolledTo) return;
     if (Date.now() - this.touchedAt < 4000) return;
@@ -236,19 +510,54 @@ export struct TranscriptPane {
    * 文本**由 words 原样拼**而不是拿整句去找子串:`TranscribedWord` 立了不变式 ——
    * 各条 text 直接拼起来就等于整句(该带的空格已折在 text 里)。所以既不用补空格
    * (补了会把英文子词 "prog"+"rammatic" 拼成两个词),也不用按子串定位(重复词上会错位)。
+   *
+   * 搜索命中时改走**预切好的片段**(`TextSlice`):底色是 `textBackgroundStyle`,
+   * 与上面的前景色/字重是两个维度,同一条 Span 上可以共存。
    */
   @Builder
-  lineText(seg: TranscribedSegment, isCurrent: boolean) {
+  lineText(seg: TranscribedSegment, index: number, isCurrent: boolean) {
     if (isCurrent && this.wordHighlight && seg.words.length > 0) {
+      if (this.hasMarks(index)) {
+        Text() {
+          ForEach(this.piecesForCurrent(seg, index), (p: TextSlice, k?: number) => {
+            Span(p.text)
+              .fontColor(p.spoken ? this.scheme.primary : withAlpha(this.scheme.primary, 0.55))
+              .fontWeight(p.spoken ? FontWeight.Medium : FontWeight.Normal)
+              .textBackgroundStyle({
+                color: p.hit ? withAlpha(this.scheme.onBackground, 0.20) : Color.Transparent,
+                radius: 2
+              })
+          }, (p: TextSlice, k?: number) => `${k}-${p.text}`)
+        }
+        .fontSize(TypeScale.body * this.fontScale)
+        .lineHeight(24)
+        .width('100%')
+      } else {
+        Text() {
+          ForEach(seg.words, (w: TranscribedWord, k?: number) => {
+            Span(w.text)
+              .fontColor(this.isSpokenWord(seg, k === undefined ? -1 : k)
+                ? this.scheme.primary
+                : withAlpha(this.scheme.primary, 0.55))
+              .fontWeight(this.isSpokenWord(seg, k === undefined ? -1 : k)
+                ? FontWeight.Medium : FontWeight.Normal)
+          }, (w: TranscribedWord, k?: number) => `${k}-${w.startMs}`)
+        }
+        .fontSize(TypeScale.body * this.fontScale)
+        .lineHeight(24)
+        .width('100%')
+      }
+    } else if (this.hasMarks(index)) {
       Text() {
-        ForEach(seg.words, (w: TranscribedWord, k?: number) => {
-          Span(w.text)
-            .fontColor(this.isSpokenWord(seg, k === undefined ? -1 : k)
-              ? this.scheme.primary
-              : withAlpha(this.scheme.primary, 0.55))
-            .fontWeight(this.isSpokenWord(seg, k === undefined ? -1 : k)
-              ? FontWeight.Medium : FontWeight.Normal)
-        }, (w: TranscribedWord, k?: number) => `${k}-${w.startMs}`)
+        ForEach(this.slicesOf(index), (p: TextSlice, k?: number) => {
+          Span(p.text)
+            .fontColor(isCurrent ? this.scheme.primary : this.scheme.onSurfaceVariant)
+            .fontWeight(isCurrent ? FontWeight.Medium : FontWeight.Normal)
+            .textBackgroundStyle({
+              color: p.hit ? withAlpha(this.scheme.onBackground, 0.20) : Color.Transparent,
+              radius: 2
+            })
+        }, (p: TextSlice, k?: number) => `${k}-${p.text}`)
       }
       .fontSize(TypeScale.body * this.fontScale)
       .lineHeight(24)

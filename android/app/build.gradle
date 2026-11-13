@@ -35,14 +35,13 @@ android {
         applicationId "com.yuyin.reverb.android"
         minSdk 26
         targetSdk 34
-        versionCode 8
-        versionName "1.0.7"
+        versionCode 9
+        versionName "1.0.8"
         vectorDrawables {
             useSupportLibrary true
         }
-        // 离线语音识别只带 arm64 —— armeabi-v7a 的机器跑不动这个模型,给了也是让人干等。
-        // 合并前这条写在 `default` flavor 里(写在 defaultConfig 会让商店渠道也带上 native
-        // 目录结构);现在只有一份包,那个顾虑不存在了,写在这里。
+        // 离线语音识别的原生库只带 arm64 —— armeabi-v7a 的机器跑不动这个模型,
+        // 给了也是让人干等。1.0.8 起引擎是 sherpa-onnx(onnxruntime + JNI 两份 .so)。
         ndk { abiFilters 'arm64-v8a' }
         // 真实频谱(Visualizer 读播放输出做 FFT,需 RECORD_AUDIO,默认关闭)。
         buildConfigField "boolean", "SPECTRUM", "true"
@@ -109,13 +108,15 @@ android {
             excludes += ['/META-INF/{AL2.0,LGPL2.1}', 'META-INF/*.kotlin_module', 'DebugProbesKt.bin']
         }
         // 识别模型必须**不压缩**:压了就没法用 openFd 拿到长度、也没法直接读,
-        // 而且 ggml 模型本身几乎压不动,压缩只换来每次读取的解压开销(见 WhisperEngine)。
+        // 而且 onnx 模型本身几乎压不动,压缩只换来每次读取的解压开销(见 SenseVoiceEngine)。
         jniLibs {
             useLegacyPackaging false
         }
     }
     androidResources {
-        noCompress 'bin'
+        // `bin` 是 1.0.7 及以前的 whisper 模型;`onnx` 是 1.0.8 起的 SenseVoice 模型。
+        // 旧的已不在包里,但 asset 名一旦回归就会踩同一个坑,两个都留着无成本。
+        noCompress 'bin', 'onnx'
     }
 }
 
@@ -146,6 +147,12 @@ dependencies {
     implementation 'com.squareup.okhttp3:okhttp:4.12.0'
     implementation 'io.coil-kt:coil-compose:2.6.0'
     implementation 'androidx.work:work-runtime-ktx:2.9.1'
+
+    // 离线语音识别的 Java API(Apache-2.0,来自 sherpa-onnx 2.0.1 的 AAR)。
+    // **产物不入库**:tools/build-asr.sh 从 AAR 里解出 classes.jar 放这里,
+    // 同时把两份 arm64 .so 放进 jniLibs、模型放进 assets。缺了这份 jar 连编译都过不去,
+    // 所以在一台新机器上要先跑一遍 tools/build-asr.sh(它会跳过已下载的东西)。
+    implementation files('libs/sherpa-onnx.jar')
 
     debugImplementation 'androidx.compose.ui:ui-tooling'
 

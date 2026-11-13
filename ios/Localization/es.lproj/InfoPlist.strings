@@ -1,2 +1,4 @@
 "NSPhotoLibraryAddUsageDescription" = "Guarda los pósteres de citas, huellas y canales en tu fototeca.";
 "NSSpeechRecognitionUsageDescription" = "Transcribe el audio del pódcast a texto en este dispositivo; el audio nunca sale de tu iPhone.";
+"NSLocalNetworkUsageDescription" = "Fusiona suscripciones y registros de escucha directamente con otro dispositivo en la misma Wi-Fi; los datos solo viajan por tu red local.";
+

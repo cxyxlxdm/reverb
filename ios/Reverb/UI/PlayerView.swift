@@ -22,6 +22,8 @@ struct PlayerView: View {
     @State private var showTranscript = false
     @State private var showQueue = false
     @State private var showNotes = false
+    /// 章表弹层。手机上用一个 sheet(与逐字稿/简介同一种容器),不用 popover。
+    @State private var showChapters = false
     @State private var channel: Podcast?
     @State private var noteParagraphs: [String] = []
     @State private var noteForEpisode = ""
@@ -56,6 +58,22 @@ struct PlayerView: View {
             }
         }
         .background(Color(.systemBackground))
+        .task(id: player.current?.id) {
+            // 切集时把章表状态机复位(**不发请求**,见 `ChapterStore.prepare`)
+            if let id = player.current?.id { env.chapters.prepare(episodeId: id) }
+        }
+        #if DEBUG
+        // 模拟器没有点击注入工具(没有 WDA):`-open-chapters` 让章表弹层自己弹出来,
+        // 用来验收「请求 → 列表 → 当前章高亮」这一屏。只在 Debug 包,TestFlight 里不存在。
+        .onAppear {
+            if ProcessInfo.processInfo.arguments.contains("-open-chapters") {
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    showChapters = true
+                }
+            }
+        }
+        #endif
         .sheet(isPresented: $showStamps) {
             if let ep = player.current { stampSheet(ep) }
         }
@@ -64,6 +82,9 @@ struct PlayerView: View {
         }
         .sheet(isPresented: $showTranscript) {
             if let ep = player.current { transcriptSheet(ep) }
+        }
+        .sheet(isPresented: $showChapters) {
+            if let ep = player.current { chapterSheet(ep) }
         }
         .sheet(isPresented: $showQueue) {
             QueueView()
@@ -136,7 +157,10 @@ struct PlayerView: View {
             VStack(spacing: 26) {
                 artwork(ep)
                 titleBlock(ep)
-                seekBar(ep)
+                VStack(spacing: 2) {
+                    if hasChapters(ep) { chapterEntry(ep) }
+                    seekBar(ep)
+                }
                 controls(ep)
                 actionRow(ep)
             }
@@ -225,6 +249,119 @@ struct PlayerView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 章节
+
+    /// 只认有章表、且不是"没有时间轴的直播"的集(判据与 `seekBar` 同一把尺)
+    private func hasChapters(_ ep: Episode) -> Bool {
+        !(ep.isLive && player.durationMs <= 0) && !ep.chaptersUrl.isEmpty
+    }
+
+    /// 章表入口:一行文字(当前章标题,没有时写「章节」)+ 下拉小三角。
+    /// 显示当前章标题而不只是"章节":它在播放时本身就是有用的信息,
+    /// 也让"点这里能跳章"看得出来(与 Android / 鸿蒙 / macOS 同一条)。
+    private func chapterEntry(_ ep: Episode) -> some View {
+        Button { showChapters = true } label: {
+            HStack(spacing: 5) {
+                Text(currentChapterTitle(ep))
+                    .font(.callout)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+            }
+            .foregroundStyle(accent)
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("章节"))
+    }
+
+    /// 列表没加载之前退回「章节」,不显示"第 N 章"之类的猜测(三端同一口径)
+    private func currentChapterTitle(_ ep: Episode) -> String {
+        let store = env.chapters
+        guard store.episodeId == ep.id, store.state == .done else {
+            return String(localized: "章节")
+        }
+        let idx = store.index(atMs: player.positionMs)
+        guard idx >= 0, idx < store.chapters.count else { return String(localized: "章节") }
+        let title = store.chapters[idx].title
+        return title.isEmpty ? String(localized: "章节") : title
+    }
+
+    private func chapterSheet(_ ep: Episode) -> some View {
+        NavigationStack {
+            chapterBody(ep)
+                .navigationTitle("章节")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("完成") { showChapters = false }
+                    }
+                }
+        }
+        .tint(accent)
+        // 每次打开都走一次 load:命中缓存是同步读几 KB,没缓存才发请求。
+        // **入口不自动取** —— 章表只在用户真的要看列表时才有价值。
+        .task(id: ep.id) { await env.chapters.load(episode: ep) }
+    }
+
+    @ViewBuilder
+    private func chapterBody(_ ep: Episode) -> some View {
+        let store = env.chapters
+        switch store.state {
+        case .idle, .loading:
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .empty:
+            Text("这一集没有章节")
+                .font(.callout).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case .failed:
+            // 只有"取不到"才给重试;空表不给按钮,否则用户会一直点一个永远好不了的按钮
+            Button {
+                Task { await env.chapters.load(episode: ep) }
+            } label: {
+                Text("章节加载失败，点按重试")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        case .done:
+            let idx = store.index(atMs: player.positionMs)
+            List {
+                ForEach(store.chapters.indices, id: \.self) { i in
+                    chapterRow(i, active: i == idx)
+                }
+            }
+            .listStyle(.plain)
+        }
+    }
+
+    private func chapterRow(_ i: Int, active: Bool) -> some View {
+        let c = env.chapters.chapters[i]
+        return Button {
+            player.seek(toMs: c.startMs)
+            showChapters = false
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Text(Fmt.clock(c.startMs))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(active ? accent : .secondary)
+                    .frame(width: 52, alignment: .leading)
+                Text(c.title)
+                    .font(.callout)
+                    .fontWeight(active ? .medium : .regular)
+                    .foregroundStyle(active ? accent : .primary)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(active ? accent.opacity(0.12) : Color.clear)
     }
 
     // MARK: - 传输控制

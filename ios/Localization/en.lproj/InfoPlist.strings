@@ -1,2 +1,4 @@
 "NSPhotoLibraryAddUsageDescription" = "Saves clip, footprint, and channel share posters to your photo library.";
 "NSSpeechRecognitionUsageDescription" = "Transcribes podcast audio to text on this device; the audio never leaves your iPhone.";
+"NSLocalNetworkUsageDescription" = "Merges subscriptions and listening records directly with another device on the same Wi-Fi; data stays on your local network.";
+

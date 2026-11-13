@@ -26,9 +26,16 @@ class EpisodeJsonTest {
             feedUrl = "https://feed.example.com/rss",
             isLive = true,
             transcriptUrl = "https://feed.example.com/t.json",
-            transcriptType = "application/json"
+            transcriptType = "application/json",
+            chaptersUrl = "https://feed.example.com/chapters.json",
+            chaptersType = "application/json+chapters"
         )
-        assertEquals(episode, EpisodeJson.fromJson(EpisodeJson.toJson(episode)))
+        val json = EpisodeJson.toJson(episode)
+        // 往返相等证明不了"真的写出去了":两个方向同时漏掉新字段,往返照样相等。
+        // 所以先认键名与值,再比整条(2026-11-11 就是漏了这一步才让章节在重启后消失)。
+        assertEquals("https://feed.example.com/chapters.json", json.getString("chaptersUrl"))
+        assertEquals("application/json+chapters", json.getString("chaptersType"))
+        assertEquals(episode, EpisodeJson.fromJson(json))
     }
 
     @Test
@@ -43,5 +50,7 @@ class EpisodeJsonTest {
         assertFalse("老数据没有 isLive,不能读成直播", episode.isLive)
         assertEquals("", episode.transcriptUrl)
         assertEquals("", episode.transcriptType)
+        assertEquals("", episode.chaptersUrl)
+        assertEquals("", episode.chaptersType)
     }
 }

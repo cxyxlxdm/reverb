@@ -19,15 +19,18 @@ public struct WidgetState: Codable {
     /// (卡片这条来自历史),不带 id 点开只能停在空播放页 —— 与 Android 的
     /// `EXTRA_OPEN_EPISODE` 同一条理由。
     public var id: String = ""
-    /// 顶部小字,如「继续收听」/「CONTINUE LISTENING」
-    public var label: String = ""
     public var title: String = ""
     public var podcast: String = ""
     /// 「12:34 / 45:00」或「直播」;没有进度时为空串(卡片不画那一行)
     public var time: String = ""
-    /// 0...100
-    public var percent: Int = 0
+    /// 0...100,保留一位小数(等价于 Android 那边的 0...1000 千分档)。
+    /// 1.0.8 起四端统一到这个精度:整数百分比在 80 分钟的节目上一格约 48 秒,
+    /// 5 秒推一次时进度条会"定住"—— 鸿蒙与 Android 已按 0.1% 改过(见 H267)。
+    public var percent: Double = 0
     public var hasProgress: Bool = false
+    /// 正在播放。播放/暂停图标靠它翻面:进度 > 0 推不出"正在播",暂停时进度也还在。
+    /// 与鸿蒙 `WidgetCard.playing` 同一位,App 侧由播放器的 `isPlaying` 写入。
+    public var playing: Bool = false
     /// 直播流:没有进度可言
     public var live: Bool = false
     /// 空态(没有在听/听到一半的节目)
@@ -50,12 +53,19 @@ extension WidgetState {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = (try? c.decode(String.self, forKey: .id)) ?? ""
-        label = (try? c.decode(String.self, forKey: .label)) ?? ""
         title = (try? c.decode(String.self, forKey: .title)) ?? ""
         podcast = (try? c.decode(String.self, forKey: .podcast)) ?? ""
         time = (try? c.decode(String.self, forKey: .time)) ?? ""
-        percent = (try? c.decode(Int.self, forKey: .percent)) ?? 0
+        // 旧文件写的是整数百分比;Double 解码能直接吃下 `28`,不用为迁移加版本号。
+        if let d = try? c.decode(Double.self, forKey: .percent) {
+            percent = d
+        } else if let i = try? c.decode(Int.self, forKey: .percent) {
+            percent = Double(i)
+        } else {
+            percent = 0
+        }
         hasProgress = (try? c.decode(Bool.self, forKey: .hasProgress)) ?? false
+        playing = (try? c.decode(Bool.self, forKey: .playing)) ?? false
         live = (try? c.decode(Bool.self, forKey: .live)) ?? false
         empty = (try? c.decode(Bool.self, forKey: .empty)) ?? true
         dark = (try? c.decode(Bool.self, forKey: .dark)) ?? false

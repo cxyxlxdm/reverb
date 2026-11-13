@@ -246,6 +246,14 @@
 "简介" = "Show Notes";
 "暂无简介" = "No show notes";
 "转录" = "Transcript";
+
+/* 逐字稿搜索与导出(与 Android / 鸿蒙同一组文案) */
+"搜索逐字稿" = "Search transcript";
+"无匹配" = "No matches";
+"上一处" = "Previous match";
+"下一处" = "Next match";
+"导出逐字稿" = "Export transcript";
+"纯文本 (.txt)" = "Plain text (.txt)";
 "中文" = "Chinese";
 "正在准备音频…" = "Preparing audio…";
 "正在下载语言模型…" = "Downloading language model…";
@@ -260,6 +268,11 @@
 "正在获取发布方提供的逐字稿…" = "Fetching the publisher’s transcript…";
 "这一集发布方提供了逐字稿" = "The publisher provides a transcript for this episode";
 "查看逐字稿" = "Show transcript";
+
+/* Chapters · 章节(发布方给的章表,Podcasting 2.0) */
+"章节" = "Chapters";
+"这一集没有章节" = "No chapters in this episode";
+"章节加载失败，点按重试" = "Couldn’t load chapters. Tap to retry";
 
 // 收听时长
 "收听时长" = "Listening Time";
@@ -320,10 +333,12 @@
 "· 离线下载：下载的单集长期留在本机" = "· Offline: downloaded episodes stay on this Mac";
 "· 播放缓存：播过的单集自动留在本机，下次直接本地起播；断网时已加载的列表与封面仍可浏览，可在设置一键清除" = "· Playback cache: episodes you play stay on this Mac and start locally next time; loaded lists and artwork remain browsable offline, clearable in Settings";
 "· 播放：倍速、快进快退、睡眠定时、播放模式（顺序 / 单曲循环 / 随机）、自动续播，以及系统媒体键与「正在播放」" = "· Playback: speed, skip back and forward, sleep timer, play modes (in order / repeat one / shuffle), autoplay next, plus media keys and Now Playing";
-"· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）" = "· Transcript: shows the publisher’s transcript when there is one, otherwise turns the episode into text on this Mac, highlighted as it plays (on-device transcription needs macOS 26)";
+"· 逐字稿：优先显示发布方提供的逐字稿，没有时在本机转成文字并随进度高亮（本机转写需 macOS 26）；支持全文搜索，可导出为文本或 Markdown 分享" = "· Transcript: shows the publisher’s transcript when there is one, otherwise turns the episode into text on this Mac, highlighted as it plays (on-device transcription needs macOS 26); full-text search, and export as text or Markdown to share";
 "· 批注：记下这一秒和此刻的一句话；音阁「批注」栏把它们连成时间线，点一下从那一句接着听" = "· Notes: mark that second with a sentence; the Library's Notes section strings them into a timeline — click one to resume from that line";
 "· 节目笔记：播放页横滑查看简介" = "· Show notes: swipe across the player to read the description";
+"· 章节：发布方给了章表的单集，播放页进度条上方显示当前章节，点开可跳转；章表取一次后离线也能看" = "· Chapters: for episodes whose publisher ships a chapter list, the current chapter appears above the seek bar; tap to jump. The list is cached once fetched, so it works offline";
 "· 备份：勾选分区导出或恢复备份（与手机端格式互通），也能导入导出 OPML" = "· Backup: export or restore the sections you pick (compatible with the mobile apps), and import or export OPML";
+"· 局域网同步：在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度" = "· Local network sync: merge subscriptions, favourites, stamps, notes and progress with another device on the same Wi-Fi";
 "· 外观：深色 / 浅色 / 跟随系统、字号、主题配色、多语言" = "· Appearance: dark / light / system, text size, accent color, multiple languages";
 "设计理念" = "Design";
 "美学上取「水墨 + 青瓷 + 梁金」的底色，名字与图标呼应「余音绕梁」——声波环绕横梁，余韵不散。" = "Visually it draws on ink, celadon and beam-gold — the name and icon echo an echo circling the rafters: sound waves around a beam, lingering.";
@@ -379,3 +394,40 @@
 "密码" = "Password";
 "保存并重试" = "Save and retry";
 "这对用户名和密码没有通过，再核对一下。" = "That username and password were not accepted. Please check them and try again.";
+
+/* 局域网同步(2026-11-11)。键名是简中原文;插值按 SwiftUI 的 key 规则写成 %@ / %lld。 */
+"局域网" = "Local network";
+"局域网同步" = "Local network sync";
+"在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度" = "Merge subscriptions, favorites, stamps, notes and progress with another device on the same Wi-Fi";
+"等待另一台设备…" = "Waiting for another device…";
+"正在连接 %@…" = "Connecting to %@…";
+"本机：%@" = "This device: %@";
+"没有找到 Wi-Fi 地址。请先连接与另一台设备相同的 Wi-Fi。" = "No Wi-Fi address found. Join the same Wi-Fi network as the other device first.";
+"本机地址，可让对方手动输入" = "This device's address — the other device can enter it manually";
+"附近的设备" = "Nearby devices";
+"还没发现设备。确认对方也打开了这个页面；找不到就直接输入对方屏幕上显示的地址。" = "No devices found yet. Make sure the other device has this screen open. If it still doesn't appear, enter the address shown on its screen.";
+"对方地址，如 192.168.1.5:47820" = "Other device's address, e.g. 192.168.1.5:47820";
+"连接" = "Connect";
+"在任意一台设备上点对方即可，不需要两台都点。" = "Tap the other device on either one — you don't need to tap on both.";
+"核对配对码" = "Confirm the pairing code";
+"对方：%@" = "Other device: %@";
+"两台设备上的六位数字必须完全相同。不同就取消，可能有人在中间。" = "The six digits must match exactly on both devices. If they differ, cancel — someone may be in the middle.";
+"正在与 %@ 同步…" = "Syncing with %@…";
+"发送数据" = "Sending data";
+"接收数据" = "Receiving data";
+"合并数据" = "Merging data";
+"同步完成" = "Sync complete";
+"已与 %@ 合并" = "Merged with %@";
+"新增：订阅 %lld · 收藏 %lld · 印记 %lld · 批注 %lld · 历史 %lld · 统计 %lld" = "Added: %lld subscriptions · %lld favorites · %lld stamps · %lld notes · %lld history · %lld stats";
+"两端已经一致，没有新增内容。" = "Both devices already match — nothing new was added.";
+"同步失败" = "Sync failed";
+"连不上对方。确认两台设备在同一 Wi-Fi、对方页面开着；也可以改用对方屏幕上显示的地址。" = "Can't reach the other device. Check that both devices are on the same Wi-Fi and the other screen is open; you can also use the address shown there.";
+"两台设备的版本不一致，先升级到同一版本。" = "The devices are running different versions. Update both to the same version first.";
+"对方的回应不符合预期，已中止。" = "The other device responded unexpectedly. Stopped.";
+"加密校验失败，已中止。" = "Encryption check failed. Stopped.";
+"网络中断，已中止。" = "The connection dropped. Stopped.";
+"已取消。" = "Cancelled.";
+"对方取消了这次同步。" = "The other device cancelled the sync.";
+"只同步订阅、收藏、印记、批注、历史与收听统计；下载与设置不参与。删除目前不会同步：在一台设备上取消订阅后，另一台同步时可能把它带回来。" = "Only subscriptions, favorites, stamps, notes, history and listening stats are synced; downloads and settings are not included. Deletions don't sync yet: unsubscribing on one device may bring it back the next time the other device syncs.";
+"再同步一次" = "Sync again";
+"一致，开始同步" = "They match — start";

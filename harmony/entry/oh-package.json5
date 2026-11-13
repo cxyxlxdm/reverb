@@ -6,8 +6,12 @@
   "author": "",
   "license": "",
   "dependencies": {
-    // native 音频解码模块(给系统语音识别喂 PCM)。类型声明在 src/main/cpp/types/
-    "libreverb_pcm.so": "file:./src/main/cpp/types/libreverb_pcm"
+    // native 音频解码模块(给语音识别喂 PCM)。类型声明在 src/main/cpp/types/
+    "libreverb_pcm.so": "file:./src/main/cpp/types/libreverb_pcm",
+    // 离线语音识别:上游预编译的 har(arm64 的 .so + ArkTS 封装),Apache-2.0。
+    // 版本固定在 1.13.3 —— 模型格式与 API 都在演进,浮动跟主线会某天行为突变。
+    // 模型本体不在 har 里,由 tools/build-asr.sh 备到 rawfile/sensevoice/(不入库)。
+    "sherpa_onnx": "^1.13.3"
   },
   "devDependencies": {
     // 本地单测框架(src/test)。只进构建机,不进 app 包。

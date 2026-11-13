@@ -9,7 +9,7 @@ import com.yuyin.reverb.data.local.SettingsStore
  *
  * 为什么要单独成一个东西(见 REVIEW-2026-10-25 中-3):同一段三条判据原先**抄了两份**
  * (`DownloadManager.blockedByCellular` 与 `AudioCacheManager.blockedByCellular`),而第三条
- * 大流量路径 —— 本机识别前要下的那一整集音频(`WhisperEngine.downloadToCache`,几十 MB) ——
+ * 大流量路径 —— 本机识别前要下的那一整集音频(`SenseVoiceEngine.downloadToCache`,几十 MB) ——
  * 根本没接闸门:用户关了「仅在 Wi-Fi 下载」,下载与缓存都老实用 Wi-Fi,
  * 只有"转逐字稿"这一条会在蜂窝上悄悄跑掉一整集的流量。
  * 判据抄第二份的时候漏第三个调用点是必然的,不是偶然(体检总结的「靠调用点自律的规矩必漏」)。

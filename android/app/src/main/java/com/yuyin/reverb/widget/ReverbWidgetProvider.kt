@@ -16,6 +16,8 @@ import android.view.View
 import android.widget.RemoteViews
 import com.yuyin.reverb.MainActivity
 import com.yuyin.reverb.R
+import com.yuyin.reverb.ReverbApp
+import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.util.Logger
 import java.util.Locale
 import java.util.concurrent.Executors
@@ -59,9 +61,97 @@ class ReverbWidgetProvider : AppWidgetProvider() {
         renderAll(context)
     }
 
+    /**
+     * 卡片上的三颗键走**显式广播**回到这里,而不是拉起界面:
+     * 点键只动播放态,用户应该继续停在桌面(与鸿蒙 `postCardAction { action: 'call' }` 同一分工)。
+     *
+     * `goAsync()` 是必须的:冷启动时 `PlayerController` 连上服务要几百毫秒,
+     * `onReceive` 一返回系统就可能回收广播,动作会凭空消失。它最多把这次广播多留 ~10 秒,
+     * 我们自己的等待上限是 6 秒(见 [PlayerController.runWhenReady])。
+     */
+    override fun onReceive(context: Context, intent: Intent) {
+        when (intent.action) {
+            ACTION_TOGGLE, ACTION_PREV, ACTION_NEXT -> {
+                val app = context.applicationContext
+                val pending = goAsync()
+                handleControl(app, intent.action.orEmpty(), intent.getStringExtra(EXTRA_EPISODE)) {
+                    pending.finish()
+                }
+            }
+            else -> super.onReceive(context, intent)
+        }
+    }
+
     companion object {
+        const val ACTION_TOGGLE = "com.yuyin.reverb.widget.TOGGLE"
+        const val ACTION_PREV = "com.yuyin.reverb.widget.PREV"
+        const val ACTION_NEXT = "com.yuyin.reverb.widget.NEXT"
+        const val EXTRA_EPISODE = "episode_id"
+
         private val executor = Executors.newSingleThreadExecutor { r ->
             Thread(r, "reverb-widget").apply { isDaemon = true }
+        }
+
+        /**
+         * 卡片按键的动作体。三项前置条件按顺序:
+         *  ① **隐私同意门**:连播放器会创建 ExoPlayer,media3 内部会读系统网络状态;
+         *     未同意时一个动作都不许做(与 `MainActivity.startGatedComponents` 同一条门)。
+         *  ② 控制器没起来就先 `init` —— 小组件进程可能在 App 没运行时被单独拉起,
+         *     而 `ReverbApp.onCreate` 已经绑好历史 / 设置 / 播放态,只差这一步连接。
+         *  ③ 控制器与恢复都要等到位再动作:冷启动时 `restoreState` 是异步的,
+         *     早一步按下播放键会对着"还没装载的播放器"操作,表现为点了没反应。
+         *
+         * 当前集为空时(盘上没有可恢复的会话)**退回打开播放页**,不让按键变成死键;
+         * 其余两档没有可切的对象,只记一条日志。
+         */
+        private fun handleControl(
+            app: Context,
+            action: String,
+            episodeId: String?,
+            done: () -> Unit
+        ) {
+            val container = (app as? ReverbApp)?.container
+            if (container == null || !container.settingsStore.privacyAccepted.value) {
+                Logger.w("Widget", "卡片按键忽略:$action(未同意隐私或容器不可用)")
+                done()
+                return
+            }
+            PlayerController.init(app)
+            PlayerController.runWhenReady(
+                timeoutMs = 6_000,
+                onTimeout = {
+                    Logger.w("Widget", "卡片按键超时:$action")
+                    done()
+                }
+            ) {
+                try {
+                    val cur = PlayerController.current.value
+                    Logger.i("Widget", "卡片按键 $action cur=${cur?.id ?: "-"}")
+                    when (action) {
+                        ACTION_TOGGLE -> if (cur != null) {
+                            PlayerController.togglePlayPause()
+                        } else {
+                            // 没有会话:退回播放页。带 episodeId 时由 MainActivity 负责装载;
+                            // 不带的话 App 内会按空态处理。
+                            app.startActivity(
+                                Intent(app, MainActivity::class.java).apply {
+                                    putExtra(MainActivity.EXTRA_OPEN_PLAYER, true)
+                                    if (!episodeId.isNullOrBlank()) {
+                                        putExtra(MainActivity.EXTRA_OPEN_EPISODE, episodeId)
+                                    }
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                                }
+                            )
+                        }
+                        ACTION_PREV -> if (cur != null) PlayerController.previous()
+                        ACTION_NEXT -> if (cur != null) PlayerController.next()
+                    }
+                } catch (e: Exception) {
+                    Logger.e("Widget", "卡片按键失败:$action", e)
+                } finally {
+                    done()
+                }
+            }
         }
 
         /** App 内播放状态变化时调用;真正的重绘在后台线程,调用方不会被 IO 挡住。 */
@@ -79,6 +169,9 @@ class ReverbWidgetProvider : AppWidgetProvider() {
             if (ids.isEmpty()) return
             // 一次刷新只读一遍文件:同一批 id 共用同一份状态与同一张解好的封面。
             val state = WidgetState.read(app)
+            // 播放态来自独立的 `widget_state.json`(见 WidgetRuntime):两份播放数据文件
+            // 里都没有「正在播」这一位,不能靠有进度来推。
+            val playing = WidgetRuntime.readPlaying(app)
             val artKey = state?.artworkUrl.orEmpty()
             var art: android.graphics.Bitmap? = null
             var artTried = false
@@ -93,7 +186,7 @@ class ReverbWidgetProvider : AppWidgetProvider() {
                     val px = (artDp * app.resources.displayMetrics.density).toInt()
                     art = WidgetArtwork.load(app, artKey, px)
                 }
-                mgr.updateAppWidget(id, build(app, state, layout, art))
+                mgr.updateAppWidget(id, build(app, state, layout, art, playing))
             }
         }
 
@@ -142,11 +235,15 @@ class ReverbWidgetProvider : AppWidgetProvider() {
             app: Context,
             state: WidgetEpisode?,
             layout: Int,
-            art: android.graphics.Bitmap?
+            art: android.graphics.Bitmap?,
+            playing: Boolean
         ): RemoteViews {
             val rv = RemoteViews(app.packageName, layout)
+            // 两种排法的控件不是同一组 id:2×2 只有封面上的播放键,4×2 / 4×4 才有那一行三颗键。
+            // **不能对不存在的 id 发 RemoteViews 动作** —— 宿主 apply 时会整条抛 ActionException。
+            val rowControls = layout == R.layout.widget_large || layout == R.layout.widget_medium
+            // 标签行已删(与鸿蒙 H269 同一条:它不携带信息,还占 2×2 最缺的那一行)。
             if (state == null) {
-                rv.setTextViewText(R.id.widget_label, app.getString(R.string.widget_continue))
                 rv.setTextViewText(R.id.widget_title, app.getString(R.string.widget_empty_title))
                 rv.setTextViewText(R.id.widget_podcast, app.getString(R.string.widget_empty_sub))
                 rv.setViewVisibility(R.id.widget_progress, View.GONE)
@@ -155,12 +252,19 @@ class ReverbWidgetProvider : AppWidgetProvider() {
                 // 下面空半张卡片。放应用图标当占位,卡片才像一个完整的设计。
                 rv.setViewVisibility(R.id.widget_art, View.VISIBLE)
                 rv.setImageViewResource(R.id.widget_art, R.mipmap.ic_launcher)
+                // 空态三颗键全部藏掉:没有可播放 / 可切换的对象,亮着只会被当成坏键。
+                if (rowControls) {
+                    rv.setViewVisibility(R.id.widget_prev, View.GONE)
+                    rv.setViewVisibility(R.id.widget_toggle, View.GONE)
+                    rv.setViewVisibility(R.id.widget_next, View.GONE)
+                } else {
+                    rv.setViewVisibility(R.id.widget_toggle, View.GONE)
+                }
                 rv.setContentDescription(
                     R.id.widget_root,
                     "${app.getString(R.string.widget_empty_title)} · ${app.getString(R.string.widget_empty_sub)}"
                 )
             } else {
-                rv.setTextViewText(R.id.widget_label, app.getString(R.string.widget_continue))
                 rv.setTextViewText(R.id.widget_title, state.title)
                 rv.setTextViewText(
                     R.id.widget_podcast,
@@ -168,6 +272,8 @@ class ReverbWidgetProvider : AppWidgetProvider() {
                 )
                 if (state.hasProgress) {
                     rv.setViewVisibility(R.id.widget_progress, View.VISIBLE)
+                    // 0..1000 = 0.1% 一档:80 分钟的节目一格约 4 秒,5 秒推一次时读数连续
+                    // (与鸿蒙 H267 的 percent 精度同一档)。
                     rv.setProgressBar(R.id.widget_progress, 1000, state.percent, false)
                     rv.setViewVisibility(R.id.widget_time, View.VISIBLE)
                     rv.setTextViewText(
@@ -193,6 +299,35 @@ class ReverbWidgetProvider : AppWidgetProvider() {
                 } else {
                     rv.setViewVisibility(R.id.widget_art, View.VISIBLE)
                     rv.setImageViewResource(R.id.widget_art, R.mipmap.ic_launcher)
+                }
+                // 播放 / 暂停图标由 `widget_state.json` 决定;上一首 / 下一首在本集没有队列时
+                // 仍可点(PlayerController 会按频道缓存补上下文,见 expandContextFromFeed)——
+                // 补不出来时它只是没有动作,不如藏起来诚实,但那样会让一排键在播放中闪断,
+                // 所以这里保持显示,由播放器决定能不能走。
+                val toggleIcon = if (playing) R.drawable.widget_ic_pause else R.drawable.widget_ic_play
+                val toggleDesc = app.getString(if (playing) R.string.a11y_pause else R.string.a11y_play)
+                rv.setImageViewResource(R.id.widget_toggle, toggleIcon)
+                rv.setContentDescription(R.id.widget_toggle, toggleDesc)
+                rv.setOnClickPendingIntent(
+                    R.id.widget_toggle,
+                    controlIntent(app, ACTION_TOGGLE, state.id)
+                )
+                if (rowControls) {
+                    rv.setViewVisibility(R.id.widget_prev, View.VISIBLE)
+                    rv.setViewVisibility(R.id.widget_toggle, View.VISIBLE)
+                    rv.setViewVisibility(R.id.widget_next, View.VISIBLE)
+                    rv.setContentDescription(R.id.widget_prev, app.getString(R.string.a11y_prev))
+                    rv.setContentDescription(R.id.widget_next, app.getString(R.string.a11y_next))
+                    rv.setOnClickPendingIntent(
+                        R.id.widget_prev,
+                        controlIntent(app, ACTION_PREV, state.id)
+                    )
+                    rv.setOnClickPendingIntent(
+                        R.id.widget_next,
+                        controlIntent(app, ACTION_NEXT, state.id)
+                    )
+                } else {
+                    rv.setViewVisibility(R.id.widget_toggle, View.VISIBLE)
                 }
                 val time = if (state.hasProgress) {
                     app.getString(
@@ -232,6 +367,29 @@ class ReverbWidgetProvider : AppWidgetProvider() {
             )
         }
 
+        /**
+         * 控制键的广播。**显式 Intent**(带组件)而不是只给 action:
+         * Android 8 起隐式广播受限,而卡片按键必须稳定命中本 Provider。
+         * 三个动作各占一个 request code,否则后一个 PendingIntent 会把前一个顶掉。
+         */
+        private fun controlIntent(app: Context, action: String, episodeId: String?): PendingIntent {
+            val intent = Intent(app, ReverbWidgetProvider::class.java).apply {
+                setAction(action)
+                if (!episodeId.isNullOrBlank()) putExtra(EXTRA_EPISODE, episodeId)
+            }
+            val request = REQUEST_OPEN + when (action) {
+                ACTION_PREV -> 1
+                ACTION_NEXT -> 2
+                else -> 3
+            }
+            return PendingIntent.getBroadcast(
+                app,
+                request,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+        }
+
         private const val REQUEST_OPEN = 0x5701
 
         internal fun clock(ms: Long): String {
@@ -246,14 +404,17 @@ class ReverbWidgetProvider : AppWidgetProvider() {
 }
 
 /**
- * 播放/暂停/换集/拖动时请求重绘,进度类更新做 20 秒节流。
+ * 播放/暂停/换集/拖动时请求重绘,进度类更新做 5 秒节流。
  *
- * 为什么需要节流:播放中每 500ms 有一个 tick,而每 5 秒会落一次 history 进度;
- * 如果每次落盘都重绘,系统每分钟要处理十几次小组件更新,而进度条的时间文字只到分钟级,
- * 20 秒一次已经看不出延迟。换集 / 播放态变化走 `force`,立刻刷。
+ * 为什么是 5 秒(2026-11-12,与鸿蒙 H267 同一读数):
+ * 时间行按分钟读,但进度条按 0.1% 一档 —— 80 分钟的节目一格约 4 秒。
+ * 原先 20 秒一次,进度条 20 秒才动一格,看起来像"定住了"。
+ * 播放中每 500ms 有一个 tick,每 5 秒落一次 history;重绘**错开落盘那一拍**
+ * (ticker 里 `%10 == 5`),否则读到的是刚排队还没写下去的那一份,卡片永远落后一跳。
+ * 换集 / 播放态变化走 `force`,立刻刷。
  */
 object WidgetRefresh {
-    private const val PROGRESS_MIN_MS = 20_000L
+    private const val PROGRESS_MIN_MS = 5_000L
     private val handler = Handler(Looper.getMainLooper())
     private var lastRunAtMs = 0L
     private var pending = false

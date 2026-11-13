@@ -131,6 +131,11 @@ class PlaybackStateStore(context: Context) {
         .put("feedUrl", e.feedUrl)
         .put("transcriptUrl", e.transcriptUrl)
         .put("transcriptType", e.transcriptType)
+        // 章节地址必须在这里:冷启动恢复的"正在播那一集"就是播放页上那一集,
+        // 缺了它,重启后章节入口整条消失(2026-11-11 装机验收抓到)。
+        // 两串都是短 URL,与瘦身的目的不冲突。
+        .put("chaptersUrl", e.chaptersUrl)
+        .put("chaptersType", e.chaptersType)
 
     private fun load(): Snapshot {
         val text = runCatching { if (file.exists()) file.readText() else "" }.getOrDefault("")

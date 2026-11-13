@@ -2,6 +2,9 @@ import dateParseTest from './DateParse.test';
 import htmlTextTest from './HtmlText.test';
 import liveStreamTest from './LiveStream.test';
 import transcriptLinesTest from './TranscriptLines.test';
+import chaptersTest from './Chapters.test';
+import transcriptSearchExportTest from './TranscriptSearchExport.test';
+import senseVoiceTextTest from './SenseVoiceText.test';
 
 /**
  * 本地单测入口。`hvigorw test` 会生成 `.test/testability/pages/Index.ets`,
@@ -15,4 +18,7 @@ export default function testsuite(): void {
   htmlTextTest();
   liveStreamTest();
   transcriptLinesTest();
+  chaptersTest();
+  transcriptSearchExportTest();
+  senseVoiceTextTest();
 }

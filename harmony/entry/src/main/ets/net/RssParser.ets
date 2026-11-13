@@ -117,6 +117,20 @@ function transcriptRank(type: string): number {
   return -1;
 }
 
+/**
+ * `podcast:chapters` 的取舍等级。**负数表示不要**。
+ *
+ * 章节规范只定义了 JSON 一种载体:`application/json+chapters` 是标准写法,不少源写成
+ * `application/json`,这两种都收,前者优先。XML 之类的章表本端不解析 ——
+ * 宣告"有章节"却点开报错,比根本不出现入口更糟(与 Android `chaptersRank` 同一张表)。
+ */
+function chaptersRank(type: string): number {
+  const t = type.toLowerCase();
+  if (t.indexOf('json+chapters') >= 0) return 2;
+  if (t.indexOf('json') >= 0) return 1;
+  return -1;
+}
+
 /// 解析状态机。channel 级与 item 级字段分层,均「首个非空胜出」。
 class ParseState {
   private feedUrl: string;
@@ -146,6 +160,10 @@ class ParseState {
   private iTrUrl = '';
   private iTrType = '';
   private iTrRank = -1;
+  /// `podcast:chapters`:只收一条.JSON,按 type 打分取最优(见 `chaptersRank`)
+  private iChUrl = '';
+  private iChType = '';
+  private iChRank = -1;
 
   private textBuf = '';
   private episodes: Episode[] = [];
@@ -165,6 +183,7 @@ class ParseState {
         this.iTitle = ''; this.iDesc = ''; this.iAudio = '';
         this.iImage = ''; this.iGuid = ''; this.iDate = ''; this.iDur = '';
         this.iTrUrl = ''; this.iTrType = ''; this.iTrRank = -1;
+        this.iChUrl = ''; this.iChType = ''; this.iChRank = -1;
       } else if (name === 'image') {
         this.inImage = true;
       }
@@ -270,6 +289,20 @@ class ParseState {
           this.iTrRank = rank;
         }
       }
+      return;
+    }
+    if (tag === 'chapters' && this.inItem) {
+      // 与 transcript 同形:空元素的属性分多次回调,url 先到、type 后到时也要能把等级补上来
+      if (key === 'url') this.pendingChUrl = v;
+      if (key === 'type') this.pendingChType = v;
+      if (this.pendingChUrl.length > 0) {
+        const rank = chaptersRank(this.pendingChType);
+        if (rank > this.iChRank || (rank === this.iChRank && this.pendingChUrl === this.iChUrl)) {
+          this.iChUrl = this.pendingChUrl;
+          this.iChType = this.pendingChType;
+          this.iChRank = rank;
+        }
+      }
     }
   }
 
@@ -280,6 +313,8 @@ class ParseState {
   private linkIsEnclosure = false;
   private pendingTrUrl = '';
   private pendingTrType = '';
+  private pendingChUrl = '';
+  private pendingChType = '';
 
   private flushItem(): void {
     // 仅当拿到音频直链才产出一集(没音频的条目对播放毫无意义)
@@ -298,7 +333,9 @@ class ParseState {
       pubDate: this.iDate,
       feedUrl: this.feedUrl,
       transcriptUrl: this.iTrUrl,
-      transcriptType: this.iTrType
+      transcriptType: this.iTrType,
+      chaptersUrl: this.iChUrl,
+      chaptersType: this.iChType
     };
     this.episodes.push(ep);
     this.resetPending();
@@ -311,6 +348,8 @@ class ParseState {
     this.linkIsEnclosure = false;
     this.pendingTrUrl = '';
     this.pendingTrType = '';
+    this.pendingChUrl = '';
+    this.pendingChType = '';
   }
 
   finish(): FeedResult {

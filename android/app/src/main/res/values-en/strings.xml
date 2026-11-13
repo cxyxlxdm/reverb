@@ -198,6 +198,9 @@
     <string name="player_err_unplayable">This episode can\'t be played right now</string>
     <string name="shownotes">Show notes</string>
     <string name="shownotes_empty">No show notes</string>
+    <string name="player_chapters">Chapters</string>
+    <string name="chapters_empty">No chapters in this episode</string>
+    <string name="chapters_failed">Couldn\'t load chapters. Tap to retry</string>
     <string name="note_add">Write a note</string>
     <string name="note_title">Mark this second</string>
     <string name="note_hint">What struck you just now?</string>
@@ -247,6 +250,48 @@
     <string name="set_full_backup">Full backup</string>
     <string name="set_full_backup_sub">All your local data — subscriptions, notes, history and more — for migration / backup</string>
     <string name="set_restore">Restore backup</string>
+
+    <!-- LAN sync (same Wi-Fi, merges the backup sections). -->
+    <string name="sec_lan">LAN</string>
+    <string name="set_lan_sync">LAN sync</string>
+    <string name="set_lan_sync_sub">Merge subscriptions, favorites, stamps, notes and progress with another device on the same Wi-Fi</string>
+    <string name="lan_title">LAN sync</string>
+    <string name="lan_own_name">This device: %1$s</string>
+    <string name="lan_waiting">Waiting for another device…</string>
+    <string name="lan_no_wifi">No Wi-Fi address found. Connect both devices to the same Wi-Fi first.</string>
+    <string name="lan_own_address">This device\u2019s address — the other device can enter it manually</string>
+    <string name="lan_peers">Nearby devices</string>
+    <string name="lan_no_peers">No devices yet. Make sure the other device has this page open, or enter the address shown on its screen.</string>
+    <string name="lan_peer_row">%1$s\n%2$s</string>
+    <string name="lan_manual_hint">Other device address, e.g. 192.168.1.5:47820</string>
+    <string name="lan_connect">Connect</string>
+    <string name="lan_connecting">Connecting to %1$s…</string>
+    <string name="lan_confirm_title">Verify the pairing code</string>
+    <string name="lan_confirm_body">The six digits must match exactly on both devices. If they differ, cancel — someone may be in the middle.</string>
+    <string name="lan_confirm_peer">Peer: %1$s</string>
+    <string name="lan_confirm_accept">They match, start sync</string>
+    <string name="lan_cancel">Cancel</string>
+    <string name="lan_syncing">Syncing with %1$s…</string>
+    <string name="lan_stage_sending">Sending data</string>
+    <string name="lan_stage_receiving">Receiving data</string>
+    <string name="lan_stage_merging">Merging data</string>
+    <string name="lan_done_title">Sync complete</string>
+    <string name="lan_done_with">Merged with %1$s</string>
+    <string name="lan_done_added">Added: subscriptions %1$d · favorites %2$d · stamps %3$d · notes %4$d · history %5$d · stats %6$d</string>
+    <string name="lan_done_nothing">Both devices are already in sync.</string>
+    <string name="lan_failed_title">Sync failed</string>
+    <string name="lan_fail_connect">Cannot reach the other device. Check that both are on the same Wi-Fi and its page is open, or enter the address shown on its screen.</string>
+    <string name="lan_fail_version">The two devices run different versions. Update both to the same version first.</string>
+    <string name="lan_fail_protocol">The other device responded unexpectedly. Stopped.</string>
+    <string name="lan_fail_decrypt">Encryption check failed. Stopped.</string>
+    <string name="lan_fail_io">Connection lost. Stopped.</string>
+    <string name="lan_fail_cancelled">Cancelled.</string>
+    <string name="lan_fail_peer_cancelled">The other device cancelled the sync.</string>
+    <string name="lan_scope">Only subscriptions, favorites, stamps, notes, history and listening stats are synced. Downloads and settings are not involved. Deletions do not sync yet: unsubscribing on one device may be undone by the other.</string>
+    <string name="lan_close">Close</string>
+    <string name="lan_again">Sync again</string>
+    <string name="lan_retry">Retry</string>
+    <string name="lan_tip">Tap the other device on either side only — no need to tap on both.</string>
     <string name="set_restore_sub">Import from a Reverb backup file</string>
 
     <string name="set_theme">Theme</string>
@@ -329,7 +374,7 @@
     <string name="about_h_what">What is this</string>
     <string name="about_p_what">Reverb is a lightweight podcast client with an ink-and-wash aesthetic. Discover shows, subscribe, download for offline, and resume anytime — focused on listening.</string>
     <string name="about_h_features">Features</string>
-    <string name="about_p_features">· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: by name or paste an RSS URL\n· Video links: paste a Bilibili video link or BV ID and listen to it as an episode (no sign-in; episodes from video links cannot be downloaded)\n· Share shows: create an image with the show artwork, title and Reverb branding\n· Radio: roam at random or follow time-of-day moods\n· Updates: every episode from the shows you follow, newest first, on its own tab\n· Library: six shelves — subscriptions, up next, favorites, downloads, history, notes\n· Batch and shortcuts: tap an episode cover to open its channel; in Updates, Favorites, Downloads, History or a channel page, long-press a row and pick "Select multiple" to add the whole batch to Up next\n· Offline downloads: keep downloaded episodes on this device, Wi-Fi-only optional\n· Playback cache: episodes you play stay on this device and replay offline; loaded lists and artwork stay browsable without a connection, clearable in Settings\n· Transcript: transcribe on device, or read the publisher\'s own transcript\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background &amp; lock-screen controls\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player\n· New-episode notifications\n· In-app updates: download the new version on device and hand it to the system installer (asks first when you are not on Wi-Fi)\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent color, multiple languages</string>
+    <string name="about_p_features">· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: by name or paste an RSS URL\n· Video links: paste a Bilibili video link or BV ID and listen to it as an episode (no sign-in; episodes from video links cannot be downloaded)\n· Share shows: create an image with the show artwork, title and Reverb branding\n· Radio: roam at random or follow time-of-day moods\n· Updates: every episode from the shows you follow, newest first, on its own tab\n· Library: six shelves — subscriptions, up next, favorites, downloads, history, notes\n· Batch and shortcuts: tap an episode cover to open its channel; in Updates, Favorites, Downloads, History or a channel page, long-press a row and pick "Select multiple" to add the whole batch to Up next\n· Offline downloads: keep downloaded episodes on this device, Wi-Fi-only optional\n· Playback cache: episodes you play stay on this device and replay offline; loaded lists and artwork stay browsable without a connection, clearable in Settings\n· Transcript: transcribe on device (Chinese, English, Japanese, Korean and Cantonese), or read the publisher\'s own transcript; full-text search, and export as text or Markdown to share\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background &amp; lock-screen controls\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player\n· Chapters: for episodes whose publisher ships a chapter list, the current chapter appears above the seek bar; tap to jump. The list is cached once fetched, so it works offline\n· New-episode notifications\n· In-app updates: download the new version on device and hand it to the system installer (asks first when you are not on Wi-Fi)\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Local network sync: merge subscriptions, favourites, stamps, notes and progress with another device on the same Wi-Fi\n· Appearance: dark/light/system, text size, accent color, multiple languages</string>
     <string name="about_h_philosophy">Design</string>
     <string name="about_p_philosophy">Visually it draws on ink, celadon and beam-gold — the name and icon echo “an echo circling the rafters.”\n\nFor sources it stays entirely free, no login, no API key: discovery relies on public sources, and it always returns to the publisher’s own RSS and streams the original audio — copyright-clean, zero cost.\n\nFor privacy, subscriptions, history and downloads stay on your device, are not automatically uploaded to the developer, and are not used for cross-app tracking.</string>
 
@@ -340,8 +385,9 @@
     <string name="licenses_sources_note">This app provides no catalog and neither stores nor proxies any audio — audio always comes straight from the publisher\'s own RSS feed.</string>
     <string name="licenses_sources_note_catalog">These are public podcast directory/search APIs, used only for search and charts; audio always comes from the publisher\'s original RSS. This app never re-hosts or proxies it.</string>
     <!-- 许可页与数据来源里"换语种要变"的四条。目录/接口名(Apple iTunes、fyyd.de、gpodder.net)与专有名词是五套同形,仍留在 LicensesScreen.kt 字面量里。 -->
-    <string name="lic_whisper">whisper.cpp (on-device speech recognition)</string>
-    <string name="lic_whisper_model">Whisper model ggml-base-q5_1 (OpenAI)</string>
+    <string name="lic_sherpa">sherpa-onnx (on-device speech recognition framework)</string>
+    <string name="lic_onnxruntime">ONNX Runtime (inference engine)</string>
+    <string name="lic_sensevoice">SenseVoiceSmall model (FunASR)</string>
     <string name="src_publisher_rss">The publisher\'s own RSS feed</string>
     <string name="src_site_opml">Recommended subscription list (OPML) on the app\'s site</string>
     <string name="notif_channel_name">New episodes</string>
@@ -380,7 +426,7 @@
     <string name="batch_added">Added %1$d episodes to Up next</string>
     <string name="batch_added_none">Those episodes are already in Up next</string>
     <string name="set_transcription">Transcript</string>
-    <string name="set_transcription_sub">Swipe to the third page on the player. Falls back to on-device transcription when the publisher provides none</string>
+    <string name="set_transcription_sub">Swipe to the third page on the player. Falls back to on-device transcription when the publisher provides none (Chinese, English, Japanese, Korean and Cantonese)</string>
     <string name="transcript_prompt">Turn this episode into text, on your device</string>
     <string name="transcript_start">Generate transcript</string>
     <string name="transcript_fetching">Fetching the publisher\'s transcript…</string>
@@ -389,9 +435,20 @@
     <string name="transcript_running">Transcribing — the first line will appear shortly…</string>
     <string name="transcript_failed">Transcription failed. Tap to retry</string>
     <string name="transcript_none">The publisher provides no transcript for this episode, and this build has no on-device recognition</string>
+    <string name="transcript_lang_unsupported">On-device transcription currently supports Chinese, English, Japanese, Korean and Cantonese only. The publisher provides no transcript for this episode either.</string>
     <string name="action_retry">Retry</string>
     <string name="transcript_prompt_official">The publisher provides a transcript for this episode</string>
     <string name="transcript_show">Show transcript</string>
+    <string name="transcript_search">Search transcript</string>
+    <string name="transcript_search_none">No matching lines</string>
+    <string name="transcript_search_position">%1$d / %2$d</string>
+    <string name="transcript_search_prev">Previous match</string>
+    <string name="transcript_search_next">Next match</string>
+    <string name="transcript_export">Export transcript</string>
+    <string name="transcript_export_text">Plain text (.txt)</string>
+    <string name="transcript_export_markdown">Markdown (.md)</string>
+    <string name="transcript_export_failed">Export failed</string>
+    <string name="transcript_share_title">Share transcript</string>
     <string name="set_word_highlight">Word-by-word highlight</string>
 
     <!-- ↓↓ 这两组串合并自原 src/default/res(2026-10-18 两个 flavor 合成一份包,见 H205):
@@ -400,9 +457,10 @@
          原先它们在自分发渠道的 source set 里,商店渠道另有一份同名覆盖;现在只有一份包、一份文案。
          ⚠️ 正文由同意页用 stringResource 取**纯文本**渲染:`**` 会原样上屏、`<b>` 会被 aapt
          收成样式跨度后再摊平(不掉字形也不加粗)⇒ 强调只能靠措辞与标点。 -->
-    <string name="privacy_consent_asr">Offline speech-to-text. This build bundles offline speech recognition (the open-source whisper.cpp plus a bundled model). Turning an episode\'s audio into text happens <b>entirely on your device — the audio is never uploaded, never leaves the device, and never passes through any server</b>. You can turn this off in Settings.</string>
+    <string name="privacy_consent_asr">Offline speech-to-text. This build bundles offline speech recognition (the open-source sherpa-onnx runtime with the SenseVoiceSmall model). Turning an episode\'s audio into text happens <b>entirely on your device — the audio is never uploaded, never leaves the device, and never passes through any server</b>. Transcription currently supports Chinese, English, Japanese, Korean and Cantonese. You can turn this off in Settings.</string>
     <string name="set_word_highlight_sub">Light up each word as it is spoken. On-device recognition produces word timings along the way, so this costs no extra transcription time.</string>
     <string name="privacy_consent_mic">Real spectrum (optional). Turning on "Real spectrum" in Settings makes the ink wave follow the actual loudness. That needs microphone access, which the system asks for separately when you enable it; the audio is only analysed on device — never recorded, stored or sent anywhere — and is no longer used once you turn the switch off.</string>
+    <string name="privacy_consent_lan">Local network sync (optional). After you open “Local network sync” in Settings, the app advertises a service name (including this device\'s name and a short random identifier) on the same Wi-Fi and temporarily opens a TCP port; both stop when the page closes. After you tap the other device or enter its address, each device shows a six-digit pairing code, and transfer starts only when you confirm both screens match. The transfer carries the same six sections as a full backup (subscriptions, favourites, stamps, notes, history and listening stats, with stats merged per device); it excludes audio, binary caches, private-feed usernames and passwords, app settings and the play queue. Data is encrypted with keys negotiated between the two devices (ECDH P-256 and AES-256-GCM) and goes directly only between the two paired devices — never through any server, and never uploaded to the developer. Deletions are not synced: an item unsubscribed or deleted on one device comes back on the next sync if the other device still has it.</string>
     <string name="privacy_consent_update">In-app updates (optional). On launch this build asks GitHub\'s public releases endpoint (api.github.com) which version is the latest. The request carries only this app\'s own public repository address and its current version number — never an account, an identifier, your subscriptions or what you listen to. It downloads only when that answer really has a newer version, and by default only over Wi-Fi; on a metered network it asks first and starts if you agree. The system installer then takes over — this app never installs anything itself — and the "Install unknown apps" permission that step needs is requested by the system only when you choose to install.</string>
 
     <string name="update_title">New version %1$s</string>
@@ -422,7 +480,6 @@
 
     <!-- Continue-listening widget -->
     <string name="widget_name">Reverb · Continue listening</string>
-    <string name="widget_continue">CONTINUE LISTENING</string>
     <string name="widget_empty_title">Pick an episode</string>
     <string name="widget_empty_sub">Your last episode shows up here</string>
     <string name="widget_description">Shows where you left off — tap to keep listening</string>

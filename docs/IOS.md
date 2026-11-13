@@ -64,6 +64,8 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
   `build-ios.sh` 的验收段现在要求 4 套里都有这份且两个键都非空。
 - `Info.plist`:后台音频、后台刷新任务标识、出口合规声明、竖屏(iPhone)/四向(iPad)、
   离线语音识别与相册(仅添加)用途说明(简中基准;其余语种走 `InfoPlist.strings`)。
+  局域网同步另需 `NSLocalNetworkUsageDescription` 与 `NSBonjourServices`(`_reverb._tcp`);
+  首次打开该页面时由系统询问本地网络权限,**拒绝后该功能不可用**(包括手动输入地址)。
   GUID 与版本号由工程设置注入,不要手改。
 
 ---
@@ -92,6 +94,13 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
   (改字段要四端一起想;`public init()` 必须写在类型体里,见 H252)。
 - **共享数据用 App Group `group.com.yuyin.reverb`**:App 侧 `Reverb/App/WidgetBridge.swift` 写 `widget_state.json` + 压缩后的封面,
   扩展只读。两份 entitlements(`ios/Reverb.entitlements`、`ios/ReverbWidget/ReverbWidget.entitlements`)都已接入工程。
+  写盘节奏与另三端一致:播放中约 5 秒一次,一次性事件延迟 0.7 秒(等历史那条去抖写落盘),
+  内容与上次逐字节相同就跳过;`percent` 是一位小数(0.1% 步进),另有 `playing` 供按键翻面。
+- **卡片上的播放控制**:三档尺寸都带 上一集 / 播放暂停 / 下一集(iOS 17 起)。小卡把播放键压在封面上,
+  中卡控制行靠左,大卡控制行居中。按钮用 `ReverbWidgetControlIntent`(`AudioPlaybackIntent`,
+  与 macOS 共用 `macos/Sources/WidgetContract/WidgetControlIntent.swift`),动作经
+  `WidgetCommandCenter.handler` 交回 App 执行 —— **不打开界面**;未同意隐私时直接丢弃。
+  新文件同时编进 App 与扩展两个 target(pbxproj 显式引用,漏一处会编不过或运行时不响应)。
 - ⚠️ **App Group 在真机签名上要付费 Apple Developer Program 的 profile**;模拟器不校验这项 entitlement。
   2026-11-09 在 iPad Pro 13-inch (M5) 模拟器上实测(adhoc 安装、`TeamIdentifier=not set`):
   `simctl listapps` 能看到 `group.com.yuyin.reverb` 的容器映射,App 真的写出了
@@ -108,10 +117,13 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
 - **编译门已覆盖扩展**:`build-ios.sh` 现在断言 `PlugIns/ReverbWidget.appex` 存在、扩展点正确、版本/构建号与主包一致、
   4 套 `.lproj` 都能 lint 且含画廊文案(见脚本 `5b` 段)。
 
-**验收状态(2026-11-09)**:编译门 exit 0;模拟器上扩展能被系统登记,App Group 容器与
-`widget_state.json` 都真实落盘(见上一条的读数),bundle 内 appex 结构与断言一致。
-**没验过**:主屏上把卡片加出来看渲染、点卡片后播放页是否弹出(`simctl openurl` 会弹系统确认框,
-需要人点一下);真机 / TestFlight 的 App Group 受付费会员限制,签名结果未实测。
+**验收状态(2026-11-12)**:编译门 exit 0;模拟器(iPhone 17 / iOS 27.2)App Group 容器与
+`widget_state.json` 真实落盘。2026-11-12 用一条 25.1% 的历史夹具实测,文件内容为
+`percent:25.1` / `time:"4:11 / 16:41"` / `playing:false`,封面副本 `widget_art.jpg` 70,520 B;
+空态文件里没有 `label` 字段(契约已删)。Mac 13 上 `swift build --product ReverbWidget` exit 0。
+**没验过**:主屏上把卡片加出来看渲染与按控制键(本机没有 Simulator 图形界面,加卡片需要人点一下);
+点卡片后播放页是否弹出(`simctl openurl` 会弹系统确认框,需要人点一下);
+真机 / TestFlight 的 App Group 受付费会员限制,签名结果未实测。
 
 ---
 
@@ -119,8 +131,8 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
 
 | 位置 | 字段 | 当前 |
 |---|---|---|
-| `ios/Reverb.xcodeproj/project.pbxproj` | `MARKETING_VERSION` | 1.0.7 |
-| 同上 | `CURRENT_PROJECT_VERSION` | 1 |
+| `ios/Reverb.xcodeproj/project.pbxproj` | `MARKETING_VERSION` | 1.0.8 |
+| 同上 | `CURRENT_PROJECT_VERSION` | 2 |
 
 **TestFlight 每上传一次,构建号必须比上一次大**(版本名可以不变,同号会被拒)。
 改工程里的 `CURRENT_PROJECT_VERSION`,或只对这一轮覆盖:
@@ -162,8 +174,8 @@ cd ios && ./build-ios.sh
 ```bash
 cd ios
 DEVELOPMENT_TEAM=XXXXXXXXXX ./build-ios.sh --archive   # → build/Reverb.xcarchive
-DEVELOPMENT_TEAM=XXXXXXXXXX ./build-ios.sh --export    # → dist/reverb-ios-1.0.7-1.ipa
-BUILD_NUMBER=2 DEVELOPMENT_TEAM=XXXXXXXXXX \
+DEVELOPMENT_TEAM=XXXXXXXXXX ./build-ios.sh --export    # → dist/reverb-ios-1.0.8-2.ipa
+BUILD_NUMBER=3 DEVELOPMENT_TEAM=XXXXXXXXXX \
   ASC_KEY_ID=... ASC_ISSUER_ID=... ./build-ios.sh --upload
 ```
 
@@ -383,12 +395,13 @@ privacy_version -int <当前版本>` 走的是 cfprefsd,2026-11-09 实测可用(
 | 项 | 状态 |
 |---|---|
 | Debug / Release 编译 | ✅ 均 exit 0 |
-| `./build-ios.sh` 编译门 | ✅ exit 0,六条判据全过(处理量由脚本自己打印) |
+| `./build-ios.sh` 编译门 | ✅ exit 0,七条判据全过(处理量由脚本自己打印;2026-11-13 对 1.0.8 复跑仍是七条) |
 | 签名身份 | ✅ 已建 `Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`;Team = `J4YCBW8ZG7`(**免费 Personal Team**);`DEVELOPMENT_TEAM` 仍不写进工程,只走命令行 |
 | archive / export / upload | ❌ 仍未跑通。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员。**2026-11-10 试了 `--archive`**:报 `No Accounts: Add a new account in Accounts settings.` 与 `No profiles for 'com.yuyin.reverb'` —— 11-02 那份开发描述文件已于 **2026-11-09 14:57:39 UTC 到期**,而 Xcode 现在没有任何已登录账号,重签要维护者先登录(见下) |
 | iOS 模拟器运行时 | ✅ 已装 iOS 27.2;iPhone 17 模拟器上跑过(见上节) |
 | 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动。**2026-11-09**:1.0.7(1) 在机上,截图与 App 日志都取得到;但重新拉起被 `FBSOpenApplicationErrorDomain error 3` 拒(当时锁屏;免费 7 天描述文件 11-02 装、可能到期),WDA runner 仍 `host_command_failed` ⇒ 点击类验收仍缺 |
 | 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊;同日**真机**复跑:设置三段 / 追更与音阁空态 / 英文界面 / 权限说明本地化 / 后台音频 / 冷启动暂停态时长(H247);**11-08 真机**补验音阁历史多选浮条;**11-09 模拟器**补验 B 站过滤读数、直播流结果行与播放页直播态(无进度条 / 无倍速 / 上下集置灰)、直播不记历史 |
+| 局域网同步 | ◐ 三端编译门与共享层单测通过(KAT、回环握手);**2026-11-11 用探针补了跨端协议互通** —— Android 真机与 Apple 共享层双向各一次,SAS 一致、订阅导入与去重成立;当晚又用**真实 Wi-Fi** 由 Mac 直连手机(手动地址、无端口转发)跑了两轮,配对码一致、订阅导入、二次同步去重成立;**2026-11-12 补了删除墓碑**(共享层 `Sync/LanSyncTombstones.swift`,随快照传 `tombstones` 段),iOS 编译门 7 条全过、`swift test` 61 条 0 失败;**iOS 面板、mDNS 发现仍未跑**(模拟器无点击注入、真机 WDA 装不上),Apple 侧跑的是探针而不是 App 面板 |
 | 仍未验 | ◐ 订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看)、**2026-11-04 新增能力的运行侧**:后台巡检与本地通知(BGTask 需真机跨 6 小时)、通知权限拒绝分支、相册保存、邮件草稿、蜂窝闸门(要在真机上切 Wi-Fi / 蜂窝);**2026-11-09 补记**:401 弹框、朋友圈海报生成、双击回顶、追更自动回顶、继续收听卡片点开,在 iOS 上**仍没有任何运行时读数**(模拟器无点击注入、真机 WDA 装不上);直播流的 UI 已由模拟器补上,**出声**仍只有真机可证(模拟器这一轮连内置引导音频都加载失败,见 §3) |
 
 **所以 TestFlight 链接目前还不可用**:缺的是 **Apple Developer Program 会员**(现在登录的是免费
@@ -404,6 +417,14 @@ release 正文与公开仓 README 都写明了「不能直接安装」。
 **要换成能装的**:在 Xcode 里登录 Apple 账号(任一个人 Team 即可)→ 确认
 `security find-identity -v -p codesigning` 能列出开发证书 → `DEVELOPMENT_TEAM=J4YCBW8ZG7
 ./build-ios.sh --archive`,再决定是走 `--export` 还是 TestFlight。
+
+**2026-11-13 的归档包(1.0.8)**:`./build-ios.sh` 编译门 exit 0、七条判据全过;
+归档依然走不通(同一个原因:`--archive` 要签名,本机没有可用描述文件),于是照 1.0.7 的做法
+把编译产物打成 `ios/dist/reverb-ios-1.0.8-2-unsigned.ipa`(2,910,794 B,sha256 `d3f2d4c1…`)。
+**同样没有签名**(`codesign -dv` 报 `code object is not signed at all`,包内也没有
+`embedded.mobileprovision`),装不上真机,只用于归档与结构校验 —— 解包核过:1.0.8(2) / arm64 /
+4 套 `.lproj` / `UIBackgroundModes` 含 audio / `ReverbWidget.appex` 在位。
+**要换成能装的**,步骤同上(先让 Xcode 登录账号)。
 
 ---
 

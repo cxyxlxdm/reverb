@@ -2,6 +2,7 @@ package com.yuyin.reverb.data.local
 
 import android.content.Context
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.sync.SyncTombstones
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
@@ -28,6 +29,9 @@ class FavoriteStore(context: Context) {
             _favorites.value = current
             persist(current)
             com.yuyin.reverb.util.Logger.i("FavStore", "${if (removed) "remove" else "add"} id=${episode.id} total=${current.size}")
+            // 与订阅同一条:取消收藏记墓碑,重新收藏清墓碑(见 SyncTombstones)。
+            if (removed) SyncTombstones.record(SyncTombstones.FAVORITES, episode.id)
+            else SyncTombstones.clear(SyncTombstones.FAVORITES, episode.id)
         }
     }
 
@@ -38,6 +42,8 @@ class FavoriteStore(context: Context) {
             for (e in episodes) if (current.none { it.id == e.id }) current.add(e)
             _favorites.value = current
             persist(current)
+            // 恢复/同步并入 = 重新收藏,清掉墓碑(理由同 SubscriptionStore.addAll)。
+            episodes.forEach { SyncTombstones.clear(SyncTombstones.FAVORITES, it.id) }
         }
     }
 

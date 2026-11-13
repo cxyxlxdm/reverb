@@ -13,6 +13,7 @@ import { DiscoverPage } from '../view/DiscoverPage';
 import { FeedPage } from '../view/FeedPage';
 import { PodcastDetailPage } from '../view/PodcastDetailPage';
 import { NoteStore, EpisodeNote } from '../store/NoteStore';
+import { ChapterStore } from '../store/ChapterStore';
 import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
 import {
@@ -71,6 +72,8 @@ struct Index {
   /// 批注(音阁第 6 段的数据源)。必须是 @State:它在 播放页写、音阁列表读,
   /// 裸对象赋值观察不到(H27)。
   @State notes: NoteStore = AppContainer.get().notes;
+  /// 章节表状态机(播放页 @ObjectLink 观察;仓库里 store 一律按这个形状下发,见上面 H26/H27)
+  @State chapters: ChapterStore = AppContainer.get().chapters;
   @State listenStats: ListenStatsStore = AppContainer.get().listenStats;
   @State downloadManager: DownloadManager = AppContainer.get().downloadManager;
   @State radio: RadioStation = AppContainer.get().radio;
@@ -128,6 +131,25 @@ struct Index {
    * 冷启动时 onCreate 早于本页构建,@StorageLink 的初值就是那一格;热启动则靠 @Watch。
    */
   @StorageLink(WidgetRoute.OPEN_PLAYER) @Watch('onWidgetOpenPlayer') widgetOpen: number = 0;
+  /**
+   * 从卡片进播放页的途中**盖住首页**。
+   *
+   * 卡片点的是"打开播放页",用户要看到的第一帧就该是播放页。而 `Navigation` 的
+   * `pushPathByName` 在 `aboutToAppear` 里(组件树还没挂出来)会被丢掉,只能等一小会儿;
+   * 这一小会儿里首页已经画出来了 —— 冷启动的观感就是"先进首页,再跳播放页"(2026-11-12 用户报)。
+   * 盖一层与页面同色的底 + 无动画 push,把这段路程藏掉;见 [openPlayerIfRequested]。
+   */
+  @State private widgetBootCover: boolean = false;
+  /** 卡片意图已接住、正在等会话态(见 [waitPlayerThenOpen])。普通字段即可,不进渲染。 */
+  private widgetOpenPending: boolean = false;
+  /**
+   * 播放页是不是**从服务卡片**推进来的。决定返回键的语义:
+   * 卡片是"直接看这一集",它下面没有用户建的页面栈 —— 返回就该退出 App,
+   * 而不是先退到首页再让用户按第二次(2026-11-12 用户报)。
+   * 应用内展开(迷你条 / 播放批注)不置这一位,照旧 pop 回首页。
+   * 普通字段:只影响回调里的分支,不参与渲染。
+   */
+  private playerFromWidget: boolean = false;
   @State stack: NavPathStack = new NavPathStack();
   /// 当前要展示的频道(进详情页前设置;ArkTS 的 NavPathStack 传参用 param,这里用状态更直观)
   @State detailSeed: Podcast = emptyPodcast();
@@ -250,12 +272,87 @@ struct Index {
    * 延迟 100ms 是给 `Navigation` 的:冷启动时本方法跑在 `aboutToAppear` 里,
    * 此刻组件树还没挂出来,直接 `pushPathByName` 会被丢掉。
    * 没有在播的集(空态卡片)就留在首页 —— 空卡本来就不该把人带进一个空播放页。
+   *
+   * **两处让"直接进播放页"成立**(2026-11-12 用户报"先进首页,再跳播放详情页"):
+   *  - `widgetBootCover`:首页那一帧整层盖住。不盖的话,100ms 的等待期里首页已经画出来了;
+   *  - `pushPathByName(..., false)`:不带动画。带转场时首页会在下层滑走,一眼就看出"先有首页"。
+   * 盖层在 push 之后再多留 320ms:让播放页完成首次布局再揭开,避免露出中间那一帧。
+   * 盖层与页面同色,`HitTestMode.Block` 顺手吃掉这段时间里的点击(下面什么都没有,不该可点)。
    */
   private openPlayerIfRequested(): void {
-    if (this.widgetOpen <= 0) return;
+    if (this.widgetOpen <= 0 || this.widgetOpenPending) return;
+    const recoverable = AppContainer.get().playbackState.snapshot.current !== null;
+    // 空态卡片(没有可继续的内容):留在首页。与旧注释同一口径 —— 空卡不该让人进一个空播放页。
+    if (this.player.current === null && !recoverable) {
+      Log.i('UI', '卡片要求进播放页,但没有可恢复的会话,留在首页');
+      this.widgetOpen = 0;
+      return;
+    }
+    // 消费掉这一格:换语言会重建这棵 `@Entry` 树,新树 `aboutToAppear` 不该再跳一次。
     this.widgetOpen = 0;
-    if (this.player.current === null) return;
-    setTimeout(() => { this.stack.pushPathByName('player', null); }, 100);
+    this.widgetOpenPending = true;
+    this.widgetBootCover = true;
+    Log.i('UI', `卡片要求进播放页 cur=${this.player.current === null ? '恢复中' : '已就绪'}`);
+    this.waitPlayerThenOpen(0);
+  }
+
+  /**
+   * 等会话态真的落到 `player.current` 再进播放页。
+   *
+   * 冷启动实测(2026-11-12):`restoreFromState` 的日志已经打出来,`current` 却还是 null ——
+   * `startEpisode` 是走 Promise 链的异步装载,赋值在它里面。此时若照着 `current === null`
+   * 直接 return,卡片点开的意图就被静默吞掉,只能停在首页(用户看到的"先进首页")。
+   * 判据要用**盘上有没有可恢复的会话**(`playbackState.snapshot.current`)而不是内存里的 current。
+   * 3 秒等不到就认作没有会话:揭开盖层,留在首页。
+   */
+  private waitPlayerThenOpen(tries: number): void {
+    if (this.player.current === null) {
+      if (tries >= 30) {
+        this.widgetOpenPending = false;
+        this.widgetBootCover = false;
+        Log.w('UI', '卡片要求进播放页,等待会话态超时');
+        return;
+      }
+      setTimeout(() => this.waitPlayerThenOpen(tries + 1), 100);
+      return;
+    }
+    this.widgetOpenPending = false;
+    setTimeout(() => {
+      this.playerFromWidget = true;
+      /**
+       * 播放页已经在栈顶(卡片被重复点、或用户先按迷你条展开又点了卡片):
+       * 再 push 一层就是两个一模一样的播放页,返回还得先退掉一层。
+       * 这里只把"从卡片来"的语义补上,不动栈。
+       */
+      const names = this.stack.getAllPathName();
+      if (names.length > 0 && names[names.length - 1] === 'player') {
+        Log.i('UI', '卡片要求进播放页,但播放页已在栈顶,不重复入栈');
+        this.widgetBootCover = false;
+        return;
+      }
+      this.stack.pushPathByName('player', null, false);
+      Log.i('UI', `卡片进播放页 push 完成 size=${this.stack.size()}`);
+      setTimeout(() => { this.widgetBootCover = false; }, 320);
+    }, 100);
+  }
+
+  /**
+   * 收起播放页。**从卡片进来的那一次是退出 App**。
+   *
+   * 为什么不是"pop 到首页再退":卡片点开时首页只是被压在下面的一层壳,用户从没经过它;
+   * 第一次返回退到首页,第二次才退出去,读起来像"返回键不灵"(2026-11-12 用户报)。
+   *
+   * 但只在播放页是**唯一一层**时才退出:用户若从频道详情里点卡片(热启动,栈上已有页面),
+   * 返回应该退回那个页面 —— 把别人的页面栈一起丢掉是另一种"返回错"。
+   */
+  private closePlayer(): void {
+    const fromWidget = this.playerFromWidget;
+    this.playerFromWidget = false;
+    if (fromWidget && this.stack.size() <= 1) {
+      this.exitApp();
+      return;
+    }
+    this.stack.pop();
   }
 
   /// 读状态栏/手势导航条避让高度与**窗口宽**(px→vp)。窗口设了全屏布局,故需自行避让;
@@ -448,6 +545,16 @@ struct Index {
           .width('100%')
           .height('100%')
           .hitTestBehavior(HitTestMode.None)
+
+        // 从卡片进来时盖住首页那一帧(理由见 [openPlayerIfRequested])。同色、不透明、
+        // 吃事件;正常使用时 `widgetBootCover` 恒为 false,这一层不产生任何节点外的效果。
+        if (this.widgetBootCover) {
+          Row()
+            .width('100%')
+            .height('100%')
+            .backgroundColor(this.scheme().background)
+            .hitTestBehavior(HitTestMode.Block)
+        }
       }
       .width('100%')
       .height('100%')
@@ -508,12 +615,23 @@ struct Index {
           favorites: this.favorites,
           stamps: this.stamps,
           settings: this.settings,
-          onBack: () => { this.stack.pop(); },
+          chapters: this.chapters,
+          onBack: () => { this.closePlayer(); },
           onOpenQueue: () => { this.stack.pushPathByName('queue', null); },
           onOpenPodcast: (feedUrl: string) => { this.openPodcastByFeed(feedUrl); }
         })
       }
       .hideTitleBar(true)
+      /**
+       * 系统返回(手势 / 返回键)也要走同一扇门。默认行为是把这一层 NavDestination
+       * pop 掉 —— 卡片进来的那一次于是先回到首页,用户要按第二次才退出。
+       * 返回 true = 已处理,不要再做默认 pop。
+       */
+      .onBackPressed(() => {
+        if (!this.playerFromWidget) return false;
+        this.closePlayer();
+        return true;
+      })
       .padding({ top: this.topInset, bottom: this.bottomInset })
       .backgroundColor(this.scheme().background)
     }

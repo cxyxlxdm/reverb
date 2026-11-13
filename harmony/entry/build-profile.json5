@@ -1,13 +1,19 @@
 {
   "apiType": "stageMode",
   "buildOption": {
-    // native 模块:给系统语音识别喂 PCM 的音频解码器。
+    // native 模块:给语音识别喂 PCM 的音频解码器。
     // 只出 arm64-v8a —— 鸿蒙手机与平板都是 arm64,给 32 位是白增包体。
     "externalNativeOptions": {
       "path": "./src/main/cpp/CMakeLists.txt",
       "arguments": "",
       "cppFlags": "",
       "abiFilters": ["arm64-v8a"]
+    },
+    "sourceOption": {
+      // 离线识别在 Worker 子线程里跑。sherpa 的 decode 是**同步阻塞**的 native 调用,
+      // 放在 UI 线程上一块 26 秒音频就要卡住界面几秒。Worker 不是普通源码:
+      // 它要被单独编译打包,不列在这里的话 `new ThreadWorker(路径)` 会报 10200007。
+      "workers": ["./src/main/ets/playback/asr/AsrWorker.ets"]
     }
   },
   "buildOptionSet": [

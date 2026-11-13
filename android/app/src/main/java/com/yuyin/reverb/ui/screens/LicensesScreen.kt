@@ -26,8 +26,9 @@ private data class Lib(val name: String, val license: String)
  *
  * **哪些留字面量、哪些进资源**,判据是「换语种要不要变」:
  * `Jetpack Compose` / `OkHttp` / `Coil` 这类是**专有名词**,五套界面同形,搬进资源只是让
- * 五个文件各抄一遍;而 `whisper.cpp(离线语音识别)` 的括号里是一句**说明**,
- * 法/西/英用户看到的就该是当地语言(2026-10-08 真机 fr/es 通读实测:这两行在法西界面上仍是中文)。
+ * 五个文件各抄一遍;而 `sherpa-onnx(离线语音识别框架)` 的括号里是一句**说明**,
+ * 法/西/英用户看到的就该是当地语言(2026-10-08 真机 fr/es 通读实测:当时那两行仍是中文,
+ * 1.0.8 换引擎后新增的三条同样按这个口径走资源)。
  *
  * 那两条的资源键原先在 `src/main/res/` 里定义、`src/store/res/` 里覆盖成**空串**:
  * 商店渠道不展示它们(下面 `HAS_ENGINE` 那支已被 R8 删掉),但**资源不跟着删**,
@@ -43,13 +44,17 @@ private fun libs(): List<Lib> = listOfNotNull(
     Lib("Coil", "Apache License 2.0"),
     Lib("Kotlin Coroutines", "Apache License 2.0"),
     Lib("AndroidX WorkManager", "Apache License 2.0"),
-    // 离线语音识别的引擎与模型随包分发,所以要登记这两条开源组件。
+    // 离线语音识别的框架与模型随包分发,所以要登记这三条开源组件(1.0.8 起从
+    // whisper.cpp 换成 sherpa-onnx + SenseVoice;Apache-2.0 / MIT / FunASR 模型许可)。
     // 门控留在 `HAS_ENGINE` 上:合并前它是商店渠道的「包里压根没有引擎」判据
     // (那一支连 .so 和模型都没有,列上去就是不实陈述);现在它是降级备用闸。
     // `HAS_ENGINE` 是编译期常量,R8 会把另一支的**代码**删掉,而资源那半原先靠 store
     // source set 覆盖空串 —— 与鸿蒙相反,那边没有 DCE(H54)。见 H205。
-    if (AsrFactory.HAS_ENGINE) Lib(stringResource(R.string.lic_whisper), "MIT License") else null,
-    if (AsrFactory.HAS_ENGINE) Lib(stringResource(R.string.lic_whisper_model), "MIT License") else null
+    if (AsrFactory.HAS_ENGINE) Lib(stringResource(R.string.lic_sherpa), "Apache License 2.0") else null,
+    if (AsrFactory.HAS_ENGINE) Lib(stringResource(R.string.lic_onnxruntime), "MIT License") else null,
+    if (AsrFactory.HAS_ENGINE) {
+        Lib(stringResource(R.string.lic_sensevoice), "FunASR Model Open Source License 1.1")
+    } else null
 )
 
 /**

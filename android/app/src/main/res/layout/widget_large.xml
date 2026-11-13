@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- 4×4 / 2×4:纵向大卡,封面吃掉剩余高度。三档布局共用同一组 id。 -->
+<!-- 4×4 / 2×4:纵向大卡,封面吃掉剩余高度。四档布局共用同一组 id。
+     三颗键居中当一条 transport —— 这一档封面是主视觉,键与它同宽居中
+     (与鸿蒙 posterLayout 的 controlRow(28, Center) 同一排法)。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_root"
@@ -19,22 +21,10 @@
         tools:src="@mipmap/ic_launcher" />
 
     <TextView
-        android:id="@+id/widget_label"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:ellipsize="end"
-        android:letterSpacing="0.08"
-        android:maxLines="1"
-        android:textColor="@color/widget_accent"
-        android:textSize="10sp"
-        tools:text="继续收听" />
-
-    <TextView
         android:id="@+id/widget_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="3dp"
+        android:layout_marginTop="12dp"
         android:ellipsize="end"
         android:maxLines="2"
         android:textColor="@color/widget_text"
@@ -53,12 +43,57 @@
         android:textSize="12sp"
         tools:text="声动早咖啡" />
 
+    <!-- 图标 28、点击区 42×38,与鸿蒙 4×4 的 symbolButton 同一档;间距 12dp 比那档的 16 略紧,
+         因为 Android 的卡片内边距已经是 16。 -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center_horizontal|center_vertical"
+        android:orientation="horizontal">
+
+        <ImageButton
+            android:id="@+id/widget_prev"
+            android:layout_width="42dp"
+            android:layout_height="38dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/a11y_prev"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/widget_ic_prev"
+            android:tint="@color/widget_text" />
+
+        <ImageButton
+            android:id="@+id/widget_toggle"
+            android:layout_width="42dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="12dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/a11y_play"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/widget_ic_play"
+            android:tint="@color/widget_text" />
+
+        <ImageButton
+            android:id="@+id/widget_next"
+            android:layout_width="42dp"
+            android:layout_height="38dp"
+            android:layout_marginStart="12dp"
+            android:background="@android:color/transparent"
+            android:contentDescription="@string/a11y_next"
+            android:padding="5dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/widget_ic_next"
+            android:tint="@color/widget_text" />
+    </LinearLayout>
+
     <ProgressBar
         android:id="@+id/widget_progress"
         style="?android:attr/progressBarStyleHorizontal"
         android:layout_width="match_parent"
         android:layout_height="4dp"
-        android:layout_marginTop="10dp"
+        android:layout_marginTop="6dp"
         android:max="1000"
         android:progress="0"
         android:progressBackgroundTint="@color/widget_track"

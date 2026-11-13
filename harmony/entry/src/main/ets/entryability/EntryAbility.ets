@@ -1,14 +1,29 @@
 import UIAbility from '@ohos.app.ability.UIAbility';
 import window from '@ohos.window';
+import rpc from '@ohos.rpc';
 import type AbilityConstant from '@ohos.app.ability.AbilityConstant';
 import type { Configuration } from '@ohos.app.ability.Configuration';
 import type Want from '@ohos.app.ability.Want';
 import ConfigurationConstant from '@ohos.app.ability.ConfigurationConstant';
 import { SettingsStore } from '../store/SettingsStore';
 import { JsonFile } from '../store/JsonFile';
+import { AppContainer } from '../AppContainer';
 import { Theme } from '../theme/Theme';
 import { WidgetRoute } from '../widget/WidgetRoute';
+import { WidgetFormData } from '../widget/WidgetFormData';
 import { Log } from '../util/Logger';
+
+/**
+ * 卡片 call 事件的回包。
+ *
+ * SDK 把 `callee.on` 的回调签名定成"收 MessageSequence、回 **Parcelable**"(不是回
+ * MessageSequence —— 直接回它编译期就报 `missing marshalling/unmarshalling`)。卡片侧不读回包,
+ * 所以这里是一个空壳:方法都返回 true,不带任何字段。
+ */
+class WidgetCallResult implements rpc.Parcelable {
+  marshalling(_dataOut: rpc.MessageSequence): boolean { return true; }
+  unmarshalling(_dataIn: rpc.MessageSequence): boolean { return true; }
+}
 
 /// 入口 Ability。负责建窗、铺满全屏(内容自行避让状态栏),并把 context 交给存储层。
 export default class EntryAbility extends UIAbility {
@@ -17,6 +32,7 @@ export default class EntryAbility extends UIAbility {
   onCreate(want: Want, _launchParam: AbilityConstant.LaunchParam): void {
     Log.i('App', '启动 余音 Reverb(鸿蒙端)');
     this.handleWidgetWant(want);
+    this.registerWidgetActions();
   }
 
   /**
@@ -42,6 +58,84 @@ export default class EntryAbility extends UIAbility {
     const cur = AppStorage.get<number>(WidgetRoute.OPEN_PLAYER);
     AppStorage.setOrCreate(WidgetRoute.OPEN_PLAYER, (cur === undefined ? 0 : cur) + 1);
     Log.i('App', '服务卡片要求打开播放页');
+  }
+
+  /**
+   * 卡片上三颗播放键的入口。
+   *
+   * 卡片侧是 `postCardAction({action:'call', abilityName:'EntryAbility', params:{method:'widgetToggle'}})`,
+   * 系统把本 Ability **在后台拉起**(不弹界面)再把消息投给这里注册的回调 —— 所以
+   * 「点卡片上的播放键」与「点卡片进播放页」是两条路:前者只动播放态,后者才换界面。
+   *
+   * 回调必须返回一个 `MessageSequence`:这是 call 事件的协议要求,返回 undefined 时
+   * 系统侧会报错,而卡片上看到的现象是"点了没反应"(与 `WidgetRoute` 里名字写错一样难查)。
+   *
+   * 注册只做一次(onCreate),方法名与 `WidgetRoute.ACTION_*` 逐字一致。
+   */
+  private registerWidgetActions(): void {
+    this.callee.on(WidgetRoute.ACTION_TOGGLE, (_data: rpc.MessageSequence) => {
+      this.runWidgetAction(WidgetRoute.ACTION_TOGGLE);
+      return new WidgetCallResult();
+    });
+    this.callee.on(WidgetRoute.ACTION_PREV, (_data: rpc.MessageSequence) => {
+      this.runWidgetAction(WidgetRoute.ACTION_PREV);
+      return new WidgetCallResult();
+    });
+    this.callee.on(WidgetRoute.ACTION_NEXT, (_data: rpc.MessageSequence) => {
+      this.runWidgetAction(WidgetRoute.ACTION_NEXT);
+      return new WidgetCallResult();
+    });
+  }
+
+  /**
+   * 把卡片那一下点击交给播放器。
+   *
+   * `boot` 是幂等的:界面已经在跑时它什么都不做;冷启动时它只做本地读盘(不联网),
+   * 联网相关装配由 `startGated` 自己按"是否已同意隐私"决定 —— 所以这里不需要再判权限,
+   * 只需要在未同意时放弃动作(那时本来也没有可播的内容)。
+   */
+  private runWidgetAction(action: string): void {
+    const box = AppContainer.get();
+    box.boot(this.context);
+    if (!box.settings.privacyAccepted) {
+      Log.w('Widget', `卡片动作 ${action} 忽略:还没同意隐私政策`);
+      return;
+    }
+    const waitSession = box.playbackState.snapshot.current !== null;
+    this.actWhenReady(action, waitSession, 0);
+  }
+
+  /**
+   * 等播放器把上次那一集装载出来再动手。
+   *
+   * 为什么要等:冷启动的恢复是**只预载不出声**,而 `current` 要等直链解析完才落下来
+   * (见 `PlayerController.commitAndPlay`)。这段窗口里按 toggle 会把"想播"的意图写在
+   * `startEpisode` 之前,随后被它按 autoplay=false 覆盖掉 —— 表现就是"点了播放没反应"。
+   * 有会话态就等它(最多 10 秒,覆盖网络取流);没有会话态(卡片显示的是历史里的
+   * 「继续收听」)则直接把那一集交给 `play(e)`,不能让它变成一下点空的按钮。
+   */
+  private actWhenReady(action: string, waitSession: boolean, attempt: number): void {
+    const player = AppContainer.get().player;
+    if (player.current === null && waitSession && attempt < 20) {
+      setTimeout(() => this.actWhenReady(action, waitSession, attempt + 1), 500);
+      return;
+    }
+    if (player.current === null) {
+      const e = WidgetFormData.continueEpisode();
+      if (e === null) {
+        Log.w('Widget', `卡片动作 ${action} 放弃:没有可播的那一集`);
+        return;
+      }
+      player.play(e);
+      Log.i('Widget', `卡片动作 ${action} → 从历史起播 id=${e.id}`);
+      return;
+    }
+    if (action === WidgetRoute.ACTION_TOGGLE) player.togglePlayPause();
+    else if (action === WidgetRoute.ACTION_PREV) player.previous();
+    else if (action === WidgetRoute.ACTION_NEXT) player.next();
+    // 只记"已经交给播放器":toggle 之后 isPlaying 还没翻(`isPlaying` 是异步状态回调写的),
+    // 在这行打印它会恒定落后一拍,读日志的人会以为开关没生效。
+    Log.i('Widget', `卡片动作 ${action} → 已交给播放器`);
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {

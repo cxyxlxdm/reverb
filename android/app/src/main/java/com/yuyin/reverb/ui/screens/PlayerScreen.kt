@@ -35,18 +35,22 @@ import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,6 +71,7 @@ import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.data.local.ChapterStore
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.playback.asr.AsrFactory
 import com.yuyin.reverb.ui.components.Artwork
@@ -78,7 +83,7 @@ import com.yuyin.reverb.ui.share.rememberImageSaver
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpenQueue: () -> Unit = {}) {
     val current by PlayerController.current.collectAsStateWithLifecycle()
@@ -145,6 +150,19 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
 
     var dragging by remember { mutableStateOf(false) }
     var dragValue by remember { mutableStateOf(0f) }
+    /**
+     * 章节(podcast:chapters)。只有发布方给了章表才出现入口 —— 这一集没有章节时
+     * 不摆一个点进去空着的按钮(与逐字稿"没稿就不出第三页"同一条口径)。
+     *
+     * 弹层里的列表只在用户点开时才取(见 `ChapterStore.load`),所以这里挂一次
+     * `prepare` 把上一集的章表清掉即可;否则自动续播到下一集时,弹层一开先闪上一集的章。
+     */
+    var chapterSheetOpen by remember { mutableStateOf(false) }
+    val chapterState by container.chapterStore.state.collectAsStateWithLifecycle()
+    LaunchedEffect(episode.id) { container.chapterStore.prepare(episode) }
+    val chapters = (chapterState as? ChapterStore.State.Done)?.chapters.orEmpty()
+    // 当前章:与逐字稿同一条「从后往前找第一个 startMs <= now」。章表已在解析侧保证单调
+    val currentChapter = chapters.indexOfLast { it.startMs <= position }
     val sliderValue = if (dragging) dragValue else position.toFloat()
     val maxValue = if (duration > 0) duration.toFloat() else 1f
     /**
@@ -344,7 +362,30 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
             )
         }
 
-        Spacer(Modifier.height(20.dp))
+        /**
+         * 章节入口(只在发布方给了章表时出现;直播没有时间轴,自然也没有章节)。
+         *
+         * 显示**当前章标题**而不是"章节"两个字:它在播放时本身就是有用的信息,
+         * 也让"点这里能跳章"这件事看得出来(主色可点样式)。
+         */
+        val showChapters = !liveNoTimeline && episode.chaptersUrl.isNotBlank()
+        if (showChapters) {
+            Spacer(Modifier.height(4.dp))
+            TextButton(
+                onClick = { chapterSheetOpen = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = chapters.getOrNull(currentChapter)?.title
+                        ?: stringResource(R.string.player_chapters),
+                    style = MaterialTheme.typography.labelLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+
+        Spacer(Modifier.height(if (showChapters) 4.dp else 20.dp))
         if (liveNoTimeline) {
             // 直播没有「听到哪了」:一行 LIVE 替掉进度条与两端时间,高度与那两块相当,版面不跳
             Row(
@@ -433,6 +474,19 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
         }
     }
 
+    if (chapterSheetOpen) {
+        ChapterSheet(
+            episode = episode,
+            store = container.chapterStore,
+            positionMs = position,
+            onSeek = { ms ->
+                PlayerController.seekTo(ms.toLong())
+                chapterSheetOpen = false
+            },
+            onDismiss = { chapterSheetOpen = false }
+        )
+    }
+
     if (sealDialogOpen) {
         SealDialog(
             current = currentSeal,
@@ -457,6 +511,89 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
             },
             onDismiss = { noteDialogOpen = false }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ChapterSheet(
+    episode: Episode,
+    store: ChapterStore,
+    positionMs: Long,
+    onSeek: (Int) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        val state by store.state.collectAsStateWithLifecycle()
+        // 点开就取。缓存在 store 里,反复开合不会重复下载
+        LaunchedEffect(episode.id) { store.load(episode) }
+
+        Text(
+            stringResource(R.string.player_chapters),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        when (val s = state) {
+            ChapterStore.State.Idle, ChapterStore.State.Loading -> Box(
+                Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
+                contentAlignment = Alignment.Center
+            ) { CircularProgressIndicator() }
+
+            ChapterStore.State.Empty -> Text(
+                stringResource(R.string.chapters_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 24.dp)
+            )
+
+            // 失败态给的是**再点一次**,不是一个空列表 —— 网络抖一下不该让这一集"没有章节"
+            ChapterStore.State.Failed -> TextButton(
+                onClick = { store.load(episode) },
+                modifier = Modifier.padding(horizontal = 12.dp)
+            ) { Text(stringResource(R.string.chapters_failed)) }
+
+            is ChapterStore.State.Done -> {
+                val chapters = s.chapters
+                val current = chapters.indexOfLast { it.startMs <= positionMs }
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    chapters.forEachIndexed { index, c ->
+                        val active = index == current
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onSeek(c.startMs) }
+                                .padding(horizontal = 24.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                formatTime(c.startMs.toLong()),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (active) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(52.dp)
+                            )
+                            Text(
+                                c.title,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = if (active) FontWeight.SemiBold else null,
+                                color = if (active) MaterialTheme.colorScheme.primary
+                                else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(24.dp))
+                }
+            }
+        }
     }
 }
 

@@ -12,7 +12,6 @@ import { L } from '../util/L';
  * 症状是"卡片一片空、但数据其实送出去了"。
  */
 export class ConfigKeys {
-  static readonly LABEL = 'label';
   static readonly TITLE = 'title';
   static readonly PODCAST = 'podcast';
   static readonly TIME = 'time';
@@ -21,9 +20,19 @@ export class ConfigKeys {
   static readonly EMPTY = 'empty';
   static readonly DIM = 'dim';
   static readonly DARK = 'dark';
-  /** 封面:值是 formImages 里的键(`art`);没有本地封面时是空串,卡片退回应用图标。 */
+  /**
+   * 封面:值是 `memory://<图片键>`,那个键同时出现在 `formImages` 里;没有本地封面时是空串,
+   * 卡片退回应用图标。
+   *
+   * ⚠️ **必须是 `memory://` 前缀;键在封面变化时更换,同一张要复用**(见 H266、H267)。
+   * 早先这里直接送键名(`art`),卡片画的是 `Image('art')` —— 一个不存在的资源路径,
+   * 表现就是"卡片永远没有封面";而键不变时系统会复用上一张,换了集也看不出变化。
+   * 反过来的坑是**每次更新都换键**:5 秒一推、每按一次键也推,封面就被反复重新解码,
+   * 视觉上像整张卡片闪一下(用户报的"点播放整个组件都在动")。
+   */
   static readonly ART = 'art';
-  static readonly ART_KEY = 'art';
+  /** 此刻是不是在播(卡片据此画播放/暂停键)。见 `WidgetRuntime`。 */
+  static readonly PLAYING = 'playing';
 }
 
 /**
@@ -47,17 +56,23 @@ export class WidgetSnapshot {
     return !this.live && this.durationMs > 0;
   }
 
-  /// 0..100,与进度条直接对齐(Android 那边用 0..1000 给 ProgressBar,这里没有必要)。
+  /**
+   * 0..100,**保留一位小数**。
+   *
+   * 早先是 `Math.round(...)` 的整数百分比,而卡片上的条宽就是 `${percent}%` ——
+   * 一集 80 分钟的节目 1% ≈ 48 秒,于是「播放中进度条几分钟不动」,被当成"进度不跟播放走"
+   * (2026-11-12 用户报告)。带上一位小数之后,5 秒一跳是 0.1%~0.2% 的步进,条能看出在走。
+   * 与 Android 的 0..1000 是同一个取整思路,只是这边直接送百分比。
+   */
   percent(): number {
     if (this.durationMs <= 0) return 0;
-    const p = Math.round(this.positionMs * 100 / this.durationMs);
+    const p = Math.round(this.positionMs * 1000 / this.durationMs) / 10;
     return Math.max(0, Math.min(100, p));
   }
 }
 
 /// 卡片一屏要用的全部字段;`dark` 与 `dim` 是排版本体的输入,不是内容。
 export class WidgetFormFields {
-  label: string = '';
   title: string = '';
   podcast: string = '';
   time: string = '';
@@ -86,6 +101,30 @@ export class WidgetFormData {
       if (h.played || h.durationMs <= 0) continue;
       if (h.positionMs < 10000 || h.positionMs > h.durationMs * 0.95) continue;
       return WidgetFormData.pick(h.episode, h.positionMs, h.durationMs);
+    }
+    return null;
+  }
+
+  /**
+   * 卡片上那几颗播放键在**冷启动**时要交给播放器的那一集。
+   *
+   * 与 `read()` 的取值顺序一致,只是这里要的是完整 `Episode` —— 播放器唯一的公开入口
+   * `PlayerController.play(e)` 收的是它,而不是快照。返回 null = 确实没有可播的
+   * (卡片这时是空态,播放键根本没画出来)。
+   *
+   * 为什么不能只靠 `playbackState.current`:那份快照只在"播放过的会话"里才有;
+   * 用户上一次只听到一半就退出、会话态被清掉的情形,卡片显示的是历史里那条
+   * 「继续收听」—— 那颗键点下去必须能播,否则就是"看着能点、点了没反应"。
+   */
+  static continueEpisode(): Episode | null {
+    const snap = PlaybackStateStore.readFromDisk();
+    if (snap.current !== null) return snap.current;
+    const history = WidgetFormData.readHistory();
+    for (let i = 0; i < history.length; i++) {
+      const h = history[i];
+      if (h.played || h.durationMs <= 0) continue;
+      if (h.positionMs < 10000 || h.positionMs > h.durationMs * 0.95) continue;
+      return h.episode;
     }
     return null;
   }
@@ -138,7 +177,6 @@ export class WidgetFormData {
     const f = new WidgetFormFields();
     f.dim = dim;
     f.dark = dark;
-    f.label = L.s('widget_continue');
     if (snap === null) {
       f.empty = true;
       f.title = L.s('widget_empty_title');
@@ -169,7 +207,8 @@ export class WidgetFormData {
 class HistoryRow {
   episode: Episode = {
     id: '', title: '', description: '', audioUrl: '', artworkUrl: '', podcastTitle: '',
-    durationSec: 0, pubDate: '', feedUrl: '', transcriptUrl: '', transcriptType: ''
+    durationSec: 0, pubDate: '', feedUrl: '', transcriptUrl: '', transcriptType: '',
+    chaptersUrl: '', chaptersType: ''
   };
   positionMs: number = 0;
   durationMs: number = 0;

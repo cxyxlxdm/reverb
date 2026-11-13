@@ -2,7 +2,8 @@
 <!-- 2×2 竖高变体(这台桌面实测 130×206dp):海报铺上半张、文字压在下面。
      与 widget_small 的区别只在排法 —— 同一个 2×2 在别的桌面上可能是正方形或宽扁的,
      那时 widget_small 的「左封面 + 右文字」更合适,所以由 Provider 按宽高比挑,不靠本文件自适应。
-     层级只用 LinearLayout / FrameLayout(见 widget_medium 头注):RemoteViews 不允许 android.widget.Space。 -->
+     层级只用 LinearLayout / FrameLayout(见 widget_medium 头注):RemoteViews 不允许 android.widget.Space。
+     播放键压在海报右下角,这一档同样没有额外一行摆三颗键。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_root"
@@ -13,31 +14,38 @@
     android:padding="12dp">
 
     <!-- 海报吃掉剩余高度:竖高的格子里它是主角,固定尺寸会在上下各留一大块空白。 -->
-    <ImageView
-        android:id="@+id/widget_art"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1"
-        android:contentDescription="@null"
-        android:scaleType="centerCrop"
-        tools:src="@mipmap/ic_launcher" />
+        android:layout_weight="1">
 
-    <TextView
-        android:id="@+id/widget_label"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:ellipsize="end"
-        android:letterSpacing="0.08"
-        android:maxLines="1"
-        android:textColor="@color/widget_accent"
-        android:textSize="9sp"
-        tools:text="继续收听" />
+        <ImageView
+            android:id="@+id/widget_art"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            tools:src="@mipmap/ic_launcher" />
+
+        <ImageButton
+            android:id="@+id/widget_toggle"
+            android:layout_width="30dp"
+            android:layout_height="30dp"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="8dp"
+            android:background="@drawable/widget_control_bg"
+            android:contentDescription="@string/a11y_play"
+            android:padding="6dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/widget_ic_play"
+            android:tint="@color/widget_on_accent" />
+    </FrameLayout>
 
     <TextView
         android:id="@+id/widget_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
         android:ellipsize="end"
         android:maxLines="2"
         android:textColor="@color/widget_text"
