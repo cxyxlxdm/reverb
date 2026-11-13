@@ -13776,3 +13776,52 @@ Android 同场景输入后立刻变亮可点。这不是渲染慢 —— 等十�
    密钥要一次性 —— 把两者塞进同一个对象,迟早有人顺手拿来复用。
 ④ **前向保密不是 ECDH 自带的属性。** ECDH 用长期钥就退化成静态 DH:泄漏一次密钥,
    历史会话全部可解,配对码也失去"这次是新的"的含义。
+
+### H279. 鸿蒙同步面板「行距太挤、完成态标题居中」+ Android「关闭」是主色而鸿蒙是灰
+
+**现象(用户,2026-11-13 装机对比两端)**。同一块「局域网同步」面板:
+① 鸿蒙那几行字挤成一团,行与行之间几乎没有缝;
+② 「同步完成 / 核对配对码 / 同步失败」这些标题**独自居中**,而正文、按钮都靠左,看着不协调;
+③ Android 的「关闭」是主色(青/蓝),鸿蒙是灰。
+安卓与 macOS 本来就是整块左对齐,所以这两条都是鸿蒙独有;③ 是 Android 独有。
+
+**根因(三个,互不相干)**。
+
+- **②是 `Column` 的默认对齐,不是标题自己的决定。** ArkUI 的 `Column` 默认 `HorizontalAlign.Center`,
+  `Text` 不给宽度时按内容宽度居中;而同一列里的正文行都写了 `.width('100%')`(内容自然左对齐),
+  于是只有没写宽的标题、配对码和 IDLE / CONNECTING 那两行 Row 独自居中。
+- **①是只搬了字号没搬行高。** Android 侧 Material 3 的 `bodyMedium` 自带 20/14 ≈ 1.43 的行高,
+  鸿蒙这边 `fontSize(TypeScale.body)` 只取字号,`Text` 默认行距紧贴字身。`theme/Theme.ets` 里
+  早就备着 `LineHeight`(body 1.43 / bodyLarge 1.5 / label 1.33)这张倍率表 —— 这个面板没引它。
+- **③是 `TextButton` 的默认色。** Compose 的 `TextButton` 取 `colorScheme.primary`,
+  鸿蒙的 `actionButton` 一直取 `onSurfaceVariant`;同样的"次要动作"两端落在两个不同的 token 上。
+
+**修法**。
+- 鸿蒙 `LanSyncDialog.ets`:标题 / 配对码 / IDLE / CONNECTING 行统一补 `.width('100%')`;
+  `labelLine` / `bodyLine` 与标题、状态文字补 `.lineHeight(字号 × 对应倍率)`(标题用 titleMedium × 1.5,
+  正文用 `LineHeight.body`,小字用 `LineHeight.label`)。改法都写在代码旁注释里。
+- Android `LanSyncDialog.kt`:抽一个 `val secondary = MaterialTheme.colorScheme.onSurfaceVariant`,
+  套到 `lan_cancel` 与三处 `lan_close` 上;**主要动作(一致，开始同步 / 再同步一次 / 重试)仍用主色** ——
+  灰化的只是"关闭 / 取消"这一类。
+
+**验收(2026-11-13,真机)**。
+① Android `:app:compileReleaseKotlin` exit 0,debug 包`install -r`覆盖安装(数据保留);
+   鸿蒙 `assembleHap` BUILD SUCCESSFUL,Mate 60 覆盖安装成功(数据保留)。
+② 鸿蒙走完 LISTENING / CONFIRM / FAILED / **DONE** 四个状态截图:标题与配对码与正文同一左边界;
+   行距肉眼可见松开(与 Android 并排比对一致);「关闭」为灰、「再同步一次」为主色。
+③ Android DONE 态截图:同一行里「关闭」灰、「再同步一次」主色;配对到同步完成
+   (logcat `同步完成 peer=HUAWEI Mate 60 added subs=3 favs=1 stamps=2 notes=0 history=81 stats=11`)。
+
+**教训 / 可复用的规律**。
+
+① **ArkUI 里"左对齐"要每行自己声明。** `Column` 默认居中,一个不写 `width('100%')` 的 `Text`
+   就是居中 —— 与旁边写了宽的行并排,就是用户说的"不协调"。跨端对齐这类面板时,
+   逐个节点看宽度声明,别只看最外层容器。
+② **字号对齐 ≠ 排版对齐。** Material 的 type scale 自带 lineHeight,ArkUI 的 `Text` 不带。
+   移植字号时把行高一起搬(本仓库的倍率表在 `theme/Theme.ets`),否则一屏多行立刻挤成一坨。
+③ **"次要动作"的对齐对象是另一端的语义 token,不是某个颜色值。** 这条不该写成
+   `Color(0xFF9E9E9E)` 之类的字面量 —— 换主题 / 深浅色都会失真。两端都该说
+   "次要 = onSurfaceVariant",颜色差异才是主题差异。
+④ **真机点击坐标按 `dumpLayout` 的点击区算,别按缩略图目测。** Mate 60 物理 1216×2688,
+   而贴给人看的截图是缩过的;同一轮里按目测比例点的 (970,1807) 落在按钮下沿之外,
+   连点两次都没反应,改成文字行中线 (893,1724) 才生效 —— "点了没反应"先怀疑坐标,再怀疑代码(见 H275)。

@@ -254,6 +254,25 @@
 >   非中文无汉字。首跑全绿 —— Android 456 / 鸿蒙 427 / macOS 360 / iOS 416,各语言键集
 >   0 缺 0 多;`-v` 列出的 es/fr 同形项均为 Anime / Bilibili / Hong Kong / URL 之类。
 
+### 局域网同步面板:鸿蒙行距与左对齐、Android 次要按钮改灰(2026-11-13)
+
+两端并排看同一块面板时发现的差异,按"三端应该长得一样"统一:
+
+- 鸿蒙:面板里的几行字不再挤在一起(行距按 `theme/Theme.ets` 的倍率表补齐,与 Android 一致);
+  「同步完成 / 核对配对码 / 同步失败」这些标题改为与正文同一左边界,不再独自居中。
+- Android:面板里的「关闭 / 取消」从主色改成灰(与鸿蒙一致);「一致，开始同步 / 再同步一次 / 重试」
+  仍保持主色 —— 变灰的只是次要动作。
+
+> **工程要点**
+> - 鸿蒙那两个现象各有独立根因:标题居中是因为 `Column` 默认水平居中、而这几个 `Text` 没写
+>   `width('100%')`;行距挤是因为只搬了字号没搬行高(Material type scale 自带 lineHeight,ArkUI 的
+>   `Text` 不带)。见 H279。
+> - Android 的蓝色来自 `TextButton` 默认取 `colorScheme.primary`,统一到 `onSurfaceVariant` 语义 token,
+>   不写颜色字面量。
+> - 验收:两端编译/打包全过;真机(Mate 60 / Pixel 3)各自截了 LISTENING / CONFIRM / DONE 三个状态,
+>   并真跑完一次配对到「同步完成」(logcat `added subs=3 favs=1 stamps=2 notes=0 history=81 stats=11`)。
+>   只动了界面,未重打 `dist/` 发布包。
+
 ### 补齐:macOS 官方稿解析器单测(2026-11-13)
 
 发版前扫文档时发现:`docs/TRANSCRIPT.md` 仍写着「macOS 不读发布方官方稿」,而这条功能
