@@ -569,7 +569,7 @@ SenseVoice 模型(239,233,841 B)、词表、sherpa-onnx 的 `classes.jar` 与两
 |---|---|---|
 | Android | `android/dist/reverb.apk`(**唯一那份**,大陆商店与 GitHub Releases 传同一个文件) | `./build-release.sh`;脚本里已用 `apksigner` 读证书 DN,**是调试证书就 exit 1**(不是"verify 通过"就算数)。版本再对 `CHANGELOG.md`:`aapt2 dump badging` —— 注意 **aapt2 不在开发机 PATH**(H156),用 `$SDK/build-tools/<ver>/aapt2` 全路径,且"命令没跑成"和"版本不对"要按退出码分开读。⚠️ 重打前按 H204/H205 归档在架那份的 mapping |
 | HarmonyOS | `harmony/dist/reverb.app` **+ `reverb-symbol.zip`**(符号包一并传,否则市场侧还原不了崩溃栈) | `build-release.sh` 末尾那条 `debugKey` 断言(命中即 exit 1);`reverb-unsigned.app` **只是备查,别传** |
-| macOS | `macos/dist/余音-Reverb-<版本>-universal.dmg`(架构标记由 `EXPECTED` 推导,不是写死) | `./package.sh` 的架构硬断言(缺一个架构就不出 dmg);**`…-1.0.2-arm64.dmg` 那种单架构历史包不能顶替** —— Intel Mac 装 arm64 没有退路 |
+| macOS | `macos/dist/余音-Reverb-<版本>-universal.dmg`(架构标记由 `EXPECTED` 推导,不是写死);Release 上的资产名是 **`Reverb.dmg`**(应用内更新按这个名字挑) | `./package.sh` 的架构硬断言(缺一个架构就不出 dmg);**`…-1.0.2-arm64.dmg` 那种单架构历史包不能顶替** —— Intel Mac 装 arm64 没有退路 |
 | iOS | `ios/dist/reverb-ios-<版本>-<构建号>.ipa`(TestFlight 上传的就是它) | `./build-ios.sh --export` 的验收段:版本/构建号与工程设置一致、4 套 `.lproj` 集合相等、后台音频、内置物料、图标、arm64;**ipa 解包后 `embedded.mobileprovision` 必须在、`codesign --verify` 必须过**。⚠️ 构建号每次上传递增,同名/同号会被 TestFlight 拒 |
 
 **报"包已就绪"要带出处**:那份文件的字节数与 `ls -lT` 时间戳,并说明它**晚于最后一次源码改动**
@@ -692,9 +692,10 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 4. 界面动过 → 截图整套重拍 → 商店图与官网 `shots/` 是**同源两条出口,两侧都要换**;
 5. 部署官网 → 上传商店 / GitHub Releases(**Releases 传的是公开分发仓 `revert-cast`,不是本机 git remote
    那个私有 `reverb`** —— 传错边,应用内更新就查不到新包,见「仓库的对外边界」与 H203)。
-   资产名沿用 `reverb.apk`(应用侧按名字挑,不是取 `assets[0]`);
+   资产名沿用 `reverb.apk` 与 `Reverb.dmg`(两端都按名字挑,不是取 `assets[0]`;漏传 dmg 的后果见上一节 ⚠️);
    **传完必查两条**:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq .tag_name` 要等于新版本号
    (指针真的移过来了),`--jq '.assets[0].digest'` 要等于本地 `shasum -a 256` 那份(上传没换字节)。
+   多端同发时逐项核:`--jq '.assets[] | "\(.name) \(.size) \(.digest)"'` 的条目数 = 本轮上传件数,别只看第一条。
 
 **回滚预案见 `docs/ROLLBACK.md`**(2026-11-13 落文,`REVIEW-2026-10-18.md` P0 第 7 条至此有正文)。
 一句话口径:**回滚 = 用旧代码出一个版本号更高的包**,不是把版本号退回去 —— 四端都只对"更高版本"提示更新,
@@ -851,10 +852,20 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 | 仓库 | 可见性 | 装什么 |
 |---|---|---|
 | `github.com/cxyxlxdm/reverb` = **本机 git remote** | **私有**(匿名 API 404) | 全部源码与文档 —— 就是你在读的这个仓库 |
-| `github.com/cxyxlxdm/revert-cast` | **公开** | 只有 `README.md` + **Releases**(apk 的分发处;1.0.1 / 1.0.2 那两版也放过 dmg,1.0.3 起只传 apk —— macOS 走自分发下载页)。Android 应用内更新查的就是它的 `releases/latest` —— **latest 是哪版别抄文档,现算**:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq .tag_name` |
+| `github.com/cxyxlxdm/revert-cast` | **公开** | 只有 `README.md` + **Releases**(Android `reverb.apk` 与 macOS `Reverb.dmg` 的分发处;1.0.1 / 1.0.2 放过 dmg,1.0.3~1.0.5 断过三版,1.0.6 起恢复每版都带 dmg —— 见下一段的后果)。Android 应用内更新查的就是它的 `releases/latest` —— **latest 是哪版别抄文档,现算**:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq .tag_name` |
 
-**iOS 的出口是 TestFlight,不是这两个仓库**:iOS 包不进 GitHub Releases(那个公开仓只放
-Android apk 与历史 dmg),也不在 `site/` 下载页出现;`ios/dist/*.ipa` 只用于上传 App Store Connect。
+⚠️ **macOS 那份 dmg 不是附带物,是 macOS 应用内更新的唯一来源**(2026-11-13 核对:1.0.3 起的「只传 apk」写法已过时,
+按它出包会让 macOS 端从此查不到新版本,而且**没有任何报错** —— `SelfUpdate.swift` 在 release 列表里找
+`name == "Reverb.dmg"` 的资产,找不到就跳过整条 release,用户侧表现是「已是最新」)。
+自检:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq '.assets[].name'` 里必须同时有
+`reverb.apk` 与 `Reverb.dmg`。1.0.6 起两端都恢复上传;1.0.3~1.0.5 那三版缺 dmg 是事实,别回头补传 ——
+它们对应的 macOS 包本来就没发出去。
+
+**iOS 的出口是 TestFlight,不是这两个仓库**:iOS 包不作为安装来源出现在 GitHub Releases 或 `site/` 下载页;
+`ios/dist/*.ipa` 的正常去处是上传 App Store Connect。**1.0.7 有一处已发生的例外**:
+该版把未签名归档件 `reverb-ios-1.0.7-1-unsigned.ipa` 也挂上了 release(理由与读数见 `CHANGELOG.md` 1.0.7 发版记录)——
+它是**归档,不是安装路径**(未签名,`codesign` 直接判 unsigned,侧载也装不上),别在官网/README 里当下载项引用。
+往后再挂不挂由维护者拍,不按「上次挂过」自动类推。
 TestFlight 链接本身也不是公开下载地址,由维护者在 App Store Connect 里邀请测试员。
 
 **两个都没有 `LICENSE` 文件。** 所以缺口的正确表述不是"公开仓库没证书",而是:

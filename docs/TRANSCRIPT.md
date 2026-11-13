@@ -42,11 +42,17 @@
 
 **macOS 这一端不做功能删减** —— 自分发桌面端,不受应用市场的合规口径约束。
 
-> ⚠️ **上面第一节那条「顺序永远是先官方稿、后本机识别」在 macOS 这一端不成立**:
+> **macOS 也走同一条顺序**(2026-11-13 核正):下面这段警告描述的是 1.0.6 之前的状态,
+> `88b4ec7 macOS M10`(2026-10-25)已补上整块功能 —— `Episode.transcriptUrl` / `transcriptType` 进模型,
+> `RssParser` 认 `podcast:transcript`,`TranscriptStore.runAny` 先取官方稿、取不到才回退本机识别,
+> 三种格式(Podcast Index JSON / WebVTT / SRT)与手机两端同一套规则。运行侧读数见 `ROADMAP.md` 三-A2 ⑧
+> (1.0.6 真机进程里用本地 `http.server` 喂合成 feed,有稿集 4 句渲染、关掉语音转文字后仍取得到);
+> 解析器单测 2026-11-13 补齐(`macos/Tests/ReverbTests/TranscriptFetcherTests.swift`,12 条)。
+>
+> ~~**上面第一节那条「顺序永远是先官方稿、后本机识别」在 macOS 这一端不成立**:
 > 桌面端没有 `TranscriptFetcher` 的对应物,`Episode` 模型里连 `transcriptUrl` 字段都没有
-> (`Data/Models.swift`,全仓 grep 零命中),所以**发布方给了现成稿的英文集也要在 macOS 26 上
-> 跑几分钟本机识别**(发热耗电,而官方稿又准又快)。这是缺口不是取舍,记录与判据见
-> `ROADMAP.md` 三-A2;补上之前,本节那条顺序只对 Android 与鸿蒙成立。
+> (`Data/Models.swift`,全仓 grep 零命中),所以发布方给了现成稿的英文集也要在 macOS 26 上
+> 跑几分钟本机识别~~(历史记录,当时确实如此;留在这里是为了对上以前的文档引用)。
 
 ### Android —— 一份包,一条备用降级闸
 
