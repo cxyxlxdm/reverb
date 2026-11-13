@@ -271,7 +271,15 @@
 >   不写颜色字面量。
 > - 验收:两端编译/打包全过;真机(Mate 60 / Pixel 3)各自截了 LISTENING / CONFIRM / DONE 三个状态,
 >   并真跑完一次配对到「同步完成」(logcat `added subs=3 favs=1 stamps=2 notes=0 history=81 stats=11`)。
->   只动了界面,未重打 `dist/` 发布包。
+> - 两端发布包按本批改动重打(2026-11-13 22:16,HEAD `db3dc1e`):
+>   Android `reverb.apk` **270,259,537 B @22:16:40** sha256 `3d88e2c3…`,`mapping` 46,813,079 B;
+>   解包读数 4 / 1 / 13,权限 12 项(含 RECORD_AUDIO、REQUEST_INSTALL_PACKAGES),
+>   `apksigner` 证书 `CN=Yuyin Reverb`;鸿蒙 `reverb.app` **182,007,993 B @22:16:26** sha256 `7ee9f754…`、
+>   `reverb-symbol.zip` **14,952,713 B** sha256 `86f369c2…`,嵌套 hap 内模型+词表 2、native 库 3,
+>   `debugKey` 断言通过(`buildMode=release` / `debug: false` / `1000008` / `1.0.8`)。
+>   两端 `-newer` 判据均 0 命中。重打前的旧包已归档:
+>   `android/dist/_archive/mapping-1.0.8-vc9-20261113-2215-preLanSyncUiFix.txt`(+ apk 的 `.sha256`)、
+>   `harmony/dist/_backup-1.0.8-preLanSyncUiFix-20261113-2215/`。
 
 ### 补齐:macOS 官方稿解析器单测(2026-11-13)
 
