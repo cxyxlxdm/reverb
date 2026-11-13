@@ -246,7 +246,13 @@
 >   sha256 `7d2b0813…`,`aapt2 dump permissions` **12 项**,解包读数 4 / 1 / 13;
 >   鸿蒙 `reverb.app` **182,007,692 B @21:30:29** sha256 `7dd43a10…`、`reverb-symbol.zip`
 >   **14,952,613 B** sha256 `5dc5384a…`,嵌套 hap 内模型+词表 2、native 库 3。
->   两端 `-newer` 判据均 0 命中。
+>   共享的 `macos/Sources/Reverb/Sync` 改过,苹果两端跟着重出:macOS
+>   `余音-Reverb-1.0.8-universal.dmg` **6,203,997 B @21:34:01** sha256 `8cbc0070…`;
+>   iOS 编译门 7 条全过,未签名归档 ipa **2,911,408 B @21:34:40** sha256 `388cbc34…`。
+>   四端 `-newer` 判据均 0 命中。
+> - 五语种体检落成脚本 `tools/check-l10n.py`(以前是手工对照):键集相等、繁体无简体独有字、
+>   非中文无汉字。首跑全绿 —— Android 456 / 鸿蒙 427 / macOS 360 / iOS 416,各语言键集
+>   0 缺 0 多;`-v` 列出的 es/fr 同形项均为 Anime / Bilibili / Hong Kong / URL 之类。
 
 ### Android:章节(Podcasting 2.0)(2026-11-11)
 
