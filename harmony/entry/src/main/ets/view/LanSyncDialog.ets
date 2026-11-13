@@ -72,6 +72,7 @@ export struct LanSyncDialog {
     const c = this.controller;
     if (c === null) return;
     const text = this.manual.trim();
+    // 空串时按钮本身是置灰的(见 listeningBody),这里只是兜底。
     if (text.length === 0) return;
     c.connectTo(text);
   }
@@ -119,6 +120,29 @@ export struct LanSyncDialog {
       .margin({ top: 6 })
   }
 
+  /**
+   * 可点的文字按钮。**点击区必须自己撑起来,不能只靠文字本身。**
+   *
+   * 1.0.8 用户反馈「取消 / 一致,开始同步 点不动」,原因就在这里:原先 `onClick` 直接挂在
+   * `Text` 上,实测那两颗按钮的 bounds 高度只有 46 px(≈18vp),手指落在字的上下几像素就
+   * 落到遮罩上 —— 而配对态遮罩是锁住的,表现就是"点了没反应"。
+   * `Row` 给它 14vp 上下内边距,行高 ≈46vp,与系统建议的 48vp 最小点击区基本齐平(Android 侧用的是
+   * Material TextButton,自带 48dp)。`enabled` 为 false 时置灰且吞掉点击(手动地址为空时的「连接」)。
+   * 真机验收与 `dumpLayout` 读数陷阱见 docs/TROUBLESHOOTING.md H275。
+   */
+  @Builder
+  actionButton(label: string, color: string, enabled: boolean, onTap: () => void) {
+    Row() {
+      Text(label)
+        .fontSize(TypeScale.label * this.fontScale)
+        .fontColor(enabled ? color : withAlpha(color, 0.38))
+    }
+    .padding({ left: 14, right: 14, top: 14, bottom: 14 })
+    .onClick(() => {
+      if (enabled) onTap();
+    })
+  }
+
   /// 发现态:本机名字 / 地址 / 附近设备 / 手动输入。
   @Builder
   listeningBody() {
@@ -145,6 +169,8 @@ export struct LanSyncDialog {
       if (this.view.peers.length === 0) {
         this.labelLine(L.s('lan_no_peers'), this.scheme.onSurfaceVariant)
       } else {
+        // 光列名字没人知道可以点 —— 用户反馈"附近的设备"下面缺一句提示。
+        this.labelLine(L.s('lan_peers_hint'), this.scheme.onSurfaceVariant)
         ForEach(this.view.peers, (p: LanSyncPeer) => {
           Column() {
             Text(p.name)
@@ -157,7 +183,7 @@ export struct LanSyncDialog {
               .width('100%')
           }
           .width('100%')
-          .padding({ top: 8, bottom: 8 })
+          .padding({ top: 12, bottom: 12 })
           .onClick(() => {
             const c = this.controller;
             if (c !== null) c.connectTo(p.address());
@@ -176,11 +202,10 @@ export struct LanSyncDialog {
         .onChange((v: string) => { this.manual = v; })
 
       Row() {
-        Text(L.s('lan_connect'))
-          .fontSize(TypeScale.label * this.fontScale)
-          .fontColor(this.scheme.primary)
-          .padding({ left: 12, right: 4, top: 8, bottom: 8 })
-          .onClick(() => this.connect())
+        // 空串时置灰:Android 那边 TextButton 一直是可点的(点下去报「地址格式不对:」),
+        // 而鸿蒙先前是静默 return,看起来像按钮坏了。统一成"没地址就不可点",两端都读得懂。
+        this.actionButton(L.s('lan_connect'), this.scheme.primary,
+          this.manual.trim().length > 0, () => this.connect())
       }
       .width('100%')
       .justifyContent(FlexAlign.End)
@@ -249,35 +274,21 @@ export struct LanSyncDialog {
 
   @Builder
   footerButtons() {
-    Row({ space: 22 }) {
+    Row({ space: 4 }) {
       if (this.view.phase === LanSyncPhase.CONFIRM) {
-        Text(L.s('lan_cancel'))
-          .fontSize(TypeScale.label * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-          .onClick(() => this.confirm(false))
-        Text(L.s('lan_confirm_accept'))
-          .fontSize(TypeScale.label * this.fontScale)
-          .fontColor(this.scheme.primary)
-          .onClick(() => this.confirm(true))
+        this.actionButton(L.s('lan_cancel'), this.scheme.onSurfaceVariant, true, () => this.confirm(false))
+        this.actionButton(L.s('lan_confirm_accept'), this.scheme.primary, true, () => this.confirm(true))
       } else if (this.view.phase === LanSyncPhase.DONE || this.view.phase === LanSyncPhase.FAILED) {
-        Text(L.s('lan_close'))
-          .fontSize(TypeScale.label * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-          .onClick(() => this.onDismiss())
-        Text(this.view.phase === LanSyncPhase.DONE ? L.s('lan_again') : L.s('lan_retry'))
-          .fontSize(TypeScale.label * this.fontScale)
-          .fontColor(this.scheme.primary)
-          .onClick(() => this.retry())
+        this.actionButton(L.s('lan_close'), this.scheme.onSurfaceVariant, true, () => this.onDismiss())
+        this.actionButton(this.view.phase === LanSyncPhase.DONE ? L.s('lan_again') : L.s('lan_retry'),
+          this.scheme.primary, true, () => this.retry())
       } else {
-        Text(L.s('lan_close'))
-          .fontSize(TypeScale.label * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-          .onClick(() => this.onDismiss())
+        this.actionButton(L.s('lan_close'), this.scheme.onSurfaceVariant, true, () => this.onDismiss())
       }
     }
     .width('100%')
     .justifyContent(FlexAlign.End)
-    .margin({ top: 10 })
+    .margin({ top: 4 })
   }
 
   build() {

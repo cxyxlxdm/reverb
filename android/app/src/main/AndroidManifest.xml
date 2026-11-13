@@ -8,6 +8,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- 局域网同步的组播接收(普通权限,无运行时弹窗):2026-11-13 实测,Wi-Fi 驱动在没有
+         MCAST 锁时会过滤组播帧,系统 mdnssd 因此收不到对端的 `_reverb._tcp` 应答,
+         Android 永远发现不了鸿蒙。只在同步面板打开期间持锁,关闭即释放。
+         同一件事的另一半证据与兜底见 docs/TROUBLESHOOTING.md H276。 -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- 真实频谱(RECORD_AUDIO + MODIFY_AUDIO_SETTINGS)与应用内更新(REQUEST_INSTALL_PACKAGES)
          原先只声明在 src/default/AndroidManifest.xml,商店那份没有 —— 2026-10-18 两 flavor 合成
          一份包之后,这三条进了唯一的 manifest(理由与代价见 H205):

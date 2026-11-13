@@ -262,6 +262,7 @@
     <string name="lan_own_address">Dirección de este dispositivo, se puede escribir manualmente en el otro</string>
     <string name="lan_peers">Dispositivos cercanos</string>
     <string name="lan_no_peers">Aún no hay dispositivos. Comprueba que la página esté abierta en el otro dispositivo o escribe la dirección que muestra su pantalla.</string>
+    <string name="lan_peers_hint">Toca un dispositivo de la lista para emparejar.</string>
     <string name="lan_peer_row">%1$s\n%2$s</string>
     <string name="lan_manual_hint">Dirección del otro dispositivo, p. ej. 192.168.1.5:47820</string>
     <string name="lan_connect">Conectar</string>

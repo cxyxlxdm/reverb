@@ -1585,6 +1585,10 @@
       "value": "Aún no se ha encontrado ningún dispositivo. Comprueba que el otro tenga esta página abierta; si no aparece, escribe la dirección que muestra su pantalla."
     },
     {
+      "name": "lan_peers_hint",
+      "value": "Toca un dispositivo de la lista para emparejar."
+    },
+    {
       "name": "lan_manual_hint",
       "value": "Dirección del otro dispositivo, p. ej. 192.168.1.5:47820"
     },
