@@ -1,5 +1,5 @@
 import type common from '@ohos.app.ability.common';
-import { Scheme, TypeScale, withAlpha } from '../theme/Theme';
+import { LineHeight, Scheme, TypeScale, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { AppContainer } from '../AppContainer';
 import { LanSyncController, LanSyncPhase, LanSyncViewState, LanSyncPeer } from '../sync/LanSyncController';
@@ -102,10 +102,16 @@ export struct LanSyncDialog {
     return `${code.substring(0, 3)} ${code.substring(3)}`;
   }
 
+  /**
+   * 正文/说明行。**`lineHeight` 不能省**:ArkUI 的 `Text` 默认行距紧贴字身,而 Android 侧
+   * Material 3 的 bodyMedium 自带 20/14 ≈ 1.43 的行高 —— 只搬字号不搬行高,面板里的几行字
+   * 就会挤成一团(用户 2026-11-13 装机反馈「行间距太小」)。倍率表见 `theme/Theme.ets` 的 `LineHeight`。
+   */
   @Builder
   labelLine(text: string, color: string) {
     Text(text)
       .fontSize(TypeScale.caption * this.fontScale)
+      .lineHeight(TypeScale.caption * this.fontScale * LineHeight.label)
       .fontColor(color)
       .width('100%')
       .margin({ top: 6 })
@@ -115,6 +121,7 @@ export struct LanSyncDialog {
   bodyLine(text: string) {
     Text(text)
       .fontSize(TypeScale.body * this.fontScale)
+      .lineHeight(TypeScale.body * this.fontScale * LineHeight.body)
       .fontColor(this.scheme.onBackground)
       .width('100%')
       .margin({ top: 6 })
@@ -227,18 +234,25 @@ export struct LanSyncDialog {
   }
 
   /// 配对态:六位数字要两端一致。
+  ///
+  /// 标题与配对码都显式给 `width('100%')`:**`Column` 默认水平居中**,而正文行都是 100% 宽
+  /// (内容左对齐),于是不给宽的标题会独自居中 —— 用户 2026-11-13 反馈「同步完成居中,
+  /// 其他都居左不协调」。三端一律左对齐(Android/macOS 本来就是)。
   @Builder
   confirmBody() {
     Column() {
       Text(L.s('lan_confirm_title'))
         .fontSize(TypeScale.titleMedium * this.fontScale)
+        .lineHeight(TypeScale.titleMedium * this.fontScale * 1.5)
         .fontColor(this.scheme.onBackground)
+        .width('100%')
       this.bodyLine(L.f('lan_confirm_peer', this.view.peerName))
       Text(this.codeText(this.view.code))
         .fontSize(TypeScale.displaySmall * this.fontScale)
         .fontWeight(FontWeight.Bold)
         .letterSpacing(6)
         .fontColor(this.scheme.primary)
+        .width('100%')
         .margin({ top: 12 })
       this.labelLine(L.s('lan_confirm_body'), this.scheme.onSurfaceVariant)
     }
@@ -255,7 +269,9 @@ export struct LanSyncDialog {
     Column() {
       Text(L.s('lan_done_title'))
         .fontSize(TypeScale.titleMedium * this.fontScale)
+        .lineHeight(TypeScale.titleMedium * this.fontScale * 1.5)
         .fontColor(this.scheme.onBackground)
+        .width('100%')
       if (result !== null) {
         this.bodyLine(L.f('lan_done_with', result.peerName))
         if (result.total() > 0) {
@@ -274,7 +290,9 @@ export struct LanSyncDialog {
     Column() {
       Text(L.s('lan_failed_title'))
         .fontSize(TypeScale.titleMedium * this.fontScale)
+        .lineHeight(TypeScale.titleMedium * this.fontScale * 1.5)
         .fontColor(this.scheme.onBackground)
+        .width('100%')
       this.bodyLine(this.failText(this.view.fail))
       if (this.view.detail.length > 0) {
         this.labelLine(this.view.detail, this.scheme.onSurfaceVariant)
@@ -327,8 +345,10 @@ export struct LanSyncDialog {
                 LoadingProgress().width(18).height(18).color(this.scheme.primary)
                 Text(L.s('lan_waiting'))
                   .fontSize(TypeScale.body * this.fontScale)
+                  .lineHeight(TypeScale.body * this.fontScale * LineHeight.body)
                   .fontColor(this.scheme.onBackground)
               }
+              .width('100%')
             } else if (this.view.phase === LanSyncPhase.LISTENING) {
               this.listeningBody()
             } else if (this.view.phase === LanSyncPhase.CONNECTING) {
@@ -336,9 +356,11 @@ export struct LanSyncDialog {
                 LoadingProgress().width(18).height(18).color(this.scheme.primary)
                 Text(L.f('lan_connecting', this.view.target))
                   .fontSize(TypeScale.body * this.fontScale)
+                  .lineHeight(TypeScale.body * this.fontScale * LineHeight.body)
                   .fontColor(this.scheme.onBackground)
                   .layoutWeight(1)
               }
+              .width('100%')
             } else if (this.view.phase === LanSyncPhase.CONFIRM) {
               this.confirmBody()
             } else if (this.view.phase === LanSyncPhase.SYNCING) {

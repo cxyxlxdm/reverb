@@ -187,11 +187,15 @@ fun LanSyncDialog(controller: LanSyncController, onDismiss: () -> Unit) {
                 )
 
                 Spacer(Modifier.height(8.dp))
+                // 「关闭 / 取消」是次要动作:鸿蒙那侧一直用 onSurfaceVariant(灰),
+                // 而 TextButton 默认取主色,于是 Android 的「关闭」是蓝的、鸿蒙是灰的。
+                // 2026-11-13 用户装机对比后要求统一成灰;主要动作(一致/再同步一次)仍用主色。
+                val secondary = MaterialTheme.colorScheme.onSurfaceVariant
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                     when (state) {
                         is LanSyncState.Confirm -> {
                             TextButton(onClick = { controller.confirm(false) }) {
-                                Text(stringResource(R.string.lan_cancel))
+                                Text(stringResource(R.string.lan_cancel), color = secondary)
                             }
                             TextButton(onClick = { controller.confirm(true) }) {
                                 Text(stringResource(R.string.lan_confirm_accept))
@@ -200,7 +204,7 @@ fun LanSyncDialog(controller: LanSyncController, onDismiss: () -> Unit) {
 
                         is LanSyncState.Done -> {
                             TextButton(onClick = { onDismiss() }) {
-                                Text(stringResource(R.string.lan_close))
+                                Text(stringResource(R.string.lan_close), color = secondary)
                             }
                             TextButton(onClick = { controller.stop(); controller.start() }) {
                                 Text(stringResource(R.string.lan_again))
@@ -209,7 +213,7 @@ fun LanSyncDialog(controller: LanSyncController, onDismiss: () -> Unit) {
 
                         is LanSyncState.Failed -> {
                             TextButton(onClick = { onDismiss() }) {
-                                Text(stringResource(R.string.lan_close))
+                                Text(stringResource(R.string.lan_close), color = secondary)
                             }
                             TextButton(onClick = { controller.stop(); controller.start() }) {
                                 Text(stringResource(R.string.lan_retry))
@@ -217,7 +221,7 @@ fun LanSyncDialog(controller: LanSyncController, onDismiss: () -> Unit) {
                         }
 
                         else -> TextButton(onClick = { onDismiss() }) {
-                            Text(stringResource(R.string.lan_close))
+                            Text(stringResource(R.string.lan_close), color = secondary)
                         }
                     }
                 }
