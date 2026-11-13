@@ -254,6 +254,20 @@
 >   非中文无汉字。首跑全绿 —— Android 456 / 鸿蒙 427 / macOS 360 / iOS 416,各语言键集
 >   0 缺 0 多;`-v` 列出的 es/fr 同形项均为 Anime / Bilibili / Hong Kong / URL 之类。
 
+### 补齐:macOS 官方稿解析器单测(2026-11-13)
+
+发版前扫文档时发现:`docs/TRANSCRIPT.md` 仍写着「macOS 不读发布方官方稿」,而这条功能
+从 1.0.6(macOS M10,`88b4ec7`)起就在跑 —— 文档过期,不是功能缺失。顺手把它缺的验收补上:
+
+- 新增 `macos/Tests/ReverbTests/TranscriptFetcherTests.swift` 12 条:VTT(BOM / NOTE / STYLE / REGION /
+  说话人标签 / `&nbsp;` / 省略小时)、SRT(逗号毫秒 / 序号行不进正文)、纯文本无时间轴拒绝、
+  `parseClock` 边界(单段数字不是时间)、Podcast Index JSON(标准形 / 根数组 / 字符串数字与四舍五入 /
+  负起点与空正文丢弃 / 坏 JSON),以及「type 标错时靠内容嗅探」。
+- 口径断言:**三端都保留 `&nbsp;` 换空格后的双空格**,不在单端折叠 —— 折叠会改行宽,同一份稿在三端断行数就分叉(H150)。
+- `swift test` **73 条 0 失败**(新增 12 条);共享层未改,Android / 鸿蒙不受影响。
+- 文档据此订正:`TRANSCRIPT.md` 的 macOS 警告改成现状 + 历史留存;`ROADMAP.md` A2-2#7 与
+  「三处硬规矩落空」表标记完成(运行读数仍指向三-A2 ⑧ 的 1.0.6 真机那一轮)。
+
 ### Android:章节(Podcasting 2.0)(2026-11-11)
 
 - 发布方在 RSS 里给了 `<podcast:chapters>` 的单集,播放页进度条上方多一行**当前章节名**;

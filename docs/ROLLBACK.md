@@ -50,11 +50,11 @@
 
 | 端 | 现役发布物 | 上一版取处 | 校验 |
 |---|---|---|---|
-| Android(GitHub 自分发) | `android/dist/reverb.apk`(上传到公开仓 `revert-cast`) | 公开仓对应的 tag:`gh api repos/cxyxlxdm/revert-cast/releases/tags/<tag> --jq '.assets[]\|"\(.name) \(.size) \(.digest)"'` | 资产 `digest` 与下载后 `shasum -a 256` 逐字相同(字节数相等不算) |
+| Android(GitHub 自分发) | `android/dist/reverb.apk`(上传到公开仓 `revert-cast`) | 公开仓对应的 tag:`gh api repos/cxyxlxdm/revert-cast/releases/tags/<tag> --jq '.assets[]\|"\(.name) \(.size) \(.digest)"'`,再 `gh release download <tag> -R cxyxlxdm/revert-cast -p reverb.apk -D <目录>` | 下载后 `shasum -a 256` 与资产 `digest` 逐字相同(字节数相等不算)。⚠️ **别按本地备份目录名认"那一版"**:同版本重出包会让两个目录都叫 `1.0.7` 而字节不同(实测见 §八) |
 | Android(大陆商店) | 同一份 apk 的商店侧副本 | **只能从商店后台取**,公开仓那份与商店那份不是同一个文件(合并 flavor 后是同一份代码,但分发各存一份历史) | 商店后台的包体摘要;本地 mapping 另见下一行 |
 | Android 的 mapping | `android/dist/` 里只留最后一次构建 | `android/dist/_archive/`(每次重打前按日期归档,见 §五) | 文件名带版本 / versionCode / 时间戳;与那次构建同批 |
 | 鸿蒙 | `harmony/dist/reverb.app` + `reverb-symbol.zip` | **市场后台**;本地归档可能在 kit zip 里:`harmony/dist/_backup-*kit*/*.zip`(`unzip -l` 数得见 `reverb.app` 与 `reverb-symbol.zip` 两个条目) | 以上架后台的摘要为准;kit zip 不是"素材",按发布物待遇核(H204) |
-| macOS | `macos/dist/余音-Reverb-<版本>-universal.dmg` | 本地 `macos/dist/` 保留了历史 dmg(如 `…-1.0.6-universal.dmg`、`…-1.0.7-universal.dmg`)与 `_backup-…-published-*`;官网下载页当前指向的也是其中一份 | 架构断言(`lipo -archs` 必须是 `x86_64 arm64`)+ `codesign --verify` |
+| macOS | `macos/dist/余音-Reverb-<版本>-universal.dmg` | 本地 `macos/dist/` 保留了历史 dmg(如 `…-1.0.6-universal.dmg`、`…-1.0.7-universal.dmg`);公开仓 release 里同名资产是 **`Reverb.dmg`**(1.0.6 起每版都带),官网获取节只链到 Releases 页面本身,没有指向具体文件 | 架构断言(`lipo -archs` 必须是 `x86_64 arm64`)+ `codesign --verify`;与公开仓比 `digest` |
 | iOS | `ios/dist/reverb-ios-<版本>-<构建号>.ipa` | 本地 `ios/dist/` 历史 ipa;TestFlight 侧旧构建 **90 天过期**,过期后不可再提供给测试员 | 构建号与工程设置一致;`embedded.mobileprovision` 在、`codesign --verify` 过 |
 
 **公开仓的 release 不删。**坏版本那份留着:它的 `digest` 是诊断"用户装的是不是那一份"的唯一凭据;
@@ -157,10 +157,32 @@
 |---|---|
 | 回滚包能出、能过解包验收 | 机制上等于正常发版,发版流程已多次跑通 |
 | GitHub 侧"新 tag 覆盖坏版本"的指针 / digest 检查 | 发 1.0.5 时有过一次有读数的样板(见 `REVIEW-2026-10-18.md` P0 第 7 条) |
+| §三「上一版从哪取」逐条空跑(只读,2026-11-13 夜) | ✅ 见下方读数 |
 | 真正从坏版本回滚一次 | **未演练** |
 | 商店侧停止放量 / 重新提交 | **未操作过**,后台入口与审核话术以各市场当期界面为准 |
 | TestFlight 让坏构建过期 | **未操作过** |
 
-**下一次发版前若要补这条**,最小演练是:出一份"版本号 +1、代码不变"的包传到公开仓,
+**2026-11-13 夜的取件空跑读数**(只读,没有上传、没有改 tag):
+
+- 公开仓 1.0.7 资产三项都在,`digest` 依次 `reverb.apk` `2278c101…`、
+  `Reverb.dmg` `75d8d509…`、未签名 ipa `ec57dc9f…`;1.0.6 为 `reverb.apk` `8f09048e…` +
+  `Reverb.dmg` `f4a2052e…`(1.0.3~1.0.5 三版没有 dmg,见「仓库的对外边界」)。
+- 本地 macOS `余音-Reverb-1.0.7-universal.dmg` 与 iOS `reverb-ios-1.0.7-1-unsigned.ipa`
+  的 `shasum -a 256` **与上面两条逐字相同** —— 这两端的本地归档确实就是发出去的那一份。
+- **取回动作本身也真跑了一遍**:`gh release download 1.0.7 -R cxyxlxdm/revert-cast -p reverb.apk`
+  下载 65,180,564 B,`shasum -a 256` = `2278c101…`,与 API 给的 `digest`、与本地
+  `_backup-1.0.7-published-pre1.0.8-20261111-1713/reverb.apk` 三者逐字相同
+  ⇒「上一版取得到、也证得出是那一份」这条链路成立(下载耗时约 7 分钟,65 MB 量级,别按秒级预期)。
+- **Android 反过来是个反例**:`dist/` 下有两个都自称 1.0.7 published 的备份 ——
+  `_backup-1.0.7-published-1108/` 的 apk 65,126,980 B / `fc887efc…`、
+  `_backup-1.0.7-published-pre1.0.8-20261111-1713/` 的 apk 65,180,564 B / `2278c101…`。
+  `aapt2 dump badging` 两份都是 `versionCode=8 / 1.0.7`,**只有第二份等于公开仓的字节**。
+  这正是"同版本重出包 + 目录名按日期"会留下的坑:取回滚源时认 digest,不认目录名。
+- 鸿蒙本地归档是 kit zip 形态:`harmony/dist/_backup-1.0.6-kit-1110-215713/reverb-harmony-submission-kit.zip`
+  里 `unzip -l` 数得见 `reverb.app`(1,157,634 B)与 `reverb-symbol.zip`(668,735 B)两个条目,
+  §三 的说法成立;1.0.4 那份本地唯一副本已在 10-18 清理中丢失(H204),只能回市场侧取。
+
+**仍未演练的**是"装坏版本 → 出新回滚包 → 用户侧真的收到并覆盖安装"这一整条;
+下一次发版前若要补这条,最小演练是:出一份"版本号 +1、代码不变"的包传到公开仓,
 在一台旧设备上确认应用内更新能提示并覆盖安装,然后把它作为正常版本留下(而不是删掉)。
 它顺带验证了"回滚包 = 更高版本"这条口径本身。
