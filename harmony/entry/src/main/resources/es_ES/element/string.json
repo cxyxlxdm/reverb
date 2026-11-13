@@ -1013,6 +1013,14 @@
       "value": "Material Design Icons (vectores de las pestañas inferiores)"
     },
     {
+      "name": "lic_sherpa",
+      "value": "sherpa-onnx (motor de reconocimiento de voz en el dispositivo)"
+    },
+    {
+      "name": "lic_onnxruntime",
+      "value": "ONNX Runtime (motor de inferencia)"
+    },
+    {
       "name": "src_publisher_rss",
       "value": "El feed RSS original del editor"
     },
@@ -1206,7 +1214,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Descubrir: explora listas diarias por región y categoría; reordénalas y desliza entre ellas\n· Buscar: encuentra programas o episodios por palabra clave, o pega una URL RSS\n· Enlaces de vídeo: pega un enlace de vídeo de Bilibili o un identificador BV y escúchalo como un episodio (sin cuenta; los episodios de vídeo no se pueden descargar)\n· Compartir programas: crea una imagen con portada, título, descripción y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Novedades: todos los episodios de tus programas seguidos, del más reciente al más antiguo, en su propia pestaña\n· Biblioteca: seis apartados — suscripciones, a continuación, favoritos, descargas, historial y anotaciones\n· Lote y atajos: toca la portada de un episodio para abrir su canal; en Novedades, Favoritos, Descargas, Historial o la página de un canal, mantén pulsado un episodio y elige «Seleccionar varios» para añadirlos en bloque a la cola\n· Sin conexión: descarga episodios en el dispositivo, opcionalmente solo con Wi-Fi\n· Caché de reproducción: los episodios escuchados se quedan en el dispositivo y se vuelven a oír sin conexión; listas y portadas ya cargadas siguen navegables sin red, y se borra desde Ajustes\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano y pantalla de bloqueo\n· Transcripción: en los episodios cuyo editor la ofrece, puedes leer mientras escuchas\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del programa: desliza en la página del reproductor\n· Avisos de novedades: notificación cuando llega un episodio nuevo\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño de texto, color de acento, varios idiomas"
+      "value": "· Descubrir: explora listas diarias por región y categoría; reordénalas y desliza entre ellas\n· Buscar: encuentra programas o episodios por palabra clave, o pega una URL RSS\n· Enlaces de vídeo: pega un enlace de vídeo de Bilibili o un identificador BV y escúchalo como un episodio (sin cuenta; los episodios de vídeo no se pueden descargar)\n· Compartir programas: crea una imagen con portada, título, descripción y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Novedades: todos los episodios de tus programas seguidos, del más reciente al más antiguo, en su propia pestaña\n· Biblioteca: seis apartados — suscripciones, a continuación, favoritos, descargas, historial y anotaciones\n· Lote y atajos: toca la portada de un episodio para abrir su canal; en Novedades, Favoritos, Descargas, Historial o la página de un canal, mantén pulsado un episodio y elige «Seleccionar varios» para añadirlos en bloque a la cola\n· Sin conexión: descarga episodios en el dispositivo, opcionalmente solo con Wi-Fi\n· Caché de reproducción: los episodios escuchados se quedan en el dispositivo y se vuelven a oír sin conexión; listas y portadas ya cargadas siguen navegables sin red, y se borra desde Ajustes\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano y pantalla de bloqueo\n· Transcripción: transcripción en el dispositivo (chino, inglés, japonés, coreano y cantonés), o lee la del editor cuando la ofrece; búsqueda en todo el texto y exportación como texto o Markdown para compartir\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del programa: desliza en la página del reproductor\n· Capítulos: en los episodios cuyo editor incluye una lista de capítulos, el capítulo actual aparece sobre la barra de progreso; toca para saltar. La lista se guarda en caché, así que funciona sin conexión\n· Avisos de novedades: notificación cuando llega un episodio nuevo\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño de texto, color de acento, varios idiomas"
     },
     {
       "name": "about_h_philosophy",
@@ -1262,7 +1270,7 @@
     },
     {
       "name": "privacy_consent_asr",
-      "value": "Transcripciones. Si el editor ofrece una transcripción en su RSS, el reproductor puede descargarla para leer mientras escuchas: solo se accede a la dirección indicada por el editor, igual que con el audio y la portada. El texto descargado se guarda en el directorio privado de la app y se elimina al desinstalar. Esta versión no incluye reconocimiento de voz y nunca sube tu audio."
+      "value": "Transcripción de voz sin conexión. Esta versión incluye reconocimiento sin conexión (el motor de código abierto sherpa-onnx y el modelo SenseVoiceSmall). La conversión del audio de un episodio en texto se realiza por completo en tu dispositivo: el audio nunca se sube, nunca sale del dispositivo y nunca pasa por ningún servidor. La transcripción admite por ahora chino, inglés, japonés, coreano y cantonés. Puedes desactivar esta función en Ajustes."
     },
     {
       "name": "privacy_read_full",
@@ -1342,7 +1350,7 @@
     },
     {
       "name": "set_transcription_sub",
-      "value": "Desliza a la tercera página para leer la transcripción del editor. Si no hay ninguna, esa página se oculta."
+      "value": "Desliza a la tercera página del reproductor. Si el editor no la ofrece, se transcribe en el dispositivo (chino, inglés, japonés, coreano y cantonés)"
     },
     {
       "name": "set_word_highlight",
@@ -1387,6 +1395,50 @@
     {
       "name": "transcript_none",
       "value": "El editor no ofrece transcripción para este episodio"
+    },
+    {
+      "name": "transcript_lang_unsupported",
+      "value": "La transcripción en el dispositivo solo admite chino, inglés, japonés, coreano y cantonés. Este episodio tampoco tiene transcripción del editor."
+    },
+    {
+      "name": "transcript_search",
+      "value": "Buscar en la transcripción"
+    },
+    {
+      "name": "transcript_search_none",
+      "value": "Sin resultados"
+    },
+    {
+      "name": "transcript_search_prev",
+      "value": "Coincidencia anterior"
+    },
+    {
+      "name": "transcript_search_next",
+      "value": "Coincidencia siguiente"
+    },
+    {
+      "name": "transcript_export",
+      "value": "Exportar transcripción"
+    },
+    {
+      "name": "transcript_export_text",
+      "value": "Texto sin formato (.txt)"
+    },
+    {
+      "name": "transcript_export_markdown",
+      "value": "Markdown (.md)"
+    },
+    {
+      "name": "player_chapters",
+      "value": "Capítulos"
+    },
+    {
+      "name": "chapters_empty",
+      "value": "Este episodio no tiene capítulos"
+    },
+    {
+      "name": "chapters_failed",
+      "value": "No se pudieron cargar los capítulos. Toca para reintentar"
     },
     {
       "name": "play_mode_sequential",
@@ -1482,11 +1534,7 @@
     },
     {
       "name": "widget_description",
-      "value": "Muestra dónde lo dejaste; toca para seguir escuchando"
-    },
-    {
-      "name": "widget_continue",
-      "value": "SEGUIR ESCUCHANDO"
+      "value": "Muestra dónde lo dejaste; reproduce, pausa o cambia de episodio desde la tarjeta"
     },
     {
       "name": "widget_empty_title",

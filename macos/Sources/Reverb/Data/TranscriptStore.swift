@@ -5,7 +5,9 @@ import Foundation
 /// 为什么写在类外:`TranscriptStore` 是 `@MainActor`,而它的缓存解码刻意搬到后台线程
 /// (一份词级稿实测 192 KB,主线程解码会让切集卡一下)。校验版本与夹单调这两步
 /// 要跟着解码一起在后台跑完,所以它们不能是 MainActor 的成员。
-/// 与 Android `TranscriptStore.CACHE_VERSION` / 鸿蒙 `TranscriptStore.CACHE_VERSION` 同值同义。
+/// 与 Android `TranscriptStore.CACHE_VERSION` / 鸿蒙 `TranscriptStore.CACHE_VERSION` **同一套含义**,
+/// 但不要求同号:两端 1.0.8 换了识别引擎(whisper / Core Speech → sherpa-onnx),各自升到 3;
+/// 这一端仍是 `SpeechAnalyzer`,口径没变,所以留在 2。缓存只在本机读,跨端不比对版本号。
 enum TranscriptFormat {
     /// 缓存格式 / 时间轴口径的版本。**改了时刻的算法就要 +1**(硬规矩 11),
     /// 否则用户机器上已经生成的旧稿会一直按旧口径显示,修复等于没生效,而用户没有自救入口。

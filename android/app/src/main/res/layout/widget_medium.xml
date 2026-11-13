@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 4×2:左封面、右文字。与 widget_small / widget_large 共用同一组 id。
      层级只用 LinearLayout / FrameLayout:RemoteViews 的允许类白名单里没有 android.widget.Space,
-     用了宿主 inflate 会直接判 "Class not allowed to be inflated" 并整条显示「无法加载微件」。 -->
+     用了宿主 inflate 会直接判 "Class not allowed to be inflated" 并整条显示「无法加载微件」。
+     三颗键跟在文字下面、左对齐(与鸿蒙 2×4 那一档同一排法:键跟着文字走,不当整卡的 transport)。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_root"
@@ -27,7 +28,7 @@
         android:layout_weight="1"
         android:orientation="vertical">
 
-        <!-- 4×2 的格子高约 210dp,文字块占掉剩余高度并垂直居中,进度与时间贴底;
+        <!-- 4×2 的格子高约 210dp,文字块占掉剩余高度并垂直居中,键 / 进度 / 时间贴底;
              否则三行文字全挤在顶部、下面空一大块。 -->
         <FrameLayout
             android:layout_width="match_parent"
@@ -39,17 +40,6 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center_vertical"
                 android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/widget_label"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:ellipsize="end"
-                    android:letterSpacing="0.08"
-                    android:maxLines="1"
-                    android:textColor="@color/widget_accent"
-                    android:textSize="9sp"
-                    tools:text="继续收听" />
 
                 <TextView
                     android:id="@+id/widget_title"
@@ -76,11 +66,56 @@
             </LinearLayout>
         </FrameLayout>
 
+        <!-- 图标尺寸与鸿蒙那档一致(20),点击区放大到 34×30 —— 卡片上的键不能只按图标本身量。 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:gravity="start|center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/widget_prev"
+                android:layout_width="34dp"
+                android:layout_height="30dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="@string/a11y_prev"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/widget_ic_prev"
+                android:tint="@color/widget_text" />
+
+            <ImageButton
+                android:id="@+id/widget_toggle"
+                android:layout_width="34dp"
+                android:layout_height="30dp"
+                android:layout_marginStart="8dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="@string/a11y_play"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/widget_ic_play"
+                android:tint="@color/widget_text" />
+
+            <ImageButton
+                android:id="@+id/widget_next"
+                android:layout_width="34dp"
+                android:layout_height="30dp"
+                android:layout_marginStart="8dp"
+                android:background="@android:color/transparent"
+                android:contentDescription="@string/a11y_next"
+                android:padding="7dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/widget_ic_next"
+                android:tint="@color/widget_text" />
+        </LinearLayout>
+
         <ProgressBar
             android:id="@+id/widget_progress"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="4dp"
+            android:layout_marginTop="4dp"
             android:max="1000"
             android:progress="0"
             android:progressBackgroundTint="@color/widget_track"

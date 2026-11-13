@@ -9,9 +9,15 @@ import { Log } from '../util/Logger';
 /**
  * App 侧把「继续收听」推上桌面卡片(Android 对应物是 `widget/WidgetRefresh.kt`)。
  *
- * 节流口径与 Android 一致:播放中**最多 20 秒推一次**,播放/暂停/换集/seek 这类真实状态变化
+ * 节流口径:播放中**最多 5 秒推一次**,播放/暂停/换集/seek 这类真实状态变化
  * 走 `force`,立刻排一次。为什么需要节流:播放中每 500ms 有一个 tick、每 5 秒落一次历史进度,
  * 每次落盘都推一遍等于每分钟十几次进程间更新,而卡片上的时间只精确到秒。
+ *
+ * ⚠️ **这里曾经是 20 秒**(对齐 Android 的 `WidgetRefresh`),2026-11-12 改成 5 秒:
+ * 用户报「卡片进度不会随播放改变」。20 秒一跳本身没错,但卡片上的时间戳一眼看去像定住;
+ * 而进度条更糟 —— 百分比取整之后,80 分钟的节目要 48 秒才动一格。现在 5 秒一跳、
+ * 百分比保留一位小数,肉眼能看出在走。系统对 `updateForm` 没有“每 N 秒一次”的硬限制
+ * (每天 50 次那条只约束**定时刷新**,见 H267),实测 5 秒一推稳定。
  *
  * force 也**不是同步执行**,而是延后 700ms:进度写盘是 400ms 去抖(JsonFile.writeJsonDebounced),
  * 立刻推会读到上一份 —— 卡片上的进度会比实际落后一跳(Android 那边 seek/暂停路径的
@@ -21,13 +27,13 @@ import { Log } from '../util/Logger';
  * `JsonFile`/`L` 单例;两边共用 `WidgetFormBuilder`,保证字段与取值口径一致。
  */
 export class WidgetUpdater {
-  private static readonly MIN_MS: number = 20_000;
+  private static readonly MIN_MS: number = 5_000;
   private static readonly FORCE_DELAY_MS: number = 700;
   private static lastRunAt: number = 0;
   private static timer: number = -1;
   private static busy: boolean = false;
 
-  /// 推一次。`force=false` 时按 20 秒节流(到点补推一次,不丢最后一次)。
+  /// 推一次。`force=false` 时按 5 秒节流(到点补推一次,不丢最后一次)。
   static request(settings: SettingsStore, force: boolean = false): void {
     if (force) {
       WidgetUpdater.schedule(settings, WidgetUpdater.FORCE_DELAY_MS);

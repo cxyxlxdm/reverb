@@ -16,6 +16,8 @@ import { MomentCard, snapshotToPng, saveToGallery } from './MomentCard';
 import { SeekBar } from './SeekBar';
 import { SleepCountdownText } from './SleepCountdownText';
 import { TranscriptPane } from './TranscriptPane';
+import { ChapterEntry, ChapterSheetView } from './ChapterPanel';
+import { ChapterStore } from '../store/ChapterStore';
 import { Features } from '../Features';
 import { Episode } from '../model/Models';
 import { Log } from '../util/Logger';
@@ -33,6 +35,8 @@ export struct PlayerPage {
   @ObjectLink favorites: FavoriteStore;
   @ObjectLink stamps: StampStore;
   @ObjectLink settings: SettingsStore;
+  /// 章节表的状态机(见 `store/ChapterStore`)。只在发布方给了章表时出现入口。
+  @ObjectLink chapters: ChapterStore;
   onBack: () => void = () => {};
   onOpenQueue: () => void = () => {};
   /**
@@ -66,6 +70,13 @@ export struct PlayerPage {
    * 现在它挂在本页根 Column 上。
    */
   @State showNote: boolean = false;
+  /**
+   * 章节弹层的显位。`.bindSheet` 挂在「章节入口 + 进度条」那个 Column 上
+   * (根 Column 已被批注占了、moreMenuChip 被盖章占了;一个节点只有一个 bindSheet)。
+   * 入口的 onClick 与 sheet 不在同一节点,不会出现 $$ 与 onClick 互相置位的抖动
+   * (那个坑的说明见 moreMenuChip 的长注释)。
+   */
+  @State showChapters: boolean = false;
   /**
    * 批注要记的那一秒 —— **按下「写批注」那一刻的快照,不是跟随播放器的实时值**。
    *
@@ -118,6 +129,16 @@ export struct PlayerPage {
   private liveNoTimeline(): boolean {
     const e = this.player.current;
     return e !== null && e.isLive === true && this.player.durationMs <= 0;
+  }
+
+  /**
+   * 这一集有没有发布方给的章表。没有就**不出现入口** —— 摆一个点进去空着的按钮,
+   * 比不摆更让人怀疑是 bug(与 Android 同一条)。
+   * 直播流没有时间轴,`liveNoTimeline` 那条分支已经把整块(jump/进度)藏掉了。
+   */
+  private hasChapters(): boolean {
+    const e = this.player.current;
+    return e !== null && e.chaptersUrl.length > 0;
   }
 
   private pageDots(): number[] {
@@ -208,14 +229,34 @@ export struct PlayerPage {
       if (this.liveNoTimeline()) {
         this.liveRow()
       } else {
-        // 进度条是独立组件:它自己轮询播放位置,于是进度更新不再重渲整个播放页(H64)
-        SeekBar({
-          scheme: this.scheme,
-          fontScale: this.fontScale,
-          durationMs: this.player.durationMs,
-          playing: this.player.isPlaying,
-          clock: this.player.clock,
-          onSeek: (ms: number) => { this.player.seekTo(ms); }
+        Column() {
+          // 章节入口:显示**当前章标题**而不是"章节"两个字 —— 它本身就是有用的信息,
+          // 也让"点这里能跳章"看得出来(与 Android 播放页同形)。
+          if (this.hasChapters()) {
+            ChapterEntry({
+              scheme: this.scheme,
+              fontScale: this.fontScale,
+              store: this.chapters,
+              episodeId: this.player.current === null ? '' : this.player.current.id,
+              clock: this.player.clock,
+              onOpen: () => { this.showChapters = true; }
+            })
+          }
+          // 进度条是独立组件:它自己轮询播放位置,于是进度更新不再重渲整个播放页(H64)
+          SeekBar({
+            scheme: this.scheme,
+            fontScale: this.fontScale,
+            durationMs: this.player.durationMs,
+            playing: this.player.isPlaying,
+            clock: this.player.clock,
+            onSeek: (ms: number) => { this.player.seekTo(ms); }
+          })
+        }
+        .width('100%')
+        // 章节弹层挂在这个 Column 上(见 showChapters 的注释)。高度按「标题 + 约五行 + 边距」给,
+        // 章多的集在列表内部滚动。
+        .bindSheet($$this.showChapters, this.chapterSheet(), {
+          height: 420, backgroundColor: this.scheme.surface
         })
       }
       this.controls()
@@ -244,6 +285,26 @@ export struct PlayerPage {
     // (一个节点只有一个 bindSheet)。高度按「标题 + 时间 + 三行输入 + 按钮」给足,
     // 键盘弹起时由系统抬升 —— 这条**未真机验过**,装机判据是"输入框不被键盘盖住"。
     .bindSheet($$this.showNote, this.noteSheet(), { height: 320, backgroundColor: this.scheme.surface })
+  }
+
+  /**
+   * 章节弹层内容。`episodeId` / `chaptersUrl` 由组件自己带 —— 弹层开着时自动续播换集,
+   * `@Watch` 会重新取这一集的章表;点一章就跳过去并收起弹层(与 Android 同行为)。
+   */
+  @Builder
+  chapterSheet() {
+    ChapterSheetView({
+      scheme: this.scheme,
+      fontScale: this.fontScale,
+      store: this.chapters,
+      episodeId: this.player.current === null ? '' : this.player.current.id,
+      chaptersUrl: this.player.current === null ? '' : this.player.current.chaptersUrl,
+      clock: this.player.clock,
+      onSeek: (ms: number) => {
+        this.player.seekTo(ms);
+        this.showChapters = false;
+      }
+    })
   }
 
   @Builder

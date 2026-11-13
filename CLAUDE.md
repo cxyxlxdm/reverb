@@ -56,7 +56,8 @@ Android release 编译 + 装机、鸿蒙 `assembleHap` + 装机、macOS 整模�
 
 - **一个现象可能是多个缺陷的和。** 逐字稿那次「高亮对不上且不跟随」是三个互不相干的
   缺陷叠在一起,只修一个用户仍会说"还是不行"。
-- **看不见中间值的问题,先造能看见的工具**(现成的例子:`android/tools/asr-probe/`)。
+- **看不见中间值的问题,先造能看见的工具**(现成的例子:`android/tools/play-button-check.sh`
+  量播放键几何;ASR 选型期的主机探针已随 whisper 删除,方法与读数留在研究文档里)。
   在此之前靠现象猜原因,错过两次。
 - 真机日志:`adb logcat` / `hdc shell hilog -x`;Android 崩溃另看
   `adb shell dumpsys activity exit-info`(`reason=16` 是覆盖安装,不是崩溃)。

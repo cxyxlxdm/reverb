@@ -6,7 +6,8 @@ import com.yuyin.reverb.data.model.TranscribedWord
 /**
  * 把逐字稿整理成**屏幕上一行左右**的句子。两条路都要用它,所以抽在这里:
  * - 官方稿(`TranscriptFetcher`):VTT 的 cue 可以长到几百字;
- * - 本机识别(`WhisperEngine`):给了标点提示词之后,whisper 会吐出整段带标点的长句。
+ * - 本机识别(`SenseVoiceEngine`):SenseVoice 直接吐带标点的整段,一个 26 秒块
+ *   可能有几百字 —— 不切的话跟读高亮的粒度就是"整块一起亮"。
  *
  * 为什么必须切:跟读高亮的粒度就是句子的粒度。一段三百字的文本会整段高亮二十多秒,
  * 跟读效果等于没有,还得在屏幕上滚半天才看到当前位置。
@@ -111,8 +112,9 @@ object TranscriptLines {
      * 队尾只要混进一个异常小的值,它就永远满足条件,于是**高亮钉死在那一条再也不动**
      * (真实事故见 TROUBLESHOOTING H60:某些 token 算不出时刻、退化成 -1)。
      *
-     * 这里是所有来源的共同入口(发布方的 JSON 稿、whisper 的 token),所以放在这里最省事:
-     * 本机识别那条在 C++ 侧已经保证过一遍,这一道额外覆盖**发布方给的稿** ——
+     * 这里是所有来源的共同入口(发布方的 JSON 稿、本机识别的 token),所以放在这里最省事:
+     * 本机识别那条在 `SenseVoiceEngine.wordsFrom` 里已经保证过一遍(1.0.8 前是在 C++ 侧),
+     * 这一道额外覆盖**发布方给的稿** ——
      * 别人生成的文件不能假定一定按时间排好。终点同时保证不早于起点。
      */
     private fun monotonic(words: List<TranscribedWord>): List<TranscribedWord> {
@@ -139,14 +141,14 @@ object TranscriptLines {
      *
      * 三种来源都走这里,因为它们是同一个问题:
      * - 官方 JSON 稿:一条一个词(实测一集 10245 条);
-     * - whisper 的 token:一条一到两个汉字 / 一个英文子词;
+     * - 本机识别的 token:一条一到两个汉字 / 一个英文子词(SenseVoice,1.0.8 前是 whisper);
      * - (将来)鸿蒙若换三方引擎,同样是 token 流。
      *
      * 三个断句依据,先到先断:句末标点 / 累计长度超过一行 / 与下一条之间静音超过 900ms
      * (换气或换人说话)。行宽按内容选:多数是汉字用 24,否则 42。
      *
      * @param spaced 传 true 表示条目**不自带空格**,需要按 ASCII 规则补(官方 JSON 稿);
-     *   传 false 表示条目自带该有的空格(whisper token),原样拼接。
+     *   传 false 表示条目自带该有的空格(本机识别的 token),原样拼接。
      *   无论哪种,产出都满足 `words` 拼接 == 行文本这条不变式。
      */
     fun mergeWords(words: List<TranscribedWord>, spaced: Boolean): List<TranscribedSegment> {

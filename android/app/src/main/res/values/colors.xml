@@ -11,4 +11,7 @@
     <color name="widget_text_secondary">#66716F</color>
     <color name="widget_accent">#3F8A7C</color>
     <color name="widget_track">#E7E0D1</color>
+    <!-- 压在 accent 圆底上的图标色。与鸿蒙 WidgetCard.onAccent() 同一口径:
+         浅色档 accent 够深,用白色;深色档 accent 是浅青,白图标会糊在一起,改用深墨色。 -->
+    <color name="widget_on_accent">#FFFFFF</color>
 </resources>

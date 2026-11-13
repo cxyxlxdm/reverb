@@ -26,7 +26,17 @@ command -v say >/dev/null || { echo "✗ 找不到 say(仅 macOS 可生成)"; ex
 command -v afconvert >/dev/null || { echo "✗ 找不到 afconvert"; exit 1; }
 [ -f script.txt ] || { echo "✗ 缺 script.txt(引导文案)"; exit 1; }
 
-say -v '?' | grep -q "^${VOICE} " || { echo "✗ 系统里没有 ${VOICE} 这个语音,用 say -v '?' 查可用列表"; exit 1; }
+# 别写成 `say -v '?' | grep -q "^${VOICE} "`(2026-11-13 改,见 H272):
+# `grep -q` 一命中就关管道,`say` 还在写列表时会吃到 SIGPIPE(141),而本脚本是
+# `set -euo pipefail` ⇒ 明明有这个语音也会被判成"没有"。这一行至今没闪,是因为
+# `^Tingting ` 命中得早、列表也短 —— 但形状与鸿蒙那条发布闸门完全一样,改掉不留隐患。
+# 顺带把两类失败分开报:say 没跑起来 ≠ 系统缺这个语音(同 H272 教训 ②)。
+if ! VOICE_LIST=$(say -v '?'); then
+  echo "✗ say -v '?' 读不出语音列表 —— 是 say 自己没跑起来,不是缺 ${VOICE} 这个语音"
+  exit 1
+fi
+grep -q "^${VOICE} " <<< "$VOICE_LIST" \
+  || { echo "✗ 系统里没有 ${VOICE} 这个语音,用 say -v '?' 查可用列表"; exit 1; }
 
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT

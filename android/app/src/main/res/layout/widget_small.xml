@@ -1,7 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- 2×2:缩略图 + 两行标题,底部一条细进度。RemoteViews 不支持 ConstraintLayout,
      也不允许 android.widget.Space(见 widget_medium 头注),所以层级只用 LinearLayout / FrameLayout,
-     三档布局共用同一组 id(Provider 只写 id,不认布局)。 -->
+     四档布局共用同一组 id(Provider 只写 id,不认布局)。
+     播放键压在这张 44dp 封面的右下角(与鸿蒙 2×2 的 filledButton 同一分工:这一档没有
+     多余高度再摆一行键)。 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/widget_root"
@@ -20,13 +22,30 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
-        <ImageView
-            android:id="@+id/widget_art"
+        <FrameLayout
             android:layout_width="44dp"
-            android:layout_height="44dp"
-            android:contentDescription="@null"
-            android:scaleType="centerCrop"
-            tools:src="@mipmap/ic_launcher" />
+            android:layout_height="44dp">
+
+            <ImageView
+                android:id="@+id/widget_art"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="centerCrop"
+                tools:src="@mipmap/ic_launcher" />
+
+            <ImageButton
+                android:id="@+id/widget_toggle"
+                android:layout_width="26dp"
+                android:layout_height="26dp"
+                android:layout_gravity="bottom|end"
+                android:background="@drawable/widget_control_bg"
+                android:contentDescription="@string/a11y_play"
+                android:padding="5dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/widget_ic_play"
+                android:tint="@color/widget_on_accent" />
+        </FrameLayout>
 
         <LinearLayout
             android:layout_width="0dp"
@@ -34,17 +53,6 @@
             android:layout_marginStart="10dp"
             android:layout_weight="1"
             android:orientation="vertical">
-
-            <TextView
-                android:id="@+id/widget_label"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:letterSpacing="0.08"
-                android:maxLines="1"
-                android:textColor="@color/widget_accent"
-                android:textSize="9sp"
-                tools:text="继续收听" />
 
             <TextView
                 android:id="@+id/widget_title"

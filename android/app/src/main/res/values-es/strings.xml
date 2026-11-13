@@ -198,6 +198,9 @@
     <string name="player_err_unplayable">Este episodio no se puede reproducir ahora</string>
     <string name="shownotes">Notas del episodio</string>
     <string name="shownotes_empty">Sin notas</string>
+    <string name="player_chapters">Capítulos</string>
+    <string name="chapters_empty">Este episodio no tiene capítulos</string>
+    <string name="chapters_failed">No se pudieron cargar los capítulos. Toca para reintentar</string>
     <string name="note_add">Escribir una anotación</string>
     <string name="note_title">Guardar este segundo</string>
     <string name="note_hint">¿Qué te ha venido a la mente?</string>
@@ -247,6 +250,48 @@
     <string name="set_full_backup">Copia completa</string>
     <string name="set_full_backup_sub">Todos tus datos locales — suscripciones, anotaciones, historial — para migración / copia de seguridad</string>
     <string name="set_restore">Restaurar</string>
+
+    <!-- Sincronización en red local (misma Wi-Fi, fusiona las secciones de la copia). -->
+    <string name="sec_lan">Red local</string>
+    <string name="set_lan_sync">Sincronización local</string>
+    <string name="set_lan_sync_sub">Combina suscripciones, favoritos, sellos, notas y progreso con otro dispositivo en la misma Wi-Fi</string>
+    <string name="lan_title">Sincronización local</string>
+    <string name="lan_own_name">Este dispositivo: %1$s</string>
+    <string name="lan_waiting">Esperando a otro dispositivo…</string>
+    <string name="lan_no_wifi">No se encontró una dirección Wi-Fi. Conecta ambos dispositivos a la misma Wi-Fi primero.</string>
+    <string name="lan_own_address">Dirección de este dispositivo, se puede escribir manualmente en el otro</string>
+    <string name="lan_peers">Dispositivos cercanos</string>
+    <string name="lan_no_peers">Aún no hay dispositivos. Comprueba que la página esté abierta en el otro dispositivo o escribe la dirección que muestra su pantalla.</string>
+    <string name="lan_peer_row">%1$s\n%2$s</string>
+    <string name="lan_manual_hint">Dirección del otro dispositivo, p. ej. 192.168.1.5:47820</string>
+    <string name="lan_connect">Conectar</string>
+    <string name="lan_connecting">Conectando con %1$s…</string>
+    <string name="lan_confirm_title">Verifica el código de emparejamiento</string>
+    <string name="lan_confirm_body">Los seis dígitos deben coincidir exactamente en ambos dispositivos. Si no, cancela: puede haber alguien en medio.</string>
+    <string name="lan_confirm_peer">Par: %1$s</string>
+    <string name="lan_confirm_accept">Coinciden, iniciar sincronización</string>
+    <string name="lan_cancel">Cancelar</string>
+    <string name="lan_syncing">Sincronizando con %1$s…</string>
+    <string name="lan_stage_sending">Enviando datos</string>
+    <string name="lan_stage_receiving">Recibiendo datos</string>
+    <string name="lan_stage_merging">Combinando datos</string>
+    <string name="lan_done_title">Sincronización completada</string>
+    <string name="lan_done_with">Combinado con %1$s</string>
+    <string name="lan_done_added">Añadidos: suscripciones %1$d · favoritos %2$d · sellos %3$d · notas %4$d · historial %5$d · estadísticas %6$d</string>
+    <string name="lan_done_nothing">Ambos dispositivos ya están al día.</string>
+    <string name="lan_failed_title">Error de sincronización</string>
+    <string name="lan_fail_connect">No se puede conectar con el otro dispositivo. Comprueba que ambos estén en la misma Wi-Fi y que su página esté abierta, o escribe la dirección que muestra su pantalla.</string>
+    <string name="lan_fail_version">Los dispositivos tienen versiones distintas. Actualiza ambos a la misma versión.</string>
+    <string name="lan_fail_protocol">La respuesta del otro dispositivo no es la esperada. Detenido.</string>
+    <string name="lan_fail_decrypt">Error de verificación del cifrado. Detenido.</string>
+    <string name="lan_fail_io">Conexión interrumpida. Detenido.</string>
+    <string name="lan_fail_cancelled">Cancelado.</string>
+    <string name="lan_fail_peer_cancelled">El otro dispositivo canceló la sincronización.</string>
+    <string name="lan_scope">Solo se sincronizan suscripciones, favoritos, sellos, notas, historial y estadísticas de escucha. Las descargas y los ajustes no participan. Las eliminaciones aún no se sincronizan: darse de baja en un dispositivo puede deshacerse desde el otro.</string>
+    <string name="lan_close">Cerrar</string>
+    <string name="lan_again">Sincronizar de nuevo</string>
+    <string name="lan_retry">Reintentar</string>
+    <string name="lan_tip">Toca el otro dispositivo solo en uno de los dos; no hace falta en ambos.</string>
     <string name="set_restore_sub">Importar desde un archivo de copia de Reverb</string>
 
     <string name="set_theme">Tema</string>
@@ -329,7 +374,7 @@
     <string name="about_h_what">Qué es esto</string>
     <string name="about_p_what">Reverb es un cliente de pódcast ligero con estética de tinta china. Descubre, suscríbete, descarga sin conexión y reanuda cuando quieras — centrado en escuchar.</string>
     <string name="about_h_features">Funciones</string>
-    <string name="about_p_features">· Descubrir: listas diarias por región y categoría; reordenar y deslizar\n· Buscar: por nombre o URL RSS\n· Enlaces de vídeo: pega un enlace de vídeo de Bilibili o un identificador BV y escúchalo como un episodio (sin cuenta; los episodios de vídeo no se pueden descargar)\n· Compartir programas: crea una imagen con portada, título y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Novedades: todos los episodios de tus programas seguidos, del más reciente al más antiguo, en su propia pestaña\n· Biblioteca: suscripciones, a continuación, favoritos, descargas, historial y anotaciones\n· Lote y atajos: toca la portada de un episodio para abrir su canal; en Novedades, Favoritos, Descargas, Historial o la página de un canal, mantén pulsado un episodio y elige «Seleccionar varios» para añadirlos en bloque a la cola\n· Sin conexión: guarda los episodios descargados en el dispositivo, solo Wi-Fi opcional\n· Caché de reproducción: los episodios escuchados se quedan en el dispositivo y se vuelven a oír sin conexión; listas y portadas ya cargadas siguen navegables sin red, y se borra desde Ajustes\n· Transcripción: transcribe en el dispositivo o lee la del propio editor\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del episodio: desliza en el reproductor\n· Avisos de nuevos episodios\n· Actualización dentro de la app: descarga la nueva versión en el dispositivo y la entrega al instalador del sistema (fuera de Wi-Fi pregunta antes)\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño, color, idiomas</string>
+    <string name="about_p_features">· Descubrir: listas diarias por región y categoría; reordenar y deslizar\n· Buscar: por nombre o URL RSS\n· Enlaces de vídeo: pega un enlace de vídeo de Bilibili o un identificador BV y escúchalo como un episodio (sin cuenta; los episodios de vídeo no se pueden descargar)\n· Compartir programas: crea una imagen con portada, título y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Novedades: todos los episodios de tus programas seguidos, del más reciente al más antiguo, en su propia pestaña\n· Biblioteca: suscripciones, a continuación, favoritos, descargas, historial y anotaciones\n· Lote y atajos: toca la portada de un episodio para abrir su canal; en Novedades, Favoritos, Descargas, Historial o la página de un canal, mantén pulsado un episodio y elige «Seleccionar varios» para añadirlos en bloque a la cola\n· Sin conexión: guarda los episodios descargados en el dispositivo, solo Wi-Fi opcional\n· Caché de reproducción: los episodios escuchados se quedan en el dispositivo y se vuelven a oír sin conexión; listas y portadas ya cargadas siguen navegables sin red, y se borra desde Ajustes\n· Transcripción: transcribe en el dispositivo (chino, inglés, japonés, coreano y cantonés) o lee la del propio editor; búsqueda en todo el texto y exportación como texto o Markdown para compartir\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del episodio: desliza en el reproductor\n· Capítulos: en los episodios cuyo editor incluye una lista de capítulos, el capítulo actual aparece sobre la barra de progreso; toca para saltar. La lista se guarda en caché, así que funciona sin conexión\n· Avisos de nuevos episodios\n· Actualización dentro de la app: descarga la nueva versión en el dispositivo y la entrega al instalador del sistema (fuera de Wi-Fi pregunta antes)\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Sincronización en red local: fusiona suscripciones, favoritos, sellos, notas y progreso con otro dispositivo en la misma Wi-Fi\n· Apariencia: oscuro/claro/sistema, tamaño, color, idiomas</string>
     <string name="about_h_philosophy">Diseño</string>
     <string name="about_p_philosophy">La estética se inspira en la tinta, el celadón y el oro de las vigas — el nombre y el icono evocan «un eco girando entre las vigas».\n\nLas fuentes son gratuitas, sin cuenta ni clave API: la búsqueda usa fuentes públicas y vuelve al RSS original del editor para reproducir el audio.\n\nEn privacidad, suscripciones, historial y descargas permanecen en tu dispositivo, no se suben automáticamente al desarrollador ni se usan para seguimiento entre aplicaciones.</string>
 
@@ -340,8 +385,9 @@
     <string name="licenses_sources_note">Esta app no ofrece catálogo ni almacena ni redirige audio: el audio siempre proviene del RSS original del editor.</string>
     <string name="licenses_sources_note_catalog">Directorios/API públicos, usados solo para búsqueda y listas; el audio siempre proviene del RSS original del editor. La app no lo aloja ni lo redirige.</string>
     <!-- 许可页与数据来源里"换语种要变"的四条。目录/接口名(Apple iTunes、fyyd.de、gpodder.net)与专有名词是五套同形,仍留在 LicensesScreen.kt 字面量里。 -->
-    <string name="lic_whisper">whisper.cpp (reconocimiento de voz en el dispositivo)</string>
-    <string name="lic_whisper_model">Modelo Whisper ggml-base-q5_1 (OpenAI)</string>
+    <string name="lic_sherpa">sherpa-onnx (motor de reconocimiento de voz en el dispositivo)</string>
+    <string name="lic_onnxruntime">ONNX Runtime (motor de inferencia)</string>
+    <string name="lic_sensevoice">Modelo SenseVoiceSmall (FunASR)</string>
     <string name="src_publisher_rss">El feed RSS original del editor</string>
     <string name="src_site_opml">Lista de suscripciones recomendada en el sitio de la app</string>
     <string name="notif_channel_name">Nuevos episodios</string>
@@ -380,7 +426,7 @@
     <string name="batch_added">%1$d episodios añadidos a la cola</string>
     <string name="batch_added_none">Los episodios elegidos ya están en la cola</string>
     <string name="set_transcription">Transcripción</string>
-    <string name="set_transcription_sub">Desliza a la tercera página del reproductor. Si el editor no la ofrece, se transcribe en el dispositivo</string>
+    <string name="set_transcription_sub">Desliza a la tercera página del reproductor. Si el editor no la ofrece, se transcribe en el dispositivo (chino, inglés, japonés, coreano y cantonés)</string>
     <string name="transcript_prompt">Convierte este episodio en texto, en tu dispositivo</string>
     <string name="transcript_start">Generar transcripción</string>
     <string name="transcript_fetching">Obteniendo la transcripción del editor…</string>
@@ -389,9 +435,20 @@
     <string name="transcript_running">Transcribiendo: la primera línea aparecerá en breve…</string>
     <string name="transcript_failed">La transcripción falló. Toca para reintentar</string>
     <string name="transcript_none">El editor no ofrece transcripción de este episodio y esta versión no incluye reconocimiento en el dispositivo</string>
+    <string name="transcript_lang_unsupported">La transcripción en el dispositivo solo admite chino, inglés, japonés, coreano y cantonés. Este episodio tampoco tiene transcripción del editor.</string>
     <string name="action_retry">Reintentar</string>
     <string name="transcript_prompt_official">El editor ofrece una transcripción de este episodio</string>
     <string name="transcript_show">Ver transcripción</string>
+    <string name="transcript_search">Buscar en la transcripción</string>
+    <string name="transcript_search_none">Ninguna línea coincide</string>
+    <string name="transcript_search_position">%1$d / %2$d</string>
+    <string name="transcript_search_prev">Coincidencia anterior</string>
+    <string name="transcript_search_next">Coincidencia siguiente</string>
+    <string name="transcript_export">Exportar transcripción</string>
+    <string name="transcript_export_text">Texto sin formato (.txt)</string>
+    <string name="transcript_export_markdown">Markdown (.md)</string>
+    <string name="transcript_export_failed">Error al exportar</string>
+    <string name="transcript_share_title">Compartir transcripción</string>
     <string name="set_word_highlight">Resaltado palabra por palabra</string>
 
     <!-- ↓↓ 这两组串合并自原 src/default/res(2026-10-18 两个 flavor 合成一份包,见 H205):
@@ -400,9 +457,10 @@
          原先它们在自分发渠道的 source set 里,商店渠道另有一份同名覆盖;现在只有一份包、一份文案。
          ⚠️ 正文由同意页用 stringResource 取**纯文本**渲染:`**` 会原样上屏、`<b>` 会被 aapt
          收成样式跨度后再摊平(不掉字形也不加粗)⇒ 强调只能靠措辞与标点。 -->
-    <string name="privacy_consent_asr">Transcripción de voz sin conexión. Esta versión incluye reconocimiento sin conexión (el componente de código abierto whisper.cpp y su modelo). La conversión del audio de un episodio en texto se realiza <b>por completo en tu dispositivo: el audio nunca se sube, nunca sale del dispositivo y nunca pasa por ningún servidor</b>. Puedes desactivar esta función en Ajustes.</string>
+    <string name="privacy_consent_asr">Transcripción de voz sin conexión. Esta versión incluye reconocimiento sin conexión (el motor de código abierto sherpa-onnx y el modelo SenseVoiceSmall). La conversión del audio de un episodio en texto se realiza <b>por completo en tu dispositivo: el audio nunca se sube, nunca sale del dispositivo y nunca pasa por ningún servidor</b>. La transcripción admite por ahora chino, inglés, japonés, coreano y cantonés. Puedes desactivar esta función en Ajustes.</string>
     <string name="set_word_highlight_sub">Ilumina cada palabra mientras se pronuncia. El reconocimiento en el dispositivo obtiene los tiempos por palabra de paso, así que no añade tiempo de transcripción.</string>
     <string name="privacy_consent_mic">Espectro real (opcional). Al activar «Espectro real» en Ajustes, la onda de tinta sigue el volumen real. Requiere acceso al micrófono, que el sistema solicita por separado al activarlo; el audio solo se analiza en el dispositivo — nunca se graba, guarda ni envía — y deja de usarse al desactivar la opción.</string>
+    <string name="privacy_consent_lan">Sincronización en red local (opcional). Al abrir «Sincronización en red local» en Ajustes, la aplicación anuncia un nombre de servicio (con el nombre de este dispositivo y un identificador aleatorio corto) en la misma Wi-Fi y abre temporalmente un puerto TCP; ambos se detienen al cerrar la página. Cuando tocas el otro dispositivo o escribes su dirección, cada dispositivo muestra un código de emparejamiento de seis cifras, y la transferencia solo empieza cuando confirmas que ambas pantallas coinciden. La transferencia lleva las mismas seis secciones que una copia completa (suscripciones, favoritos, sellos, notas, historial y estadísticas de escucha, estas últimas fusionadas por dispositivo); excluye audio, cachés binarias, el usuario y la contraseña de fuentes privadas, los ajustes y la cola de reproducción. Los datos se cifran con claves negociadas entre ambos dispositivos (ECDH P-256 y AES-256-GCM) y viajan directamente solo entre los dos dispositivos emparejados: nunca pasan por un servidor ni se suben al desarrollador. Las eliminaciones no se sincronizan: un elemento al que se dio de baja o que se borró en un dispositivo vuelve en la siguiente sincronización si el otro dispositivo todavía lo tiene.</string>
     <string name="privacy_consent_update">Actualizaciones dentro de la app (opcional). Al iniciarse, esta versión consulta una vez la interfaz pública de publicaciones de GitHub (api.github.com) para saber cuál es la última versión. La petición solo incluye la dirección del repositorio público de la propia app y su número de versión actual; nunca una cuenta, un identificador, tus suscripciones o lo que escuchas. Solo descarga cuando esa respuesta trae una versión realmente más nueva, y por defecto únicamente por Wi-Fi; en una red con cargo por datos, primero pide tu permiso. Después se hace cargo el instalador del sistema — la app no instala nada por sí misma — y el permiso «Instalar aplicaciones desconocidas» que hace falta en ese paso lo solicita el sistema solo cuando eliges instalar.</string>
 
     <string name="update_title">Nueva versión %1$s</string>
@@ -422,7 +480,6 @@
 
     <!-- Widget Seguir escuchando -->
     <string name="widget_name">Reverb · Seguir escuchando</string>
-    <string name="widget_continue">SEGUIR ESCUCHANDO</string>
     <string name="widget_empty_title">Elige un episodio</string>
     <string name="widget_empty_sub">Tu último episodio aparecerá aquí</string>
     <string name="widget_description">Muestra dónde lo dejaste; toca para seguir escuchando</string>

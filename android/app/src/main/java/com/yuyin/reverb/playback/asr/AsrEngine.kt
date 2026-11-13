@@ -4,7 +4,7 @@ import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.TranscribedSegment
 
 /**
- * 本机离线语音识别。实现是 `WhisperEngine`,工厂是 `AsrFactory`。
+ * 本机离线语音识别。实现是 `SenseVoiceEngine`,工厂是 `AsrFactory`。
  *
  * 这两样原先分开放(接口在 `main`、实现按 flavor 各一份),理由是要保证商店那个渠道的包里
  * **连实现类、`.so` 与模型都不存在** —— R8 能折叠常量删掉 Kotlin 代码,但删不掉 `.so` 与 assets,
@@ -36,12 +36,21 @@ interface AsrEngine {
     }
 
     /**
+     * 这个引擎能不能识别某种语言(按 `localeId` 判断,如 `zh-CN` / `fr-FR`)。
+     *
+     * 为什么要显式问一句,而不是"跑了失败再说":SenseVoice **只认 zh/en/ja/ko/yue**。
+     * 法语、西语界面下如果照旧摆一个「生成逐字稿」按钮,点下去只会得到"转写失败";
+     * 界面需要的是**在点之前**就说清"本机识别不支持这种语言,只能看发布方的官方稿"。
+     */
+    fun supports(localeId: String): Boolean
+
+    /**
      * 转写一集。**挂起直到做完或被取消**;取消由协程取消传播,实现方要检查 `isActive`。
      *
      * @param localPath 已下载单集的本地路径;为空则实现方自己下载到临时文件
      * @param localeId  `zh-CN` / `en-US` …;空串表示让引擎自动判断语言
-     * @param wordTimestamps 是否额外算**词级时间**(逐字高亮要用)。在 whisper 上几乎不要钱
-     *   (只是多跑一遍时间戳启发式),仍留作参数是因为用户可以在设置里关掉这个效果
+     * @param wordTimestamps 是否把**词级时间**存进结果(逐字高亮要用)。关掉只影响存不存,
+     *   不影响切行 —— 引擎本来就能拿到 token 时刻
      * @param onSegment 逐句吐出,**按时间顺序**
      * @return true = 正常做完
      */

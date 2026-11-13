@@ -1,43 +1,70 @@
 package com.yuyin.reverb.ui.screens
 
+import android.content.ClipData
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Notes
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import com.yuyin.reverb.data.local.TranscriptStore
@@ -45,6 +72,12 @@ import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.TranscribedSegment
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.playback.asr.AsrFactory
+import com.yuyin.reverb.util.TranscriptExport
+import com.yuyin.reverb.util.TranscriptSearch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.File
 
 /**
  * 播放页第三页:逐字稿。对应 macOS `UI/TranscriptPage.swift`。
@@ -74,7 +107,12 @@ fun TranscriptPane(
     val isPlaying by PlayerController.isPlaying.collectAsStateWithLifecycle()
     // 切集/切语言:交给 store 决定是命中缓存秒显,还是等用户点「生成」
     LaunchedEffect(episode.id, uiLanguage) {
-        store.prepare(episode, uiLanguage, AsrFactory.HAS_ENGINE)
+        store.prepare(
+            episode,
+            uiLanguage,
+            AsrFactory.HAS_ENGINE,
+            AsrFactory.supports(TranscriptStore.localeFor(uiLanguage))
+        )
     }
 
     val nowMs = rememberExtrapolatedPosition(position, isPlaying, active)
@@ -84,13 +122,47 @@ fun TranscriptPane(
      * (词级高亮那层仍按 80ms 走,见 `karaokeLine` 的调用处。)
      *
      * `indexOfLast` 的正确性依赖**句子起点单调不减**:官方稿本来按时间排,本机识别那条
-     * 由 C++ 侧 `tidyWords` 保证。见那里的注释 —— 队尾一个异常小的值就会把高亮钉死。
+     * 由 `SenseVoiceEngine.wordsFrom` 保证(1.0.8 前在 C++ 侧)。见那里的注释 ——
+     * 队尾一个异常小的值就会把高亮钉死。
      */
     val currentIndex = remember(segments, nowMs / 100) {
         segments.indexOfLast { it.startMs <= nowMs }
     }
 
     val start: () -> Unit = { store.start(episode, uiLanguage, localPath, engine, wordHighlight) }
+
+    /**
+     * 搜索与导出。状态放在这一层而不是 `TranscriptList` 里,因为搜索要**跨列表**做事:
+     * 找命中句子、把某一句滚进视线、按命中起点跳播放位置。列表只负责画出来。
+     */
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
+    var searching by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    var cursor by remember { mutableIntStateOf(0) }
+    val trimmedQuery = query.trim()
+    val search = remember(segments, trimmedQuery) { TranscriptSearch.find(segments, trimmedQuery) }
+    // 命中集合随识别推进变化时,光标可能越界 —— 展示与跳转都用夹住后的值
+    val safeCursor = cursor.coerceIn(0, (search.hits.size - 1).coerceAtLeast(0))
+
+    fun showLine(index: Int, seek: Boolean) {
+        val seg = segments.getOrNull(index) ?: return
+        if (seek) PlayerController.seekTo(seg.startMs.toLong())
+        scope.launch { runCatching { listState.animateScrollToItem((index - 2).coerceAtLeast(0)) } }
+    }
+
+    // 查询一变就回到第一处并滚进视线;但**不打字就跳音频** —— 打字过程中播放位置乱跳比找不到更糟
+    LaunchedEffect(trimmedQuery) {
+        cursor = 0
+        search.hits.firstOrNull()?.let { showLine(it.index, seek = false) }
+    }
+
+    fun step(delta: Int) {
+        if (search.hits.isEmpty()) return
+        cursor = Math.floorMod(safeCursor + delta, search.hits.size)
+        showLine(search.hits[cursor].index, seek = true)
+    }
 
     Column(Modifier.fillMaxSize()) {
         when (val s = state) {
@@ -101,7 +173,39 @@ fun TranscriptPane(
                 if (segments.isEmpty() && tail.isBlank()) {
                     Progress(stringResource(R.string.transcript_running))
                 } else {
-                    TranscriptList(segments, tail, currentIndex, nowMs, active, wordHighlight)
+                    Column(Modifier.fillMaxSize()) {
+                        // 一句都没有时搜索无对象、导出只剩标题 —— 工具栏先不摆
+                        if (segments.isNotEmpty()) {
+                            TranscriptToolbar(
+                                searching = searching,
+                                query = query,
+                                onQueryChange = { query = it },
+                                onSearchingChange = { on ->
+                                    searching = on
+                                    if (!on) query = ""
+                                },
+                                matchCount = search.hits.size,
+                                cursor = safeCursor,
+                                onPrev = { step(-1) },
+                                onNext = { step(1) },
+                                onExport = { format ->
+                                    scope.launch {
+                                        shareTranscript(context, episode, segments, format) {
+                                            Toast.makeText(context, R.string.transcript_export_failed, Toast.LENGTH_SHORT).show()
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                        TranscriptList(
+                            segments, tail, currentIndex, nowMs,
+                            // 搜索开着的时候别跟着播放位置滚 —— 用户正在看的是搜到的那一行
+                            autoScroll = active && !(searching && trimmedQuery.isNotEmpty()),
+                            wordHighlight,
+                            listState,
+                            search.rangesByIndex
+                        )
+                    }
                 }
 
             // 有官方稿与没有官方稿,**要说不同的话**:前者只是下载一个文件(一两秒),
@@ -158,6 +262,16 @@ fun TranscriptPane(
                 actionLabel = null,
                 onAction = {}
             )
+
+            // 引擎在,但不认这种语言(法语 / 西语界面),而这一集也没有官方稿 ——
+            // 同样如实说,不摆一个点了必然失败的重试按钮
+            is TranscriptStore.State.UnsupportedLocale -> Hint(
+                icon = Icons.Rounded.Notes,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = stringResource(R.string.transcript_lang_unsupported),
+                actionLabel = null,
+                onAction = {}
+            )
         }
     }
 }
@@ -204,9 +318,10 @@ private fun TranscriptList(
     currentIndex: Int,
     nowMs: Long,
     autoScroll: Boolean,
-    wordHighlight: Boolean
+    wordHighlight: Boolean,
+    listState: LazyListState,
+    searchRanges: Map<Int, List<IntRange>>
 ) {
-    val listState = rememberLazyListState()
 
     /**
      * 当前句滚进视线。**只在用户没有手动滚动时**才自动跟随 ——
@@ -233,6 +348,9 @@ private fun TranscriptList(
         runCatching { listState.animateScrollToItem((currentIndex - 2).coerceAtLeast(0)) }
     }
 
+    // 搜索命中的底色。半透明强调色叠在正文之上:词级高亮那层仍在,两种信息不互相盖掉
+    val mark = MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
+
     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
         itemsIndexed(segments) { i, seg ->
             val isCurrent = i == currentIndex
@@ -247,9 +365,13 @@ private fun TranscriptList(
              * 合并成行时把原始条目留在了 `words` 里,见 `TranscriptFetcher`)。
              * 本机识别与 SRT/VTT 稿都没有词级时间 ⇒ `words` 为 null ⇒ 自动退化成整句高亮,
              * 调用方不用分辨(macOS 侧同样的回退设计)。
+             *
+             * 搜索区间由 `TranscriptSearch` **一次算好**传进来(见硬规矩 6):
+             * 当前句每 80ms 重建一次这段文本,匹配区间不该跟着重找一遍。
              */
-            val rendered = remember(seg, isCurrent, wordHighlight, if (isCurrent && wordHighlight) nowMs / 80 else 0L) {
-                karaokeLine(seg, isCurrent, nowMs, accent, dim, wordHighlight)
+            val marks = searchRanges[i] ?: emptyList()
+            val rendered = remember(seg, isCurrent, wordHighlight, if (isCurrent && wordHighlight) nowMs / 80 else 0L, marks, mark) {
+                karaokeLine(seg, isCurrent, nowMs, accent, dim, wordHighlight, marks, mark)
             }
             Text(
                 rendered,
@@ -297,17 +419,21 @@ private fun karaokeLine(
     nowMs: Long,
     accent: androidx.compose.ui.graphics.Color,
     dim: androidx.compose.ui.graphics.Color,
-    wordHighlight: Boolean
+    wordHighlight: Boolean,
+    marks: List<IntRange>,
+    markColor: androidx.compose.ui.graphics.Color
 ): AnnotatedString {
     val words = if (wordHighlight) seg.words else null
     if (!isCurrent || words.isNullOrEmpty()) {
-        return AnnotatedString(
-            seg.text,
-            SpanStyle(
-                color = if (isCurrent) accent else dim,
-                fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal
-            )
-        )
+        return buildAnnotatedString {
+            withStyle(
+                SpanStyle(
+                    color = if (isCurrent) accent else dim,
+                    fontWeight = if (isCurrent) FontWeight.SemiBold else FontWeight.Normal
+                )
+            ) { append(seg.text) }
+            addSearchMarks(marks, markColor)
+        }
     }
     val spoken = words.indexOfLast { it.startMs <= nowMs }
     val read = SpanStyle(color = accent.copy(alpha = 0.55f))
@@ -316,6 +442,210 @@ private fun karaokeLine(
         for ((idx, w) in words.withIndex()) {
             withStyle(if (idx == spoken) at else read) { append(w.text) }
         }
+        addSearchMarks(marks, markColor)
+    }
+}
+
+/**
+ * 命中区间贴底色。下标直接来自 `seg.text` —— 与 `words` 拼接等于整句那条不变式
+ * (见 `TranscribedWord` 的注释)是这里能这么写的前提。
+ */
+private fun AnnotatedString.Builder.addSearchMarks(ranges: List<IntRange>, color: androidx.compose.ui.graphics.Color) {
+    if (ranges.isEmpty()) return
+    for (r in ranges) {
+        val start = r.first.coerceIn(0, length)
+        val end = (r.last + 1).coerceIn(start, length)
+        if (end > start) addStyle(SpanStyle(background = color), start, end)
+    }
+}
+
+/**
+ * 逐字稿顶上那条工具带:搜索 / 上一处 / 下一处 / 导出。
+ *
+ * 平时只露两颗图标 —— 逐字稿页的主体是正文,工具栏不该常驻一行输入框。
+ * 导出收进菜单而不是两颗常驻按钮:`.txt` 与 `.md` 是同一件事的两种出口,
+ * 两个并排的按钮会让人以为它们导出的是不同内容。
+ */
+@Composable
+private fun TranscriptToolbar(
+    searching: Boolean,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onSearchingChange: (Boolean) -> Unit,
+    matchCount: Int,
+    cursor: Int,
+    onPrev: () -> Unit,
+    onNext: () -> Unit,
+    onExport: (TranscriptExport.Format) -> Unit
+) {
+    val keyboard = LocalSoftwareKeyboardController.current
+    var exportOpen by remember { mutableStateOf(false) }
+    if (searching) {
+        val focus = remember { FocusRequester() }
+        // 点开搜索就聚焦并弹出键盘 —— 否则用户还得再点一下输入框
+        LaunchedEffect(Unit) {
+            focus.requestFocus()
+            keyboard?.show()
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 12.dp, end = 2.dp, top = 4.dp, bottom = 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focus),
+                placeholder = {
+                    Text(
+                        stringResource(R.string.transcript_search),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                },
+                leadingIcon = {
+                    Icon(Icons.Rounded.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                },
+                trailingIcon = if (query.isNotEmpty()) {
+                    {
+                        IconButton(onClick = { onQueryChange("") }, modifier = Modifier.size(36.dp)) {
+                            Icon(
+                                Icons.Rounded.Close,
+                                contentDescription = stringResource(R.string.action_clear),
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                } else null,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium,
+                shape = RoundedCornerShape(16.dp),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() })
+            )
+            val label = when {
+                query.isBlank() -> ""
+                matchCount == 0 -> stringResource(R.string.transcript_search_none)
+                else -> stringResource(R.string.transcript_search_position, cursor + 1, matchCount)
+            }
+            if (label.isNotEmpty()) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 6.dp)
+                )
+            }
+            IconButton(onClick = onPrev, enabled = matchCount > 0, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Rounded.KeyboardArrowUp,
+                    contentDescription = stringResource(R.string.transcript_search_prev),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            IconButton(onClick = onNext, enabled = matchCount > 0, modifier = Modifier.size(36.dp)) {
+                Icon(
+                    Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = stringResource(R.string.transcript_search_next),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            IconButton(
+                onClick = {
+                    onSearchingChange(false)
+                    keyboard?.hide()
+                },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    Icons.Rounded.Close,
+                    contentDescription = stringResource(R.string.action_cancel),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    } else {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { onSearchingChange(true) }) {
+                Icon(
+                    Icons.Rounded.Search,
+                    contentDescription = stringResource(R.string.transcript_search),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Box {
+                IconButton(onClick = { exportOpen = true }) {
+                    Icon(
+                        Icons.Rounded.Share,
+                        contentDescription = stringResource(R.string.transcript_export),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(expanded = exportOpen, onDismissRequest = { exportOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.transcript_export_text)) },
+                        onClick = {
+                            exportOpen = false
+                            onExport(TranscriptExport.Format.Text)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.transcript_export_markdown)) },
+                        onClick = {
+                            exportOpen = false
+                            onExport(TranscriptExport.Format.Markdown)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 导出逐字稿并经系统分享面板发出(与设置页「分享日志」同一个形状)。
+ *
+ * **失败必须出声**:面板没弹、界面也没提示,用户看到的就是"点了没反应"(H142 的同一族)。
+ * 拼装与落盘都放在 IO 线程 —— 一集几千行的文本拼起来不该占着 UI 线程。
+ */
+private suspend fun shareTranscript(
+    context: Context,
+    episode: Episode,
+    segments: List<TranscribedSegment>,
+    format: TranscriptExport.Format,
+    onFailed: () -> Unit
+) {
+    try {
+        val uri = withContext(Dispatchers.IO) {
+            val text = TranscriptExport.build(episode, segments, format)
+            val dir = File(context.cacheDir, "shares").apply { mkdirs() }
+            val file = File(dir, TranscriptExport.fileName(episode, format))
+            file.writeText(text)
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        }
+        val send = Intent(Intent.ACTION_SEND).apply {
+            type = format.mime
+            putExtra(Intent.EXTRA_STREAM, uri)
+            putExtra(Intent.EXTRA_SUBJECT, episode.title)
+            clipData = ClipData.newRawUri("transcript", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        val chooser = Intent.createChooser(send, context.getString(R.string.transcript_share_title))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
+    } catch (e: Exception) {
+        com.yuyin.reverb.util.Logger.e("Transcript", "share transcript failed", e)
+        onFailed()
     }
 }
 

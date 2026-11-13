@@ -104,6 +104,8 @@ class RssParser(private val client: OkHttpClient) {
             var iImage = ""; var iGuid = ""; var iDate = ""; var iDur = ""
             // 逐字稿:同一集可能给多条(不同格式),iTrRank 记住当前已选那条的优先级
             var iTrUrl = ""; var iTrType = ""; var iTrRank = -1
+            // 章节表:只需一条 JSON,按 type 打分取最优(见下面 podcast:chapters 那段)
+            var iChUrl = ""; var iChType = ""; var iChRank = -1
             // 累积**当前元素**的文本。为什么是栈而不是一个 buffer:
             // 原先在 START_TAG 里 `setLength(0)`,于是标题里内嵌一个标签就把前半截丢掉 ——
             // `<title>前情<b>提要</b>收尾</title>` 读出来只剩「提要收尾」(REVIEW-2026-10-25 低·族 B-3)。
@@ -127,6 +129,7 @@ class RssParser(private val client: OkHttpClient) {
                                 iTitle = ""; iDesc = ""; iAudio = ""
                                 iImage = ""; iGuid = ""; iDate = ""; iDur = ""
                                 iTrUrl = ""; iTrType = ""; iTrRank = -1
+                                iChUrl = ""; iChType = ""; iChRank = -1
                             }
                             "image" -> inImage = true
                             // <enclosure> 优先，无条件覆盖
@@ -183,6 +186,21 @@ class RssParser(private val client: OkHttpClient) {
                                     iTrUrl = u.trim(); iTrType = t.trim(); iTrRank = rank
                                 }
                             }
+                            /**
+                             * 发布方给的**章节表**(Podcasting 2.0)。与逐字稿同形:空元素、信息全在属性里。
+                             *
+                             * 只收 JSON:本端按 [data.model.Chapter] 解析,别的格式(个别源给 XML)
+                             * 收下来只会得到一个"加载失败"。打分只区分"标准 chapters 类型"与"泛 JSON":
+                             * `application/json+chapters` 优先,`application/json` 次之,其余不要。
+                             */
+                            "podcast:chapters" -> if (inItem) {
+                                val u = parser.getAttributeValue(null, "url")
+                                val t = parser.getAttributeValue(null, "type").orEmpty()
+                                val rank = chaptersRank(t)
+                                if (!u.isNullOrBlank() && rank > iChRank) {
+                                    iChUrl = u.trim(); iChType = t.trim(); iChRank = rank
+                                }
+                            }
                         }
                     }
 
@@ -212,7 +230,9 @@ class RssParser(private val client: OkHttpClient) {
                                                 pubDate = iDate,
                                                 feedUrl = feedUrl,
                                                 transcriptUrl = iTrUrl,
-                                                transcriptType = iTrType
+                                                transcriptType = iTrType,
+                                                chaptersUrl = iChUrl,
+                                                chaptersType = iChType
                                             )
                                         )
                                     }
@@ -283,6 +303,22 @@ class RssParser(private val client: OkHttpClient) {
             t.contains("vtt") -> 2
             t.contains("srt") || t.contains("subrip") -> 1
             else -> -1          // text/html、text/plain 等
+        }
+    }
+
+    /**
+     * 章节表格式的优先级。**负数表示不要**。
+     *
+     * 章节规范只定义了 JSON 一种载体;`application/json+chapters` 是标准写法,
+     * 不少源写成 `application/json`,这两种都收,前者优先。XML 之类的章表本端不解析 ——
+     * 宣告"有章节"却点开报错,比根本不出现入口更糟。
+     */
+    private fun chaptersRank(type: String): Int {
+        val t = type.lowercase()
+        return when {
+            t.contains("json+chapters") -> 2
+            t.contains("json") -> 1
+            else -> -1
         }
     }
 

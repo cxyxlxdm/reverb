@@ -100,13 +100,17 @@ enum AppSupport {
     var onRemoved: ((Podcast) -> Void)?
 
     func toggle(_ p: Podcast) {
+        let tombKey = LanSyncTombstones.subscriptionKey(feedUrl: p.feedUrl, id: p.id)
         if let i = subscriptions.firstIndex(where: { $0.id == p.id }) {
             subscriptions.remove(at: i)
             Log.i("Store", "取消订阅 id=\(p.id) title=\"\(p.title)\"")
             onRemoved?(p)
+            // 删除墓碑:下一次同步时对端不能把这条再带回来;重新订阅则清掉墓碑。
+            LanSyncTombstones.record(LanSyncTombstones.subscriptions, tombKey)
         } else {
             subscriptions.insert(p, at: 0)
             Log.i("Store", "订阅 id=\(p.id) title=\"\(p.title)\"")
+            LanSyncTombstones.clear(LanSyncTombstones.subscriptions, tombKey)
         }
         persist()
     }
@@ -115,6 +119,11 @@ enum AppSupport {
         let before = subscriptions.count
         for p in items where !subscriptions.contains(where: { $0.id == p.id }) { subscriptions.append(p) }
         Log.i("Store", "订阅批量合并 +\(subscriptions.count - before)(共 \(subscriptions.count))")
+        // 备份恢复与同步并入都是「把外部条目重新加进来」= 重新订阅:不清墓碑的话,下一次同步会再删一遍。
+        // 同步路径上走到这里的条目已过 `LanSyncMerge` 的墓碑过滤,这一步对它是空转。
+        for p in items {
+            LanSyncTombstones.clear(LanSyncTombstones.subscriptions, LanSyncTombstones.subscriptionKey(feedUrl: p.feedUrl, id: p.id))
+        }
         persist()
     }
     private func persist() { AppSupport.save("subscriptions.json", subscriptions) }
@@ -134,9 +143,11 @@ enum AppSupport {
         if let i = favorites.firstIndex(where: { $0.id == e.id }) {
             favorites.remove(at: i)
             Log.i("Store", "取消收藏 id=\(e.id) title=\"\(e.title)\"")
+            LanSyncTombstones.record(LanSyncTombstones.favorites, e.id)
         } else {
             favorites.insert(e, at: 0)
             Log.i("Store", "收藏 id=\(e.id) title=\"\(e.title)\"")
+            LanSyncTombstones.clear(LanSyncTombstones.favorites, e.id)
         }
         persist()
     }
@@ -145,6 +156,8 @@ enum AppSupport {
         let before = favorites.count
         for e in items where !favorites.contains(where: { $0.id == e.id }) { favorites.append(e) }
         Log.i("Store", "收藏批量合并 +\(favorites.count - before)(共 \(favorites.count))")
+        // 恢复/同步并入 = 重新收藏,清掉墓碑(理由同 SubscriptionStore.addAll)。
+        for e in items { LanSyncTombstones.clear(LanSyncTombstones.favorites, e.id) }
         persist()
     }
     private func persist() { AppSupport.save("favorites.json", favorites) }
@@ -237,18 +250,24 @@ enum AppSupport {
         stamps.removeAll { $0.episodeId == episodeId }
         stamps.insert(Stamp(episodeId: episodeId, seal: seal, title: title, podcastTitle: podcastTitle, createdAt: now), at: 0)
         Log.i("Store", "设置印记 id=\(episodeId) seal=\(seal)")
+        // 盖章=重新添加:清掉删除墓碑,否则同步时会被另一端的旧删除压回去。
+        LanSyncTombstones.clear(LanSyncTombstones.stamps, episodeId)
         persist()
     }
 
     func remove(_ episodeId: String) {
         Log.i("Store", "移除印记 id=\(episodeId)")
-        stamps.removeAll { $0.episodeId == episodeId }; persist()
+        stamps.removeAll { $0.episodeId == episodeId }
+        LanSyncTombstones.record(LanSyncTombstones.stamps, episodeId)
+        persist()
     }
 
     func addAll(_ items: [Stamp]) {
         let before = stamps.count
         for s in items where !stamps.contains(where: { $0.episodeId == s.episodeId }) { stamps.append(s) }
         Log.i("Store", "印记批量合并 +\(stamps.count - before)(共 \(stamps.count))")
+        // 恢复/同步并入 = 重新盖章,清掉墓碑。
+        for s in items { LanSyncTombstones.clear(LanSyncTombstones.stamps, s.episodeId) }
         persist()
     }
     private func persist() { AppSupport.save("stamps.json", stamps) }
@@ -298,6 +317,8 @@ enum AppSupport {
                                positionMs: min(max(positionMs, 0), cap), text: body, createdAt: now)
         notes.insert(note, at: 0)
         Log.i("Store", "批注 add id=\(note.noteId) pos=\(note.positionMs)ms len=\(body.count) total=\(notes.count)")
+        // 新批注不可能与旧删除同 id(UUID),这一行只是把"重新添加就清墓碑"的规则补齐。
+        LanSyncTombstones.clear(LanSyncTombstones.notes, note.noteId)
         persist()
         return note
     }
@@ -306,6 +327,7 @@ enum AppSupport {
         let before = notes.count
         notes.removeAll { $0.noteId == noteId }
         Log.i("Store", "批注 remove id=\(noteId) -\(before - notes.count) 共 \(notes.count)")
+        LanSyncTombstones.record(LanSyncTombstones.notes, noteId)
         persist()
     }
 
@@ -316,6 +338,8 @@ enum AppSupport {
         for n in items where !notes.contains(where: { $0.noteId == n.noteId }) { notes.append(n) }
         notes = NoteStore.normalize(notes)
         Log.i("Store", "批注批量合并 +\(notes.count - before)(共 \(notes.count))")
+        // 恢复/同步并入 = 重新写回这条批注,清掉墓碑。
+        for n in items { LanSyncTombstones.clear(LanSyncTombstones.notes, n.noteId) }
         persist()
     }
 

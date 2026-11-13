@@ -43,7 +43,17 @@ data class Episode(
      */
     val transcriptUrl: String = "",
     /// 逐字稿的 MIME(`application/json` / `text/vtt` / `application/srt` …),用于选解析器
-    val transcriptType: String = ""
+    val transcriptType: String = "",
+    /**
+     * 发布方给的**章节**地址(RSS 的 `podcast:chapters`,Podcasting 2.0)。
+     *
+     * 与逐字稿同一条思路:章节表由发布方维护,本机只是取回 JSON 并按时间跳转,
+     * 不做任何推断。空串表示这一集没有章节 —— 播放页就**不出现**章节入口,
+     * 而不是摆一个点进去空着的按钮。
+     */
+    val chaptersUrl: String = "",
+    /// 章节表的 MIME,目前只认 JSON(`application/json+chapters` / `application/json`)
+    val chaptersType: String = ""
 )
 
 /**
@@ -71,6 +81,22 @@ data class TranscribedSegment(
     val startMs: Int,
     val endMs: Int,
     val words: List<TranscribedWord>? = null
+)
+
+/**
+ * 发布方给的一章(Podcasting 2.0 `podcast:chapters` 的 JSON 表)。
+ *
+ * `startMs` 是**这一章从哪一秒开始**,不是区间:一章一直延续到下一章开头,
+ * 最后一章延续到结尾。所以章表只需要起点,结束时刻由列表本身决定 ——
+ * 与逐字稿"每句自带起止"不同,这是章节规范本来的形状。
+ *
+ * 字段与 macOS / 鸿蒙保持同名(`startMs` / `title` / `imageUrl` / `url`),方便三端对读。
+ */
+data class Chapter(
+    val startMs: Int,
+    val title: String,
+    val imageUrl: String = "",
+    val url: String = ""
 )
 
 /** 解析 RSS 后的结果：频道元信息 + 分集列表。 */

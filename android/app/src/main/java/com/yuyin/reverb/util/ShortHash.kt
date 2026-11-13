@@ -11,7 +11,7 @@ import java.security.MessageDigest
  *    撞上了就是"A 集的下载件被 B 集认领"—— 表现为播某集会跳出另一集的声音,
  *    而账本、目录、日志全都自洽,查不到根因;
  *  - `kotlin.math.abs(hashCode)` 还多一个洞:`Int.MIN_VALUE` 的绝对值仍是它自己(负数),
- *    于是文件名里会带一个 `-`(见 `WhisperEngine` 那一处);
+ *    于是文件名里会带一个 `-`(见 `SenseVoiceEngine` 那一处);
  *  - 摘要长度取 16 个 hex = 64 位:碰撞概率在本 App 的量级(单集 id 数量 ≤ 1e5)下小到可以当作 0,
  *    而整段 64 个 hex 会让目录列表和备份里的路径长一倍,没有收益。
  *

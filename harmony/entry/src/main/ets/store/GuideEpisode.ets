@@ -95,7 +95,10 @@ export class GuideEpisode {
       feedUrl: '',
       // 引导音频没有官方稿。它是随包的本地文件,要文字就靠系统识别转 —— 正好是个不联网的试用样本
       transcriptUrl: '',
-      transcriptType: ''
+      transcriptType: '',
+      // 也没有章表:它是一条一分钟的本地文件,不是任何发布方的节目
+      chaptersUrl: '',
+      chaptersType: ''
     };
   }
 }

@@ -198,6 +198,9 @@
     <string name="player_err_unplayable">Cet épisode ne peut pas être lu pour le moment</string>
     <string name="shownotes">Notes de l\'épisode</string>
     <string name="shownotes_empty">Aucune note</string>
+    <string name="player_chapters">Chapitres</string>
+    <string name="chapters_empty">Aucun chapitre dans cet épisode</string>
+    <string name="chapters_failed">Impossible de charger les chapitres. Touchez pour réessayer</string>
     <string name="note_add">Écrire une annotation</string>
     <string name="note_title">Marquer cette seconde</string>
     <string name="note_hint">Écrivez ce qui vous vient à l\'esprit</string>
@@ -247,6 +250,48 @@
     <string name="set_full_backup">Sauvegarde complète</string>
     <string name="set_full_backup_sub">Toutes vos données locales — abonnements, annotations, historique — pour migration / sauvegarde</string>
     <string name="set_restore">Restaurer</string>
+
+    <!-- Synchronisation réseau local (même Wi-Fi, fusion des sections de sauvegarde). -->
+    <string name="sec_lan">Réseau local</string>
+    <string name="set_lan_sync">Synchronisation locale</string>
+    <string name="set_lan_sync_sub">Fusionner abonnements, favoris, sceaux, notes et progression avec un autre appareil sur le même Wi-Fi</string>
+    <string name="lan_title">Synchronisation locale</string>
+    <string name="lan_own_name">Cet appareil : %1$s</string>
+    <string name="lan_waiting">En attente d\'un autre appareil…</string>
+    <string name="lan_no_wifi">Aucune adresse Wi-Fi trouvée. Connectez d\'abord les deux appareils au même Wi-Fi.</string>
+    <string name="lan_own_address">Adresse de cet appareil, saisissable manuellement sur l\'autre</string>
+    <string name="lan_peers">Appareils proches</string>
+    <string name="lan_no_peers">Aucun appareil détecté. Vérifiez que la page est ouverte sur l\'autre appareil, ou saisissez l\'adresse affichée sur son écran.</string>
+    <string name="lan_peer_row">%1$s\n%2$s</string>
+    <string name="lan_manual_hint">Adresse de l\'autre appareil, par ex. 192.168.1.5:47820</string>
+    <string name="lan_connect">Se connecter</string>
+    <string name="lan_connecting">Connexion à %1$s…</string>
+    <string name="lan_confirm_title">Vérifiez le code d\'appairage</string>
+    <string name="lan_confirm_body">Les six chiffres doivent être identiques sur les deux appareils. S\'ils diffèrent, annulez : quelqu\'un peut s\'interposer.</string>
+    <string name="lan_confirm_peer">Pair : %1$s</string>
+    <string name="lan_confirm_accept">Ils correspondent, lancer la synchronisation</string>
+    <string name="lan_cancel">Annuler</string>
+    <string name="lan_syncing">Synchronisation avec %1$s…</string>
+    <string name="lan_stage_sending">Envoi des données</string>
+    <string name="lan_stage_receiving">Réception des données</string>
+    <string name="lan_stage_merging">Fusion des données</string>
+    <string name="lan_done_title">Synchronisation terminée</string>
+    <string name="lan_done_with">Fusionné avec %1$s</string>
+    <string name="lan_done_added">Ajouts : abonnements %1$d · favoris %2$d · sceaux %3$d · notes %4$d · historique %5$d · statistiques %6$d</string>
+    <string name="lan_done_nothing">Les deux appareils sont déjà à jour.</string>
+    <string name="lan_failed_title">Échec de la synchronisation</string>
+    <string name="lan_fail_connect">Impossible de joindre l\'autre appareil. Vérifiez le même Wi-Fi et que sa page est ouverte, ou saisissez l\'adresse affichée sur son écran.</string>
+    <string name="lan_fail_version">Les deux appareils n\'ont pas la même version. Mettez-les à jour d\'abord.</string>
+    <string name="lan_fail_protocol">La réponse de l\'autre appareil est inattendue. Arrêt.</string>
+    <string name="lan_fail_decrypt">Échec de la vérification du chiffrement. Arrêt.</string>
+    <string name="lan_fail_io">Connexion interrompue. Arrêt.</string>
+    <string name="lan_fail_cancelled">Annulé.</string>
+    <string name="lan_fail_peer_cancelled">L\'autre appareil a annulé la synchronisation.</string>
+    <string name="lan_scope">Seuls les abonnements, favoris, sceaux, notes, historique et statistiques d\'écoute sont synchronisés. Téléchargements et réglages ne le sont pas. Les suppressions ne sont pas encore synchronisées : un désabonnement peut être annulé par l\'autre appareil.</string>
+    <string name="lan_close">Fermer</string>
+    <string name="lan_again">Synchroniser à nouveau</string>
+    <string name="lan_retry">Réessayer</string>
+    <string name="lan_tip">Touchez l\'autre appareil sur un seul des deux — inutile de le faire des deux côtés.</string>
     <string name="set_restore_sub">Importer depuis un fichier de sauvegarde Reverb</string>
 
     <string name="set_theme">Thème</string>
@@ -329,7 +374,7 @@
     <string name="about_h_what">Qu\'est-ce que c\'est</string>
     <string name="about_p_what">Reverb est un client de podcasts léger à l\'esthétique encre et lavis. Découvrez, abonnez-vous, téléchargez hors ligne et reprenez à tout moment — centré sur l\'écoute.</string>
     <string name="about_h_features">Fonctionnalités</string>
-    <string name="about_p_features">· Découvrir : classements du jour par région et catégorie ; réorganiser et glisser\n· Rechercher : par nom ou URL RSS\n· Liens vidéo : collez un lien vidéo Bilibili ou un identifiant BV pour l\'écouter comme un épisode (sans compte ; les épisodes issus d\'une vidéo ne peuvent pas être téléchargés)\n· Partager une émission : créez une image avec sa pochette, son titre et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Lot et raccourcis : touchez la pochette d\'un épisode pour ouvrir sa chaîne ; dans Nouveautés, Favoris, Téléchargements, Historique ou la page d\'une émission, appuyez longuement puis choisissez « Sélectionner plusieurs » pour les ajouter en bloc à la file\n· Hors ligne : gardez les épisodes téléchargés sur l\'appareil, Wi-Fi seul en option\n· Cache de lecture : les épisodes écoutés restent sur l\'appareil et se relisent hors connexion ; listes et pochettes déjà chargées restent consultables sans réseau, à effacer dans Réglages\n· Transcription : transcrivez sur l\'appareil ou lisez celle de l\'éditeur\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d\'un geste\n· Notes de l\'épisode : glisser sur le lecteur\n· Notifications de nouveaux épisodes\n· Mise à jour intégrée : téléchargez la nouvelle version sur l\'appareil puis remettez-la à l\'installateur du système (hors Wi-Fi, la question est posée d\'abord)\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d\'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l\'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille, couleur, langues</string>
+    <string name="about_p_features">· Découvrir : classements du jour par région et catégorie ; réorganiser et glisser\n· Rechercher : par nom ou URL RSS\n· Liens vidéo : collez un lien vidéo Bilibili ou un identifiant BV pour l\'écouter comme un épisode (sans compte ; les épisodes issus d\'une vidéo ne peuvent pas être téléchargés)\n· Partager une émission : créez une image avec sa pochette, son titre et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Lot et raccourcis : touchez la pochette d\'un épisode pour ouvrir sa chaîne ; dans Nouveautés, Favoris, Téléchargements, Historique ou la page d\'une émission, appuyez longuement puis choisissez « Sélectionner plusieurs » pour les ajouter en bloc à la file\n· Hors ligne : gardez les épisodes téléchargés sur l\'appareil, Wi-Fi seul en option\n· Cache de lecture : les épisodes écoutés restent sur l\'appareil et se relisent hors connexion ; listes et pochettes déjà chargées restent consultables sans réseau, à effacer dans Réglages\n· Transcription : transcrivez sur l\'appareil (chinois, anglais, japonais, coréen et cantonais) ou lisez celle de l\'éditeur ; recherche plein texte, export en texte ou Markdown à partager\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d\'un geste\n· Notes de l\'épisode : glisser sur le lecteur\n· Chapitres : pour les épisodes dont l’éditeur fournit une liste de chapitres, le chapitre en cours s’affiche au-dessus de la barre de progression ; touchez pour y aller. La liste est mise en cache et reste consultable hors connexion\n· Notifications de nouveaux épisodes\n· Mise à jour intégrée : téléchargez la nouvelle version sur l\'appareil puis remettez-la à l\'installateur du système (hors Wi-Fi, la question est posée d\'abord)\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d\'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l\'audio et les transcriptions ne sont pas inclus\n· Synchronisation en réseau local : fusionner abonnements, favoris, empreintes, notes et progression avec un autre appareil sur le même Wi-Fi\n· Apparence : sombre/clair/système, taille, couleur, langues</string>
     <string name="about_h_philosophy">Conception</string>
     <string name="about_p_philosophy">L’esthétique s’inspire de l’encre, du céladon et de l’or des poutres — le nom et l’icône évoquent « un écho tournant autour des poutres ».\n\nLes sources restent entièrement gratuites, sans compte ni clé API : la recherche s’appuie sur des sources publiques, puis revient au RSS d’origine de l’éditeur pour diffuser l’audio original.\n\nCôté vie privée, abonnements, historique et téléchargements restent sur votre appareil, ne sont pas envoyés automatiquement au développeur et ne servent pas au suivi inter-applications.</string>
 
@@ -340,8 +385,9 @@
     <string name="licenses_sources_note">Cette app ne fournit aucun catalogue et ne stocke ni ne relaie aucun audio : l\'audio provient toujours du flux RSS de l\'éditeur.</string>
     <string name="licenses_sources_note_catalog">Annuaires/API publics, utilisés uniquement pour la recherche et les classements ; l\'audio provient toujours du RSS d\'origine. L\'app ne l\'héberge ni ne le relaie.</string>
     <!-- 许可页与数据来源里"换语种要变"的四条。目录/接口名(Apple iTunes、fyyd.de、gpodder.net)与专有名词是五套同形,仍留在 LicensesScreen.kt 字面量里。 -->
-    <string name="lic_whisper">whisper.cpp (reconnaissance vocale sur l\'appareil)</string>
-    <string name="lic_whisper_model">Modèle Whisper ggml-base-q5_1 (OpenAI)</string>
+    <string name="lic_sherpa">sherpa-onnx (moteur de reconnaissance vocale sur l\'appareil)</string>
+    <string name="lic_onnxruntime">ONNX Runtime (moteur d\'inférence)</string>
+    <string name="lic_sensevoice">Modèle SenseVoiceSmall (FunASR)</string>
     <string name="src_publisher_rss">Le flux RSS d\'origine de l\'éditeur</string>
     <string name="src_site_opml">Liste d\'abonnements recommandée sur le site de l\'app</string>
     <string name="notif_channel_name">Nouveaux épisodes</string>
@@ -380,7 +426,7 @@
     <string name="batch_added">%1$d épisodes ajoutés à la file</string>
     <string name="batch_added_none">Ces épisodes sont déjà dans la file</string>
     <string name="set_transcription">Transcription</string>
-    <string name="set_transcription_sub">Faites glisser jusqu\'à la troisième page du lecteur. À défaut de transcription de l\'éditeur, elle est faite sur l\'appareil</string>
+    <string name="set_transcription_sub">Faites glisser jusqu\'à la troisième page du lecteur. À défaut de transcription de l\'éditeur, elle est faite sur l\'appareil (chinois, anglais, japonais, coréen et cantonais)</string>
     <string name="transcript_prompt">Transformez cet épisode en texte, sur votre appareil</string>
     <string name="transcript_start">Générer la transcription</string>
     <string name="transcript_fetching">Récupération de la transcription de l\'éditeur…</string>
@@ -389,9 +435,20 @@
     <string name="transcript_running">Transcription en cours — la première ligne va bientôt apparaître…</string>
     <string name="transcript_failed">Échec de la transcription. Touchez pour réessayer</string>
     <string name="transcript_none">L\'éditeur ne fournit pas de transcription pour cet épisode et cette version n\'intègre pas la reconnaissance sur l\'appareil</string>
+    <string name="transcript_lang_unsupported">La transcription sur l\'appareil ne prend en charge que le chinois, l\'anglais, le japonais, le coréen et le cantonais. Cet épisode n\'a pas non plus de transcription de l\'éditeur.</string>
     <string name="action_retry">Réessayer</string>
     <string name="transcript_prompt_official">L\'éditeur fournit une transcription pour cet épisode</string>
     <string name="transcript_show">Afficher la transcription</string>
+    <string name="transcript_search">Rechercher dans la transcription</string>
+    <string name="transcript_search_none">Aucune ligne correspondante</string>
+    <string name="transcript_search_position">%1$d / %2$d</string>
+    <string name="transcript_search_prev">Occurrence précédente</string>
+    <string name="transcript_search_next">Occurrence suivante</string>
+    <string name="transcript_export">Exporter la transcription</string>
+    <string name="transcript_export_text">Texte brut (.txt)</string>
+    <string name="transcript_export_markdown">Markdown (.md)</string>
+    <string name="transcript_export_failed">Échec de l\'export</string>
+    <string name="transcript_share_title">Partager la transcription</string>
     <string name="set_word_highlight">Surlignage mot à mot</string>
 
     <!-- ↓↓ 这两组串合并自原 src/default/res(2026-10-18 两个 flavor 合成一份包,见 H205):
@@ -400,9 +457,10 @@
          原先它们在自分发渠道的 source set 里,商店渠道另有一份同名覆盖;现在只有一份包、一份文案。
          ⚠️ 正文由同意页用 stringResource 取**纯文本**渲染:`**` 会原样上屏、`<b>` 会被 aapt
          收成样式跨度后再摊平(不掉字形也不加粗)⇒ 强调只能靠措辞与标点。 -->
-    <string name="privacy_consent_asr">Transcription vocale hors ligne. Cette version intègre la reconnaissance hors ligne (le composant open source whisper.cpp et son modèle). La conversion de l\'audio d\'un épisode en texte s\'effectue <b>entièrement sur votre appareil : l\'audio n\'est jamais envoyé, ne quitte jamais l\'appareil et ne transite par aucun serveur</b>. Vous pouvez désactiver cette fonction dans les réglages.</string>
+    <string name="privacy_consent_asr">Transcription vocale hors ligne. Cette version intègre la reconnaissance hors ligne (le moteur open source sherpa-onnx et le modèle SenseVoiceSmall). La conversion de l\'audio d\'un épisode en texte s\'effectue <b>entièrement sur votre appareil : l\'audio n\'est jamais envoyé, ne quitte jamais l\'appareil et ne transite par aucun serveur</b>. La transcription prend actuellement en charge le chinois, l\'anglais, le japonais, le coréen et le cantonais. Vous pouvez désactiver cette fonction dans les réglages.</string>
     <string name="set_word_highlight_sub">Surligne chaque mot au fur et à mesure. La reconnaissance sur l\'appareil fournit les temps par mot au passage, sans allonger la transcription.</string>
     <string name="privacy_consent_mic">Spectre réel (facultatif). En activant « Spectre réel » dans les réglages, l\'onde suit le volume réel. Cela nécessite l\'accès au micro, que le système demande séparément au moment de l\'activation ; l\'audio est uniquement analysé sur l\'appareil — jamais enregistré, stocké ni envoyé — et n\'est plus utilisé dès que vous désactivez l\'option.</string>
+    <string name="privacy_consent_lan">Synchronisation en réseau local (facultative). Après avoir ouvert « Synchronisation en réseau local » dans les réglages, l\'application annonce un nom de service (comprenant le nom de cet appareil et un court identifiant aléatoire) sur le même Wi-Fi et ouvre temporairement un port TCP ; les deux s\'arrêtent à la fermeture de la page. Après avoir touché l\'autre appareil ou saisi son adresse, chaque appareil affiche un code d\'appairage à six chiffres ; le transfert ne commence qu\'une fois que vous avez confirmé que les deux écrans concordent. Le transfert contient les six mêmes sections qu\'une sauvegarde complète (abonnements, favoris, empreintes, notes, historique et statistiques d\'écoute, ces dernières fusionnées par appareil) ; il exclut l\'audio, les caches binaires, les identifiants des flux privés, les réglages et la file de lecture. Les données sont chiffrées avec des clés négociées entre les deux appareils (ECDH P-256 et AES-256-GCM) et circulent directement entre les deux appareils appairés — jamais via un serveur, jamais vers le développeur. Les suppressions ne sont pas synchronisées : un élément désabonné ou supprimé sur un appareil revient à la synchronisation suivante si l\'autre appareil le possède encore.</string>
     <string name="privacy_consent_update">Mise à jour intégrée (facultative). Au lancement, cette version interroge une fois l\'interface publique des publications GitHub (api.github.com) pour connaître la dernière version. La requête ne contient que l\'adresse du dépôt public de cette application et son numéro de version actuel — jamais de compte, d\'identifiant, d\'abonnement ou d\'écoute. Elle ne télécharge que si cette réponse apporte une version réellement plus récente, et par défaut uniquement en Wi-Fi ; sur un réseau facturé à l\'usage, elle demande d\'abord votre accord. L\'installateur du système prend ensuite le relais — l\'application n\'installe rien elle-même — et la permission « Installer des applications inconnues » nécessaire à cette étape est demandée par le système seulement quand vous choisissez d\'installer.</string>
 
     <string name="update_title">Nouvelle version %1$s</string>
@@ -422,7 +480,6 @@
 
     <!-- Widget Reprendre l\'écoute (XML: l\'apostrophe doit être échappée) -->
     <string name="widget_name">Reverb · Reprendre l\'écoute</string>
-    <string name="widget_continue">REPRENDRE L\'ÉCOUTE</string>
     <string name="widget_empty_title">Choisissez un épisode</string>
     <string name="widget_empty_sub">Votre dernier épisode apparaîtra ici</string>
     <string name="widget_description">Affiche où vous en étiez ; touchez pour reprendre</string>

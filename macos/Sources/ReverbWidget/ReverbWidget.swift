@@ -1,6 +1,7 @@
 import SwiftUI
 import WidgetKit
 import AppKit
+import AppIntents
 import WidgetContract
 
 /// 「继续收听」桌面卡片(WidgetKit,macOS 端)。
@@ -63,12 +64,12 @@ struct ReverbProvider: TimelineProvider {
     /// 画廊预览用。**故意给一条假数据**:用户第一次看到卡片应该知道"这里会显示什么"。
     static var sample: WidgetState {
         var s = WidgetState()
-        s.label = NSLocalizedString("继续收听", comment: "卡片顶部小字")
         s.title = NSLocalizedString("余音 · 继续收听", comment: "卡片预览标题")
         s.podcast = NSLocalizedString("上次听到哪一集，会出现在这里", comment: "卡片预览副标题")
         s.time = "12:34 / 45:00"
-        s.percent = 28
+        s.percent = 28.0
         s.hasProgress = true
+        s.playing = true
         s.empty = false
         return s
     }
@@ -78,7 +79,6 @@ struct ReverbProvider: TimelineProvider {
 enum WidgetProviderDefaults {
     static var emptyState: WidgetState {
         var s = WidgetState()
-        s.label = NSLocalizedString("继续收听", comment: "卡片顶部小字")
         s.title = NSLocalizedString("挑一集开始听", comment: "卡片空态标题")
         s.podcast = NSLocalizedString("上次听到哪一集，会出现在这里", comment: "卡片空态副标题")
         s.empty = true
@@ -105,15 +105,17 @@ private struct Palette {
     let sub: Color
     let accent: Color
     let track: Color
+    /// 压在 accent 圆底上的图标色(与鸿蒙 `onAccent()` 同一取舍)。
+    let onAccent: Color
 
     static func of(dark: Bool) -> Palette {
         dark
             ? Palette(bg: Color(hex: 0x161D20), text: Color(hex: 0xF2F2ED),
                       sub: Color(hex: 0x9AA8A6), accent: Color(hex: 0x7FD1C0),
-                      track: Color(hex: 0x1F2A2E))
+                      track: Color(hex: 0x1F2A2E), onAccent: Color(hex: 0x10181A))
             : Palette(bg: Color(hex: 0xFCFAF4), text: Color(hex: 0x1B2426),
                       sub: Color(hex: 0x66716F), accent: Color(hex: 0x3F8A7C),
-                      track: Color(hex: 0xE7E0D1))
+                      track: Color(hex: 0xE7E0D1), onAccent: Color(hex: 0xFFFFFF))
     }
 }
 
@@ -165,12 +167,23 @@ struct ReverbWidgetView: View {
 
     private var smallLayout: some View {
         VStack(alignment: .leading, spacing: 0) {
-            artView(corner: 10)
-                .frame(maxWidth: .infinity)
-                .frame(height: 62)
-            labelText(size: 9)
-                .padding(.top, 7)
+            ZStack(alignment: .bottomTrailing) {
+                artView(corner: 10)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 62)
+                // macOS 13 没有可交互卡片(Button(intent:) 从 14 起),那一档不画键,
+                // 点整张卡片仍能进播放页。
+                if #available(macOS 14.0, *), !entry.state.empty {
+                    filledControlButton(.toggle, size: 13, dim: 26)
+                        .padding(6)
+                }
+            }
             titleText(size: 12, lines: 2)
+                .padding(.top, 7)
+            Text(entry.state.podcast)
+                .font(.system(size: 10))
+                .foregroundStyle(palette.sub)
+                .lineLimit(1)
                 .padding(.top, 2)
             Spacer(minLength: 0)
             if entry.state.hasProgress { progressBar }
@@ -190,9 +203,7 @@ struct ReverbWidgetView: View {
             HStack(alignment: .center, spacing: 12) {
                 artView(corner: 8).frame(width: 74, height: 74)
                 VStack(alignment: .leading, spacing: 2) {
-                    labelText(size: 9)
                     titleText(size: 15, lines: 2)
-                        .padding(.top, 2)
                     Text(entry.state.podcast)
                         .font(.system(size: 11))
                         .foregroundStyle(palette.sub)
@@ -200,6 +211,9 @@ struct ReverbWidgetView: View {
                         .padding(.top, 2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            if #available(macOS 14.0, *), !entry.state.empty {
+                controlRow(size: 16, centered: false).padding(.top, 4)
             }
             Spacer(minLength: 0)
             if entry.state.hasProgress { progressBar }
@@ -218,15 +232,16 @@ struct ReverbWidgetView: View {
         VStack(alignment: .leading, spacing: 0) {
             artView(corner: 12)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-            labelText(size: 10)
-                .padding(.top, 11)
             titleText(size: 17, lines: 2)
-                .padding(.top, 3)
+                .padding(.top, 11)
             Text(entry.state.podcast)
                 .font(.system(size: 12))
                 .foregroundStyle(palette.sub)
                 .lineLimit(1)
                 .padding(.top, 3)
+            if #available(macOS 14.0, *), !entry.state.empty {
+                controlRow(size: 22, centered: true).padding(.top, 4)
+            }
             if entry.state.hasProgress { progressBar.padding(.top, 3) }
             if !entry.state.time.isEmpty {
                 Text(entry.state.time)
@@ -260,14 +275,49 @@ struct ReverbWidgetView: View {
         }
     }
 
-    @ViewBuilder
-    private func labelText(size: CGFloat) -> some View {
-        if !entry.state.label.isEmpty {
-            Text(entry.state.label)
-                .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(palette.accent)
-                .lineLimit(1)
+    private func icon(_ command: WidgetCommand) -> String {
+        switch command {
+        case .toggle: return entry.state.playing ? "pause.fill" : "play.fill"
+        case .previous: return "backward.end.fill"
+        case .next: return "forward.end.fill"
         }
+    }
+
+    /// 三颗键一行。中卡左对齐、大卡居中(与鸿蒙 `controlRow(size:align:)` 同一条)。
+    /// 图标在按钮闭包里现读 `playing`,不传算好的值(鸿蒙 `@Builder` 参数快照那条,H266)。
+    @available(macOS 14.0, *)
+    private func controlRow(size: CGFloat, centered: Bool) -> some View {
+        HStack(spacing: 14) {
+            controlButton(.previous, size: size)
+            controlButton(.toggle, size: size)
+            controlButton(.next, size: size)
+        }
+        .frame(maxWidth: .infinity, alignment: centered ? .center : .leading)
+    }
+
+    @available(macOS 14.0, *)
+    private func controlButton(_ command: WidgetCommand, size: CGFloat) -> some View {
+        Button(intent: ReverbWidgetControlIntent(command)) {
+            Image(systemName: icon(command))
+                .font(.system(size: size, weight: .semibold))
+                .foregroundStyle(palette.text)
+                .frame(width: size + 14, height: size + 10)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @available(macOS 14.0, *)
+    private func filledControlButton(_ command: WidgetCommand, size: CGFloat, dim: CGFloat) -> some View {
+        Button(intent: ReverbWidgetControlIntent(command)) {
+            Image(systemName: icon(command))
+                .font(.system(size: size, weight: .bold))
+                .foregroundStyle(palette.onAccent)
+                .frame(width: dim, height: dim)
+                .background(Circle().fill(palette.accent))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
     }
 
     private func titleText(size: CGFloat, lines: Int) -> some View {

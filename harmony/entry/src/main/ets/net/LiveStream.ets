@@ -99,6 +99,9 @@ export class LiveStream {
       feedUrl: '',
       transcriptUrl: '',
       transcriptType: '',
+      // 直播没有"整段"这个边界,章表也就没有意义(播放页的章节入口按 liveNoTimeline 藏掉)
+      chaptersUrl: '',
+      chaptersType: '',
       isLive: true
     };
     return ep;

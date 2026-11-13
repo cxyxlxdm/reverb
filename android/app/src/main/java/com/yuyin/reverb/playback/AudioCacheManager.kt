@@ -110,6 +110,18 @@ object AudioCacheManager {
         if (id.isBlank() || url.isBlank()) return
         // 内置引导音频的 URL 是 asset:///android_resource,不是 HTTP enclosure,没什么可缓存的
         if (com.yuyin.reverb.data.model.GuideEpisode.isGuide(id)) return
+        /**
+         * **只缓存 http(s)。** 原先只挡了内置引导音频那一条,其它非 HTTP 的 enclosure
+         * (`file://`、自定义 scheme、甚至一条写坏了的 URL)会一路走到 `fetch` 里的
+         * `Request.Builder().url()`,那里对非法 scheme **直接抛 IllegalArgumentException** ——
+         * 这是后台协程,没人接,整个进程当场死掉。RSS 里的 enclosure 是发布方给的字符串,
+         * 一条坏地址就能让 App 每次启动都在恢复播放时崩一次(见 H262,验收时真踩到了)。
+         * 缓存只是一份可再生的加速副本,遇到这种地址**跳过**即可,不该比播放本身更要紧。
+         */
+        if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+            com.yuyin.reverb.util.Logger.w(TAG, "cache skipped: non-http url id=$id")
+            return
+        }
         if (store.get(id) != null) return
         if (blockedByCellular()) {
             com.yuyin.reverb.util.Logger.w(TAG, "cache skipped on metered net id=$id")

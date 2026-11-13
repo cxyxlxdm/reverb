@@ -36,7 +36,11 @@ export class Codec {
       'id': e.id, 'title': e.title, 'description': e.description, 'audioUrl': e.audioUrl,
       'artworkUrl': e.artworkUrl, 'podcastTitle': e.podcastTitle,
       'durationSec': e.durationSec, 'pubDate': e.pubDate, 'feedUrl': e.feedUrl,
-      'transcriptUrl': e.transcriptUrl, 'transcriptType': e.transcriptType
+      'transcriptUrl': e.transcriptUrl, 'transcriptType': e.transcriptType,
+      // 章节地址必须在这里:历史 / 下载 / 收藏 / 批注 / 缓存 / 播放态 / 备份都走这一份编解码,
+      // 漏了就是"刚搜到的那一集有章节、冷启动后同一个节目就没有了"(Android 装机验收抓到的,
+      // 见 `EpisodeJson.kt` 的同一条注释)。
+      'chaptersUrl': e.chaptersUrl, 'chaptersType': e.chaptersType
     };
   }
 
@@ -54,7 +58,10 @@ export class Codec {
       // 老缓存里没有这两个键,`J.str` 给空串 —— 等于"这一集没有官方稿",与事实一致:
       // 下次刷新订阅时会从 RSS 重新解析出来
       transcriptUrl: J.str(o, 'transcriptUrl'),
-      transcriptType: J.str(o, 'transcriptType')
+      transcriptType: J.str(o, 'transcriptType'),
+      // 老缓存里没有这两个键,`J.str` 给空串 —— 等于"这一集没有章节",下次刷新订阅时补上
+      chaptersUrl: J.str(o, 'chaptersUrl'),
+      chaptersType: J.str(o, 'chaptersType')
     };
   }
 

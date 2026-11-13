@@ -52,6 +52,14 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         /** 这份包不含可用的离线识别引擎,且这一集没有官方稿 */
         data object NoEngine : State
         /**
+         * 引擎在,但**不认这种语言**(SenseVoice 只有 zh / en / ja / ko / yue),且这一集没有官方稿。
+         *
+         * 为什么要单独一态(而不是让用户点了再报"转写失败"):失败态只给出"再点一次",
+         * 而这件事再点一百次也不会好。界面要直接说清"本机识别不支持这种语言,只能看发布方的稿",
+         * 并且**不摆一个没用的按钮**。判据在 `AsrFactory.supports`。
+         */
+        data object UnsupportedLocale : State
+        /**
          * 识别前要下的那整集音频被**蜂窝/计费链路闸门**拦下了(见 REVIEW-2026-10-25 中-3)。
          *
          * 为什么不是一个 `Failed("…")`:失败态给用户的只有"再点一次",而再点一次会被同样拦下,
@@ -94,8 +102,11 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
     /**
      * 切到某单集/语言时调用。命中缓存直接显示;否则置初始态**等用户手动开始** ——
      * 不自动转写:那是几分钟的满载计算,得由用户点了才做。
+     *
+     * @param hasEngine 这份包里有没有本机识别
+     * @param supportsLocale 引擎认不认当前界面语言(见 `AsrFactory.supports`)
      */
-    fun prepare(episode: Episode, uiLanguage: String, hasEngine: Boolean) {
+    fun prepare(episode: Episode, uiLanguage: String, hasEngine: Boolean, supportsLocale: Boolean) {
         val loc = localeFor(uiLanguage)
         if (episode.id == episodeId && loc == localeId && _state.value != State.Idle) return
         cancel()
@@ -113,8 +124,9 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         _segments.value = emptyList()
         _state.value = when {
             episode.transcriptUrl.isNotBlank() -> State.Idle   // 有官方稿,点一下就能取
-            hasEngine -> State.Idle
-            else -> State.NoEngine
+            !hasEngine -> State.NoEngine
+            !supportsLocale -> State.UnsupportedLocale
+            else -> State.Idle
         }
     }
 
@@ -192,6 +204,14 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
         // 2) 本机识别
         if (engine == null) {
             if (!stale()) _state.value = State.NoEngine
+            return
+        }
+        /**
+         * 语言门槛要在**跑之前**判:官方稿取不到才走到这里,而引擎认不出这种语言时
+         * 跑下去只会得到一团错字 + 一个"失败"。见 `State.UnsupportedLocale` 的注释。
+         */
+        if (!engine.supports(loc)) {
+            if (!stale()) _state.value = State.UnsupportedLocale
             return
         }
         engine.transcribe(
@@ -363,9 +383,11 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
          * 会继续按旧时间轴显示,修复等于没生效。
          *
          * - v1:词级时刻取 whisper 的 DTW(`t_dtw`)—— 整体偏晚 0.4~0.9 秒,已废弃;
-         * - v2:改用 whisper 自带的 `token_timestamps`(t0/t1),并保证起点单调不减。
+         * - v2:改用 whisper 自带的 `token_timestamps`(t0/t1),并保证起点单调不减;
+         * - v3(1.0.8):引擎换 sherpa-onnx + SenseVoice。文本、标点、断行与时刻**全部不同**
+         *   (v2 是 whisper 的输出),旧稿继续显示只会让人以为新引擎"没变好",一律作废重转。
          */
-        const val CACHE_VERSION = 2
+        const val CACHE_VERSION = 3
 
         /**
          * 界面语言 → 识别/取稿语言。与 macOS `TranscriptStore.locale(for:)` 同一张表。
@@ -378,7 +400,7 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
             "fr" -> "fr-FR"
             "es" -> "es-ES"
             // 「跟随系统」:**要解析成真实语言,不能传空串**。
-            // 传空串等于让识别引擎自己猜,而中文猜出来的往往是繁体(见 WhisperEngine.promptFor);
+            // 传空串等于让识别引擎自己猜;而且缓存 key 会退化成 "auto",换了系统语言也命中同一份旧稿。
             // 而且缓存 key 会退化成 "auto",换了系统语言也命中同一份旧稿。
             else -> systemLocaleId()
         }

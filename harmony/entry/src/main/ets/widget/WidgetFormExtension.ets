@@ -24,8 +24,9 @@ import { Log } from '../util/Logger';
  */
 export default class WidgetFormExtension extends FormExtensionAbility {
   onAddForm(want: Want): formBindingData.FormBindingData {
+    // forceImage:新表单是空的,桌面进程里没有可复用的封面 —— 这一轮必须带图(见 WidgetFormBuilder.build)
     const built = WidgetFormBuilder.build(WidgetFormExtension.dimFromWant(want),
-      WidgetFormExtension.initStatics(this.context));
+      WidgetFormExtension.initStatics(this.context), true);
     // 图片 fd 要等系统读完才能关;onAddForm 没有回包回调,给一个宽裕的延时再收。
     setTimeout(() => { built.release(); }, 3000);
     return built.data;

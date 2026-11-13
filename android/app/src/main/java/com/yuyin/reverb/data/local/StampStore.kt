@@ -1,6 +1,7 @@
 package com.yuyin.reverb.data.local
 
 import android.content.Context
+import com.yuyin.reverb.sync.SyncTombstones
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
@@ -34,6 +35,8 @@ class StampStore(context: Context) {
             _stamps.value = list
             persist(list)
             com.yuyin.reverb.util.Logger.i("StampStore", "set seal='$seal' id=$episodeId total=${list.size}")
+            // 盖章=重新添加:清掉删除墓碑,否则同步时会被另一端的旧删除压回去。
+            SyncTombstones.clear(SyncTombstones.STAMPS, episodeId)
         }
     }
 
@@ -43,6 +46,7 @@ class StampStore(context: Context) {
             _stamps.value = list
             persist(list)
             com.yuyin.reverb.util.Logger.i("StampStore", "remove id=$episodeId total=${list.size}")
+            SyncTombstones.record(SyncTombstones.STAMPS, episodeId)
         }
     }
 
@@ -52,6 +56,8 @@ class StampStore(context: Context) {
             for (s in items) if (list.none { it.episodeId == s.episodeId }) list.add(s)
             _stamps.value = list
             persist(list)
+            // 恢复/同步并入 = 重新盖章,清掉墓碑(理由同 SubscriptionStore.addAll)。
+            items.forEach { SyncTombstones.clear(SyncTombstones.STAMPS, it.episodeId) }
         }
     }
 

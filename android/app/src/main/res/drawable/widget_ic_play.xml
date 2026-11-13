@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 小组件控制键图标。用矢量而不是 bitmap:RemoteViews 会被系统按卡片缩放,
+     一套 24dp 就能覆盖三档尺寸;颜色靠 ImageButton 的 android:tint 切深浅色。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8,5v14l11,-7z" />
+</vector>

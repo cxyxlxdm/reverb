@@ -59,7 +59,7 @@ final class WidgetBridge {
             .sink { [weak self] _ in self?.schedule(force: true) }
             .store(in: &bag)
 
-        timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { _ in
+        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { _ in
             Task { @MainActor in WidgetBridge.shared.flush() }
         }
         // 冷启动恢复出来的那份播放态不会再发一次 `$current`(restore 在 start 之前),
@@ -76,9 +76,10 @@ final class WidgetBridge {
         if abs(ms - lastPosition) > 3_000 { schedule(force: true) }
     }
 
-    /// `force = false` 时受 15 秒节流;两种都要再延迟 0.7 秒,等历史那条去抖写落盘。
+    /// `force = false` 时受 4 秒节流;两种都要再延迟 0.7 秒,等历史那条去抖写落盘。
+    /// 历史在播放中约 5 秒落一次,节流必须小于 5,否则每次都被挡掉、卡片退回 15 秒一拍(见 H267)。
     private func schedule(force: Bool) {
-        if !force, Date().timeIntervalSince(lastWriteAt) < 15 { return }
+        if !force, Date().timeIntervalSince(lastWriteAt) < 4 { return }
         pending?.cancel()
         pending = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 700_000_000)
@@ -99,8 +100,9 @@ final class WidgetBridge {
         }
 
         var state = WidgetState()
-        state.label = NSLocalizedString("继续收听", comment: "卡片顶部小字")
         state.dark = Self.isDark(settings)
+        // 播放/暂停图标靠这一位翻面;进度 > 0 推不出"正在播"——暂停时进度还在。
+        state.playing = player.isPlaying
 
         let episode = Self.pickEpisode(player: player, history: history)
         if let ep = episode {
@@ -115,8 +117,10 @@ final class WidgetBridge {
             state.live = ep.isLive
             if !ep.isLive && duration > 0 {
                 state.hasProgress = true
-                state.percent = Int((Double(max(0, position)) * 100 / Double(duration)).rounded())
-                state.percent = min(max(state.percent, 0), 100)
+                // 0.1% 一档(等价 Android 的 0..1000)。整数百分比在 80 分钟的节目上一格约 48 秒,
+                // 5 秒推一次时进度条会"定住"(H267)。
+                let raw = (Double(max(0, position)) * 1000 / Double(duration)).rounded() / 10
+                state.percent = min(max(raw, 0), 100)
                 state.time = "\(Fmt.clock(position)) / \(Fmt.clock(duration))"
             } else if ep.isLive {
                 state.time = NSLocalizedString("直播", comment: "直播流的时长位置占位")

@@ -76,5 +76,13 @@
 	</dict>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>用于在设备上离线把播客音频转成文字，内容不会离开你的 iPhone。</string>
+	<!-- 局域网同步:iOS 14 起访问本地网络要这一对键。`_reverb._tcp` 是 DNS-SD 服务类型,
+	     少了它 NWBrowser/NWListener 的 Bonjour 那一半会被系统静默挡住(手动输入 IP 仍可用)。 -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>用于在同一 Wi-Fi 下与另一台设备直接合并订阅与收听记录，数据只在局域网内传输。</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_reverb._tcp</string>
+	</array>
 </dict>
 </plist>

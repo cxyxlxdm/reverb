@@ -38,6 +38,8 @@ struct SettingsView: View {
     @State private var logSizeText = ""
     @State private var alertText: LocalizedStringKey?
     @State private var showFootprint = false
+    /// 局域网同步面板。打开时才创建控制器,关闭即停止监听(与 Android `showLanSync` 同口径)。
+    @State private var showLanSync = false
     @State private var mailDraft = false
     @State private var mailBody = ""
     @State private var mailLogData = Data()
@@ -212,6 +214,8 @@ struct SettingsView: View {
                 }
             }
 
+            lanSection
+
             Section("日志") {
                 HStack {
                     Label("日志", systemImage: "doc.text")
@@ -327,6 +331,7 @@ struct SettingsView: View {
             }
             .tint(accent)
         }
+        .modifier(LanSyncSheetModifier(env: env, isPresented: $showLanSync, tint: accent))
         .sheet(isPresented: $showAbout) {
             AboutView().environmentObject(settings)
         }
@@ -362,6 +367,32 @@ struct SettingsView: View {
                 alertText = "保存失败"
             }
             exportDocument = nil
+        }
+    }
+
+    // MARK: - 局域网
+
+    /// 单独一段:它不是"备份文件"的又一种格式,而是两台设备之间的实时合并
+    /// (Android 那段注释同样说明了为什么不并进「备份」)。
+    ///
+    /// **抽成独立属性不是为了好看**:iOS 这个 Form 的 `body` 已经贴着类型检查的
+    /// "reasonable time" 上限,再内联一段含 `Label { VStack { … } }` 的分区就直接编不过
+    /// (2026-11-11 实测)。后续往设置里加分区,照这个形状先抽出去。
+    private var lanSection: some View {
+        Section("局域网") {
+            Button { showLanSync = true } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("局域网同步")
+                        Text("在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "wifi.router")
+                }
+                .contentShape(Rectangle())
+            }
         }
     }
 
@@ -597,5 +628,23 @@ struct TextFileDocument: FileDocument {
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
         FileWrapper(regularFileWithContents: Data(text.utf8))
+    }
+}
+
+/// 局域网同步的 sheet 单独做一个 modifier,而不是继续往 `body` 那条链上挂 `.sheet`。
+///
+/// 原因与 `lanSection` 抽成属性相同:iOS 设置页的 body 已经贴着 Swift 类型检查的
+/// "reasonable time" 上限,再挂一条带闭包的 sheet 就直接编不过(2026-11-11 实测)。
+/// 把 `LanSyncSheet(env:).tint(...)` 挪进这里,body 只需要一次简单的方法调用。
+private struct LanSyncSheetModifier: ViewModifier {
+    let env: AppEnvironment
+    @Binding var isPresented: Bool
+    let tint: Color
+
+    func body(content: Content) -> some View {
+        content.sheet(isPresented: $isPresented) {
+            LanSyncSheet(env: env)
+                .tint(tint)
+        }
     }
 }

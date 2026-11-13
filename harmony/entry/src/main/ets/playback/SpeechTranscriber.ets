@@ -97,6 +97,17 @@ export class SpeechTranscriber implements SpeechTranscriberLike {
     this.cancelled = true;
   }
 
+  /**
+   * 系统识别这条路不按语言**预筛**:能不能认由引擎自己决定(listLanguages),
+   * 提前猜反而会把能用的语言挡掉。
+   *
+   * 1.0.8 起本实现不再装配(引擎换成了 `asr/SenseVoiceTranscriber`,见 Features.LOCAL_ASR),
+   * 留着它一为对照、二为回退;`supports` 仍要满足接口,行为与过去一致。
+   */
+  supports(localeId: string): boolean {
+    return true;
+  }
+
   async transcribe(
     episode: Episode,
     localPath: string,

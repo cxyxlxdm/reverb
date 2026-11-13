@@ -55,20 +55,23 @@ done
 APP_ID="com.yuyin.reverb.android"
 OUT_APK=reverb.apk
 
-# 离线语音识别的那两样东西**不入版本管理**(一个 57 MB 的模型 + 一个 .so),
+# 离线语音识别的产物**不入版本管理**(228 MB 的模型 + 两份 .so + 一个 jar),
 # 由 tools/build-asr.sh 备好。缺了照样能构建成功,只是装上之后转写入口点了没反应 ——
 # 那种"打出来才发现"的包最难查,所以在这里挡住。
 # 只有引擎真的启用时才检查 —— HAS_ENGINE 是合规降级的备用闸,置成 false 时
-# 任何机器都该能直接构建,不该被这两个本地产物挡住。
+# 任何机器都该能直接构建,不该被这些本地产物挡住。
 ASR_ON=$(grep -c 'HAS_ENGINE = true' app/src/main/java/com/yuyin/reverb/playback/asr/AsrFactory.kt || true)
 if [ "$ASR_ON" != "0" ]; then
   MISSING=0
-  [ -f app/src/main/jniLibs/arm64-v8a/libreverb_asr.so ] || MISSING=1
-  [ -f app/src/main/assets/whisper-model.bin ] || MISSING=1
+  [ -f app/libs/sherpa-onnx.jar ] || MISSING=1
+  [ -f app/src/main/jniLibs/arm64-v8a/libonnxruntime.so ] || MISSING=1
+  [ -f app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so ] || MISSING=1
+  [ -f app/src/main/assets/sensevoice/model.int8.onnx ] || MISSING=1
+  [ -f app/src/main/assets/sensevoice/tokens.txt ] || MISSING=1
   if [ "$MISSING" = "1" ]; then
     echo "✗ 缺少离线识别的产物,先跑一次:"
     echo "    ./tools/build-asr.sh"
-    echo "  (会编译 libreverb_asr.so 并下载 57 MB 的模型;只需跑一次)"
+    echo "  (会下载 sherpa-onnx 的 AAR 与约 228 MB 的 SenseVoice 模型;只需跑一次)"
     exit 1
   fi
 fi

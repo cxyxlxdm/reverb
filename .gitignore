@@ -28,6 +28,10 @@ docs/BEIAN.md
 BEIAN.md
 MIGRATION.txt
 
+# 局域网排障现场(抓包、路由表、mDNS 日志):一次性诊断输出,含本机地址与网络结构,
+# 只留本地。目录名带日期,用通配覆盖后续轮次。
+network-diagnostics-*/
+
 # 发布运营手册(分发平台流程/物料口径,仅本机可见)
 docs/STORE-OPS.md
 
@@ -46,6 +50,7 @@ MIGRATION.txt.bak-*
 # DerivedData 一次就是几百 MB,里面还有调试符号与中间包;private_keys 是
 # App Store Connect API 私钥(App Store Connect 只允许下载一次),绝不能入库。
 /ios/build/
+/ios/.build/
 /ios/dist/
 /ios/private_keys/
 ios/*.xcarchive

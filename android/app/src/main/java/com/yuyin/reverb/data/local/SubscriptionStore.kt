@@ -2,6 +2,7 @@ package com.yuyin.reverb.data.local
 
 import android.content.Context
 import com.yuyin.reverb.data.model.Podcast
+import com.yuyin.reverb.sync.SyncTombstones
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONArray
@@ -36,6 +37,10 @@ class SubscriptionStore(context: Context) {
             persist(current)
             com.yuyin.reverb.util.Logger.i("SubStore", "${if (removed) "remove" else "add"} id=${podcast.id} total=${current.size}")
             if (removed) onRemoved?.invoke(podcast)
+            // 删除墓碑:下一次同步时对端不能把这条再带回来;重新订阅则清掉墓碑。
+            val tombKey = SyncTombstones.subscriptionKey(podcast.feedUrl, podcast.id)
+            if (removed) SyncTombstones.record(SyncTombstones.SUBSCRIPTIONS, tombKey)
+            else SyncTombstones.clear(SyncTombstones.SUBSCRIPTIONS, tombKey)
         }
     }
 
@@ -45,6 +50,12 @@ class SubscriptionStore(context: Context) {
             for (p in podcasts) if (current.none { it.id == p.id }) current.add(p)
             _subscriptions.value = current
             persist(current)
+            // 备份恢复与同步并入都是「把外部的条目重新加进来」,按主观意图等于重新订阅:
+            // 不清墓碑的话,下一次同步会把它当成"已删除"再删一遍。
+            // 同步路径上走到这里的条目已经过 `LanSyncMerge` 的墓碑过滤,这一步对它是空转。
+            podcasts.forEach {
+                SyncTombstones.clear(SyncTombstones.SUBSCRIPTIONS, SyncTombstones.subscriptionKey(it.feedUrl, it.id))
+            }
             com.yuyin.reverb.util.Logger.i("SubStore", "addAll +${podcasts.size} total=${current.size}")
         }
     }

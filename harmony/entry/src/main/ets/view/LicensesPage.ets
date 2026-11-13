@@ -16,8 +16,9 @@ class Lib {
  * 开源许可页。对应 Android `LicensesScreen.kt`。
  *
  * 与 Android 的清单**内容不同、性质相同**:Android 列的是 Compose / Media3 / OkHttp /
- * Coil / Coroutines / WorkManager;鸿蒙端**不引三方库**,用到的全是系统能力,
- * 所以列的是 HarmonyOS SDK 自身与所用的系统 Kit。取源清单两端一致。
+ * Coil / Coroutines / WorkManager;鸿蒙端大多只用系统能力(所以列 HarmonyOS SDK 自身与
+ * 所用的系统 Kit),**1.0.8 起另加两条内置的开源离线识别组件**(sherpa-onnx 与
+ * ONNX Runtime),与 Android 用同一组名字与许可证。取源清单两端一致。
  *
  * 唯一的三方**素材**是底部页签那两枚图标:为了与 Android 端形状一致(并排截图时最显眼),
  * 从 Material Design Icons 取了 Explore / LibraryMusic 两个矢量打进包里,故单列一条。
@@ -37,6 +38,9 @@ function buildLibs(): Lib[] {
     new Lib('@ohos.xml (XmlPullParser)', 'Apache License 2.0'),
     new Lib('Share Kit / Core File Kit', 'Apache License 2.0'),
     new Lib('workScheduler / notificationManager', 'Apache License 2.0'),
+    // 1.0.8 起内置的开源离线语音识别组件(模型随包,全程本机,不上传音频)
+    new Lib(L.s('lic_sherpa'), 'Apache License 2.0'),
+    new Lib(L.s('lic_onnxruntime'), 'MIT License'),
     // 打进包里的三方素材:底部页签的两枚矢量(与 Android 端同一批图标)
     new Lib(L.s('lic_mdi_tabs'), 'Apache License 2.0')
   ];

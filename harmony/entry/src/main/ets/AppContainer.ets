@@ -17,8 +17,10 @@ import { NoteStore } from './store/NoteStore';
 import { PlaybackStateStore } from './store/PlaybackStateStore';
 import { CategoryStore } from './store/CategoryStore';
 import { TranscriptStore } from './store/TranscriptStore';
+import { ChapterStore } from './store/ChapterStore';
 import { WidgetUpdater } from './widget/WidgetUpdater';
 import { SpeechTranscriber } from './playback/SpeechTranscriber';
+import { SenseVoiceTranscriber } from './playback/asr/SenseVoiceTranscriber';
 import { DownloadManager } from './playback/DownloadManager';
 import { AudioCacheManager } from './playback/AudioCacheManager';
 import { PodcastRepository } from './net/PodcastRepository';
@@ -54,6 +56,8 @@ export class AppContainer {
   readonly categoryStore: CategoryStore = new CategoryStore();
   /// 逐字稿:状态机 + 缓存。识别实现由 boot 注入(见下)
   readonly transcripts: TranscriptStore = new TranscriptStore();
+  /// 章节表(podcast:chapters):状态机 + 缓存;章表取回后离线也能跳(与 Android 同名同职责)
+  readonly chapters: ChapterStore = new ChapterStore();
   readonly downloads: DownloadStore = new DownloadStore();
   readonly downloadManager: DownloadManager = DownloadManager.get();
   /// 「播过即缓存」的账本与执行者(与 downloads 分目录、分账本、分清理入口)
@@ -117,10 +121,13 @@ export class AppContainer {
      * 唯一联网的动作是"取发布方的官方稿",那一步由用户点了才发生。
      */
     this.transcripts.init(ctx.filesDir);
-    // 本机识别当前关着(系统识别质量不够用,见 Features.LOCAL_ASR 的长注释)。
-    // 不装配识别器 ⇒ store 只走"发布方提供的逐字稿"那一条路。
+    // 章表缓存同样是**纯本地读**(不联网)。真正取章表由用户点开弹层触发,排在同意门之后。
+    this.chapters.load();
+    // 本机识别(1.0.8 起 sherpa-onnx + SenseVoice,见 Features.LOCAL_ASR 的长注释)。
+    // 这里只**装配**一个外壳:模型到第一次转写才拷贝/加载,不占启动时间、不联网。
+    // 旧实现 `SpeechTranscriber`(系统 Core Speech Kit)留着对照,不再装配。
     if (Features.LOCAL_ASR) {
-      this.transcripts.transcriber = new SpeechTranscriber(ctx, this.settings);
+      this.transcripts.transcriber = new SenseVoiceTranscriber(ctx, this.settings);
     }
     this.downloads.load();
     this.downloadManager.init(ctx.filesDir, this.downloads, this.settings);
@@ -168,6 +175,15 @@ export class AppContainer {
     // 播放层装配:注入历史/设置,并把状态变化同步给系统媒体会话
     this.player.bind(this.history, this.settings);
     this.player.bindState(this.playbackState);
+    /**
+     * 单集上下文补全用的一列:`播放队列里只有一集`时按它把同一个节目的缓存列表接上,
+     * 否则「上一集 / 下一集」(桌面卡片、迷你条)会变成点得到的死键。
+     * **只读本地频道缓存** —— 按一下就联网取 RSS 不是这个动作该有的代价。
+     */
+    this.player.bindFeedEpisodes((feedUrl: string): Episode[] => {
+      const hit = this.feedCache.get(feedUrl);
+      return hit === null ? [] : hit.episodes;
+    });
     // 选源四级:**引导 > 下载 > 缓存 > 网络**(Android 那边没有"引导走本地文件"这一级,
     // 它的引导音频用 asset URI 直接起播,所以是 下载 > 缓存 > 网络)。
     // 下载排在缓存前是因为它是用户点名留下的那一份;缓存命中时 AudioCacheManager
@@ -194,6 +210,7 @@ export class AppContainer {
     this.player.authHeaderProvider = authOf;
     this.downloadManager.authHeaderProvider = authOf;
     this.transcripts.authHeaderProvider = authOf;
+    this.chapters.authHeaderProvider = authOf;
     // 视频源的伪地址在起播前现取直链。注入的是**同一个** `bilibili` 实例(repository 里那一个),
     // 候选流缓存与探活游标都在它身上 —— 换实例等于每次起播重新摸一遍 PCDN。
     // 回来的是 `{ url, durationSec }`:时长是**这一次解析的那个 cid** 的真值,见 `ResolvedStream`。

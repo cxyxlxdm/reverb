@@ -1,2 +1,4 @@
 "NSPhotoLibraryAddUsageDescription" = "Enregistre les affiches de citation, d’empreintes et de chaînes dans votre photothèque.";
 "NSSpeechRecognitionUsageDescription" = "Transcrit l’audio du podcast en texte sur cet appareil ; l’audio ne quitte jamais votre iPhone.";
+"NSLocalNetworkUsageDescription" = "Fusionne directement les abonnements et l’historique d’écoute avec un autre appareil sur le même Wi-Fi ; les données restent sur votre réseau local.";
+

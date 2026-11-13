@@ -25,8 +25,16 @@ export enum TranscriptState {
   Running = 3,
   Done = 4,
   Failed = 5,
-  /// 这台设备上没有可用的系统语音识别,且这一集也没有官方稿
+  /// 这台设备上没有可用的本机识别(没有 PCM 解码模块),且这一集也没有官方稿
   Unsupported = 6,
+  /**
+   * 引擎在,但**不认这个界面语言**(法语 / 西语界面:模型只支持 zh/en/ja/ko/yue),
+   * 而这一集也没有官方稿。
+   *
+   * 与 `Unsupported` 分开,是因为两种情形该说的话完全不同:前者是"这台设备用不了",
+   * 后者是"换一种界面语言就能用"。Android 有同名状态,文案也同一组(硬规矩 5)。
+   */
+  UnsupportedLocale = 8,
   /**
    * 正在读本机缓存。
    *
@@ -51,10 +59,11 @@ export interface TranscriptSink {
  * 「逐字稿」的状态机与缓存。对应 Android `data/local/TranscriptStore.kt`、
  * macOS `Data/TranscriptStore.swift`,**缓存 JSON 格式三端完全一致**。
  *
- * 两条取稿路径,**先官方稿、后系统识别**:
+ * 两条取稿路径,**先官方稿、后本机识别**:
  * 1. 发布方自己给的逐字稿(RSS `podcast:transcript`)—— 准、快、不耗电,还可能带词级时间;
- * 2. 系统离线语音识别(Core Speech Kit)—— 音频不出设备,但只有文本、**没有任何时间戳**,
- *    时间轴要自己按"已喂进去多少音频"推算(见 `playback/SpeechTranscriber`)。
+ * 2. 本机离线语音识别(sherpa-onnx + SenseVoiceSmall,1.0.8 起;此前是 Core Speech Kit)
+ *    —— 音频不出设备,自带标点与**词级时间**(v2 那代 Core Speech 只有文本,时间轴靠
+ *    "喂进去多少音频"推算,所以换了引擎要作废旧稿,见下面 `CACHE_VERSION`)。
  *
  * 缓存:每单集 × 每语言一份 JSON,放 `filesDir/transcripts/`。命中即秒显,不重转。
  * 不进备份(`BackupManager` 没有它):可重生成、体积大,与另两端一致。
@@ -66,12 +75,17 @@ export class TranscriptStore implements TranscriptSink {
    * 缓存格式/时间轴口径的版本。**改了时刻的算法就要 +1**,否则用户设备上已经生成的稿
    * 会继续按旧口径显示,修复等于没生效(Android 端踩过,见 TROUBLESHOOTING H60)。
    *
-   * 与 Android `TranscriptStore.CACHE_VERSION` **同一个数**:缓存格式三端互通,
-   * 版本号也就必须共用一套编号。
+   * 与 Android `TranscriptStore.CACHE_VERSION` **同一个数**:缓存格式互通,
+   * 版本号也就必须共用一套编号。**macOS / iOS 那份仍是 2** —— 它们没换引擎,
+   * 旧稿的口径没变,不需要作废(见 `macos/Sources/Reverb/Data/TranscriptStore.swift`)。
    *   - v1:Android 用 whisper DTW 的时代(本端没有 v1 的稿);
-   *   - v2:当前。
+   *   - v2:Core Speech Kit 时代(本端 1.0.7 及以前;无时间戳,时间轴靠"喂了多少音频"推算);
+   *   - v3:当前 —— sherpa-onnx + SenseVoiceSmall(1.0.8)。**必须 +1**:v2 的稿是按
+   *     旧的"累积喂入时长"排的,与 SenseVoice 的**词级真实时间**不是同一个口径,
+   *     混在一起会出现前面几十秒按旧算法、后面按新算法;而且旧稿只认五种语言的
+   *     界面语言集合也不同了。不做这一步就是"修了等于没修"(硬规矩 11 / H60)。
    */
-  static readonly CACHE_VERSION: number = 2;
+  static readonly CACHE_VERSION: number = 3;
 
   private static readonly DIR: string = 'transcripts';
   private static readonly TAG: string = 'Transcript';
@@ -139,11 +153,16 @@ export class TranscriptStore implements TranscriptSink {
       this.state = TranscriptState.Done;
       return;
     }
-    // 有官方稿就一定能出东西;没有则要看这台设备的系统识别在不在
-    const canRecognize = this.transcriber !== null && this.transcriber.available();
-    this.state = (episode.transcriptUrl.length > 0 || canRecognize)
-      ? TranscriptState.Idle
-      : TranscriptState.Unsupported;
+    // 有官方稿就一定能出东西;没有则要看本机识别在不在、认不认这个语言
+    const t = this.transcriber;
+    const engineOk = t !== null && t.available();
+    const langOk = engineOk && (t as SpeechTranscriberLike).supports(loc);
+    if (episode.transcriptUrl.length > 0 || langOk) {
+      this.state = TranscriptState.Idle;
+    } else {
+      // 两种"没有"要说不同的话:设备上没有引擎 / 引擎不认这个语言(见枚举注释)
+      this.state = engineOk ? TranscriptState.UnsupportedLocale : TranscriptState.Unsupported;
+    }
   }
 
   /**
@@ -175,6 +194,16 @@ export class TranscriptStore implements TranscriptSink {
     }
   }
 
+  /**
+   * 停掉在途任务。**只有三条路会调它**:`prepare()` 切到另一集/另一语言、`start()` 重新开始、
+   * 以及下游(worker)自己的失败清理。
+   *
+   * ⚠️ **换播放中的单集不会调它** —— 这是与 Android 相同的有意行为,不是漏接:
+   * 转写是用户明确点过的一次请求,关掉播放页/切去听别的,正是"让它后台跑完、下次打开秒显"。
+   * 2026-11-11 真机实测:切集 20 秒后旧任务仍在解(日志里 `startMs` 继续增长),一直跑到
+   * 整集完成并落缓存 —— 那一刻**看起来像取消失效**,实际是设计如此。真要停,
+   * 用户回到逐字稿页切到另一集(触发 `prepare`)或点「重新转写」(`start`)即可。
+   */
   cancel(): void {
     this.generation += 1;      // 让在途回调失效
     this.running = false;
@@ -203,18 +232,21 @@ export class TranscriptStore implements TranscriptSink {
 
     // 2) 本机识别(没装配识别器时这条路不存在,见 Features.LOCAL_ASR)
     const t = this.transcriber;
-    if (t === null || !t.available()) {
+    if (t === null || !t.available() || !t.supports(loc)) {
       if (gen === this.generation) {
         /**
-         * 这里要分清两种情况,否则文案会骗人:
+         * 这里要分清三种情况,否则文案会骗人:
          * - **有稿但取失败**(网络问题、链接坏了)⇒ `Failed`,界面给「重试」;
-         * - 压根没有稿 ⇒ `Unsupported`,界面说"发布方未提供"。
-         * 只走官方稿的版本里,前一种才是常见情形 —— 早先一律置 Unsupported,
-         * 于是"下载失败"被说成"发布方没提供",用户还以为这集永远没有稿。
+         * - 压根没有稿、设备也没有引擎 ⇒ `Unsupported`,界面说"发布方未提供"(不摆重试);
+         * - 引擎在但不认这个语言 ⇒ `UnsupportedLocale`,说明"换界面语言才可用"。
          */
-        this.state = episode.transcriptUrl.length > 0
-          ? TranscriptState.Failed
-          : TranscriptState.Unsupported;
+        if (episode.transcriptUrl.length > 0) {
+          this.state = TranscriptState.Failed;
+        } else if (t !== null && t.available()) {
+          this.state = TranscriptState.UnsupportedLocale;
+        } else {
+          this.state = TranscriptState.Unsupported;
+        }
       }
       return;
     }
@@ -520,8 +552,10 @@ export class TranscriptStore implements TranscriptSink {
  * store 不该认识具体引擎,将来换三方实现只要满足这个形状(见 docs/TRANSCRIPT.md 的迁移路径)。
  */
 export interface SpeechTranscriberLike {
-  /// 这台设备上系统识别能不能用
+  /// 这台设备上的本机识别能不能用
   available(): boolean;
+  /// 这个界面语言能不能用本机识别(模型只认固定几种语言)
+  supports(localeId: string): boolean;
   cancel(): void;
   transcribe(
     episode: Episode,

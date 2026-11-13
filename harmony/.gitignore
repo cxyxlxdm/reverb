@@ -4,6 +4,9 @@
 /build-profile.json5
 # 打包产物(build-release.sh 的输出),不入库
 /dist
+# 离线语音识别的模型与词表(约 229 MB,硬规矩 16):由 tools/build-asr.sh 备齐,
+# 通常直接从同机 Android 端那份拷过来。发布构建前必须先跑它,build-release.sh 会查。
+/entry/src/main/resources/rawfile/sensevoice/
 # 单测产物(覆盖率数据与 test_result.txt),每次跑都变,不入库
 /entry/.test
 # hvigor 构建输出与缓存(每次构建都变,18M 量级,不入库)

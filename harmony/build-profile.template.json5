@@ -12,13 +12,16 @@
 // 否则下次从模板重建会丢配置。
 {
   "app": {
+    // targetSdkVersion 自 2026-11 起按平台要求升到 26.0.0;compatibleSdkVersion 仍留
+    // 6.1.0(23),不缩小可安装的设备范围。⚠️ API 26 起的版本写法**不带括号**
+    // (写成 "26.0.0",不是 "26.0.0(26)"),否则 hvigor 直接拒绝。
     "products": [
       {
         // 日常开发/真机调试用。签名是 DevEco 自动生成的调试证书,不能发布。
         "name": "default",
         "signingConfig": "default",
-        "compatibleSdkVersion": "6.0.2(22)",
-        "targetSdkVersion": "6.0.2(22)",
+        "compatibleSdkVersion": "6.1.0(23)",
+        "targetSdkVersion": "26.0.0",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {
@@ -34,8 +37,8 @@
         //   发布:hvigorw assembleApp  --mode project -p product=release -p buildMode=release
         "name": "release",
         "signingConfig": "release",
-        "compatibleSdkVersion": "6.0.2(22)",
-        "targetSdkVersion": "6.0.2(22)",
+        "compatibleSdkVersion": "6.1.0(23)",
+        "targetSdkVersion": "26.0.0",
         "runtimeOS": "HarmonyOS",
         "buildOption": {
           "strictMode": {

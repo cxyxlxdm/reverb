@@ -114,14 +114,12 @@ cd android && export JAVA_HOME=/Users/cxyxl/Library/Java/JavaVirtualMachines/jdk
 
 ```bash
 cd android
-./build-release.sh                 # 唯一那份 → dist/reverb.apk(≈65 MB,含语音模型)
+./build-release.sh                 # 唯一那份 → dist/reverb.apk(1.0.8 起 ≈270 MB,含 239 MB 语音模型)
 ./build-release.sh --bundle          # 同上,出 .aab(H205 之后没有渠道参数了;--store 会当未知参数退出)
 # 只想过编译(快):
 ./gradlew :app:compileReleaseKotlin -q
-# 备齐离线识别的两样产物(不入版本管理,缺了打包会报错退出):
+# 备齐离线识别的五样产物(模型 + 词表 + jar + 两个 .so;不入版本管理,缺了打包会报错退出):
 ./tools/build-asr.sh [--force]
-# 主机端探针:用与 JNI 同参数跑 whisper,打印每个 token 的时刻
-./tools/asr-probe/run.sh [音频文件]
 adb install -r dist/reverb.apk
 ```
 
@@ -134,11 +132,13 @@ mapping **本地只此一份**,重打前先归档(H204 踩过的同类事故,H20
 cd harmony
 export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk
 HV=/Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw
-# debug hap(装机调试用)
+# 离线识别产物(模型 228 MB + 词表;不入库,缺了打包会报错退出):
+./tools/build-asr.sh [--force]          # 同机有 Android 那份时直接按 sha256 拷过来,不再下载
+# debug hap(装机调试用;模型进了 rawfile 之后约 271 MB)
 $HV assembleHap --mode module -p product=default -p buildMode=debug --no-daemon
 ./tools/install-device.sh              # 装机一条命令:覆盖装 + 签名口径冲突识别(见 H216)
 # 发布包(build-release.sh 自带 node 版本闸,≥23 会自动切 ~/Library/OpenHarmony 的 node 22,见 H216)
-./build-release.sh [--fast]        # → dist/reverb.app + reverb-symbol.zip
+./build-release.sh [--fast]        # → dist/reverb.app + reverb-symbol.zip;出包前后各查一次模型在不在
 ```
 
 `hdc` 在 `$DEVECO_SDK_HOME/default/openharmony/toolchains/`;本机还有一份较新的在
@@ -325,12 +325,19 @@ BUILD_NUMBER=2 DEVELOPMENT_TEAM=XXXXXXXXXX \
 ### 1. 包里有 / 没有,以解包 grep 为准
 
 ```bash
-# Android 唯一那份,当前期望(H205):功能全开,所以四项都非 0
-unzip -l dist/reverb.apk | grep -icE 'lib/|whisper-model'              # 非 0(2)
+# Android 唯一那份,当前期望(H205 / 1.0.8):功能全开,所以四项都非 0
+unzip -l dist/reverb.apk | grep -icE 'lib/|assets/sensevoice/'         # 非 0(4:两个 .so + 模型 + 词表)
 unzip -l dist/reverb.apk | grep -cE 'assets/seed_podcasts\.json'       # 非 0(1)
-LC_ALL=C cat classes*.dex | grep -ac 'itunes.apple.com\|fyyd\|gpodder' # 非 0(14)
+unzip -p dist/reverb.apk classes.dex | LC_ALL=C grep -ao 'itunes.apple.com\|fyyd\|gpodder' | wc -l  # 非 0(13,4/5/4)
 "$SDK/build-tools/<ver>/aapt2" dump permissions dist/reverb.apk | grep -cE 'RECORD_AUDIO|REQUEST_INSTALL_PACKAGES'   # 非 0(2)
-# HarmonyOS 商店包当前同样应能 grep 到目录接口 URL(非 0)
+# HarmonyOS 商店包:模型、词表与识别库都在**嵌套的 entry-default.hap** 里 ——
+# 直接对 dist/reverb.app grep 这两条会恒得 0(2026-11-13 实测,外层 .app 里只有一个 .hap 条目),
+# 那不是"包里没有",是"查错了容器"。先解一层,清单落文件再数(H272:`grep -q` 直连管道会假阴性)。
+T=$(mktemp -d); unzip -o -q dist/reverb.app '*.hap' -d "$T"
+unzip -l "$T/entry-default.hap" > "$T/hap.list"
+grep -cE 'rawfile/sensevoice/(model\.int8\.onnx|tokens\.txt)' "$T/hap.list"   # 非 0(2)
+grep -cE 'libs/arm64-v8a/lib(sherpa|onnxruntime)' "$T/hap.list"               # 非 0(3)
+rm -rf "$T"
 ```
 
 合并前这一节写的是 store 渠道的「native / 模型 / 录音权限应为 0」,那组期望随 H205 一起翻转。
@@ -367,8 +374,9 @@ Kotlin/R8 会折叠常量并删掉整支;**ArkTS 没有 DCE**,`Features.X ? A : 
 ### 3. R8 删不掉 `.so` 与 assets
 
 native 库与模型是构建系统按 source set 打进包的,R8 只折叠代码分支。合并 flavor 之后这两样
-都在 `app/src/main/`(`jniLibs/arm64-v8a/libreverb_asr.so`、`assets/whisper-model.bin`、
-`assets/seed_podcasts.json`),所以**把 `AsrFactory.HAS_ENGINE` 降到 `false` 并不会让那 57 MB 从包里消失** ——
+都在 `app/src/main/`(`jniLibs/arm64-v8a/libonnxruntime.so` + `libsherpa-onnx-jni.so`、
+`assets/sensevoice/model.int8.onnx` + `tokens.txt`、`assets/seed_podcasts.json`),
+所以**把 `AsrFactory.HAS_ENGINE` 降到 `false` 并不会让那 239 MB 模型与 26.9 MB native 库从包里消失** ——
 它只是让界面与调用路径不再用它。真要做到「包里没有」,只能把文件本身移出构建树
 (`tools/build-asr.sh` 负责放进来,`.gitignore` 已遮住)。
 
@@ -447,7 +455,7 @@ ArkTS 没有协程,**没有 `withContext(Dispatchers.IO)` 这种一行搬走的�
 
 渲染找「当前句/当前词」用的是「从后往前找第一个 `startMs <= now`」,
 **只在起点单调不减时才正确**。队尾一个异常小的值就会让高亮钉死不动。
-所以在数据出口一次性保证「≥0 且单调」(C++ 侧 `tidyWords`、`TranscriptLines.monotonic`)。
+所以在数据出口一次性保证「≥0 且单调」(`SenseVoiceEngine.wordsFrom`、`TranscriptLines.monotonic`)。
 
 ### 11. 持久化数据的口径变了,就得加版本号
 
@@ -517,19 +525,23 @@ ArkTS 没有协程,**没有 `withContext(Dispatchers.IO)` 这种一行搬走的�
 
 ### 16. 大产物不入版本管理
 
-whisper 的 `.so`(1.6 MB)与模型(57 MB)由 `tools/build-asr.sh` 重建(固定 commit + 校验 sha256);
+SenseVoice 模型(239,233,841 B)、词表、sherpa-onnx 的 `classes.jar` 与两个 `.so` 由
+两端的 `tools/build-asr.sh` 各自备齐(固定上游版本 + 校验 sha256;鸿蒙那份还会按 sha256
+从同机 Android 目录直接拷贝);`harmony/entry/src/main/resources/rawfile/sensevoice/`、
 `harmony/entry/.cxx`、`dist/`、`build-profile.json5`(含签名口令)都在 `.gitignore` 里。
 
 ### 17. 「系统有这个 API」不等于「这个 API 能干这件事」
 
 鸿蒙的 Core Speech Kit 接口形状完全对得上(喂 PCM、出文本),但它的离线档是给**短语音输入**
 设计的,拿长音频转写实测 10 分钟只出 14 行碎片。**这种判断只能靠真机跑真实素材。**
+(1.0.8 已改用 sherpa-onnx;这条教训保留,它解释的是"为什么当初不接系统能力"。)
 
 ### 18. 看不见中间值的问题,先造能看见的工具
 
-逐字稿时间轴对不对,在真机上完全看不出来。为此写了主机端探针
-(`android/tools/asr-probe/`,与 JNI 同参数打印每个 token 的时刻),
-真相用**切片法**定(把音频截到 1.0 / 1.3 秒分别识别,看第几个字还在里面)。
+逐字稿时间轴对不对,在真机上完全看不出来。whisper 时代为此写了主机端探针
+(与线上同参数打印每个 token 的时刻),真相用**切片法**定(把音频截到 1.0 / 1.3 秒分别识别,
+看第几个字还在里面)。换 sherpa-onnx 后那个探针随 whisper 一起删了,但**方法不变**:
+2026-11-11 的选型实测就是先在主机上用同参数跑同一段 3 分钟素材,再上真机。
 在此之前靠现象猜原因,错了两次。
 
 ### 19. 分发运营物料不入版本控制 —— changelog 例外入库
@@ -594,7 +606,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 | `ui/share/` | 剪藏与足迹海报 | 分享图 |
 | `update/` | WorkManager 订阅巡检 + 新集通知 + 应用内更新(`SelfUpdate`,合并后商店那份也带,见 H205) | 后台刷新、更新检查 |
 | ~~`app/src/{default,store}/`~~ | **已删除**(2026-10-18 合并 flavor,H205) | 渠道差异不再由 source set 承载;要降级改 `src/main` 里那三个常量 |
-| `android/tools/` | `build-asr.sh` · `asr-probe/` · `glass-shot.sh` · `play-button-check.sh` | ASR 产物、探针、截图 |
+| `android/tools/` | `build-asr.sh` · `glass-shot.sh` · `play-button-check.sh` | ASR 产物、截图、播放键几何 |
 
 ### HarmonyOS(`harmony/entry/src/main/ets/`)
 
@@ -637,12 +649,12 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 
 ### 版本号一共四处,没有单一来源
 
-| 端 | 文件 | 字段 | 1.0.7 的值 |
+| 端 | 文件 | 字段 | 当前值(2026-11-11,1.0.8 开发中) |
 |---|---|---|---|
-| Android | `android/app/build.gradle:38-39` | `versionCode` / `versionName` | `8` / `1.0.7` |
-| 鸿蒙 | `harmony/AppScope/app.json5:5-6` | `versionCode` / `versionName` | `1000007` / `1.0.7` |
-| macOS | `macos/Info.plist:29-32` | `CFBundleShortVersionString` / `CFBundleVersion` | `1.0.7` / `4` |
-| iOS | `ios/Reverb.xcodeproj/project.pbxproj` | `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` | `1.0.7` / `1` |
+| Android | `android/app/build.gradle:38-39` | `versionCode` / `versionName` | `9` / `1.0.8` |
+| 鸿蒙 | `harmony/AppScope/app.json5:5-6` | `versionCode` / `versionName` | `1000008` / `1.0.8` |
+| macOS | `macos/Info.plist:29-32` | `CFBundleShortVersionString` / `CFBundleVersion` | `1.0.8` / `5` |
+| iOS | `ios/Reverb.xcodeproj/project.pbxproj` | `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` | `1.0.8` / `2` |
 
 **四处必须手改,漏一处不会有任何东西报错。** 改完用这条核:
 

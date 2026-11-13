@@ -21,19 +21,20 @@ export class Features {
   /**
    * 是否提供**本机语音转写**(没有官方逐字稿时,自己把音频转成文字)。
    *
-   * 置 false 的理由是**真机实测的结论,不是猜的**(详见 TROUBLESHOOTING H62):
+   * **1.0.8 起为 true**:引擎换成了 sherpa-onnx + 随包的 SenseVoiceSmall int8
+   * (实现见 `playback/asr/`,跑在 Worker 子线程)。原先 false 的理由是**真机实测的结论**:
    * 系统的 Core Speech Kit 离线档是给"短语音输入/命令词"设计的 —— 一次会话的 VAD
-   * 检测到句末静音就收工、只认第一句。10 分钟的中文单集只出 14 行,内容多是
-   * 「。」「能力。」这类碎片。这种质量拿给用户看,只会让人以为功能坏了。
+   * 检测到句末静音就收工,10 分钟的中文单集只出 14 行碎片(见 TROUBLESHOOTING H62)。
+   * 换引擎之后同一段素材能出完整稿件,中文准确率也明显更好;代价是模型 228 MB 要进包
+   * (与 Android 同一取舍,用户已拍板"只带 SenseVoice")。
    *
-   * 所以本端目前**只走发布方提供的逐字稿**(RSS 的 `podcast:transcript`):
-   *   - 播放页第三页**仅当该集有官方稿时才出现**(与 Android 大陆商店渠道同一规则);
-   *   - 设置里不显示「逐字稿」总开关 —— 没有可开关的本机识别,那个开关没有意义;
-   *   - 「逐字高亮」保留:官方的 JSON 稿一词一条、自带词级时间,那个效果是真的。
+   * 翻成 true 意味着三条同时生效:
+   *  - 播放页第三页对任何一集都出现(受设置里「逐字稿」总开关控制);
+   *  - 设置里显示「逐字稿」总开关;
+   *  - 首次转写把模型从 rawfile 拷到私有目录(之后按大小跳过)。
    *
-   * **要打开这个开关需要先把引擎换掉**:把 whisper.cpp 链进已经建好的 native 模块
-   * (`cpp/reverb_pcm.cpp` 那套解码链真机验过,能用),换掉 `SpeechTranscriber`。
-   * 迁移路径见 docs/TRANSCRIPT.md。届时这一行改成 true,上面三条会同时恢复。
+   * 要再关掉:把这一行改回 false,界面三处门控会自动收掉。但**模型仍会打进包**
+   * (与 Android 的 `HAS_ENGINE` 同一个性质:常量只关调用路径,不删文件,见硬规矩 3)。
    */
-  static readonly LOCAL_ASR: boolean = false;
+  static readonly LOCAL_ASR: boolean = true;
 }

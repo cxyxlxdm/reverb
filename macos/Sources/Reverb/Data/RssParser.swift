@@ -74,7 +74,9 @@ final class RssParser {
                 pubDate: (item["pubDate"] ?? "").trimmed,
                 feedUrl: feedUrl,
                 transcriptUrl: (item["transcriptUrl"] ?? "").trimmed,
-                transcriptType: (item["transcriptType"] ?? "").trimmed
+                transcriptType: (item["transcriptType"] ?? "").trimmed,
+                chaptersUrl: (item["chaptersUrl"] ?? "").trimmed,
+                chaptersType: (item["chaptersType"] ?? "").trimmed
             )
         }
 
@@ -227,6 +229,22 @@ private final class RssDelegate: NSObject, XMLParserDelegate {
                     currentItem?["transcriptRank"] = String(rank)
                 }
             }
+        case "podcast:chapters":
+            // 章节表(Podcasting 2.0 `podcast:chapters`)。与 transcript 同为**空元素**,
+            // 信息全在 url/type 两个属性里。规范只定义了 JSON 一种载体:
+            // `application/json+chapters` 是标准写法,不少源写成 `application/json`,
+            // 这两种都收、前者优先;XML 之类的章表本端不解析 —— 宣告"有章节"却点开报错,
+            // 比根本不出现入口更糟(与 Android / 鸿蒙同一条)。
+            if inItem, let url = attributeDict["url"], !url.isEmpty {
+                let type = attributeDict["type"] ?? ""
+                let rank = Self.chaptersRank(type)
+                let best = Int(currentItem?["chaptersRank"] ?? "") ?? -1
+                if rank > best {
+                    currentItem?["chaptersUrl"] = url
+                    currentItem?["chaptersType"] = type
+                    currentItem?["chaptersRank"] = String(rank)
+                }
+            }
         default:
             break
         }
@@ -239,6 +257,16 @@ private final class RssDelegate: NSObject, XMLParserDelegate {
         if t.contains("json") { return 3 }
         if t.contains("vtt") { return 2 }
         if t.contains("srt") || t.contains("subrip") { return 1 }
+        return -1
+    }
+
+    /// 章节表格式的优先级。**负数表示不要**。
+    /// 章节规范只定义了 JSON 一种载体;`application/json+chapters` 是标准写法,
+    /// 不少源写成 `application/json`,这两种都收,前者优先(与 Android `chaptersRank` 同一规则)。
+    private static func chaptersRank(_ type: String) -> Int {
+        let t = type.lowercased()
+        if t.contains("json+chapters") { return 2 }
+        if t.contains("json") { return 1 }
         return -1
     }
 

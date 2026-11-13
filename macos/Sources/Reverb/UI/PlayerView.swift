@@ -11,6 +11,8 @@ struct PlayerView: View {
     @State private var dragValue: Double = 0
     @State private var showStamps = false
     @State private var showNote = false
+    /// 章表弹层。与「印记」「批注」同一种容器(popover),点空白处关闭。
+    @State private var showChapters = false
     /// 按下「写批注」那一下冻结的时间。不能直接显示 `player.positionMs`:它每 0.5s 跟着播放器刷新,
     /// 弹窗挂着不动就会看到时间一路往上涨,而用户要的是"我按下的那一秒"。
     @State private var notePosMs = 0
@@ -53,6 +55,11 @@ struct PlayerView: View {
         }
         .frame(minWidth: 420, minHeight: 560)
         .noFocusRing()
+        // 切集时把章表状态机复位(**不发请求**,见 `ChapterStore.prepare`)。挂在根上而不是
+        // 播放页里:轮播的另外两页也在同一棵树上,换集时都会重建,不该各挂一份。
+        .task(id: player.current?.id) {
+            if let id = player.current?.id { env.chapters.prepare(episodeId: id) }
+        }
         // 只给标题、不给正文:与设置页那三条失败提示同形,文案对齐 Android / 鸿蒙的 `share_failed`。
         .alert("分享图片生成失败", isPresented: $shareCardFailed) {
             Button("好", role: .cancel) {}
@@ -93,7 +100,10 @@ struct PlayerView: View {
             VStack(spacing: 28) {
                 artwork(ep)
                 titleBlock(ep)
-                seekBar(ep)
+                VStack(spacing: 8) {
+                    if hasChapters(ep) { chapterEntry(ep) }
+                    seekBar(ep)
+                }
                 controls(ep)
                 actionRow(ep)
             }
@@ -243,6 +253,129 @@ struct PlayerView: View {
                 }
             }
         }
+    }
+
+    // MARK: - 章节
+
+    /// 只认有章表、且不是"没有时间轴的直播"的集 —— 直播没有整段边界,章表对它没有意义
+    /// (`liveNoTimeline` 的判据与 `seekBar` 同一把尺:有限时长的流报出时长后,
+    /// 章表与进度条一样重新有意义)。
+    private func hasChapters(_ ep: Episode) -> Bool {
+        !(ep.isLive && player.durationMs <= 0) && !ep.chaptersUrl.isEmpty
+    }
+
+    /// 章表入口:一行文字(当前章标题,没有时写「章节」)+ 下拉小三角。
+    ///
+    /// 显示**当前章标题**而不是"章节"两个字:它在播放时本身就是有用的信息,
+    /// 也让"点这里能跳章"这件事看得出来(与 Android / 鸿蒙同一条)。
+    /// 读 `player.positionMs` 不额外开时钟 —— 本页本来就按 0.5s 跟着进度重渲,
+    /// 章表只有几十条,找当前章的 O(n) 扫描比另起一个组件更省。
+    private func chapterEntry(_ ep: Episode) -> some View {
+        Button { showChapters = true } label: {
+            HStack(spacing: 5) {
+                Text(currentChapterTitle(ep)).font(.callout).lineLimit(1)
+                Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold))
+            }
+            .foregroundStyle(accent)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .noFocusRing()
+        .help("章节")
+        .popover(isPresented: $showChapters, arrowEdge: .bottom) {
+            chapterPopover(ep)
+        }
+    }
+
+    /// 入口那一行显示什么:章表属于当前集且已就绪时给当前章标题,否则退回「章节」。
+    /// **列表没加载之前不显示"第 N 章"之类的猜测** —— 冷启动时章表还没取过,
+    /// 显示「章节」是诚实的(Android / 鸿蒙同一口径)。
+    private func currentChapterTitle(_ ep: Episode) -> String {
+        let store = env.chapters
+        guard store.episodeId == ep.id, store.state == .done else {
+            return String(localized: "章节")
+        }
+        let idx = store.index(atMs: player.positionMs)
+        guard idx >= 0, idx < store.chapters.count else { return String(localized: "章节") }
+        let title = store.chapters[idx].title
+        return title.isEmpty ? String(localized: "章节") : title
+    }
+
+    private func chapterPopover(_ ep: Episode) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("章节").font(.headline)
+            chapterBody(ep)
+        }
+        .padding(16)
+        .frame(width: 320)
+        // 每次打开都走一次 load:命中缓存是同步读几 KB,没缓存才发请求。
+        // **入口不自动取** —— 章表只在用户真的要看列表时才有价值(与另两端同一条)。
+        .task(id: ep.id) { await env.chapters.load(episode: ep) }
+    }
+
+    @ViewBuilder
+    private func chapterBody(_ ep: Episode) -> some View {
+        let store = env.chapters
+        switch store.state {
+        case .idle, .loading:
+            ProgressView()
+                .frame(maxWidth: .infinity, minHeight: 120)
+        case .empty:
+            Text("这一集没有章节")
+                .font(.callout).foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, minHeight: 120)
+        case .failed:
+            // 只有"取不到"才给重试;空表不给按钮,否则用户会一直点一个永远好不了的按钮
+            Button {
+                Task { await env.chapters.load(episode: ep) }
+            } label: {
+                Text("章节加载失败，点按重试")
+                    .font(.callout).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 120)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .noFocusRing()
+        case .done:
+            let idx = store.index(atMs: player.positionMs)
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(store.chapters.indices, id: \.self) { i in
+                        chapterRow(i, active: i == idx)
+                    }
+                }
+            }
+            .frame(maxHeight: 340)
+        }
+    }
+
+    private func chapterRow(_ i: Int, active: Bool) -> some View {
+        let c = env.chapters.chapters[i]
+        return Button {
+            player.seek(toMs: c.startMs)
+            showChapters = false
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(timeText(c.startMs))
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(active ? accent : .secondary)
+                    .frame(width: 52, alignment: .leading)
+                Text(c.title)
+                    .font(.callout)
+                    .fontWeight(active ? .medium : .regular)
+                    .foregroundStyle(active ? accent : .primary)
+                    .multilineTextAlignment(.leading)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 7)
+            .background(active ? accent.opacity(0.12) : Color.clear,
+                        in: RoundedRectangle(cornerRadius: 6))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .noFocusRing()
     }
 
     // MARK: - 传输控制

@@ -38,6 +38,11 @@ import java.util.concurrent.TimeUnit
 
 /** 极简手写依赖容器，避免引入 DI 框架带来的构建复杂度。 */
 class AppContainer(app: Application) {
+    init {
+        // 删除墓碑账本要先开:各 store 的删除动作都会往里记一笔(见 `SyncTombstones`)。
+        com.yuyin.reverb.sync.SyncTombstones.configure(app)
+    }
+
     val httpClient: OkHttpClient = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
@@ -88,12 +93,23 @@ class AppContainer(app: Application) {
     // 转写:先取发布方自己的逐字稿,取不到才在引擎可用时走本机识别(见 asrEngine 那条注释)
     val transcriptFetcher = TranscriptFetcher(httpClient) { url -> feedAuthStore.headerForUrl(url) }
     val transcriptStore = TranscriptStore(app, transcriptFetcher)
+    // 章节表(podcast:chapters):取一次、落盘、离线也能跳。与逐字稿吃同一份凭据与网络口径。
+    val chaptersFetcher = com.yuyin.reverb.data.remote.ChaptersFetcher(httpClient) { url ->
+        feedAuthStore.headerForUrl(url)
+    }
+    val chapterStore = com.yuyin.reverb.data.local.ChapterStore(app, chaptersFetcher)
     /**
      * 离线识别引擎。**只有一份包,所以它不带 null 那一支了** —— 合并前商店那个 flavor 的
      * `AsrFactory` 是空实现,包里连 `.so` 与模型都没有(见 `playback/asr/AsrEngine` 的注释与 H205)。
      * 用 lazy:模型是几十 MB,不能在应用启动时就读进内存,得等用户真的要转写。
      */
     val asrEngine: com.yuyin.reverb.playback.asr.AsrEngine? by lazy { AsrFactory.create(app) }
+
+    /**
+     * 局域网同步。**lazy**:监听端口与 mDNS 广播只在用户打开「局域网同步」面板时才开始
+     * (见 `LanSyncController.start`),不在启动时付这份代价,也不在后台常驻监听。
+     */
+    val lanSync by lazy { com.yuyin.reverb.sync.LanSyncController(app, this) }
 }
 
 class ReverbApp : Application(), Configuration.Provider {
@@ -125,6 +141,11 @@ class ReverbApp : Application(), Configuration.Provider {
         PlayerController.bindSettings(container.settingsStore)
         PlayerController.bindListenStats(container.listenStatsStore)
         PlayerController.bindState(container.playbackStateStore)
+        // 桌面卡片从历史单集起播时,上一集 / 下一集要靠本地频道缓存补上下文。
+        // **只读缓存**,不触发任何网络请求(与鸿蒙 bindFeedEpisodes 同一口径)。
+        PlayerController.bindFeedEpisodes { feedUrl ->
+            container.feedCache.get(feedUrl)?.result?.episodes.orEmpty()
+        }
         container.listenStatsStore.seedFromHistory(container.historyStore.history.value)
         Notifications.ensureChannel(this)
         // **不在这里排 WorkManager 任务**:带网络约束的周期任务会让 WorkManager 的约束追踪器

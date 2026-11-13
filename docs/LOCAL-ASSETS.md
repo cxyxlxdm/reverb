@@ -24,7 +24,7 @@
 
 | | **公开无害** | **公开有害** |
 |---|---|---|
-| **可重建** | 入库(源码、文档) | 用构建产物+脚本重建,不入库(whisper 模型) |
+| **可重建** | 入库(源码、文档) | 用构建产物+脚本重建,不入库(语音模型与推理库) |
 | **不可重建** | 视价值决定(通常是文档) | **本地留存**(签名、口令、身份信息) |
 
 在此之上叠加一条 2026-09-20 定的统一口径(AGENTS.md 硬规矩 18):
@@ -129,10 +129,11 @@
 | 历史迁移包 | 工程根 `MIGRATION.txt` 13 727 B | ✅ 在 |
 | 与工程分处的快照 | `~/Documents/cast-backup-20260925/` **502 个文件 / 约 58 MB**;`cast-full/.git` 在、`.bundle` **2 个**、`STORE-OPS-20261018.md` 69 803 B | ✅ 全在(唯一副本那一档没断) |
 | 工具层记忆与 Skill | `~/.qoder/projects/**-Users-cxyxl-Documents-cast**/memory/` 7 个文件 / 80 KB、`~/.qoder/memory/` 10 / 56 KB、`~/.qoder/skills/` 4 / 56 KB | ✅ 在,但**键名跟着机器变了**:旧 `-Users-liang-Documents-cast` 目录**不存在** ⇒ 记忆是改名搬过来的。**换机后这条必须现算**,否则"有记忆"与"会话能读到记忆"是两件事 |
-| 可重建产物 | `jniLibs/arm64-v8a/libreverb_asr.so` 1 679 264 B、`assets/whisper-model.bin` 59 707 625 B | ✅ 在(`tools/build-asr.sh` 重建过) |
+| 可重建产物(1.0.8 起) | `app/libs/sherpa-onnx.jar` 245 045 B、`jniLibs/arm64-v8a/libonnxruntime.so` 22 249 560 B + `libsherpa-onnx-jni.so` 4 609 320 B、`assets/sensevoice/model.int8.onnx` 239 233 841 B + `tokens.txt` 315 894 B | ✅ 在(`tools/build-asr.sh` 备齐;下载后按 sha256 校验) |
+| ~~可重建产物(1.0.7 及以前)~~ | `libreverb_asr.so` 1 679 264 B、`whisper-model.bin` 59 707 625 B | 1.0.8 已移除,不再需要;换回来只改 `AsrFactory` + `build-asr.sh` 的分支 |
 | 构建缓存 | **10-24 下午做了一次清空重建实验,数字如下。** 搬过来的那份:`harmony/.hvigor/` 31 个文件 / **14 MB**,**21 个 mtime 早于 10-24**(最老 09-25);`keyPassword` ×5 + `storePassword` ×5 + DevEco 密文前缀 `0000001B` ×10,分落 2 个文件(`cache/task-cache.json` 与 `outputs/sync/output.json`);**`/Users/liang` 出现 22 968 次**。清空后重跑一次 debug 构建(31 tasks executed / 0 up-to-date,是真·全量)→ 新缓存 12 个文件 / 704 KB,键名命中只剩 `cache/task-cache.json` 一处(密文 ×2),`sync/output.json` **不再回来**(它是 DevEco sync 写的,hvigor CLI 不产) | ⚠️ **一半是卫生、一半是活源头**:清掉能少 8 处键名副本 + 那 22 968 条旧机路径,但 `task-cache.json` 那份**每次构建都会再生**,所以"清了就好了"不成立(归本人判,可再生,但它是 H63 同族)。**旧缓存没有删,但已挪出仓库** → `~/Documents/cast-hvigor-preMig-20261024/`(31 个文件 / 14 MB)—— 原因见下面那行:第一次归档在仓库内、加后缀改名,**把忽略规则改失效了** —— 删它一条 `rm -rf` 的事,留着是因为里面还有 10-17 的构建遥测可比对。见第三节同一行 |
 | ⚠️ **旧缓存的归档落点(10-24 下午定的,含一个当场踩到的坑)** | 第一次归档成 `harmony/.hvigor.preMig-20261024/`,**结果它出现在 `git status` 的未跟踪列表里** —— 忽略规则写的是 `.hvigor/`(根 `.gitignore:8`,全层级)与 `/.hvigor`(`harmony/.gitignore:8`),**两条都只认这个名字**,加后缀改名等于把 H63 那层保护关掉:14 MB、内含 10 处 DevEco 密文串的目录就摆在"顺手 `git add -A` 会带走"的位置上。现已挪出仓库 → **`~/Documents/cast-hvigor-preMig-20261024/`(31 个文件 / 14 MB)** | ⚠️ **可删,归本人判**(内容与上面那行同:纯缓存,重跑构建自动再生)。**要复用的规律是那条判据**:给"为 X 写的忽略规则"做任何改名归档之前,先 `git check-ignore -v <新路径>` —— 它不给命中,就别怪规则没生效。仓库根另有一个 09-27 的空 `.hvigor/` 目录(0 个文件),不是本轮产物,没动 |
-| **对外产物里的本机路径**(不属于第二节任何一档,是解包时顺带照出来的) | `unzip -p android/dist/reverb.apk 'lib/*/libreverb_asr.so' \| LC_ALL=C strings -a \| grep -c '/Users/'` = **14**;`_backup-1.0.5-published-1018/reverb.apk` 同读数 ⇒ **已经随包分发出去了**。串是 whisper.cpp / ggml 编译时烙进二进制的**构建机源路径**,而且写的是 `/Users/liang/Documents/Workspace/source/cast/…` —— **连旧机的仓库落点都不是**(旧机是 `/Users/liang/Documents/cast`),`.so` 本身 mtime 08-24 | ⚠️ **待拍板**,三条路与代价在 H208 根因 ⑧ + 修法 3-④。判"要不要管"按**硬规矩 15**那条问法:不是"算不算机密",是"公开它能不能反查到一个具体的人"。**已固化的零成本动作**:`/Users/` 进了解包判据词(见 Skill 陷阱清单),下次换机重建 `.so` 会立刻变红而不是又藏一轮 |
+| **对外产物里的本机路径**(不属于第二节任何一档,是解包时顺带照出来的) | **1.0.8 换引擎后已归零**:`unzip -p dist/reverb.apk 'lib/*/*.so' \| LC_ALL=C strings -a \| grep -c '/Users/'` 对 `libonnxruntime.so` 与 `libsherpa-onnx-jni.so` **各 0**。1.0.7 及以前那份 `libreverb_asr.so` 是 **14**(whisper.cpp / ggml 编译时烙进去的 `/Users/liang/Documents/Workspace/source/cast/…`,连旧机的仓库落点都不是),已随 1.0.7 包分发出去了 | ✅ 新包这一条消掉了;**1.0.7 那份已经发出去,收不回来** —— 要处置只能换软链/补发,代价在 H208 根因 ⑧ + 修法 3-④。判"要不要管"仍按**硬规矩 15**那条问法:不是"算不算机密",是"公开它能不能反查到一个具体的人"。**已固化的零成本动作**:`/Users/` 留在解包判据词里,重打或再换引擎时会立刻变红 |
 
 **盘点结论**:第二节**没有丢东西**(签名、kit、快照、唯一副本、记忆五档逐项到位);
 真正的遗漏是**三条"在新机上不成立"的环境前提** —— `gh` 与 `ffmpeg` 没装、
@@ -208,7 +209,9 @@
 
 | 资产 | 重建方式 |
 |---|---|
-| whisper native 库 + 模型 | `cd android && ./tools/build-asr.sh`(固定 commit + sha256 校验;`build-release.sh` 出那份唯一发布包前会检查在不在)。⚠️ **「可重建」不等于「重建出来字节相同」**:CMake 会把**构建机的绝对源路径**烙进 `.so`(`__FILE__`),换目录/换机器重打 ⇒ `.so` 变、**整包 SHA 跟着变**,而功能一模一样(认包只能靠 mtime + SHA,见 H208 根因 ⑧;现役在架那份里烙的是旧机更早的一个工作区路径) |
+| 语音模型 + 推理库(1.0.8 起,Android) | `cd android && ./tools/build-asr.sh`(下载 SenseVoiceSmall int8 与 sherpa-onnx AAR,按 sha256 校验,把 `classes.jar` 解到 `app/libs/`、两个 `.so` 放进 `jniLibs/arm64-v8a/`;`build-release.sh` 出那份唯一发布包前会检查在不在)。⚠️ **「可重建」不等于「字节相同」**:模型与上游 `.so` 是下载来的,同一 sha256 才可复现;但整包 SHA 仍会随打包时间/签名变化(认包靠 mtime + SHA,见 H208 根因 ⑧)。1.0.7 及以前的 whisper `libreverb_asr.so` 是**本机 CMake 编译**的,会把构建机绝对路径烙进 `.so`,那条随换引擎消失(现读数 0) |
+| 语音模型 + 词表(1.0.8 起,鸿蒙) | `cd harmony && ./tools/build-asr.sh` —— 把模型 239,233,841 B 与词表 315,894 B 放进 `entry/src/main/resources/rawfile/sensevoice/`(已 gitignore)。**同机有 Android 那份时直接从 `android/app/src/main/assets/sensevoice/` 拷**,sha256 一致才收;没有才去 hf-mirror 下。推理库随 sherpa har 由 `ohpm install` 带入,`harmony/build-release.sh` 出包前会检查模型在不在、出包后再解包核对 |
+| ~~whisper native 库 + 模型~~ | 1.0.8 起不再需要。要回退时改 `AsrFactory` 与 `build-asr.sh` 两处即可,产物仍在 `tools/build-asr.sh` 的历史分支里 |
 | 构建缓存 | `.gradle`、`build`、`.cxx`、`.hvigor`、`oh_modules` —— 删了自动再生,永不拷贝。⚠️ **「永不拷贝」在换机时是硬要求而不只是省空间**:`harmony/.hvigor/` 的 sync/cache 内嵌整份签名配置(含口令),把它拷到新机等于在别处多撒一份口令副本 —— 这正是 H63 让它进了 43 个历史提交的那条路(AGENTS.md 硬规矩 14)。**10-24 把这句话的代价量化了**:搬过来的 `.hvigor` 让新机多出 10 处 DevEco 密文串与 22 968 条旧机绝对路径,清空重建后只剩 `cache/task-cache.json` 里那一份(×2 串),**它随每次构建必然再生**;所以正确的规则是**迁移时不带它**,而不是"事后清" |
 | `android/local.properties` | 打开 Android Studio 自动生成(只含 sdk.dir)。别把本机那份拷过去 —— 里面是本机路径 |
 | `harmony/build-profile.json5` | `cp build-profile.template.json5 build-profile.json5` 后填签名段(签名材料来自第二节) |

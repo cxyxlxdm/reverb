@@ -10545,6 +10545,11 @@ dex 与 arsc 同理(它不是代码里的字面量,除非某处真的把权限�
   5. **能力门与验收门是两件事,别一起撤。** 这一轮把"出不了包"改口成"出得来",依据是三条命令的退出码;
      同一次运行**没有**给任何界面证据。所以 AGENTS 那句「仍未跑过」只划掉了"包",没划掉"跑起来的产物"。
 
+> **2026-11-11 补记(1.0.8 换引擎后,上面第 ⑧ 条的读数已变)**:whisper 的 `libreverb_asr.so` 随
+> sherpa-onnx 一起移除,新包里的 `libonnxruntime.so` 与 `libsherpa-onnx-jni.so` 跑同一条
+> `strings | grep '/Users/'` **各 0**。所以"新包还带着旧机路径"不再成立;**1.0.7 已经发出去的那份
+> 仍然带着**,收不回来。判据词留在解包清单里,重打或再换引擎都会立刻变红。
+
 ---
 
 ### H210. 关于页五语通读回来的是「十六整条、一条没截断」,而真问题是**少了一整个功能**:Android 那份列表从来不列电台
@@ -12703,3 +12708,823 @@ Android(`ViewModels.kt`)与 macOS(`DiscoverView.runSearch`)都是**并行发、�
    就能脚本化跑完整条 401 流程,取证全靠日志切片的行偏移。
 ④ **同一个语义出现两颗一样的角标,先查组件自己画了什么,再查调用点传了什么** —— 这次的重复
    不是布局问题,是两处都在画。
+
+### H257. 设置里切语言必现「余音没有响应」—— `recreate()` 和弹窗的窗口在同一帧里被拆
+
+**现象**(2026-11-11,Pixel 3 / Android 12)。设置 → 语言 → 任选一种,界面立刻失去响应,
+约 5 秒后系统弹「余音没有响应」(等待/关闭)。点「等待」或点屏幕后,应用会按新语言正常恢复 ——
+所以它看起来像"卡了一下",而不是崩溃。logcat 只有一条线索:
+`am_anr … Input dispatching timed out (Application does not have a focused window)`,
+CPU 占用只有 2.6%(不是死循环)。**1.0.7 的 release 包同样复现**,与 1.0.8 换 ASR 引擎无关。
+
+**根因**。`Dlg.LANGUAGE` 的 `onPick` 在同一个回调里做了三件事:`setLanguage(...)`、
+`dlg = Dlg.NONE`、`(context as? Activity)?.recreate()`。前两件只改状态,第三件**同步**销毁
+并重建 Activity —— 而这时 `AlertDialog` 自己的窗口还挂着。Activity 先被 `performDestroy`,
+弹窗窗口成了没有主人的窗口,焦点既没交还给新 Activity 的窗口、也没跟着弹窗一起消失;
+系统 5 秒等不到一个可行焦的窗口,就判 ANR。逐条时间线(修复前):
+`17:17:58.705 wm_on_paused_called → .732 wm_on_destroy_called → .762 wm_on_create_called → .878 wm_on_resume_called`
+之后**整整 13 秒没有任何焦点事件**,`17:18:12 am_anr`。同一台机器上另一次切换(17:21:46)
+却侥幸没触发 —— 那次 logcat 多了 `Input channel object '…' was disposed without first being
+removed with the input manager!`,说明弹窗窗口的移除抢在 Activity 销毁之前被处理掉了。
+**这是个竞态:窗口移除走的是另一条异步路径,谁先到谁赢。** 所以"我切了好几次没事"不能当验收。
+
+**修法**(`android/.../ui/screens/SettingsScreen.kt`)。点击回调只记录意图,不重建:
+`settings.setLanguage(...); dlg = Dlg.NONE; languageRecreate = true`;再用
+`LaunchedEffect(languageRecreate)` 等**两帧**再 `recreate()` ——
+第一帧让重组把 `ChoiceDialog` 摘掉(它的窗口在这一帧 dismiss),第二帧让 WindowManager
+把移除命令处理完,然后才销毁 Activity。`withFrameNanos` 而不是固定 `delay`,
+不依赖机器速度。
+
+**验收**(debug 包,`adb logcat -c` 后逐次切换,每次等 8 秒再读)。
+- 修复前:1.0.7 release 与 1.0.8 debug 各复现 ≥1 次(见上面的时间线)。
+- 修复后:简体 → Français → 简体 → English → 简体 连切 4 次,每次都有
+  `ActivityThread: Schedule relaunch activity`,**无一条 `am_anr` / `focused window`**,
+  每次截图确认界面语言已生效、设置页可继续操作。
+- 阳性对照就是修复前的代码本身:同一台机器、同一条路径(设置 → 语言 → 简体中文),
+  两次里有一次在 14 秒后落 `am_anr`、另一次侥幸通过 —— 这正是"竞态"该有的样子。
+
+**教训 / 可复用的规律**。
+① **"重建 Activity"是销毁类动作,不能放在对话框的点击回调里做。** 对话框有自己独立的窗口,
+   任何"立刻销毁宿主"的调用都要等这个窗口撤掉之后再发 —— 通用形状是"先关它,下一帧再动"。
+② **ANR 不一定是主线程在算。** 先看 `am_anr` 的 reason:`Input dispatching timed out
+   (Application does not have a focused window)` 指的是窗口/焦点问题,这时去查 CPU 或堆栈
+   只会南辕北辙。
+③ **竞态型 bug 的"没复现"没有判别力。** 验收要取**每次**的日志时间线,不是"我这几次都好的"。
+   这次的两次对照(一次 ANR、一次侥幸通过)恰好给出根因的形状。
+
+### H258. sherpa-onnx 在 debug 能识别、release 一加载模型就抛 `UnsatisfiedLinkError` —— JNI 按名字注册,R8 把名字改了
+
+**现象**(2026-11-11,Android release 签名包,Pixel 3 / Android 12)。装 debug 包时语音识别一切正常;
+换成 `dist/reverb.apk` 后,一进逐字稿第三页点「开始转写」,日志立刻停在模型加载,
+异常是 `UnsatisfiedLinkError: No implementation found for
+com.k2fsa.sherpa.onnx.OfflineRecognizer.newFromFile`,界面显示「引擎不可用」。
+同一份源码、同一个模型,只有构建类型不同。
+
+**根因**。sherpa-onnx 的 native 库在 `JNI_OnLoad` 里用 `RegisterNatives`
+**按类名与方法名**注册 native 方法,而它 AAR 自带的 `proguard.txt` 是空的。
+release 构建开 `minifyEnabled`,R8 把 `com.k2fsa.sherpa.onnx.**` 的类名与方法名换掉,
+`RegisterNatives` 找不到目标,`newFromFile` 就没有实现。
+debug 不混淆,所以**这个问题在 debug 包里永远看不见** —— 它不属于"代码写错了",属于打包配置。
+
+**修法**(`android/app/proguard-rules.pro`)。加一条 keep:
+`-keep class com.k2fsa.sherpa.onnx.** { *; }`,再加 `-dontwarn` 压掉静态分析的缺类告警。
+判断"要 keep 哪些"的依据不是试错,而是**上游 JNI 是否按名字查**:
+按 `RegisterNatives` / `GetMethodID` 查的,名字就是 ABI 的一部分,不能混淆。
+
+**验收**。同一台机器、同一段 13:47 的音频、同一个模型:
+- 修前 release:加载模型即失败,零句产出;
+- 修后 release:模型从 assets 拷到 `filesDir`(228 MB)、recognizer 加载成功、
+  32 个块全部识别、`转写结束 ok=true 已出 188 句`,与 debug 包的 188 行逐行一致;
+- 阳性对照是修前那份 release 包本身(不是"再造一个错"),它确实报出上面那条 `UnsatisfiedLinkError`。
+
+**教训 / 可复用的规律**。
+① **"debug 过了"不能当 release 的验收**,尤其当依赖里有 native 库 / 反射 / 序列化时 ——
+   这三类都靠"名字"工作,而 R8 改的正是名字。发布包必须装机跑一遍真实路径。
+② 接一个新 AAR 时,先看它自己带没带 `proguard.txt`;空的就自己按 JNI 的注册方式补 keep,
+   别等 release 崩了再试。
+③ 同类问题的症状常是 `UnsatisfiedLinkError` / `ClassNotFoundException` / 字段为 null,
+   三者都指向"名字对不上",而不是算法或数据。
+
+### H259. 给 `Episode` 加了字段,搜得到、也播得了,冷启动后新功能入口却消失 —— 每一份扁平快照都只拷它列出的字段
+
+**现象**(2026-11-11,章节功能移植)。发布方给了 `podcast:chapters` 的单集,
+搜索 / 发现 / 播放都正常,章节入口也在;重启 App(或从历史 / 收藏 / 下载 / 待播里
+重新打开这一集)之后入口不见了,标题、音频、封面等老字段一切正常。
+Android 与鸿蒙都复现;苹果两端的播放态快照 `StoredEpisode` 是同一个形状。
+
+**根因**。四端持久化都不是"把 `Episode` 整个序列化",而是每个落点各自一份扁平 DTO,
+`init(_ episode:)` 逐字段拷贝、`var episode` 再逐字段还原;`Codable` 的
+`init(from:)` 用 `decodeIfPresent ?? ""` 兜底。新加的 `chaptersUrl` / `chaptersType`
+只在 RSS 解析里写了,这些 DTO 一处都没列 —— 于是**编译通过、运行不报错、旧文件也读得进**,
+新字段永远回到默认值。这不是序列化失败,是**静默丢弃**:失败还会报错,丢弃连日志都没有。
+苹果这一处同时发现 `transcriptUrl` / `transcriptType` 早就漏了(逐字稿入口也有同一个洞)。
+
+**修法**。把字段补进每一份 DTO 的五处:字段声明、`CodingKeys`、`init(_:)` 拷贝、
+`init(from:)` 默认值、`var episode` 还原;苹果同时补上此前漏掉的两个逐字稿字段。
+单测从"只测读入"改成**测写出 + 往返**:构造 `Episode` → 写出 → 读回 → 断言字段相等;
+再断言老 JSON(没有该键)读出来是空串而不是崩溃。
+
+**验收**。Android(Pixel 3)与鸿蒙(Mate 60)都做了冷启动重开:入口还在、章表还能跳;
+阳性对照是修前那版解析 —— 同一个节目冷启动后入口消失。
+苹果侧单测覆盖写出与往返;快照冷启动重开的实跑这轮没做(iOS 模拟器用的是内置引导音频,
+不经过播放态快照),别把单测通过当成实跑过。
+
+**教训 / 可复用的规律**。
+① 加一个"随 Episode 走"的字段,先数清**它会被谁拷一遍** —— 搜索 / 历史 / 下载 / 收藏 /
+   待播 / 播放态 / 备份,每端都是一串 DTO,不是一个序列化入口。
+② 判据不是"编译过了",也不是"刚搜到的那一集有";是**冷启动之后入口还在**。
+   新字段的测试必须覆盖写出,只测读入永远发现不了这个洞。
+③ `decodeIfPresent ?? ""` 这种"宽容"是必需的(旧文件要能读),但它同时把
+   "新字段写不出去"藏得干干净净 —— 宽容只该用在读入方向,写出方向要有断言。
+
+### H260. iOS 新加一个共享层源文件,编译在视图层报一串 `Binding<Subject>` —— 它没进 pbxproj
+
+**现象**(2026-11-11,iOS)。macOS 侧 `swift test`、`swift build` 都过;
+`cd ios && ./build-ios.sh` 报 `PlayerView.swift` 里 `env.chapters` 相关的
+"referencing subscript 'subscript(dynamicMember:)' requires wrapper
+'EnvironmentObject<AppEnvironment>.Wrapper'" 与 "cannot call value of non-function type
+'Binding<Subject>'",还有一行 `PlayerView.swift:296` 的调用错。错误全部指在视图文件里,
+不在新加的那两个文件上。
+
+**根因**。iOS 工程对共享层是**显式文件引用**(`PBXFileReference` 的
+`path = "../macos/Sources/Reverb/Data/…"`),不是 macOS 那样由 SwiftPM 扫目录。
+新加的 `ChapterStore.swift` / `ChaptersFetcher.swift` 只存在于文件系统里,
+没进 `PBXBuildFile` / `PBXFileReference` / Sources 构建阶段 ⇒ `AppEnvironment.chapters`
+的类型根本不存在,`ObservableObject` 的 `objectWillChange` 转发没展开,
+SwiftUI 把整个表达式退化成 dynamicMember 下标,错误从那几行级联出来。
+
+**修法**。三处一起加:PBXBuildFile(带唯一 UUID)、PBXFileReference(路径相对 `ios/`
+指到 `../macos/Sources/Reverb/Data/…`)、`PBXSourcesBuildPhase` 的 files 列表;
+顺手把 group children 也补上,便于在 Xcode 里看见。改完 `plutil -lint` 校验工程文件,
+再重跑 `./build-ios.sh`。
+
+**验收**。`plutil -lint` 通过;编译门重跑 exit 0,七条判据(版本 / 后台音频 / 本地化集合 /
+内置物料 / 图标 / widget / arm64)全过。阳性对照就是修前那次真实失败,不是臆造:
+两份文件在文件系统里、编译就报上面那串错;加进 pbxproj 后同一份源码不再报。
+
+**教训 / 可复用的规律**。
+① **报错位置在视图层,不等于错在视图层。** 共享层新增文件后先查工程文件有没有引用它,
+   再读那串"看起来像 SwiftUI 用法错"的报错 —— `Binding<Subject>` / `EnvironmentObject.Wrapper`
+   这类错误经常是"依赖类型不存在"的下游症状。
+② macOS 用 SwiftPM(目录自动发现)而 iOS 用显式 pbxproj,同一份源码两套构建入口;
+   **"macOS 编过了"永远不能替代 iOS 编译门**(反过来也一样,见 `docs/IOS.md` 的共享层口径)。
+③ 新增共享文件的标准动作固定为:写文件 → 加 pbxproj 三处 → `plutil -lint` → 两端编译门;
+   漏一步就会在另一端以完全不相干的形式报出来。
+
+### H261. Apple 局域网同步落地:CryptoKit 的 Data 切片会 trap;iOS 设置页 body 会被类型检查判死
+
+**现象**(2026-11-11,Apple 端)。
+① 用 CryptoKit 做 AES-GCM 解密,喂一份被篡改过的密文。按常理应该 `throw`,
+   实际是 **SIGTRAP / EXC_BREAKPOINT(signal 5)**,崩溃点在
+   `AES.GCM.SealedBox(nonce:ciphertext:tag:)` 或随后的 `AES.GCM.open`。
+   单测里把 `SealedBox(...).ciphertext` 直接下标改一个字节,同样 trap。
+② 给 `ios/Reverb/UI/SettingsView.swift` 加一段 `Section` 与一个 `.sheet` 之后,
+   `./build-ios.sh` 报 `the compiler is unable to type-check this expression in reasonable time`,
+   报错行却落在与本次改动无关的旧 `Text("我们如何处理你的数据")` 上。
+
+**根因**。
+① CryptoKit 返回的 `Data` 不保证**零基、连续**;`prefix` / `suffix` 得到的是
+   `Data.SubSequence` 视图。`SealedBox` 与 `Data` 的下标变异都假定零基,
+   起点不是 0 时第一次访问就越界,trap 而不是抛错。这是平台行为,不是参数写错。
+② SwiftUI 的 `body` 是一个巨型泛型表达式,类型检查成本随 modifier 链和 ViewBuilder
+   嵌套增长。iOS 设置页本来就贴着上限,再加一层 `Label { VStack { … } }` 和一个
+   带闭包的 sheet 就越过阈值;编译器会挑链里最复杂的**旧**表达式报错,所以行号误导。
+
+**修法**。
+① 交给 CryptoKit 的字节先复制成独立、零基的 `Data`(`Data(nonce)` / `Data(ct)`),
+   不要传切片;测试里改字节走 `[UInt8]` 往返再 `Data(bytes)`。
+② 新分区抽成独立的 computed property(`lanSection`),新 sheet 抽成 `ViewModifier`
+   (`LanSyncSheetModifier`),`body` 里只留一次简单调用。以后往这个 body 加东西照此形状。
+③ 跨端共用 UI 文件(`LanSyncView.swift`)与数据层一样要在 `ios/Reverb.xcodeproj` 里
+   显式登记,否则报 `cannot find 'LanSyncSheet' in scope` —— 与 H260 同源。
+
+**验收**。修后 `swift test` 全绿(含 9 条 KAT + 5 条 loopback);`cd ios && ./build-ios.sh`
+exit 0、七条判据全过;`swift build -c release` exit 0。阳性对照是修前真实崩溃与真实编译失败,
+不是臆造。
+
+**教训 / 可复用的规律**。
+① Apple 平台的"加密失败"不一定以 `throw` 出现;先检查输入是不是零基连续 `Data`,
+   再怀疑密钥或协议。
+② 类型检查超时的报错行号**不指向错处**。看到 "reasonable time" 先找最近新加的
+   ViewBuilder 嵌套与 modifier,而不是去改它指的那一行。
+③ 三端里 Android 用 Gradle 自动扫源码、macOS 用 SwiftPM 扫目录、iOS 用显式 pbxproj
+   且共享 UI 也要登记 —— "一端编过"依旧不能替代另一端的编译门。
+
+### H262. 一条 `file://` 的 enclosure 让 Android 每次恢复播放都崩一次 —— 而它在后台线程里
+
+**现象**(2026-11-11,Android,进程 `com.yuyin.reverb.android.debug`)。
+装上测试包后,每次冷启动、进到「正在播放」的恢复路径就整个进程消失,日志里:
+
+```
+FATAL EXCEPTION: DefaultDispatcher-worker-7
+java.lang.IllegalArgumentException: Expected URL scheme 'http' or 'https' but was 'file'
+    at okhttp3.Request$Builder.url(Request.kt:184)
+    at com.yuyin.reverb.playback.AudioCacheManager.fetch(AudioCacheManager.kt:164)
+    at com.yuyin.reverb.playback.AudioCacheManager$cache$1$1.invokeSuspend(AudioCacheManager.kt:123)
+```
+
+看起来像"播放器崩了",实际栈里一行播放器都没有。第二次复现时清掉
+`run-as … rm -f files/playback_state.json` 才停 —— 因为上一次崩溃前那个 `file://`
+地址已经被写进恢复状态,重启又照它走一遍,形状很像"修了等于没修"。
+
+**根因**。
+`AudioCacheManager.cache()` 直接拿 `Episode.audioUrl` 去建 OkHttp 请求。
+`episode.audioUrl` 是 **RSS 里发布方给的原文**(enclosure 的 `url` 属性),
+我们没有、也不该假定它是 http(s):本地夹具、协议相对地址、写错的绝对路径都会出现。
+而 OkHttp 的 `Request.Builder().url(String)` 对非 http(s) scheme **抛
+`IllegalArgumentException`,不是返回失败**;这一抛又发生在
+`Dispatchers.IO` 的协程里没有被 try 包住的段落,于是未捕获异常直接把进程带走 ——
+用户看到的是"打开就闪退",栈里却找不到界面代码。
+
+**修法**。在 `cache()` 的入口按 scheme 挡一道,挡掉的只记一条 warn 并返回:
+
+```kotlin
+if (!url.startsWith("http://", ignoreCase = true) && !url.startsWith("https://", ignoreCase = true)) {
+    Logger.w(TAG, "cache skipped: non-http url id=$id")
+    return
+}
+```
+
+缓存只是"离线优先"的加速层,拿不到就回落到流式播放(选源次序照旧:
+下载 → 缓存 → 流式),所以跳过不改变可播性。恢复状态里那条坏地址同理:
+下一次成功播放会把 `playback_state.json` 覆写成真地址,不需要用户清数据。
+
+**验收**。修后同一份含 `file://` enclosure 的夹具**冷启动不再闪退**,
+`logcat` 里出现 `cache skipped: non-http url id=…` 且后续进入正常播放。
+这只是"不再崩"的判据;那集的音频本身仍然不可播(发布方给的就是坏地址),这是预期。
+
+**教训 / 可复用的规律**。
+① **第三方数据进网络层之前先验 scheme,而不是先 try/catch 整段。** 抛异常的地方在
+   库内部,`try` 只能兜住"这一集不缓存",挡在入口才能让日志说清是"地址不合格"
+   还是"真的网络失败" —— 两者排障路径完全不同。
+② **`Dispatchers.IO` 不等于"异常会被吞"。** 没有 `CoroutineExceptionHandler` 的
+   `launch` 会把未捕获异常交给默认处理器,`FATAL EXCEPTION` 照样杀进程;
+   "后台线程崩了"和"前台崩了"在用户眼里都是同一次闪退。
+③ **持久化的坏输入会让修复看起来无效。** 先崩一次就把它写进状态文件,重启再读回来 ——
+   复现时若只改代码不清那行状态,结论会是"改了没用"。遇到"按旧数据复发"的崩溃,
+   先问一句:这次喂进去的输入,是代码造的,还是上次崩溃留下的?
+④ 与 H154 同源:选源次序里的每一层都要能"安静地失败",否则一个边缘输入就能让
+   整条链路不可用。
+
+### H263. 鸿蒙导出逐字稿:分享卡与「另存为」的文件名是按钮文案,不是集名
+
+**现象**(2026-11-11,鸿蒙真机,导出逐字稿)。
+面板弹出来了、文件也写对了,但分享卡片上的标题是**「导出逐字稿」**,
+点「另存为」默认文件名是同名的 `.txt`。同一份逐字稿在 Android 上叫的是**集名**。
+
+**根因**。
+`Files.shareText(ctx, title, fileName, text, description)` 的第一个参数在鸿蒙侧
+同时兼任两件事:`systemShare.SharedRecord.title`(分享卡片的标题)与
+「另存为」的**默认文件名**。第一版把 `L.s('transcript_export')` 传了进去 ——
+那是按钮文案,不是内容的名字。Android 那边对应的是 `EXTRA_SUBJECT = episode.title`
+且落盘文件就叫集名,所以两端对"同一份文件"给出了两个名字。
+
+**修法**。第一个参数改成 `e.title`;落盘名仍走 `TranscriptExport.fileName(e, format)`:
+
+```ts
+if (!await Files.shareText(ctx, e.title, name, text, '')) { … }
+```
+
+**验收**。真机重装后再导一次,分享卡片标题变成集名
+(`Action on copycat podcasts`);从沙箱 `haps/entry/cache/` 取回两份文件,
+`.txt` 4891 B / 94 行、`.md` 5078 B / 95 行,与分享卡上显示的大小一致。
+
+**教训 / 可复用的规律**。
+① **跨端移植一个"分享"按钮,参数名对不上不算移植完成** —— 要逐个参数问"它在
+   本端是什么语义":`title` 在本端不是文案位,是**内容标识**,和 Android 的
+   `EXTRA_SUBJECT` 是同一件事。
+② 这类错**编译期与单测都抓不到**(都只关心文本内容),只有真机点一次分享、
+   看一眼卡片标题才会露出来 —— 属于 H154 那一族"包比码新/界面没实跑"的验收缺口。
+③ 验收时顺手从**沙箱**取回写出的文件核对字节与行数,比只看面板显示可靠:
+   公共目录在鸿蒙上是 `Permission denied`,别在那里卡住(本轮踩过)。
+
+### H264. 鸿蒙转写整集音频下载失败:「response data exceeds the maximum limit」不是服务端拒绝
+
+**现象**(2026-11-11 21:53,鸿蒙真机,转写一集未下载的播客,音频约 70 MB)。
+点了「本机转写」,状态停在 `DownloadingAudio`,十几秒后直接 `Failed`。
+应用侧日志只有一句 `[SenseVoice] 音频下载失败:Failed to write the received data to the disk or application`;
+系统日志里紧跟着 `NETSTACK … response data exceeds the maximum limit` 与
+`libcurl CURLcode result 23`(写盘失败)。**同一集在 Android 上能正常下**(它走 OkHttp 流式落盘)。
+
+**根因**。
+`http.request(url, { expectDataType: http.HttpDataType.ARRAY_BUFFER })` 是**整包进内存**的形态:
+响应体先被完整收集到内存里再交回来。这条路上有大小上限(70 MB 这一集已经越线),
+而错误文案两头都不像"包太大"—— 一句说写盘失败(curl 23),一句说超限(把方向指向服务端),
+所以第一轮很容易误判成"这集的 CDN 拒了"或"磁盘满了"。
+
+**修法**。
+改用**流式**接口,边收边写文件,内存里始终只有一个个 chunk
+(`harmony/entry/src/main/ets/playback/asr/SenseVoiceTranscriber.ets` 的 `downloadToCache`):
+
+```ts
+this.req = http.createHttp();
+req.on('dataReceive', (chunk: ArrayBuffer) => { chain = chain.then(() => fs.write(fd, chunk)); });
+const code = await req.requestInStream(url, { method: http.RequestMethod.GET, … });
+await chain;                       // dataReceive 是异步回调,必须串成一条链再关文件
+```
+
+要点四条:
+① **写盘必须串行化** —— `fs.write` 是异步的,回调直接并发调用会让后一个 chunk 抢在前一个前面落盘;
+② 先写 `<名字>.part`,全部成功后再 `fs.rename` 成正式名 —— 失败只清临时文件,缓存里不会留半截音频;
+③ 取消(切集/退出)要 `req.destroy()`,否则那几十 MB 会继续下完才停;
+④ `finally` 里 `req.off('dataReceive')` 再 `destroy()`,避免持有已关的 fd。
+
+**验收**。真机重装后再转(另一集 1 小时 51 分、108,296,876 B 的音频):日志
+`[SenseVoice] 待转写音频就绪 103 MB`,随后 `首次拷贝模型 228 MB` →
+`模型已加载 lang=zh threads=4 用时=2654ms`,再按 26 秒一块出字(每块 1.4–2.2 秒,约 18 倍实时)。
+沙箱 `haps/entry/cache/` 里能看到那份 `asr-<hash>-1.audio`,转完的稿落在
+`haps/entry/files/transcripts/<hash>.zh-CN.json`。
+
+**教训 / 可复用的规律**。
+① **「这个网络库能下大文件」要按 API 逐个确认,不能按平台下结论**(与硬规矩 17 同族):
+   同一个 `@ohos.net.http` 里,`request()` 收进内存、`requestInStream()` 流式落盘,
+   能力边界完全不同。
+② 错误文案里出现**两种互相矛盾的原因**(写盘失败 / 响应超限)时,不要挑一种顺着查 ——
+   先把**处理量**打出来(这次是响应体字节数),矛盾通常来自同一条路径上的两个阶段。
+③ 这类错**单测与编译门都抓不到**(mock 的响应永远只有几 KB);判据只能是
+   真机下载一集真实的长音频 —— 与 H154「包比码新」、H257 那次 ANR 一样,
+   属于"只有实跑才现形"的那一族。
+
+### H265. 同一网段却「附近没有设备」:AP 只放行一个方向的组播,而 NSD 的解析槽位一卡就不再回来
+
+**现象**。2026-11-12,Android 真机(Pixel 3,`192.168.6.228`)与这台 Mac(`192.168.6.153`)
+都接到 H3C 路由器(`-5G`)的**同一网段**,两边「局域网同步」面板都打开,Android 的
+「附近的设备」永远是空的;Mac 侧的 `dns-sd -B _reverb._tcp local.` 却**当场就能列出**手机的
+`Reverb-841efc1b`,`dns-sd -L` 也解析得出 `Android.local.:47820` 与 `nm=Pixel\ 3`。
+抓包看得到 Mac 的组播应答(491 B / 246 B,PTR 指向探针与手机)确实被发到了组播组,
+但 Android 的 `NsdService` 日志里一条 `SERVICE_FOUND` 都没有。手动输入地址则两个方向都能连、
+能配对、能合并 —— 坏的只有发现。
+
+Wi-Fi 关掉再开之后,08:53:49 那一刻四个服务(探针、两个测试服务、一个残留)一次全出现,
+几分钟后又变成空的。那天同时留下了第二条线索:08:55:13 重新打开面板时,**队列里每一项
+都立刻** `解析 … 失败 code=3`(`FAILURE_ALREADY_ACTIVE`),面板从此再也发现不到任何东西,
+直到杀进程。
+
+**根因(两层叠加)**。
+
+① **AP 的组播转发只通一个方向**(环境,不是代码):手机发出的组播查询能到 Mac,
+Mac 回给组播组的应答到不了手机。AP 的 IGMP snooping / 组播转发表老化是常见成因,
+Wi-Fi 重连会把那张表重建,所以"重连后好一阵、几分钟后又坏"完全对得上。
+这条只能靠换网络或绕开组播应答,应用侧没有开关可修。
+
+② **系统 NSD 的 `resolveService` 没有取消接口**(代码缺陷):服务条目在缓存里消失、
+或者应答丢包时,回调就是不来。实测挂过 **80 秒以上**;它占着系统**全局**的解析槽位,
+之后每一次 `resolveService` 都立即回调 `FAILURE_ALREADY_ACTIVE`(code=3)。
+旧实现只有"串行队列",没有超时,于是一次卡死 = 面板永久空表 —— 两条叠加后
+"发现"看起来像彻底坏了,而真正坏的那一半(①)反而只是"时有时无"。
+
+**修法**。
+
+1. `LanSyncDiscovery` 给每次解析挂 **2.5 秒超时**(健康 LAN 上通常 <300 ms),超时就跳过该项;
+   待解析队列按服务名去重;每次尝试有 token,迟到的回调因 token 不符被丢弃;
+   `FAILURE_ALREADY_ACTIVE` 不再原地重试,而是退 1 秒再继续 —— 既不空转,也不放弃整队。
+2. 新增一条**不依赖组播应答**的发现通道:`MdnsCodec` + `LanQuDiscovery`。
+   从临时端口向 `224.0.0.251:5353` 发一条 **QU**(unicast-response,类字段最高位 `0x8000`)
+   的 PTR 查询,应答方按 RFC 6762 把 PTR/SRV/TXT/A **单播回给查询方** —— 不经过 AP 的
+   组播转发。只发查询、只收单播,所以不开 `MulticastLock`、不加任何权限。
+   两条路径的结果在控制器里取并集,谁也不清空谁。
+3. 控制器 `start()` 是异步铺开的,补 `runToken`:对话框在它铺完之前被关掉时,
+   半路拿到的 `ServerSocket` / 广播由它自己收掉(否则下一次打开会被自己占着的端口顶到
+   0 端口,`EADDRINUSE` 实测出现过一次)。
+
+**验收(2026-11-12,同一 H3C 网段,当前 debug 包)**。
+
+| 项 | 读数 |
+|---|---|
+| QU 发现 | 面板打开后 **3 秒**,日志 `QU 发现 1 台:cxyxl的Mac Mini@192.168.6.153:47820`;同时段 NSD **0** 条 |
+| Android 发起 | 点列表里那台 → 两屏配对码 `199763` → 手机 `restore` 快照 **3 160 B**,探针 `APPLY remote snapshot bytes=3160`(`subscriptions 1 / history 2 / listenStats 2`),两端 `added …=0`(内容本就一致) |
+| Apple 发起 | 探针连手机**广播出来的实际端口** `39937`,配对码同为 `199763`,合并结果同上,探针 `SENT snapshot bytes=2488` |
+| Mac 侧发现 | `dns-sd -B` 列出 `Reverb-841efc1b`;`dns-sd -L` 给出 `Android.local.:39937` 与 `nm=Pixel\ 3` |
+| 端口回落 | 首轮 `bind 47820` 撞到上一个进程的残留(`EADDRINUSE`),回落随机端口后**广播的是实际端口**;关掉面板再打开即恢复 47820 |
+
+**教训 / 可复用的规律**。
+
+① **"发现不到"要分三层读**:查询出不去 / 应答回不来 / 系统 API 自己卡死。
+   抓包只能证明前两层;第三层要看系统服务自己的日志(`NsdService`),不能只看应用日志。
+② **没有取消接口的系统 API,必须自己挂超时**。而且这类 API 的失败常常是**全局**的
+   —— 一次卡死会污染之后所有调用,症状从"慢"变成"全坏"。判据是"失败码是不是同一个"(这里是 code=3)。
+③ **QU 是绕过"组播应答被丢"的最短路径**:RFC 6762 允许查询方要求单播应答,
+   应答方不需要知道网络拓扑;但它**没有任何认证**,安全仍然只靠六位配对码那一步人眼比对。
+④ **广播里的端口必须是实际 bound 的端口**,不能写死默认值 —— 回落端口是常态而不是意外。
+⑤ QU 应答方(Apple `mDNSResponder`)会把四类记录塞进一个 211 B 的包,并用压缩指针
+   复用名字;**名字压缩指针只能向前跳**,解析器必须带跳数与回跳保护,否则坏包能让它原地打转。
+
+### H266. 鸿蒙服务卡片既没有封面也没有播放键:四条独立的坑叠在同一张卡上
+
+**现象**。2026-11-12,用户报「鸿蒙的桌面组件没有展示图片,也没有播放等操作交互按钮,
+印象里桌面组件应该也有基础的播放功能,类似应用内的播放条」。真机(Mate 60 / HarmonyOS NEXT)
+复现:2×2 卡片的封面位置是一张兜底图,标题 / 频道名 / 进度 / 时间都在;整张卡只有
+「点一下打开播放页」一个行为,没有播放 / 暂停 / 上一集 / 下一集。
+
+**根因(五条,各自独立,叠在一起看起来像"卡片做坏了")**。
+
+① **封面给了裸资源名**。builder 送的是 `art = 'art'`,卡片写 `Image('art')` ——
+   卡片渲染在桌面进程/卡片渲染进程里,只认 `memory://<formImages 键>` 或 `$r` 资源;
+   裸字符串被当成资源路径去解析,解析不到就什么也不画,且**不报错**。
+   同一个坑的第二面:键名恒定,系统的 Image 按传进去的字符串判断要不要重绘,
+   所以即便图出来了,换集之后也永远停在旧的那张。
+
+② **卡片没有「此刻在播吗」这一位**。它不能塞进 `playback_state.json` ——
+   那份是与 Android 共用的 `VERSION 1` 格式,加一个另两端不认识的字段等于让共享格式分叉。
+
+③ **控制键从来没有实现过**。`postCardAction` 的 `router` 只能打开界面;
+   「只动播放态、不弹界面」要用 `call`,并在 `UIAbility.onCreate` 里 `this.callee.on(...)` 注册。
+   这里还有一个类型坑:`CalleeCallback` 是 `(indata: rpc.MessageSequence) => rpc.Parcelable`,
+   返回 `MessageSequence` 直接编译失败(`missing marshalling/unmarshalling`)。
+
+④ **`@Builder` 的参数是按值快照的**。把 `this.playing ? pause_fill : play_fill`
+   当参数传进 `filledButton(...)`,状态翻成 true 之后**时间文字跟着变了、图标还停在 ▶** ——
+   数据到位、`build()` 也重跑了,不刷新的只是那个按值参数。
+
+⑤ **点击冒泡**:键放进可点击的父节点(封面 / 文字块)时,点键会连「打开播放页」一起触发。
+
+**修法**。
+
+1. `WidgetFormBuilder`:封面走 `formImages`,值取 `memory://art_<毫秒>_<序号>`
+   (**前缀不能省;键随封面变化更换,同一张复用 —— 见 H267 的修正**);本地没有缓存就不带 `formImages`、退回应用图标,
+   同时请 UI 进程的 `ArtworkCache.ensure` 去补一份(扩展进程没 init 过缓存,那里是 no-op)。
+2. 新增 `WidgetRuntime`(`widget_state.json`,只有 `playing` 一位):UI 进程的
+   `PlayerController.refreshWidget` 写(值没变不落盘),UI 与 FormExtension 两个进程的
+   builder 都读。进程被强杀留下的 `true` 由下次冷启动 `restoreFromState → notify` 纠回 false。
+3. `WidgetRoute` 新增 `ACTION_TOGGLE / ACTION_PREV / ACTION_NEXT`;卡片用 `call` 发动作,
+   `EntryAbility` 注册三个 callee。冷启动先等 `player.current` 落下来(最多 10 秒 × 500ms),
+   没有会话态则用 `WidgetFormData.continueEpisode()` 从历史里那一条起播 —— 不能让它变成
+   一个点空的按钮。
+4. 播放 / 暂停图标在 builder **内部**读 `this.playing`(`iconOf(method)`),不再当参数传。
+5. 点击分层:封面与文字块各自挂 `router`,含播放键的那一层没有父级 `onClick`。
+
+**验收(2026-11-12,Mate 60 / HarmonyOS NEXT,debug 覆盖安装,数据保留)**。
+
+| 项 | 读数 |
+|---|---|
+| 封面 | 2×2 / 2×4 / 4×4 三档都显示当前集封面;`widget_state.json` 16 B(`{"playing":true}`) |
+| 播放键 | 点键:日志 `卡片动作 widgetToggle → 已交给播放器` → `卡片播放态 → 播放中`,约 1 秒后 `构建卡片 dim=4*4 playing=true`,图标翻成暂停;**全程停在桌面,没有拉起 App 界面** |
+| 暂停 | 再点一次:`卡片播放态 → 暂停`,图标翻回 ▶,时间从 `51:48` 走到 `52:01` |
+| 上下集 | `widgetNext` / `widgetPrev` 两条日志都到达;当时上下文只有一集,所以画面不变(没有越界动作) |
+| 冷启动 | `aa force-stop` 后点卡片播放键:进程重建 → `restore cur='…'` 预载 → `卡片播放态 → 播放中`,卡片翻面,界面仍在桌面 |
+| 判断数据还是 UI | 临时把状态写进时间行(得到 `▶ 51:48 / 1:20:44`):证明数据已到、只有图标没重绘 —— 这条把「数据没送」与「UI 没刷新」分开,根因④就是这么定下来的 |
+| 单元测试 | `hvigorw test` 45 条,0 失败 |
+
+**教训 / 可复用的规律**。
+
+① 卡片图片只有 `memory://<formImages 键>` 一条路,而且**换图必须换键**。
+   两个条件缺一个都只表现为「图不出来 / 不更新」,不报错 —— 所以验收必须看截图,
+   不能看"构建成功"。
+   ⚠️ **这一条的边界在同日被 H267 收窄**:键只在封面变化时换,同一张要复用 ——
+   "每次更新都换键"会每 5 秒重解码一次封面,表现为按一下键整张卡闪一下。
+② **`@Builder` 的参数是按值快照**:随状态变化的图标、颜色不要当参数传,在 builder 内部读
+   `this.xxx`。便宜的判据:让同一份状态也出现在一个普通 Text 上 —— 它变了而图标没变,就是这一条。
+③ 卡片上的「后台动作」用 `call` + `callee`,不要用 `router` 一把打开界面;
+   `CalleeCallback` 返回 `rpc.Parcelable`,不是 `MessageSequence`。
+④ 卡片进程读不到 App 的 `AppStorage`,也拿不到 UI 进程的单例。跨进程的数据只有两种给法:
+   落一份极小的文件,或者随 `formBindingData` 一起送过去。
+⑤ 卡片的点击**没有拦截**这回事,分层是唯一的办法(与工程里迷你播放条覆盖层同一口径)。
+
+### H267. 卡片进度像定住了、点播放整张卡"在动"、上一集下一集点不动
+
+**现象**。2026-11-12,用户在同一张鸿蒙服务卡片上连报三条:
+① 「桌面组件进度不会随播放改变」—— 时间行隔很久才跳一次,进度条几乎看不出在走;
+② 「点击播放按钮,整个组件都在动」—— 按下去的瞬间整张卡缩一下、封面像重新加载;
+③ 「点击上一首下一首没反应」。
+
+**根因(三条,彼此独立)**。
+
+① **推送节奏太稀,百分比取整又太粗**。卡片原本 20 秒推一次;而 `percent` 取整到 1%,
+   一集 80 分钟的节目 1% ≈ 48 秒 —— 于是进度条 48 秒才动一格,时间戳 20 秒才跳一次,
+   看上去就是"定住了"。数据链路本身是通的(对照 `history.json` 的进度差不超过一个推送周期),
+   坏的是**节奏与精度不匹配**。
+
+② **整张卡"在动"有两层,别混成一条**。
+   - 平台层:Form Kit 卡片按下时系统会做**整卡按压缩放**。sceneboard 日志每次都打
+     `FormItemRelativeEvent-<formId> --> onTouch down start` → `formItemComponentLongPress
+     zoom out, scale: 0.95` → 约 96 ms 后 `zoom in, endScale: undefined`。
+     拿系统「备忘录」卡片(id 1065058108)点一下,同样有这条日志 —— **所有 Form Kit 卡都这样**;
+     而已知的原生「小艺建议」卡不打印它(它不是 Form Kit),所以不是渲染异常。
+     试图关掉这条路走不通:`sceneAnimationParams.disabledDesktopBehaviors` 的枚举
+     (`SWIPE_DESKTOP / PULL_DOWN_SEARCH / LONG_CLICK / DRAG`)注明"仅对系统应用生效",
+     `triggerTypes` 只有 `shake`。**第三方应用没有关掉这层回弹的开关。**
+   - 我们自己那层:上一轮为了让换集后封面刷新,把 `memory://` 的**键每次更新都换**
+     (`art_<毫秒>_<序号>`)。代价是每次推送、每次按键触发的更新都会重新塞一份 `formImages`,
+     系统按新键重新解码封面 —— 视觉上就是封面闪一下、整块内容重排一次。
+     同一张封面**键不变**,系统才会复用;换集时必须变。修法是按封面 URL 缓存键
+     (`WidgetFormBuilder.keyFor`),`artUrl` 没变就沿用旧键。
+
+③ **「上一集 / 下一集」没有可走的队列**。播放页的 `play(e)` 按设计就是 `playQueue([e], 0)`
+   —— 单集上下文;卡片从历史里起播时也只装载了这一集。`prevQueueIndex() / nextQueueIndex()`
+   在长度为 1 的队列上返回 -1,于是两个键**被点到了、也被处理了,但什么也没发生**
+   (日志里 `widgetPrev` / `widgetNext → 已交给播放器` 都在,所以不是点击没命中)。
+   真机落地证据:`playback_state.json` 的 `context.length = 1`、`listTag` 空、`upNext` 空。
+
+**修法**。
+
+1. 卡片推送节流 `20_000 → 5_000` ms(`WidgetUpdater.MIN_MS`),播放器 ticker 每 10 tick
+   (500 ms × 10)推一次,并**错开落盘的那一半相位**(落盘在 `ticks % 10 === 0`,
+   推卡片在 `=== 5`):同一 tick 推会读到刚排队还没写下去的那一份,卡片永远落后一跳。
+2. `percent` 改成保留一位小数(`Math.round(pos * 1000 / dur) / 10`)。
+   5 秒的节奏下,80 分钟的节目进度条约 4 秒走 0.1%,肉眼已经连续。
+3. `WidgetFormBuilder` 的图片键按 `artUrl` 复用;只有换集换封面时才换键。
+4. `PlayerController.expandContextFromFeed(e)`:**只读本地频道缓存**
+   (`FeedCacheStore.get(feedUrl)`),把单集上下文补成同一个节目的整列,
+   再按 id 找回当前下标、随机模式重建随机表。在 `next()` / `previous()` 懒补,
+   并在 `restoreFromState` 补一次 —— 那是最容易"补齐并落盘"的时机,导航键的可用态也跟着对。
+   不联网、不覆盖已有的多集上下文;缓存里没有这一列就保持原样(按键仍旧无动作,但不会更糟)。
+   `AppContainer` 注入 `bindFeedEpisodes`,只读缓存、不触发请求。
+
+**验收(2026-11-12,Mate 60 / HarmonyOS NEXT,debug 覆盖安装,数据保留)**。
+
+| 项 | 读数 |
+|---|---|
+| 进度 | 同一张 4×4 卡,间隔 8 秒两张截图:`1:06:45 / 1:20:44` → `1:06:55 / 1:20:44`,进度条可见前移 |
+| 播放键 | `widgetToggle → 已交给播放器` → `state=paused` → `卡片播放态 → 暂停`;图标翻回 ▶,封面不重建 |
+| 切换上下文 | 冷启动日志 `[Player] 上下文补全 ctx=50@1 feed='https://feed.xyzfm.space'`,随后 `restore cur='83. …' ctx=50@1`;落盘 42 条(±40 窗口)、`contextIndex=1` |
+| 下一集 | 卡片点 ▶\| :`widgetNext` → `[Player] 播放 "82. 中国好美护，为何还没在欧洲火起来？" generation=2` |
+| 上一集 | 卡片点 \|◀ :`widgetPrev` → `[Player] 播放 "83. 打造一个社群品牌，先让一部分人特别爱你"` `resume=4000486ms`(回到原来位置) |
+| 单元测试 | `hvigorw test` 45 条,`Failure: 0, Error: 0` |
+| **未覆盖** | 按下瞬间系统整卡 0.95 缩放仍在(第三方无开关);2×2 / 2×4 两档的上下集只走了代码路径,没上桌面逐档复验;空态(无历史)下按键隐藏仍未验 |
+
+**教训 / 可复用的规律**。
+
+① **刷新节奏要与可感知的变化配对**:时间行按秒读,推送就必须到秒级;百分比按 1% 展示,
+   推送间隔就得让 1% 的那一步看起来像在走。只改一头(更密的推送 / 更细的百分比)都救不回来。
+② **"整个组件在动"先拆成"平台的"和"我们的"**。判断法:同一张封面、连续两次更新各截一帧,
+   两张图里封面区域应当逐像素一致;不一致说明我们换了图片键(或重排了布局),一致而按下仍缩,
+   那是平台按压回弹 —— **这条改不动,别把它当自己的 bug 去修**,写进文档交代清楚即可。
+   本条的证据链要同时有"我们的卡"和"系统另一种卡":备忘录卡同样缩、非 Form Kit 的原生卡不缩,
+   才能排除"渲染异常"。
+③ **数据 bug 的症状会延迟**:单集上下文下起播、暂停、封面全正常,只有按上下集才暴露。
+   验收不能只看"键看起来是亮的",要落到重启后的 `playback_state.json` 里数 `context` 长度。
+④ **`restoreFromState` 里 `this.current` 还是 null**(要到最后的 `startEpisode` 才赋值)。
+   任何"按当前集补全"的钩子都必须显式传入那一集,否则会静默跳过 —— 第一版就是这么白补的。
+⑤ 补上下文是**读本地缓存**的动作,不是"顺手刷一下 RSS":一次按键不该产生网络请求与等待,
+   多集上下文也永远不替换(用户点开列表选的那一列就是答案)。
+
+### H268. 点桌面卡片先进首页、再跳播放页
+
+**现象**。2026-11-12,用户报「点击桌面组件,不是直接跳进去播放详情页,而是先进首页,再跳转播放详情页」。
+冷启动(应用没在跑)最明显:点卡片后先看到一整套首页,再滑进播放页;热启动稍轻但同样能看出首页那一帧。
+
+**根因(两条)**。
+
+① **首页被画出来了才导航**。`openPlayerIfRequested` 在 `aboutToAppear` 里跑,而 `Navigation` 还没挂好,
+   `pushPathByName` 会被丢掉,所以原代码 `setTimeout(..., 100)`;这 100ms 里首页已经上屏。
+   而且 push **带动画**,首页会在下层滑走 —— 一眼就看出"先有首页"。
+
+② **冷启动时意图被静默吞掉**。日志实测(`[State] 启动读回播放态` → `[Player] restore …` 之后):
+   `player.current` 仍是 null —— `startEpisode` 走 Promise 链异步装载,`current` 要到里面才赋值。
+   原代码 `if (this.player.current === null) return;` 于是直接放弃;而且它**先把 `widgetOpen` 清成 0**,
+   这一格意图就永久丢了。用户看到的就是"停在首页"。
+
+**修法**。
+
+1. **判据换成盘上有没有可恢复的会话**(`AppContainer.get().playbackState.snapshot.current`,
+   `boot()` 里已同步读回),而不是内存里的 `player.current`;有会话就短期轮询等 `current` 落到手
+   (100ms × 最多 30 次),到时再 push。真·空态卡片(盘上也没有)照旧留在首页。
+2. **盖住过渡**:`widgetBootCover` 从请求那一刻起盖一层与页面同色的不透明层(吃事件),
+   push 后再留 320ms 才揭开;push 用 `pushPathByName('player', null, false)` 取消动画。
+3. 意图只在**真正开始导航**时消费(`widgetOpen = 0`),并加 `widgetOpenPending` 防重复。
+
+**验收(2026-11-12,Mate 60 / HarmonyOS NEXT,debug 覆盖安装)**。
+
+| 项 | 读数 |
+|---|---|
+| 冷启动 | `aa force-stop` 后点卡片封面:`[UI] 卡片要求进播放页 cur=恢复中` → `push 完成 size=1`(约 600ms 后),截图直接是播放页 |
+| 过渡帧 | 点完立刻截图拿到的是**系统启动图**(应用图标),不是首页 —— 首页那一帧被盖层挡住,没有被画出来 |
+| 热启动 | 应用在后台时点卡片:`cur=已就绪` → 100ms 后 `push 完成 size=1`,截图直接是播放页 |
+| 与原行为差异 | 之前:首页 → 滑入播放页;现在:启动图 → 播放页(无滑动转场) |
+| **未覆盖** | 空态卡片(盘上没有会话)点封面仍会留在首页,但会先盖 3 秒再揭开(本轮没清历史复现);从播放页再点卡片会再 push 一层,未加"已在播放页就不 push"的判空 |
+
+**教训 / 可复用的规律**。
+
+① **"有没有会话"要问落盘的那份,不要问内存里的 `current`** —— 恢复链路是异步的,
+   `restore` 的日志已经打出来、`current` 仍可能是 null。用错判据的后果不是报错,是意图被静默吞掉。
+② **需要等组件树就绪的导航,等待期必须有不透明占位**;否则等待本身会把"不该看到的那一页"画出来。
+   占位还要配套**取消转场动画**,否则底层页面会在动画里露馅。
+③ 一次性意图(卡片点击、外部打开链接)要**消费在真正执行的那一刻**;先清零再检查条件,
+   条件不满足时意图就没了 —— 这个形状以后还会遇到。
+
+### H269. 从卡片进的播放页「返回先回首页」、按键仍整卡动、「继续收听」小字没意义
+
+**现象**。2026-11-12,紧接 H268 之后用户又报三条(都是鸿蒙服务卡片):
+① 「点击桌面组件,直接跳进去播放详情页,但是返回还是先返回首页,再退出 App,不是直接退出 App」;
+② 「点击桌面组件上的播放、上一首、下一首按钮,还是整个卡片都动了」,并给了退路:
+   「应该点哪个按钮,哪个按钮动,如果实在实现不了,干脆就都别动」;
+③ 「桌面组件上『继续收听』四个字似乎没什么意义」。
+
+**根因(三条,彼此独立)**。
+
+① **返回走的是 NavDestination 的默认 pop**。卡片打开时 `player` 是 **push 在首页之上**的一层
+   (`Navigation(this.stack)` 的根内容是首页),系统返回与页内「下折角」都只是 `stack.pop()`
+   —— 首页从来没有被销毁,pop 回去当然会露出来,用户得按第二次才退出。
+   而且当时不区分"从卡片来"与"应用内展开",后者必须保留 pop 的语义(迷你条展开就该收起)。
+
+② **上一轮只修了我们的一半,另一半仍在**。H267 把 `memory://` 的键改成"同一张封面复用",
+   但 `WidgetFormBuilder.build` **仍然每次更新都带一份 `formImages`** —— 系统拿到图片数据
+   就会重新读一遍/解码一次。5 秒一推、按一次键也推,于是封面每次都闪。
+   平台那层 Form Kit 0.95 按压缩放(见 H267)第三方关不掉,**能改的只有我们自己这一层**:
+   同一张封面只送一次图片数据,之后只送同一个 `memory://` 键。
+
+③ **「继续收听」是卡片脸上的固定小字**,与卡片名(桌面卡片中心里的「余音 · 继续收听」)
+   重复,内容上也不带信息;2×2 那一档最缺高度,它还占一整行。
+
+**修法**。
+
+1. **返回语义按"用户有没有自己的页面栈"分**:`Index` 记 `playerFromWidget`,从卡片 push 前置真;
+   `closePlayer()` 里:卡片来的**且播放页是唯一一层**(`stack.size() <= 1`)→ `exitApp()`;
+   否则照旧 pop(从频道详情热启动点卡片、应用内迷你条展开,都不该被丢掉)。
+   页内折叠按钮(`onBack`)与系统返回(NavDestination `.onBackPressed`,返回 true = 已消费)
+   都走这一扇门。
+2. **播放页已在栈顶时不重复入栈**:卡片被连点、或先按迷你条展开再点卡片,
+   `getAllPathName()` 末位是 `player` 就只补"从卡片来"的语义,不再 push 一层(H268 的未覆盖项)。
+3. **封面数据只交付一次**:`WidgetFormBuilder` 的键由封面 URL 算出来(`keyFor`,djb2 + 长度),
+   两个进程、两次启动都得到同一个键;另记本进程 `lastSentKey`,相同键不再附 `formImages`。
+   只有"封面换了 / 本进程还没送过 / 表单刚创建(`onAddForm` 传 `forceImage=true`)"才带图片数据。
+   `updateForm` 是增量合并,不带 `formImages` 时卡片沿用已解码的那张。
+   送图时打一条 `[Widget] 封面数据送出 key=…`,5 秒一次的更新不会刷屏,排障时一眼能数。
+4. **删掉卡片脸上的「继续收听」**:`WidgetCard` 的 `labelText` 与两处调用、`ConfigKeys.LABEL`、
+   `WidgetFormFields.label`、五语种资源里的 `widget_continue` 一起删(JSON 用严格 `json.load` 验过)。
+
+**验收(2026-11-12,Mate 60 / HarmonyOS NEXT,debug 覆盖安装,数据保留)**。
+
+| 项 | 读数 |
+|---|---|
+| 冷启动进卡片 | 启动前 `pidof` 为空 → 点封面后 `pid=40185`,截图直接是播放页 |
+| 折叠箭头退出 | 点左上「下折角」:`[App] 退出` → `Ability state trtminated`,`pidof` 为空,截图回到桌面(卡片页) |
+| 系统返回退出 | 热启动进播放页后按系统返回:同样 `[App] 退出` + 进程被杀 + 桌面截图,**没有经过首页** |
+| 应用内返回不变 | 迷你条展开播放页 → 系统返回:回到首页,`pid=40871` 仍存活 |
+| 已在播放页再点卡片 | 日志 `卡片要求进播放页,但播放页已在栈顶,不重复入栈`;随后返回直接退出 |
+| 封面只送一次 | 冷启动后 `封面数据送出 key=art_16x4a2j_53` 共 **1** 次;播放 9 秒(多次 5 秒推送)再点卡片暂停,仍是 **1** 次 |
+| 封面没丢 | 跳过 `formImages` 的连续推送下:时间 `1:15:19` → `1:15:39` → `1:15:59`,封面始终在位;暂停后图标翻 ▶ |
+| 「继续收听」 | 2×4 卡面已无这四个字,标题从第一行开始 |
+| 单元测试 | `hvigorw test` 45 条,`Failure: 0, Error: 0` |
+| **未覆盖** | 2×2 / 4×4 两档只走了代码路径(同两个 builder,删的是一行文本),没有逐个上桌面看;平台 0.95 按压缩放仍在,第三方关不掉;空态卡片未清历史复验 |
+
+**教训 / 可复用的规律**。
+
+① **"返回该退出"看的是栈里有没有用户建的页面,不是冷/热启动标记**。冷启动只是个代理指标,
+   热启动同样可能从首页点卡片;而"先按迷你条再点卡片"又会让播放页下面正好压着首页。
+   判据写成 `stack.size()`,三种情形就都对了。**同时要把系统返回和页内按钮接到同一个出口**,
+   只改其中一条会留下"手势退得对、点按钮退得不对"这种半修状态。
+② **平台的动效改不掉,就只保证"我们自己不额外动"**,并用可数的日志证明:
+   同一张封面全生命周期只出现一次 `封面数据送出`,比"看起来不闪了"可靠。
+③ **稳定键还不够,图片数据也要只送一次**。键不变只是让系统肯复用,但每次都递一份
+   `formImages` 仍会触发重读 —— H267 只修了前者,本条补上后者。
+④ **卡片脸上的固定小字通常是噪音**:卡片名已经在卡片中心说清"这是什么",
+   脸上再写一遍既重复又吃空间;2×2 的每一行都要拿来放标题/频道/进度。
+⑤ 删一个字段是**跨层**动作:卡片、数据契约、构建器、五语种资源都要同时删;
+   只删界面会留下"永远读不到的死字段",下次改的人还以为它在用。
+
+### H270. `@MainActor` 类型的默认参数编译不过,而「构建成功」的通知是假的:管道吃掉了退出码
+
+**现象**。2026-11-12,给局域网同步补删除墓碑时新写 `Sync/LanSyncTombstones.swift`,
+Android 侧编译一次过,macOS `swift build -c release` 却报 **4 条同一形状的错误**:
+
+```
+LanSyncTombstones.swift:43:76: error: call to main actor-isolated static method 'nowMs()'
+    in a synchronous nonisolated context [#ActorIsolatedCall]
+```
+
+43 / 62 / 79 / 91 四处,全部是 `record / merge / ids / snapshot` 的
+`now: Double = Self.nowMs()` 默认参数。同时**后台任务的完成通知写着 exit 0**,
+输出末尾是 `error: Build failed` —— 两者矛盾,而一开始只 `tail -30`,
+真正的诊断行被切掉了,只看见构建命令把 `LanSyncTombstones.swift` 列进了输入。
+
+**根因(两条,彼此独立)**。
+
+① **默认参数表达式在调用侧求值,而调用侧不继承被调类型的主线程隔离。**
+   把 `enum` 标成 `@MainActor` 之后,`static func nowMs()` 成了主线程隔离成员;
+   默认参数 `= Self.nowMs()` 不被当作"在 `record` 体里执行",编译器按**非隔离上下文**判它,
+   于是报 `#ActorIsolatedCall`。函数体里同样调 `nowMs()` 不会报(体是隔离的),
+   只有签名里的默认值报 —— 所以错误位置看起来"在类型声明上",容易误以为整个文件隔离配置错了。
+
+② **管道的退出码是最后一个命令的。** 当时的命令是 `swift build ... 2>&1 | tail -30`,
+   `$?` 取的是 `tail` 的状态,构建失败也照样 0。**这与 H206 那条「空 stdout 的第三个来源」
+   是同一类错误的另一面**:那边是"没跑也算 0",这边是"跑失败了也算 0"。
+   本机 shell 是 zsh,`echo ${PIPESTATUS[0]}` 直接输出**空串**(bash 才有),不能拿它兜底。
+
+**修法**。
+
+1. 把时间源标成非隔离:`nonisolated private static func nowMs() -> Double`
+   —— 它只读 `Date()`,不碰账本状态,本就不需要主线程。
+   (另一条路是去掉四个方法的默认参数、由调用方传时间,但那样每个调用点都要改写,
+   而"可注入时间"本来就是给单测留的口子。)
+2. 报构建结果**不以管道末尾为准**:要么不带管道跑一次,要么 `grep -c 'error:'` 单独判,
+   要么读编译产物的 mtime。文档与提交信息里的"exit 0"必须是**构建命令自己的**退出码。
+
+**验收(2026-11-12)**。修后 `swift build -c release` → `Build complete! (0.14秒)`;
+`--product ReverbWidget` 同过;`swift test` 61 条 0 失败(含新增的 2 条归一化判据);
+iOS 编译门 7 条全过;Android `:app:testReleaseUnitTest` 80 条 0 失败。
+
+**教训 / 可复用的规律**。
+
+① **`@MainActor` 只该给"真的必须主线程"的东西。** 账本本身是纯数据 + 文件读写,
+   标主线程是为了匹配 App 的调用点;一旦这样标了,**所有默认参数、`static let` 初始化里的调用
+   都会被当成非隔离**,要么标 `nonisolated`,要么别放在默认参数里。新写这类小工具时,
+   先只给它需要隔离的那几个入口函数标 `@MainActor`,而不是整个类型。
+② **"通知说成功"不是证据。** 判构建/测试是否通过,只能看那条命令自己的退出码或它打印的结论行;
+   带管道的命令要么显式取首个状态(bash 的 `PIPESTATUS`),要么把筛选和判定分成两次运行。
+   本仓库已经栽过一次"空输出也算 0"(H156/H206),这是第二次,形状不同、原因是同一个:
+   **别让中间那个命令替被验命令发言。**
+③ **错误行被 `tail` 切掉时,先按 `error:` 筛一次再谈根因。** 这一次四条错误位置在第 43 行,
+   而被截断的那段只剩"编译命令 + 失败"两行,差点被当成"新文件没进 target"。
+
+### H271. Android 桌面小组件在 5 列桌面上最宽只能拉到 4 列:`maxResizeWidth` 被**所有 profile 的最小值**按死
+
+**现象**。2026-11-13,用户反馈「Android 的桌面组件横向似乎无法全屏」。
+Pixel 3(Android 12 / API 31,5×5 桌面)上长按卡片进入缩放态,左右两侧都有手柄,
+但把右手柄一路拖到屏幕右边,卡片只多出一列就停住;左手柄在 4 列状态下往左拖**完全不动**,
+往右拖(缩小)正常。`dumpsys activity top` 里读到的落位是 `cell(1,1) span(4,2)` —— 桌面 5 列,卡片最多 4 列。
+
+**根因**。上限不是 `maxResizeWidth="500dp"` 直接换算出来的,而是 Launcher3
+(`LauncherAppWidgetProviderInfo.initSpans`)这样算:
+
+```java
+int maxSpanX = idp.numColumns;                       // 5
+for (DeviceProfile dp : idp.supportedProfiles) {     // 竖屏 **和横屏** 都在里面
+    maxSpanX = Math.min(maxSpanX, getSpanX(localPadding, maxResizeWidth, ...));
+}
+private int getSpanX(Rect pad, int width, int spacing, float cellWidth) {
+    return Math.max(1, (int) Math.ceil((width + pad.left + pad.right + spacing) / (cellWidth + spacing)));
+}
+```
+
+- 500dp 在 440dpi 下 = **1375px**;
+- 本机竖屏 `getCellSize().x` = **201px** → `ceil(1375/201)` = 7,竖屏自己够 7 列;
+- 但横屏 cell 是 **≈423px**(2160px 宽、5 列、左右各 8dp 边距) → `ceil(1375/423)` = **4**;
+- `supportedProfiles` 取的是**所有方向的最小值**,于是竖屏也被封在 4 列。
+
+`AppWidgetResizeFrame` 用的是同一份 `info.maxSpanX`(`mMaxHSpan`),所以手柄拖到头就停 ——
+**不是手势没抓到,是上限本来就是 4**。实测时还踩过一次"拖了没变化"的假象:起点离手柄圆心 50px,
+落在触摸区外;手柄的有效触摸半径约 24px,起点要压在圆心附近。
+
+**修法**。`android/app/src/main/res/xml/reverb_widget_info.xml` 把 `maxResizeWidth` 抬到
+`1000dp`(横屏 5 列至少需要 `4×423px = 1692px = 615dp`,1000dp 留余量,同时仍被桌面列数封顶)。
+`maxResizeHeight` 保持 `500dp`:**竖屏**已够 5 行(`ceil(1375/306)=5`),而工作区实际只容 4 行(第 0 行是日期/天气)。
+
+**验收(2026-11-13,Pixel 3 覆盖安装)**。
+
+- `aapt2 dump xmltree dist/reverb.apk --file res/8_.xml` 读回 `maxResizeWidth=1000.000000dp`
+  (发布包里资源路径被缩短成 `res/8_.xml`,不能按原文件名找)。
+- 长按卡片 → 左手柄从 `x=256` 拖到 `x=30`:卡片变成 `x≈55..1025`(5 列);
+  `dumpsys activity top -a com.google.android.apps.nexuslauncher` 读回 `cell(0,1) span(5,4)`;
+  再把下方手柄收回到两行,落位 `cell(0,1) span(5,2)` —— 整宽、2 行,`widget_medium` 排版,封面/标题/进度全部铺满。
+- 缩放期间的像素判据:手柄圆心就是卡片边框;本轮用截图里"白点 x 坐标"量跨度,比眼睛看着估准。
+
+**教训 / 可复用的规律**。
+
+① **「dp 上限」是按所有 profile 取最小值的**,而横屏的 cell 比竖屏宽一倍多 ——
+   任何"最多几格"的推算都要用**最坏的那个 profile**,不是当前屏幕上看到的那一个。
+   同一形状也适用于 `minSpanX`(取最大值)与高度方向。
+② **手柄拖不动时先怀疑上限,再怀疑手势。** 判据:左手柄"往左不动、往右能动"= 已在上限;
+   两侧都不动 = 手势没落在触摸区(圆心 ±24px)。
+③ 验收要用 launcher 自己的落位读数(`dumpsys activity top` 里的 `cell(x,y) span(w,h)`),
+   不要用"卡面看起来变宽了":卡片内部有 `padding`,边界差十几像素,截图目测量出来的列数会差一格。
+
+### H272. 鸿蒙 release 闸门偶发报「最终包里没有模型」: `grep -q` 提前关管道 + `pipefail` = 假阴性
+
+**现象**。2026-11-13 给 1.0.8 重打鸿蒙发布包,`build-release.sh` 第一次跑 exit 1,报:
+
+```
+✗ 最终包里没有 sensevoice/model.int8.onnx —— 磁盘上有但没被打进 hap,本机转写会在手机上失败。
+```
+
+而那份 hap 是**本次刚构建完的**,解包能看到模型:嵌套的 `entry-default.hap` 281,095,376 B,
+`resources/rawfile/sensevoice/model.int8.onnx` 239,233,841 B 就在里面。**原样重跑,第二次 exit 0。**
+
+**根因**。闸门当时写成:
+
+```bash
+if ! unzip -l "$HAP" 2>/dev/null | grep -q "$f"; then ... exit 1; fi
+```
+
+脚本头是 `set -euo pipefail`。`grep -q` **一命中就退出并关掉管道读端**,而 `unzip` 还在继续
+往 stdout 写条目清单 —— 写一个已关闭的管道会吃到 **SIGPIPE**,退出码 141;`pipefail` 取管道里
+第一个非零状态 ⇒ 整条 `if` 判为"失败" ⇒ 明明找到了,却被报成"没找到"。
+模型名在清单里靠近末尾,`grep` 命中的时刻离 `unzip` 写完有多近,决定了这次闪不闪 ——
+这就是"第二次又自己过了"的原因。
+
+**实测复现**:同一份 hap 把这行空跑 40 次,**4 次失败(rc=141)**,其余 36 次 0。
+比率不高,但发布闸门只要在真跑时闪一次,就会把人带去查一个不存在的打包问题(这次就去查了
+`rawfile` 目录层级与 `build-profile` 的 resources 配置,全是白查)。
+
+**修法**。清单先落文件,再对**文件** grep —— 没有管道,就没有这个竞态;
+同时把"读不出清单"和"清单里没有"拆成两种报法(`unzip` 自己的退出码单独判):
+
+```bash
+HAP_LIST="$BUILD_TMP/hap.list"
+if ! unzip -l "$HAP" > "$HAP_LIST" 2>/dev/null; then
+  echo "✗ 读不出 hap 的条目清单 —— 这是解包工具或包结构的问题,不是「没有模型」。"
+  exit 1
+fi
+for f in sensevoice/model.int8.onnx sensevoice/tokens.txt; do
+  if ! grep -q "$f" "$HAP_LIST"; then
+    echo "✗ 最终包里没有 $f —— 磁盘上有但没被打进 hap,本机转写会在手机上失败。"
+    exit 1
+  fi
+done
+```
+
+**同类点**:`shared/guide/make-guide.sh` 第 29 行
+
+```bash
+say -v '?' | grep -q "^${VOICE} " || { echo "✗ 系统里没有 ${VOICE} 这个语音…"; exit 1; }
+```
+
+同一个形状(生产者可能写不完就被关管道)。它排在最前面的 `^Tingting ` 命中得太早、`say -v '?'
+的输出也短,至今没闪,但按同一口径改成不经过管道的写法(here-string):检查的是**字符串**而不是流,
+`grep` 没有"读端被关"的时机。
+
+**验收(2026-11-13)**。修后 `DEVECO_SDK_HOME=… ./build-release.sh` exit 0,产物
+`dist/reverb.app` / `reverb-unsigned.app` / `reverb-symbol.zip` 三件齐;解包核对沿用旧口径
+(模型与词表都在嵌套 hap 内、`libs/arm64-v8a` 两个 `.so`、无 `debugKey`)全过。
+
+**教训 / 可复用的规律**。
+
+① **`grep -q` / `head -1` 这类"命中即退出"的消费者,在 `pipefail` 下会制造假阴性。**
+   要么把生产者输出落文件再查,要么用 `grep -c`(读完全部输入),要么显式接住 141 并区分
+   "命中"与"没命中"。这条与 H206 的「三种空 stdout」、H270 的「管道吃掉退出码」是同一个母题:
+   **管道里的每一段都可能替另一段发言,而且两个方向都会错** —— 那边是失败被读成 0,
+   这边是成功被读成失败。
+② **发布闸门的两类失败必须分开报**:读不出清单(工具/包结构)vs 清单里没有目标文件(打包漏了)。
+   合成一句"没有模型",会把一次解包工具问题变成一次假的打包事故,排查方向整个错掉。
+③ **"一次失败一次成功"不是偶发环境问题,是竞态。** 见到这种形状,先把那条命令空跑几十次量比率,
+   再谈根因;不要归因给"机器忙"。

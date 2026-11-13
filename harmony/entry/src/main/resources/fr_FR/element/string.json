@@ -1013,6 +1013,14 @@
       "value": "Material Design Icons (vecteurs des onglets inférieurs)"
     },
     {
+      "name": "lic_sherpa",
+      "value": "sherpa-onnx (moteur de reconnaissance vocale sur l'appareil)"
+    },
+    {
+      "name": "lic_onnxruntime",
+      "value": "ONNX Runtime (moteur d'inférence)"
+    },
+    {
       "name": "src_publisher_rss",
       "value": "Le flux RSS d'origine de l'éditeur"
     },
@@ -1206,7 +1214,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Liens vidéo : collez un lien vidéo Bilibili ou un identifiant BV pour l’écouter comme un épisode (sans compte ; les épisodes issus d’une vidéo ne peuvent pas être téléchargés)\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : six rubriques — abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Lot et raccourcis : touchez la pochette d'un épisode pour ouvrir sa chaîne ; dans Nouveautés, Favoris, Téléchargements, Historique ou la page d'une émission, appuyez longuement puis choisissez « Sélectionner plusieurs » pour les ajouter en bloc à la file\n· Hors ligne : téléchargez des épisodes sur l'appareil, au besoin uniquement en Wi-Fi\n· Cache de lecture : les épisodes écoutés restent sur l'appareil et se relisent hors connexion ; listes et pochettes déjà chargées restent consultables sans réseau, à effacer dans Réglages\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : pour les épisodes dont l'éditeur en fournit une, lisez en écoutant\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
+      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Liens vidéo : collez un lien vidéo Bilibili ou un identifiant BV pour l’écouter comme un épisode (sans compte ; les épisodes issus d’une vidéo ne peuvent pas être téléchargés)\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : six rubriques — abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Lot et raccourcis : touchez la pochette d'un épisode pour ouvrir sa chaîne ; dans Nouveautés, Favoris, Téléchargements, Historique ou la page d'une émission, appuyez longuement puis choisissez « Sélectionner plusieurs » pour les ajouter en bloc à la file\n· Hors ligne : téléchargez des épisodes sur l'appareil, au besoin uniquement en Wi-Fi\n· Cache de lecture : les épisodes écoutés restent sur l'appareil et se relisent hors connexion ; listes et pochettes déjà chargées restent consultables sans réseau, à effacer dans Réglages\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : transcription sur l’appareil (chinois, anglais, japonais, coréen et cantonais), ou lisez celle de l’éditeur lorsqu’elle existe ; recherche plein texte, export en texte ou Markdown à partager\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Chapitres : pour les épisodes dont l’éditeur fournit une liste de chapitres, le chapitre en cours s’affiche au-dessus de la barre de progression ; touchez pour y aller. La liste est mise en cache et reste consultable hors connexion\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
     },
     {
       "name": "about_h_philosophy",
@@ -1262,7 +1270,7 @@
     },
     {
       "name": "privacy_consent_asr",
-      "value": "Transcriptions. Si l’éditeur fournit une transcription dans son flux RSS, le lecteur peut la télécharger pour lire en écoutant : seule l’adresse indiquée par l’éditeur est consultée, comme pour l’audio et la pochette. Le texte téléchargé est conservé dans le répertoire privé de l’application et supprimé à la désinstallation. Cette version n’intègre aucune reconnaissance vocale et n’envoie jamais votre audio."
+      "value": "Transcription vocale hors ligne. Cette version intègre la reconnaissance hors ligne (le moteur open source sherpa-onnx et le modèle SenseVoiceSmall). La conversion de l’audio d’un épisode en texte s’effectue entièrement sur votre appareil : l’audio n’est jamais envoyé, ne quitte jamais l’appareil et ne transite par aucun serveur. La transcription prend actuellement en charge le chinois, l’anglais, le japonais, le coréen et le cantonais. Vous pouvez désactiver cette fonction dans les réglages."
     },
     {
       "name": "privacy_read_full",
@@ -1342,7 +1350,7 @@
     },
     {
       "name": "set_transcription_sub",
-      "value": "Glissez jusqu’à la troisième page pour lire la transcription fournie par l’éditeur. Sans transcription, cette page est masquée."
+      "value": "Faites glisser jusqu’à la troisième page du lecteur. À défaut de transcription de l’éditeur, elle est faite sur l’appareil (chinois, anglais, japonais, coréen et cantonais)"
     },
     {
       "name": "set_word_highlight",
@@ -1387,6 +1395,50 @@
     {
       "name": "transcript_none",
       "value": "L’éditeur ne fournit pas de transcription pour cet épisode"
+    },
+    {
+      "name": "transcript_lang_unsupported",
+      "value": "La transcription sur l’appareil ne prend en charge que le chinois, l’anglais, le japonais, le coréen et le cantonais. Cet épisode n’a pas non plus de transcription de l’éditeur."
+    },
+    {
+      "name": "transcript_search",
+      "value": "Rechercher dans la transcription"
+    },
+    {
+      "name": "transcript_search_none",
+      "value": "Aucun résultat"
+    },
+    {
+      "name": "transcript_search_prev",
+      "value": "Occurrence précédente"
+    },
+    {
+      "name": "transcript_search_next",
+      "value": "Occurrence suivante"
+    },
+    {
+      "name": "transcript_export",
+      "value": "Exporter la transcription"
+    },
+    {
+      "name": "transcript_export_text",
+      "value": "Texte brut (.txt)"
+    },
+    {
+      "name": "transcript_export_markdown",
+      "value": "Markdown (.md)"
+    },
+    {
+      "name": "player_chapters",
+      "value": "Chapitres"
+    },
+    {
+      "name": "chapters_empty",
+      "value": "Aucun chapitre dans cet épisode"
+    },
+    {
+      "name": "chapters_failed",
+      "value": "Impossible de charger les chapitres. Touchez pour réessayer"
     },
     {
       "name": "play_mode_sequential",
@@ -1482,11 +1534,7 @@
     },
     {
       "name": "widget_description",
-      "value": "Affiche où vous en étiez ; touchez pour reprendre"
-    },
-    {
-      "name": "widget_continue",
-      "value": "REPRENDRE L'ÉCOUTE"
+      "value": "Affiche où vous en étiez ; lecture, pause et changement d'épisode depuis la carte"
     },
     {
       "name": "widget_empty_title",

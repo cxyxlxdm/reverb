@@ -35,6 +35,16 @@ export interface Episode {
   /// 逐字稿的 MIME(`application/json` / `text/vtt` / `application/srt` …),用于选解析器
   transcriptType: string;
   /**
+   * 发布方给的**章节表**地址(RSS 的 `podcast:chapters`,Podcasting 2.0)。
+   *
+   * 与逐字稿同一条思路:章表由发布方维护,本机只是取回 JSON、按时间跳转,不做任何推断。
+   * 空串表示这一集没有章节 —— 播放页就**不出现**章节入口,而不是摆一个点进去空着的按钮。
+   * 与 Android `Models.kt` / macOS `Episode` 同名字段,缓存与备份可对读。
+   */
+  chaptersUrl: string;
+  /// 章节表的 MIME,目前只认 JSON(`application/json+chapters` / `application/json`)
+  chaptersType: string;
+  /**
    * 直播流标记。用户粘贴一条音频流地址时现场合成出来的 `Episode` 会置 true
    * (见 `net/LiveStream`),它不对应任何订阅源,也没有分集边界。
    *
@@ -74,6 +84,24 @@ export interface TranscribedSegment {
   startMs: number;
   endMs: number;
   words: TranscribedWord[];
+}
+
+/**
+ * 发布方给的一章(Podcasting 2.0 `podcast:chapters` 的 JSON 表)。
+ *
+ * `startMs` 是**这一章从哪一秒开始**,不是区间:一章一直延续到下一章开头,最后一章延续到结尾。
+ * 所以章表只需要起点,结束时刻由列表本身决定 —— 与逐字稿"每句自带起止"不同,这是规范本来的形状。
+ *
+ * 字段与 Android `Chapter` / macOS 同名同义(`startMs` / `title` / `imageUrl` / `url`)。
+ * **不变式:列表按 `startMs` 严格递增且 ≥0** —— 界面用「从后往前找第一个 `startMs <= now`」
+ * 判断当前章,队尾混进一个异常小的值就会让高亮钉死(硬规矩 10,与逐字稿同一条)。
+ * 排序、去重、夹零都在解析出口(`net/ChaptersFetcher.parse`)一次做完。
+ */
+export interface Chapter {
+  startMs: number;
+  title: string;
+  imageUrl: string;
+  url: string;
 }
 
 /// 解析 RSS 后的结果:频道元信息 + 分集列表。

@@ -19,6 +19,8 @@ final class AppEnvironment: ObservableObject {
     let downloadManager: DownloadManager
     let audioCache = AudioCacheManager()
     let transcripts = TranscriptStore()
+    /// 章表:只在用户点开弹层时变一次,频率极低 —— 转发到 env,播放页直接观察 env 即可。
+    let chapters = ChapterStore()
     let listenStats = ListenStatsStore()
     /// 跨启动的播放态。文件名与字段和 Android / 鸿蒙 / macOS 是**同一份**
     /// (`playback_state.json`),四端可互读。
@@ -55,6 +57,8 @@ final class AppEnvironment: ObservableObject {
         // 私有订阅源:401 要弹输入框、音频直链与官方稿要带同一个 `Authorization`。
         player.bindFeedAuth(repository.authStore)
         transcripts.authHeaderProvider = { [repository] url in repository.authHeader(for: url) }
+        // 章表与 feed / 音频 / 官方稿走同一个凭据判据(见 H253),不另写主机匹配。
+        chapters.authHeaderProvider = { [repository] url in repository.authHeader(for: url) }
         subscriptions.onRemoved = { [repository] p in repository.forgetAuth(p.feedUrl) }
         let repo = repository
         player.resolvePseudoUrl = { url in await repo.bilibili.resolvePlayback(url) }
@@ -65,12 +69,34 @@ final class AppEnvironment: ObservableObject {
         // 由扩展自己去读。没签名到组容器时它只记一行日志,App 照常可用。
         WidgetBridge.shared.start(player: player, history: history, settings: settings)
 
+        // 卡片上的播放 / 暂停 / 切集:AudioPlaybackIntent 把动作交回 App 执行(不拉界面)。
+        // 进程被系统从后台拉起时 AppEnvironment 也会照常构建,所以注册一次就够。
+        // 未同意隐私时一个动作都不做 —— 与主界面那条启动门同一条(连播放器都会读网络状态)。
+        WidgetCommandCenter.handler = { [weak self] command in
+            guard let self else { return }
+            Task { @MainActor in
+                guard self.settings.privacyAccepted else { return }
+                switch command {
+                case .toggle: self.player.togglePlayPause()
+                case .previous: self.player.previous()
+                case .next: self.player.next()
+                }
+            }
+        }
+
         #if DEBUG
         // 模拟器没有可用的点击注入工具时,用启动参数验证整条播放链:
         // `simctl launch … com.yuyin.reverb -autoplay-guide`。
         // 只在 Debug 编译,Release / TestFlight 包里不存在这段。
-        if ProcessInfo.processInfo.arguments.contains("-autoplay-guide"),
-           let guide = GuideEpisode.make() {
+        let launchArgs = ProcessInfo.processInfo.arguments
+        if launchArgs.contains("-autoplay-guide"), var guide = GuideEpisode.make() {
+            // 章节态验收要一集"有章表"的节目,而引导音频本身没有 —— 允许启动参数临时挂一份:
+            // `-autoplay-guide -chapters-url http://127.0.0.1:8099/chapters.json`。
+            // 走的仍是界面上的同一条链(入口 → 弹层 → 请求 → 跳转),只有数据来源是夹具。
+            if let i = launchArgs.firstIndex(of: "-chapters-url"), i + 1 < launchArgs.count {
+                guide.chaptersUrl = launchArgs[i + 1]
+                guide.chaptersType = "application/json"
+            }
             player.playQueue([guide], startIndex: 0)
         }
         // 同类第二条:直播流要**点一下结果行**才开始,而模拟器没有点击注入。
@@ -91,6 +117,7 @@ final class AppEnvironment: ObservableObject {
         for pub in [subscriptions.objectWillChange, favorites.objectWillChange,
                     history.objectWillChange, stamps.objectWillChange, notes.objectWillChange,
                     inbox.objectWillChange,
+                    chapters.objectWillChange,
                     downloads.objectWillChange, downloadManager.objectWillChange] {
             pub.sink { [weak self] in self?.objectWillChange.send() }.store(in: &bag)
         }

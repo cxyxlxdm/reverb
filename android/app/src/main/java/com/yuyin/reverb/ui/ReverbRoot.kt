@@ -1,6 +1,7 @@
 package com.yuyin.reverb.ui
 
 import android.Manifest
+import android.app.Activity
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
@@ -114,10 +115,47 @@ fun ReverbRoot(openPlayerSignal: Int = 0, openEpisodeId: String? = null) {
     // 「仅在你主动开启『订阅更新提醒』时征求你的同意」不符,也属于"启动即申请非必要权限"。
     // 改到设置页那个开关里申请(与「真实频谱」同一范式:授权成功才落地开关)。
 
+    /**
+     * 播放页是不是**从桌面卡片**推进来的。
+     *
+     * 用来决定返回语义(与鸿蒙 H269 同一个判据):卡片来的那一层,系统返回与页内折叠
+     * **直接退出 App**,不再先退回首页让用户按第二次;应用内展开(迷你条 / 播放批注)
+     * 照旧 pop 回首页。判据还要加上"播放页下面只剩首页"—— 用户自己从播放页进了频道页、
+     * 再退回来时,栈里已经有他建的页面,不该被这一位吞掉。
+     */
+    var playerFromWidget by remember { mutableStateOf(false) }
+    /** 等待冷启动恢复期间盖住首页那一帧;导航完成后留 320ms 再揭(与鸿蒙 widgetBootCover 同一条)。 */
+    var bootCover by remember { mutableStateOf(openPlayerSignal > 0) }
+
+    fun exitFromWidgetCard() {
+        (context as? Activity)?.finishAndRemoveTask()
+    }
+
+    // 应用内打开播放页的入口要**清掉来路位**:从卡片进来过一次之后,后面再从迷你条展开
+    // 的播放页不该继续继承"返回即退出"。
+    fun openPlayerInApp() {
+        playerFromWidget = false
+        rootNav.navigate("player")
+    }
+
     // 通知栏 / 桌面小组件点击进来（openPlayerSignal 自增）时打开播放页
     LaunchedEffect(openPlayerSignal) {
-        if (openPlayerSignal <= 0) return@LaunchedEffect
-        if (PlayerController.current.value == null && openEpisodeId == null) return@LaunchedEffect
+        if (openPlayerSignal <= 0) {
+            bootCover = false
+            return@LaunchedEffect
+        }
+        // 已经在播放页:卡片被连点、或先按迷你条展开再点卡片。只补「从卡片来」的语义,
+        // **不再压一层**(H268 的未覆盖项;连点两次不该留两个播放页)。
+        if (rootNav.currentDestination?.route == "player") {
+            playerFromWidget = true
+            bootCover = false
+            return@LaunchedEffect
+        }
+        bootCover = true
+        if (PlayerController.current.value == null && openEpisodeId == null) {
+            bootCover = false
+            return@LaunchedEffect
+        }
         if (PlayerController.current.value == null) {
             // 小组件那条来自历史(playback_state 可能是空的),此时播放页没有「当前集」可画。
             // 先把那一集装载成暂停态 —— 只跳转、不自动播放是产品口径(见 PlayerController.prepare),
@@ -130,7 +168,13 @@ fun ReverbRoot(openPlayerSignal: Int = 0, openEpisodeId: String? = null) {
         }
         val ready = PlayerController.current.value != null ||
             withTimeoutOrNull(3_000) { PlayerController.current.first { it != null } } != null
-        if (ready) rootNav.navigate("player") { launchSingleTop = true }
+        if (ready) {
+            playerFromWidget = true
+            rootNav.navigate("player") { launchSingleTop = true }
+            // 转场与首页那一帧都盖住;320ms 是鸿蒙实测的"画完播放页"时间。
+            delay(320)
+        }
+        bootCover = false
     }
 
     // 「点封面/头像进频道页」的入口:在 NavHost 外层提供一次,列表行、待播那一行、
@@ -142,14 +186,15 @@ fun ReverbRoot(openPlayerSignal: Int = 0, openEpisodeId: String? = null) {
     }
 
     CompositionLocalProvider(LocalOpenPodcastChannel provides openPodcastChannel) {
+    Box(Modifier.fillMaxSize()) {
     NavHost(navController = rootNav, startDestination = "main") {
-        composable("main") { MainShell(rootNav) }
+        composable("main") { MainShell(rootNav, onOpenPlayer = { openPlayerInApp() }) }
         // 频道详情作为全屏页(与播放页/设置同级),整体转场,避免进详情时底部栏收起导致的上下闪动;
         // 仍在底部保留迷你播放条,不显示 tab。
         composable("podcast/{feed}") { entry ->
             val feed = entry.arguments?.getString("feed").orEmpty()
             FloatingMini(
-                onExpand = { rootNav.navigate("player") },
+                onExpand = { openPlayerInApp() },
                 onOpenQueue = { rootNav.navigate("queue") },
                 // 已经在这档的页面里:播放条封面再点就是往栈上压一份同一个页面
                 miniCoverOpensChannel = false
@@ -159,15 +204,26 @@ fun ReverbRoot(openPlayerSignal: Int = 0, openEpisodeId: String? = null) {
         }
         composable("player") {
             FullScreen {
+                // 卡片来的播放页下面只剩首页时,返回就是退出 App;应用内展开的照旧 pop。
+                val fromWidgetCard = playerFromWidget &&
+                    rootNav.previousBackStackEntry?.destination?.route == "main"
+                BackHandler(enabled = fromWidgetCard) { exitFromWidgetCard() }
                 PlayerScreen(
-                    onBack = { rootNav.popBackStack() },
+                    onBack = {
+                        if (fromWidgetCard) {
+                            exitFromWidgetCard()
+                        } else {
+                            playerFromWidget = false
+                            rootNav.popBackStack()
+                        }
+                    },
                     onOpenChannel = { feed -> rootNav.navigate("podcast/${Uri.encode(feed)}") },
                     onOpenQueue = { rootNav.navigate("queue") }
                 )
             }
         }
         composable("queue") {
-            FloatingMini(onExpand = { rootNav.navigate("player") }, onOpenQueue = {}) {
+            FloatingMini(onExpand = { openPlayerInApp() }, onOpenQueue = {}) {
                 // 已在队列页:入口键不再响应,避免向同一路由重复压栈
                 QueueScreen(onBack = { rootNav.popBackStack() })
             }
@@ -191,6 +247,16 @@ fun ReverbRoot(openPlayerSignal: Int = 0, openEpisodeId: String? = null) {
     // 挂在最外层而不是某个页面里:它是**跨页面的启动提示**,谁在前台都该看得见,
     // 而且它只在有状态时才组合出东西(见 SelfUpdateUi),常驻在这里的成本是一次 Flow 订阅。
     SelfUpdateHost()
+    // 卡片冷启动时从「首页」到「播放页」之间那一帧必须盖住(H268 的同一条:
+    // 等待本身会把不该看到的那一页画出来)。纯色、不转场,导航完 320ms 再揭。
+    if (bootCover) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+        )
+    }
+    }
     }
 }
 
@@ -210,7 +276,7 @@ private fun FullScreen(content: @Composable () -> Unit) {
 
 /** 带底部栏的 tab 外壳：三个顶层 tab 常驻叠层(不走导航栈),详情 / 播放 / 设置由外层承载。 */
 @Composable
-private fun MainShell(rootNav: NavHostController) {
+private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
     /**
      * 三个顶层 tab **不走导航栈**,叠在同一个 Box 里用 [tabKept] 切换。
      *
@@ -519,7 +585,7 @@ private fun MainShell(rootNav: NavHostController) {
                     collapsed = collapsed.value
                 )
                 MiniPlayerBar(
-                    onExpand = { rootNav.navigate("player") },
+                    onExpand = onOpenPlayer,
                     onOpenQueue = { rootNav.navigate("queue") },
                     onDissolveRequest = { dissolve.burst(it) },
                     collapsed = collapsed.value,

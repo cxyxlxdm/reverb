@@ -15,11 +15,11 @@ keystore.properties
 .externalNativeBuild
 .cxx
 
-# 离线语音识别的构建产物与依赖源码:由 tools/build-asr.sh 备好,不入库。
-# 理由:一个 57 MB 的模型 + 一个 1.6 MB 的 .so + whisper.cpp 整个仓库,
-# 放进 git 会让仓库和每次归档都难看,而它们能由一条命令重建。
-# build-release.sh 打包时会检查前两样在不在(见 H205:路径随两 flavor 合并从 src/default 挪到这里)。
-/app/src/main/assets/whisper-model.bin
+# 离线语音识别的构建产物与下载缓存:由 tools/build-asr.sh 备好,不入库。
+# 理由:228 MB 的模型 + 20 多 MB 的 .so + sherpa-onnx 的 jar,放进 git 会让仓库和
+# 每次归档都难看,而它们能由一条命令重建(URL 与 sha256 都钉在脚本里)。
+# build-release.sh 打包时会检查它们在不在(见 H205:路径随两 flavor 合并从 src/default 挪到这里)。
+/app/src/main/assets/sensevoice/
 /app/src/main/jniLibs/
-/asr-native/whisper.cpp/
-/asr-native/build-arm64/
+/app/libs/sherpa-onnx.jar
+/.asr-cache/

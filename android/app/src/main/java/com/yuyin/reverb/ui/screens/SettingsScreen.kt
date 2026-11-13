@@ -41,6 +41,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -128,6 +129,28 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     )
 
     var dlg by remember { mutableStateOf(Dlg.NONE) }
+
+    /**
+     * 切语言要重建 Activity(字符串资源按新 Locale 重新解析),但**不能**在弹窗的点击回调里
+     * 同步 `recreate()`。那一刻 ChoiceDialog 自己的窗口还挂着,销毁 Activity 会把它留在一个
+     * 已经没有主人的窗口上:系统先拿不到焦点窗口,5 秒后判
+     * `Input dispatching timed out (Application does not have a focused window)` —— 一个
+     * 看起来像卡死的 ANR(实测 1.0.7 与 1.0.8 的开发包都复现过,见 H257)。
+     *
+     * 所以这里只记一个「待重建」,等弹窗这一帧真正撤掉之后再动手。
+     */
+    var languageRecreate by remember { mutableStateOf(false) }
+    if (languageRecreate) {
+        LaunchedEffect(Unit) {
+            // 第一帧:重组把 ChoiceDialog 摘掉,它的窗口在这一帧 dismiss;
+            // 第二帧:让 WindowManager 把这条移除命令处理完,再销毁 Activity。
+            withFrameNanos { }
+            withFrameNanos { }
+            languageRecreate = false
+            (context as? Activity)?.recreate()
+        }
+    }
+
     var confirmCache by remember { mutableStateOf(false) }
     var confirmDownloads by remember { mutableStateOf(false) }
     var confirmHistory by remember { mutableStateOf(false) }
@@ -190,6 +213,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     }
 
     var backupExportOpen by remember { mutableStateOf(false) }
+    // 局域网同步面板。打开时才创建控制器(container.lanSync 是 lazy),关闭即停止监听。
+    var showLanSync by remember { mutableStateOf(false) }
     var backupExportSel by remember { mutableStateOf(BackupManager.Section.entries.toSet()) }
     var backupImportJson by remember { mutableStateOf<String?>(null) }
     var backupImportAvail by remember { mutableStateOf(emptySet<BackupManager.Section>()) }
@@ -341,6 +366,11 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             SettingRow(stringResource(R.string.set_full_backup), stringResource(R.string.set_full_backup_sub)) { backupExportOpen = true }
             SettingRow(stringResource(R.string.set_restore), stringResource(R.string.set_restore_sub)) { backupImportLauncher.launch(arrayOf("*/*")) }
 
+            // 局域网同步单独一段:它既不是"备份文件"也不是"日志",放在备份段里会被读成
+            // "又一种导出格式";而它实际是**两台设备之间实时合并**(协议见 sync/ 目录)。
+            SectionLabel(stringResource(R.string.sec_lan))
+            SettingRow(stringResource(R.string.set_lan_sync), stringResource(R.string.set_lan_sync_sub)) { showLanSync = true }
+
             SectionLabel(stringResource(R.string.set_logs))
             SettingRow(stringResource(R.string.set_share_log), stringResource(R.string.set_share_log_sub)) {
                 scope.launch { shareLog(context) { msg -> backupMsg = msg } }
@@ -439,8 +469,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             stringResource(R.string.dlg_language_title), langLabels,
             LANG_TAGS.indexOf(language).coerceAtLeast(0),
             onPick = { i ->
-                settings.setLanguage(LANG_TAGS[i]); dlg = Dlg.NONE
-                (context as? Activity)?.recreate()
+                settings.setLanguage(LANG_TAGS[i]); dlg = Dlg.NONE; languageRecreate = true
             }, onDismiss = dismiss
         )
         Dlg.NONE -> Unit
@@ -537,6 +566,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             title = { Text(msg) },
             confirmButton = { TextButton(onClick = { backupMsg = null }) { Text(stringResource(R.string.action_know)) } }
         )
+    }
+    if (showLanSync) {
+        LanSyncDialog(controller = container.lanSync, onDismiss = { showLanSync = false })
     }
 }
 

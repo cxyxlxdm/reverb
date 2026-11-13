@@ -323,7 +323,10 @@ export class BilibiliSource {
       pubDate: pubDate,
       feedUrl: BilibiliSource.videoUri(bvid),
       transcriptUrl: '',
-      transcriptType: ''
+      transcriptType: '',
+      // 视频站没有 Podcasting 2.0 章表;逐字稿/章节都走本端自己的那条路
+      chaptersUrl: '',
+      chaptersType: ''
     };
   }
 
@@ -386,7 +389,9 @@ export class BilibiliSource {
         pubDate: dateOf(J.num(o, 'pubdate')),
         feedUrl: BilibiliSource.videoUri(bvid),
         transcriptUrl: '',
-        transcriptType: ''
+        transcriptType: '',
+        chaptersUrl: '',
+        chaptersType: ''
       });
     }
     // 先按标题相关性剔掉模糊命中的无关条目(见 [isTitleRelevant])。放在充电判定**之前**:

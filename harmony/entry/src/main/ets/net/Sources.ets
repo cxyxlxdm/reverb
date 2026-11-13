@@ -93,7 +93,10 @@ export class ITunesSource {
         pubDate: J.str(o, 'releaseDate').substring(0, 10),
         feedUrl: J.str(o, 'feedUrl'),
         transcriptUrl: '',
-        transcriptType: ''
+        transcriptType: '',
+        // 目录接口不给章表地址;等用户进频道、RSS 解析过之后才会有(与逐字稿同一条)
+        chaptersUrl: '',
+        chaptersType: ''
       });
     }
     return out;

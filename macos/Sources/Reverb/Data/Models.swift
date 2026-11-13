@@ -39,10 +39,18 @@ struct Episode: Codable, Identifiable, Hashable {
     /// 真正用哪种解析器由内容嗅探决定(见 `TranscriptFetcher.parse`)。
     /// 这一键桌面独有(Android `EpisodeJson` 不存),所以缺省必须能解成空串。
     var transcriptType: String = ""
+    /// 发布方给的**章节表**地址(Podcasting 2.0 `podcast:chapters`,指向一份 JSON 章表)。
+    /// 空串 = 这一集没有章表 ⇒ 播放页**不出现**章节入口(与 Android / 鸿蒙同一口径)。
+    /// 与 `transcriptUrl` 一样会被写进历史 / 下载 / 批注 / 播放态 —— 每处复制都要带上,
+    /// 漏一处就静默丢(Android 2026-11-11 装机验收抓到过)。
+    var chaptersUrl: String = ""
+    /// 章表的 MIME,目前只认 JSON(`application/json+chapters` / `application/json`)
+    var chaptersType: String = ""
 
     enum CodingKeys: String, CodingKey {
         case id, title, description, audioUrl, artworkUrl, podcastTitle
         case durationSec, pubDate, feedUrl, isLive, transcriptUrl, transcriptType
+        case chaptersUrl, chaptersType
     }
 }
 
@@ -67,7 +75,24 @@ extension Episode {
         isLive = (try? c.decode(Bool.self, forKey: .isLive)) ?? false
         transcriptUrl = (try? c.decode(String.self, forKey: .transcriptUrl)) ?? ""
         transcriptType = (try? c.decode(String.self, forKey: .transcriptType)) ?? ""
+        chaptersUrl = (try? c.decode(String.self, forKey: .chaptersUrl)) ?? ""
+        chaptersType = (try? c.decode(String.self, forKey: .chaptersType)) ?? ""
     }
+}
+
+/// 发布方给的一章(Podcasting 2.0 `podcast:chapters` 的 JSON 表)。
+///
+/// `startMs` 是**这一章从哪一秒开始**,不是区间:一章一直延续到下一章开头,
+/// 最后一章延续到结尾。所以章表只需要起点,结束时刻由列表本身决定。
+///
+/// **不变式:按 `startMs` 严格递增且 ≥0**(在解析出口保证,不在渲染侧兜底 ——
+/// 渲染找当前章用的是「从后往前找第一个 `startMs <= now`」,只在单调时才正确,硬规矩 10)。
+/// 字段名与 Android / 鸿蒙同名,缓存 JSON 的字段形状也一致。
+struct Chapter: Codable, Hashable {
+    var startMs: Int
+    var title: String
+    var imageUrl: String = ""
+    var url: String = ""
 }
 
 /// 解析 RSS 后的结果:频道元信息 + 分集列表。
