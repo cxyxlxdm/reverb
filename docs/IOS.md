@@ -420,10 +420,13 @@ release 正文与公开仓 README 都写明了「不能直接安装」。
 
 **2026-11-13 的归档包(1.0.8)**:`./build-ios.sh` 编译门 exit 0、七条判据全过;
 归档依然走不通(同一个原因:`--archive` 要签名,本机没有可用描述文件),于是照 1.0.7 的做法
-把编译产物打成 `ios/dist/reverb-ios-1.0.8-2-unsigned.ipa`(2,910,794 B,sha256 `d3f2d4c1…`)。
+把编译产物打成 `ios/dist/reverb-ios-1.0.8-2-unsigned.ipa`。
 **同样没有签名**(`codesign -dv` 报 `code object is not signed at all`,包内也没有
 `embedded.mobileprovision`),装不上真机,只用于归档与结构校验 —— 解包核过:1.0.8(2) / arm64 /
 4 套 `.lproj` / `UIBackgroundModes` 含 audio / `ReverbWidget.appex` 在位。
+⚠️ **这个文件名同一天出现过两份字节**:ECDH 修复前那版 **2,910,794 B / `d3f2d4c1…`**,
+修复后重打(21:34:40,四端同批)是 **2,911,408 B / `388cbc34…`**,现存 `dist/` 里是后者。
+构建号没变(2),所以**认文件请认 sha256,别认名字**;要传给 TestFlight 的话构建号还得再往上加。
 **要换成能装的**,步骤同上(先让 Xcode 登录账号)。
 
 ---
