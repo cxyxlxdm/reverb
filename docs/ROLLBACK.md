@@ -100,9 +100,9 @@
 
 1. 回滚包 = 上一版源码 + **更高的 `CFBundleShortVersionString` / `CFBundleVersion`**
    (`macos/Info.plist`),`./package.sh` 出 universal dmg;架构断言缺一个就不出 dmg。
-2. 上传到官网下载页与(如沿用)公开仓 release;资产名保持 `Reverb.dmg` 或任意 `.dmg`
-   (更新器先认 `Reverb.dmg`,再退到任意 `.dmg` 后缀,见 `SelfUpdate.swift:186-187`)。
-3. 官网下载链接指向新 dmg 属于**站点部署**,按硬规矩需要先确认再发布。
+2. 上传到公开仓 release,资产名用 `Reverb.dmg`(更新器先认这个名字,再退到任意 `.dmg`
+   后缀,见 `SelfUpdate.swift:75,186-187`);官网获取节链到 Releases 页面本身,不上传站点文件。
+3. 若哪天官网改成直链某个 dmg,那次就属于**站点部署**,按硬规矩需要先确认再发布。
 4. 自更新只对更高版本提示,所以第 1 步的版本号必须真的更高,不能复用坏版本号。
 
 ### iOS(TestFlight)
