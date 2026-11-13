@@ -204,8 +204,19 @@ export struct LanSyncDialog {
       Row() {
         // 空串时置灰:Android 那边 TextButton 一直是可点的(点下去报「地址格式不对:」),
         // 而鸿蒙先前是静默 return,看起来像按钮坏了。统一成"没地址就不可点",两端都读得懂。
-        this.actionButton(L.s('lan_connect'), this.scheme.primary,
-          this.manual.trim().length > 0, () => this.connect())
+        //
+        // ⚠️ **这颗按钮不能走 `actionButton`**:`enabled` 是 @Builder 的按值参数,只求值一次(H6/H19/H29),
+        // 首次渲染时 `manual` 还是空串,于是按钮永远灰 —— 2026-11-13 真机验收手动地址兜底时踩到。
+        // 判断必须在这层直接读 `this.manual`(listeningBody 随 @State 重跑,读到的是最新值)。
+        Text(L.s('lan_connect'))
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.manual.trim().length > 0
+            ? this.scheme.primary
+            : withAlpha(this.scheme.primary, 0.38))
+          .padding({ left: 14, right: 14, top: 14, bottom: 14 })
+          .onClick(() => {
+            if (this.manual.trim().length > 0) this.connect();
+          })
       }
       .width('100%')
       .justifyContent(FlexAlign.End)

@@ -14,7 +14,6 @@ import java.security.spec.ECGenParameterSpec
 import java.security.spec.ECParameterSpec
 import java.security.spec.ECPoint
 import java.security.spec.ECPublicKeySpec
-import java.security.spec.PKCS8EncodedKeySpec
 import java.util.Base64
 import javax.crypto.Cipher
 import javax.crypto.KeyAgreement
@@ -59,12 +58,6 @@ object LanSyncCrypto {
         kpg.initialize(ECGenParameterSpec(CURVE), random)
         return kpg.generateKeyPair()
     }
-
-    /** 私钥的 PKCS#8 编码;落盘时再套一层 Base64。 */
-    fun encodePrivateKey(key: PrivateKey): ByteArray = key.encoded
-
-    fun decodePrivateKey(pkcs8: ByteArray): PrivateKey =
-        KeyFactory.getInstance("EC").generatePrivate(PKCS8EncodedKeySpec(pkcs8))
 
     /**
      * 公钥只导出成 **65 字节未压缩点**。

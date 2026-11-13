@@ -95,7 +95,7 @@ final class LanSyncCryptoTest: XCTestCase {
         XCTAssertThrowsError(try LanSyncCrypto.decrypt(key: expectedSessionKey, nonce: gcmNonce, ciphertextAndTag: Data(bytes)))
     }
 
-    func testRandomKeysAgreeAndPrivateKeyRoundTrips() throws {
+    func testRandomKeysAgree() throws {
         let a = LanSyncCrypto.generatePrivateKey()
         let b = LanSyncCrypto.generatePrivateKey()
         let aRaw = LanSyncCrypto.encodePublicKey(a.publicKey)
@@ -105,9 +105,6 @@ final class LanSyncCryptoTest: XCTestCase {
         let ba = try LanSyncCrypto.sharedSecret(b, peerPublicKeyRaw: aRaw)
         XCTAssertEqual(ab.count, 32)
         XCTAssertEqual(ab, ba)
-        // 私钥落盘再读回还能用:身份是跨启动复用的,每次启动换密钥会让已配对记录全失效。
-        let restored = try LanSyncCrypto.decodePrivateKey(a.rawRepresentation)
-        XCTAssertEqual(try LanSyncCrypto.sharedSecret(restored, peerPublicKeyRaw: bRaw), ab)
     }
 
     func testHKDFSupportsArbitraryLengthsDeterministically() {

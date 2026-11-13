@@ -39,18 +39,6 @@ export class LanSyncCrypto {
     return await cryptoFramework.createAsyKeyGenerator(LanSyncCrypto.CURVE).generateKeyPair();
   }
 
-  /** 私钥的 PKCS#8 编码(系统给的 DER)。落盘时再套一层 Base64。 */
-  static encodePrivateKey(key: cryptoFramework.PriKey): Uint8Array {
-    return key.getEncoded().data;
-  }
-
-  static async decodePrivateKey(pkcs8: Uint8Array): Promise<cryptoFramework.PriKey> {
-    const gen = cryptoFramework.createAsyKeyGenerator(LanSyncCrypto.CURVE);
-    const pair = await gen.convertKey(null, { data: pkcs8 } as cryptoFramework.DataBlob);
-    if (pair.priKey === null) throw new Error('私钥导入失败');
-    return pair.priKey;
-  }
-
   /**
    * 公钥只导出成 **65 字节未压缩点**,与 Android `encodePublicKey` / Swift
    * `rawRepresentation` 一致。系统给的是 SPKI DER(91 字节,末尾正好是那个点)。

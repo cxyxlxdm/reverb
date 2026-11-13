@@ -161,13 +161,10 @@ final class LanSyncSessionTest: XCTestCase {
     }
 
     private static func material(name: String) -> LanSyncIdentity.Material {
-        let key = LanSyncCrypto.generatePrivateKey()
         let id = LanSyncCrypto.randomBytes(8).map { String(format: "%02x", $0) }.joined()
         return LanSyncIdentity.Material(
             deviceId: id,
             name: name,
-            publicKey: LanSyncCrypto.encodePublicKey(key.publicKey),
-            privateKey: key,
             createdAt: Date()
         )
     }

@@ -6,27 +6,27 @@ import com.yuyin.reverb.data.local.JsonWriter
 import com.yuyin.reverb.util.Logger
 import org.json.JSONObject
 import java.io.File
-import java.security.PrivateKey
 
 /**
- * 本机在局域网里的**长期身份**:一串设备 id + 一对 P-256 密钥。
+ * 本机在局域网里的**长期身份**:只有一串设备 id 与显示名。
  *
- * 为什么要有稳定身份:虽然 P0 每次配对都重新做 ECDH(前向保密),但设备 id 要跨启动稳定 ——
- * 否则同一台机器每次打开同步都换一个名字,对端列表里会出现一串"幽灵设备"。
+ * 为什么要稳定身份:设备 id 跟服务名与去重判据挂钩,每次打开同步都换一个名字,
+ * 对端列表里会出现一串"幽灵设备"。
+ *
+ * ⚠️ **这里不存密钥**。旧版本曾把一对长期 P-256 密钥也写进来并直接拿去做 ECDH,
+ * 结果同一对设备每次配对的六位码都一样、也没有前向保密(H278)。现在密钥对在
+ * **每次会话里现生成**(见 [LanSyncSession.greet]),身份只负责"我是谁"。
  *
  * 文件是应用私有目录下的 `lan_sync.json`,与其它 store 一样走 [JsonWriter.writeAtomically]
  * (先写 `.part` 再 rename):半截文件解析失败时宁可按"没有身份"重建,也不要把坏文件留在那儿。
- *
- * **私钥只在这台设备上**。它不进任何备份、不上传、不写日志 —— 备份里没有这个文件
- * (BackupManager 的分区是白名单),换机后重新生成一对密钥即可。
+ * 旧文件里多出来的 publicKey/privateKey 会被忽略,下次写入时自然消失。
+ * 它不进任何备份、不上传、不写日志(BackupManager 的分区是白名单)。
  */
 class LanSyncIdentity(context: Context) {
 
     data class Material(
         val deviceId: String,
         val name: String,
-        val publicKey: ByteArray,
-        val privateKey: PrivateKey,
         val createdAt: Long
     )
 
@@ -36,7 +36,7 @@ class LanSyncIdentity(context: Context) {
     @Volatile
     private var cached: Material? = null
 
-    /** 首次访问时才读盘/生成 —— 应用启动不该为这个功能付一次 EC 密钥生成。 */
+    /** 首次访问时才读盘/生成。 */
     val material: Material
         get() = cached ?: synchronized(lock) {
             cached ?: loadOrCreate().also { cached = it }
@@ -44,12 +44,9 @@ class LanSyncIdentity(context: Context) {
 
     private fun loadOrCreate(): Material {
         read()?.let { return it }
-        val keyPair = LanSyncCrypto.generateKeyPair()
         val material = Material(
             deviceId = LanSyncCrypto.randomBytes(8).joinToString("") { "%02x".format(it) },
             name = defaultName(),
-            publicKey = LanSyncCrypto.encodePublicKey(keyPair.public),
-            privateKey = keyPair.private,
             createdAt = System.currentTimeMillis()
         )
         persist(material)
@@ -63,19 +60,14 @@ class LanSyncIdentity(context: Context) {
             val o = JSONObject(file.readText())
             if (o.optInt("version", 0) != VERSION) return@runCatching null
             val id = o.optString("deviceId")
-            val publicKey = LanSyncCrypto.unbase64(o.getString("publicKey"))
-            val privateKey = LanSyncCrypto.decodePrivateKey(LanSyncCrypto.unbase64(o.getString("privateKey")))
-            if (id.length != 16 || publicKey.size != LanSyncCrypto.PUBLIC_KEY_BYTES) return@runCatching null
+            if (id.length != 16) return@runCatching null
             Material(
                 deviceId = id,
                 name = o.optString("name").ifBlank { defaultName() },
-                publicKey = publicKey,
-                privateKey = privateKey,
                 createdAt = o.optLong("createdAt")
             )
         }.onFailure {
-            // 读坏不等于"没有身份",但这里**只能重建** —— 私钥丢了没有任何别处能补。
-            // 代价是旧的配对记录失效;P0 不持久化配对记录,所以影响只到下一次配对。
+            // 读坏就重建 —— 身份里只有展示用的名字与去重用的 id,没有不可再生的东西。
             Logger.w(TAG, "lan_sync.json 读取失败,重建身份:${it.message}")
         }.getOrNull()
     }
@@ -85,8 +77,6 @@ class LanSyncIdentity(context: Context) {
             .put("version", VERSION)
             .put("deviceId", material.deviceId)
             .put("name", material.name)
-            .put("publicKey", LanSyncCrypto.base64(material.publicKey))
-            .put("privateKey", LanSyncCrypto.base64(LanSyncCrypto.encodePrivateKey(material.privateKey)))
             .put("createdAt", material.createdAt)
         JsonWriter.writeAtomically(file, json.toString(2))
     }
