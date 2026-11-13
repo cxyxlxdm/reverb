@@ -195,8 +195,10 @@ export class TypeScale {
   static readonly titleMedium = 16;       // titleMedium
   static readonly titleSmall = 14;        // titleSmall
   static readonly body = 14;              // bodyMedium
-  /// 比 body 大一号,用于**整页密排长文**(目前只有隐私同意页)。
+  /// 比 body 大一号,用于**整页密排长文**(隐私同意页、逐字稿)。
   /// 与 Android 那边 bodyMedium → bodyLarge 的同一处调整对应:长文用正文号读着费劲。
+  /// 逐字稿 2026-11-13 起也用它:Android 逐字稿一直是 bodyLarge(16sp),本端原先停在 body(14),
+  /// 于是同一份稿两端一行能放的字数不一样(见 H280);行高 24 与 16 之比正好是 1.5。
   /// 列表里的正文不要改用它 —— 那会把行高撑乱。
   static readonly bodyLarge = 16;         // bodyLarge
   /// **溢出菜单项用它**(Android 的 DropdownMenuItem 同取 labelLarge,两端就此对齐)。

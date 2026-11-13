@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// 段落 = 连续 3 句(≈3 行),段间比行间多留 `paraGap`。
+///
+/// **为什么段落是"排"出来的,不是"量"出来的**:本机识别出的句子之间没有停顿可测 ——
+/// 2026-11-13 拿一集 1.5 小时的稿子量过,1753 个间隔里中位数 0ms、最大 840ms,
+/// ≥500ms 的只有 5 个;按停顿分段等于整篇一段。所以段落只能是一条确定的排版规则,
+/// 三端必须用同一个数(Android `TranscriptPane.kt` / 鸿蒙 `TranscriptPane.ets`)。
+private let paraLines = 3
+/// 段内行距。与 `LazyVStack` 的 `spacing` 同一个数。
+private let lineGap: CGFloat = 4
+/// 段间**额外**留白;与段内行距相加才是段距。
+private let paraGap: CGFloat = 16
+
 /// 播放页「转录」轮播页:离线把当前单集音频转成文字,随播放高亮、点句跳转。
 /// 仅从 macOS 14+ 的轮播容器实例化;发布方官方稿在这一档就能用,
 /// 本机识别才进一步要求 macOS 26(`TranscriptStore.localASRAvailable`)。
@@ -278,9 +290,11 @@ struct TranscriptPage: View {
     private func transcriptList(runningTail: Bool) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: lineGap) {
                     ForEach(Array(transcripts.segments.enumerated()), id: \.offset) { idx, seg in
                         row(idx: idx, seg: seg)
+                            // 段首多留一块(见文件头 paraLines 那条注释);段内只留 lineGap
+                            .padding(.top, idx > 0 && idx % paraLines == 0 ? paraGap : 0)
                     }
                     if runningTail {
                         // 未定稿的实时尾巴(流式/打字机):淡色显示,定稿后并入上面的句子

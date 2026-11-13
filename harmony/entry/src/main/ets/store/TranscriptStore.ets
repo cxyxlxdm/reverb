@@ -76,16 +76,23 @@ export class TranscriptStore implements TranscriptSink {
    * 会继续按旧口径显示,修复等于没生效(Android 端踩过,见 TROUBLESHOOTING H60)。
    *
    * 与 Android `TranscriptStore.CACHE_VERSION` **同一个数**:缓存格式互通,
-   * 版本号也就必须共用一套编号。**macOS / iOS 那份仍是 2** —— 它们没换引擎,
-   * 旧稿的口径没变,不需要作废(见 `macos/Sources/Reverb/Data/TranscriptStore.swift`)。
+   * 版本号也就必须共用一套编号。**macOS / iOS 那份自己编号**(`TranscriptFormat.version`,2 → 3):
+   * 缓存只在本机读、跨端不比对版本号,但它们这次也改了分段尺子,同样要作废旧稿。
    *   - v1:Android 用 whisper DTW 的时代(本端没有 v1 的稿);
    *   - v2:Core Speech Kit 时代(本端 1.0.7 及以前;无时间戳,时间轴靠"喂了多少音频"推算);
-   *   - v3:当前 —— sherpa-onnx + SenseVoiceSmall(1.0.8)。**必须 +1**:v2 的稿是按
+   *   - v3:sherpa-onnx + SenseVoiceSmall(1.0.8)。**必须 +1**:v2 的稿是按
    *     旧的"累积喂入时长"排的,与 SenseVoice 的**词级真实时间**不是同一个口径,
    *     混在一起会出现前面几十秒按旧算法、后面按新算法;而且旧稿只认五种语言的
    *     界面语言集合也不同了。不做这一步就是"修了等于没修"(硬规矩 11 / H60)。
+   *   - v4(1.0.8):分段尺子 24/42 → 18/38(见 `TranscriptLines.CJK_CHARS`)。v3 的稿已按
+   *     24 字断好,而那正好比一行多一个字 —— 不改版本号,界面上照旧是"一行铺满 + 一个字"。
+   *   - v5(1.0.8):长度先判后加 + 标点黏在上一行尾,不再产出 21 字的长条;
+   *   - v6(1.0.8):`split` 的整条上限从 1.5 倍行宽收到一行,中英混排按字宽折算选行宽 ——
+   *     旧稿里仍有 20~27 字的 cue,上屏折两行、第二行只剩几个字。
+   *   - v7(1.0.8):flush 完再按**整行**重判一次行宽并切开(`fitLines`)。v6 仍会留下
+   *     38 字的混排行 —— 行首那 18 个字符被英文占满时 `headWindow` 把它判成了西文。
    */
-  static readonly CACHE_VERSION: number = 3;
+  static readonly CACHE_VERSION: number = 7;
 
   private static readonly DIR: string = 'transcripts';
   private static readonly TAG: string = 'Transcript';

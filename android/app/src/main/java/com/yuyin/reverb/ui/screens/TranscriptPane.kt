@@ -80,6 +80,20 @@ import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
+ * 段落 = 连续 3 句(≈3 行),段间比行间多留 [PARA_GAP]。
+ *
+ * **为什么段落是"排"出来的,不是"量"出来的**:本机识别出的句子之间没有停顿可测 ——
+ * 2026-11-13 拿一集 1.5 小时的稿子量过,1753 个间隔里中位数 0ms、最大 840ms,
+ * ≥500ms 的只有 5 个;按停顿分段等于整篇一段。所以段落只能是一条确定的排版规则,
+ * 三端必须用同一个数(鸿蒙 `TranscriptPane.ets` / Apple `TranscriptPage.swift`)。
+ */
+private const val PARA_LINES = 3
+/** 段内行距(与 `Text` 的默认行高相加,不是总行距)。 */
+private const val LINE_GAP = 4
+/** 段间**额外**留白;与段内行距相加才是段距。 */
+private const val PARA_GAP = 16
+
+/**
  * 播放页第三页:逐字稿。对应 macOS `UI/TranscriptPage.swift`。
  *
  * 两种来源在界面上**不作区分** —— 用户要的是"这一集的文字",不关心是发布方给的还是本机转的。
@@ -381,7 +395,8 @@ private fun TranscriptList(
                     .clickable(interactionSource = interaction, indication = null) {
                         PlayerController.seekTo(seg.startMs.toLong())
                     }
-                    .padding(vertical = 6.dp)
+                    // 段首多留一块(见文件头 PARA_LINES 那条注释);段内只留 LINE_GAP
+                    .padding(top = (if (i > 0 && i % PARA_LINES == 0) PARA_GAP else 0).dp, bottom = LINE_GAP.dp)
             )
         }
         // 识别中尚未定稿的尾巴:浅一档,表示"还会变"
@@ -393,7 +408,7 @@ private fun TranscriptList(
                     color = MaterialTheme.colorScheme.outline,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 6.dp)
+                        .padding(vertical = LINE_GAP.dp)
                 )
             }
         }

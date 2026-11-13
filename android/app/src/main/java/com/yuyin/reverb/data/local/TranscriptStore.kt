@@ -386,8 +386,15 @@ class TranscriptStore(context: Context, private val fetcher: TranscriptFetcher) 
          * - v2:改用 whisper 自带的 `token_timestamps`(t0/t1),并保证起点单调不减;
          * - v3(1.0.8):引擎换 sherpa-onnx + SenseVoice。文本、标点、断行与时刻**全部不同**
          *   (v2 是 whisper 的输出),旧稿继续显示只会让人以为新引擎"没变好",一律作废重转。
+         * - v4(1.0.8):分段尺子 24/42 → 18/38(见 `TranscriptLines.CJK_CHARS`)。旧稿已按 24 字
+         *   断好,不改版本号的话界面照旧是"一行铺满 + 下一行一个字"—— 修了等于没修(硬规矩 11)。
+         * - v5(1.0.8):长度先判后加 + 标点黏在上一行尾,不再产出 21 字的长条(2026-11-13 装机实测);
+         * - v6(1.0.8):`split` 的整条上限从 1.5 倍行宽收到一行,中英混排按字宽折算选行宽 ——
+         *   旧稿里仍有 20~27 字的 cue,上屏折两行、第二行只剩几个字。
+         * - v7(1.0.8):flush 完再按**整行**重判一次行宽并切开(`fitOneLine`)。v6 仍会留下
+         *   38 字的混排行 —— 行首那 18 个字符被英文占满时 `headWindow` 把它判成了西文。
          */
-        const val CACHE_VERSION = 3
+        const val CACHE_VERSION = 7
 
         /**
          * 界面语言 → 识别/取稿语言。与 macOS `TranscriptStore.locale(for:)` 同一张表。
