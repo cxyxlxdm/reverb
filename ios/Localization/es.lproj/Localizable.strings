@@ -479,6 +479,6 @@
 "网络中断，已中止。" = "Se interrumpió la conexión. Detenido.";
 "已取消。" = "Cancelado.";
 "对方取消了这次同步。" = "El otro dispositivo canceló la sincronización.";
-"只同步订阅、收藏、印记、批注、历史与收听统计；下载与设置不参与。删除目前不会同步：在一台设备上取消订阅后，另一台同步时可能把它带回来。" = "Solo se sincronizan suscripciones, favoritos, sellos, notas, historial y estadísticas de escucha; descargas y ajustes quedan fuera. Las eliminaciones aún no se sincronizan: si cancelas una suscripción en un dispositivo, puede volver al sincronizar el otro.";
+"只同步订阅、收藏、印记、批注、历史与收听统计；下载与设置不参与。取消订阅、取消收藏、删除印记与批注也会同步到另一台设备。" = "Solo se sincronizan suscripciones, favoritos, sellos, notas, historial y estadísticas de escucha; descargas y ajustes quedan fuera. Darse de baja, quitar un favorito o borrar un sello o una nota también se sincroniza con el otro dispositivo.";
 "再同步一次" = "Sincronizar otra vez";
 "一致，开始同步" = "Coinciden: empezar";

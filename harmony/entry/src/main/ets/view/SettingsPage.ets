@@ -7,6 +7,7 @@ import { AppContainer } from '../AppContainer';
 import { SettingsStore } from '../store/SettingsStore';
 import { TopBar } from './Widgets';
 import { ConfirmDialog, ConfirmSpec } from './Components';
+import { LanSyncDialog } from './LanSyncDialog';
 import { BackupManager, ALL_SECTIONS, BackupSection, sectionLabelKey } from '../store/BackupManager';
 import { UpdateNotifier } from '../update/UpdateNotifier';
 import { Files } from '../util/Files';
@@ -136,6 +137,8 @@ export struct SettingsPage {
   @State confirm: ConfirmSpec | null = null;
   /// 正在勾选分区的备份/恢复对话框;null = 无。
   @State backup: BackupSpec | null = null;
+  /// 局域网同步面板是否打开。面板自己的状态在子组件里(理由见 LanSyncDialog 头注)。
+  @State lanSync: boolean = false;
   /// 缓存/下载/日志占用。-1 表示还在算(与 Android 的 size_calculating 一致)。
   @State cacheBytes: number = -1;
   @State dlBytes: number = -1;
@@ -252,6 +255,9 @@ export struct SettingsPage {
           this.actionRow(L.s('set_import_opml'), () => L.s('set_import_opml_sub'), () => this.importOpml())
           this.actionRow(L.s('set_full_backup'), () => L.s('set_full_backup_sub'), () => this.openExportDialog())
           this.actionRow(L.s('set_restore'), () => L.s('set_restore_sub'), () => this.startRestore())
+          // 局域网同步与「从备份恢复」同一段:两者都是"与另一台设备对数据",差别只在介质
+          // (同一 Wi-Fi 直连 vs. 一个备份文件)。Android 的设置页也放在同一分区。
+          this.actionRow(L.s('set_lan_sync'), () => L.s('set_lan_sync_sub'), () => { this.lanSync = true; })
 
           this.sectionLabel(L.s('set_logs'))
           this.actionRow(L.s('set_share_log'), () => L.s('set_share_log_sub'), () => this.shareLog())
@@ -305,6 +311,14 @@ export struct SettingsPage {
           fontScale: this.fontScale,
           spec: this.backup,
           onDismiss: () => { this.backup = null; }
+        })
+      }
+      // 局域网同步面板:打开即开始监听、关掉即停(生命周期在子组件里)
+      if (this.lanSync) {
+        LanSyncDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          onDismiss: () => { this.lanSync = false; }
         })
       }
     }

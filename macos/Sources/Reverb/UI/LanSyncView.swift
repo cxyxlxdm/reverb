@@ -35,7 +35,7 @@ struct LanSyncView: View {
 
             Divider()
 
-            Text("只同步订阅、收藏、印记、批注、历史与收听统计；下载与设置不参与。删除目前不会同步：在一台设备上取消订阅后，另一台同步时可能把它带回来。")
+            Text("只同步订阅、收藏、印记、批注、历史与收听统计；下载与设置不参与。取消订阅、取消收藏、删除印记与批注也会同步到另一台设备。")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 

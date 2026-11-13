@@ -13528,3 +13528,102 @@ say -v '?' | grep -q "^${VOICE} " || { echo "✗ 系统里没有 ${VOICE} 这个
    合成一句"没有模型",会把一次解包工具问题变成一次假的打包事故,排查方向整个错掉。
 ③ **"一次失败一次成功"不是偶发环境问题,是竞态。** 见到这种形状,先把那条命令空跑几十次量比率,
    再谈根因;不要归因给"机器忙"。
+
+### H273. 鸿蒙局域网同步发起方一律报 `build context fail.`:HKDF 的 spec 要写**基名**,不是 `createKdf` 那个串
+
+**现象**。2026-11-13 鸿蒙端(Mate 60)第一次真机发起配对的同一秒,界面回「失败 4:build context fail.」,
+hilog 里是三行连续的:
+
+```
+E C02F0A/com.yuyin.reverb/HCF:     JsKdfGenerateSecret[717]: build context fail.
+E A0E0B0/com.yuyin.reverb/Reverb:  [LanSync] 会话异常:build context fail.
+W A0E0B0/com.yuyin.reverb/Reverb:  [LanSync] 失败 4:build context fail.
+```
+
+Android 那一侧没有报错(它只等到一条断开的连接)。**两端都监听成功、发现也正常**
+(`发现 Pixel 3@192.168.6.228:47820`),所以第一反应都在查网络、查权限、查包名。
+
+**根因**。键派生那一段写成了:
+
+```ts
+const kdf = cryptoFramework.createKdf('HKDF|SHA256');
+const spec: cryptoFramework.HKDFSpec = {
+  algName: 'HKDF|SHA256',   // ✗
+  key: ikm, salt: salt, info: …, keySize: length
+};
+```
+
+`createKdf` 要**带摘要的完整名**(`'HKDF|SHA256'`),但 `HKDFSpec.algName` 要的是**基名 `'HKDF'`** ——
+与 PBKDF2 的写法一致(`createKdf('PBKDF2|SHA256')` + `algName: 'PBKDF2'`)。
+写成完整名时系统在 `HcfKdfCtxBuild` 里建上下文就失败,抛上来的只有一句
+`build context fail.` —— **不含字段名,也不会说"algName 不对"**。
+
+**修法**(`harmony/entry/src/main/ets/sync/LanSyncCrypto.ets`):
+
+```ts
+const spec: cryptoFramework.HKDFSpec = {
+  algName: 'HKDF',   // 只写基名;写成 'HKDF|SHA256' 会在 JsKdfGenerateSecret 里 build context fail.(H273)
+  …
+};
+```
+
+重新 `assembleHap` + `install-device.sh`(覆盖安装,数据保留)。
+
+**验收(2026-11-13 真机)**。改后 Harmony 发起 → Android:
+两端六位码一致(`487378`)、两边确认后各报自己的新增条数(鸿蒙 1/0/0/0/2/2,Android 6/1/2/0/17/9);
+再跑一轮两端都报「没有新增内容」。同一轮里在鸿蒙退订一条、再同步,
+Android 的 `subscriptions.json` 从 7 条降到 6 条且 `sync_tombstones.json` 留下对端那条删除记录 ——
+说明这条 `build context fail.` 之后的整条链路(ECDH→HKDF→SAS→AES-GCM→合并)都是通的。
+
+**教训 / 可复用的规律**。
+
+① **同一个算法常常有两个名字:创建时一个、spec 里一个。** 见到 `createXxx('A|B')` 这种形状,
+   先确认它的 spec 字段要的是 `A` 还是 `A|B` —— 两件事不是同一个字符串。
+② **"build context fail." 这类不含字段名的 native 报错,要在最近一次调用的参数形状上二分**,
+   不要去查网络/包名/权限。这一次的错误串里连 `KDF` 都没出现,`HCF` 这个 tag 是唯一线索。
+③ **它只能被真机配对抓到**:编译门、单测、面板打开都到不了这一行代码 ——
+   面板显示监听成功、地址正常,看上去一切就绪。换端移植加密代码时,**真机握手是唯一验收**。
+
+### H274. Android 资源串的裸撇号:`XML 合法` ≠ `aapt2 合法`,我自己的校验脚本给了假通过
+
+**现象**。2026-11-13 改完全部五语的隐私同意文案后例行体检:
+Python 的 XML 解析全过、`plutil -lint`(Apple 侧)全过,于是继续打 debug 包 ——
+`./gradlew :app:assembleDebug` 在 `:app:mergeDebugResources` 直接失败:
+
+```
+values-en/strings.xml:461:4: Failed to flatten XML for resource 'privacy_consent_lan' with error: Invalid unicode escape sequence in string
+values-en/strings.xml:461:4: string/privacy_consent_lan does not contain a valid string resource.
+```
+
+而这条串里**没有任何 `\u` 转义**。单跑 `aapt2 compile` 才给出真话:
+
+```
+error: unescaped apostrophe in string
+"… A deletion record takes precedence over the other device's data: …"
+```
+
+**根因**。Android 资源字符串里的**裸撇号**必须写成 `\'`(或整串用双引号包起来);
+它是 aapt2 在 flatten 阶段的规则,**XML 本身完全合法** —— XML 解析器不会、也不该管这件事。
+报错文案里的 `Invalid unicode escape sequence` 与 `461` 都不是准的:那一行在源文件里是 463
+(aapt2 报的是合并后的行号),而"unicode escape"指的是它把 `'` 当成需要转义的字符在解析。
+
+**修法**。把该处改成 `device\'s`,然后**用真正的消费者验**,不是用格式解析器验:
+
+```bash
+A2="$SDK/build-tools/36.0.0/aapt2"
+for d in values values-en values-es values-fr values-zh-rTW; do
+  "$A2" compile "app/src/main/res/$d/strings.xml" -o /tmp/o.zip || echo "✗ $d"
+done
+```
+
+**验收**。五个语种逐个 `aapt2 compile` 全 0 错误,`:app:assembleDebug` 重建 exit 0,装机后
+局域网同步弹窗与新同意页文案都按新版本上屏。
+
+**教训 / 可复用的规律**。
+
+① **校验要用真正的消费者。** XML 解析、"看起来是合法 JSON/XML" 只能证明格式,证明不了资源编译器会接受;
+   Android 资源跑 `aapt2 compile`、鸿蒙资源跑严格 `json.load`(它比 restool 更早报行列号)、
+   法语那类撇号在 XML 里写 `\'`、在 JSON 里写裸 `'`(硬规矩 5 已记)。
+② **aapt2 报的行号是合并后的行号**,按它去 sed 源文件会改错行;用 `grep -n` 按资源名定位。
+③ 同一母题:**验收工具本身也会撒谎** —— 与 H272 的 `grep -q` 假阴性、H206 的空 stdout 是同一族。
+   一个"全过了"的体检,必须先问一句"它真的检查了这件事吗"。

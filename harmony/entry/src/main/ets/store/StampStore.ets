@@ -2,6 +2,7 @@ import { JsonFile } from './JsonFile';
 import { L } from '../util/L';
 import { J } from '../net/Http';
 import { Log } from '../util/Logger';
+import { SyncTombstones } from '../sync/SyncTombstones';
 
 /// 一枚听觉印记:为某一集盖下的水墨印章(印字 + 单集信息 + 时间)。
 export interface Stamp {
@@ -51,6 +52,8 @@ export class StampStore {
       podcastTitle: podcastTitle, createdAt: Date.now()
     };
     this.stamps = [fresh].concat(rest);
+    // 重新盖章 = 有这一枚,旧墓碑作废(与 Android StampStore.set 同一条)。
+    SyncTombstones.clear(SyncTombstones.STAMPS, episodeId);
     Log.i('Store', `盖印记 "${seal}" id=${episodeId}`);
     this.persist();
   }
@@ -59,7 +62,10 @@ export class StampStore {
   addAll(items: Stamp[]): void {
     const next = this.stamps.slice();
     for (let i = 0; i < items.length; i++) {
-      if (!next.some((x: Stamp) => x.episodeId === items[i].episodeId)) next.push(items[i]);
+      if (!next.some((x: Stamp) => x.episodeId === items[i].episodeId)) {
+        next.push(items[i]);
+        SyncTombstones.clear(SyncTombstones.STAMPS, items[i].episodeId);
+      }
     }
     this.stamps = next;
     this.persist();
@@ -67,6 +73,7 @@ export class StampStore {
 
   remove(episodeId: string): void {
     this.stamps = this.stamps.filter((x: Stamp) => x.episodeId !== episodeId);
+    SyncTombstones.record(SyncTombstones.STAMPS, episodeId);
     this.persist();
   }
 

@@ -3,6 +3,7 @@ import { Codec } from './Codec';
 import { JsonFile } from './JsonFile';
 import { J } from '../net/Http';
 import { Log } from '../util/Logger';
+import { SyncTombstones } from '../sync/SyncTombstones';
 
 /**
  * 一条批注:**某一集的某一秒 + 自己写的一句话**。
@@ -120,6 +121,7 @@ export class NoteStore {
       createdAt: now
     };
     this.notes = [note].concat(this.notes);
+    SyncTombstones.clear(SyncTombstones.NOTES, noteId);
     Log.i('Store', `加批注 id=${noteId} pos=${note.positionMs}ms len=${body.length} total=${this.notes.length}`);
     this.persist();
     return noteId;
@@ -127,6 +129,9 @@ export class NoteStore {
 
   remove(noteId: string): void {
     this.notes = this.notes.filter((x: EpisodeNote) => x.noteId !== noteId);
+    // 批注是**用户写出来的字**,删掉必须让对端也知道(与 Android NoteStore.remove 同一条),
+    // 否则下一次同步会把它原样复活。
+    SyncTombstones.record(SyncTombstones.NOTES, noteId);
     Log.i('Store', `删批注 id=${noteId} total=${this.notes.length}`);
     this.persist();
   }
@@ -138,7 +143,10 @@ export class NoteStore {
   addAll(items: EpisodeNote[]): void {
     const next = this.notes.slice();
     for (let i = 0; i < items.length; i++) {
-      if (!next.some((x: EpisodeNote) => x.noteId === items[i].noteId)) next.push(items[i]);
+      if (!next.some((x: EpisodeNote) => x.noteId === items[i].noteId)) {
+        next.push(items[i]);
+        SyncTombstones.clear(SyncTombstones.NOTES, items[i].noteId);
+      }
     }
     this.notes = NoteStore.normalize(next);
     this.persist();

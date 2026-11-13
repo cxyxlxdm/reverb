@@ -165,7 +165,7 @@
 - 历史与收听统计不参与:前者按较新时间取、后者按设备各记各的,本来就没有"删一条"的语义。
 - **已知限制**:删除优先于对端快照 —— A 删掉、B 在同步前重新订阅,这一次仍会被删掉;
   订阅和收藏没有"最后修改时间",证明不了谁更晚。要彻底解决需要给每条记录带逻辑时钟(未做)。
-- **鸿蒙端仍未接入局域网同步**,因此也不涉及墓碑。
+- **鸿蒙端 2026-11-13 起已接入局域网同步**(见下一节),墓碑同样生效。
 
 > **工程要点**
 > - 账本是两份同契约实现:Android `sync/SyncTombstones.kt`、Apple `Sync/LanSyncTombstones.swift`
@@ -179,6 +179,25 @@
 >   `swift build -c release`(含 `--product ReverbWidget`)与 iOS 编译门(版本 `1.0.8(2)` 7 条)exit 0。
 > - **未验**:两台真机上的整轮「A 删 → 配对 → B 也删」;单测只证明账本与过滤判据。
 > - 这一段最早一次 macOS 编译失败在默认参数上(`@MainActor` 类型里的 `nowMs()`),修法见 `docs/TROUBLESHOOTING.md` H270。
+
+### 鸿蒙:接入局域网同步(2026-11-13)
+
+- 设置 → 局域网 → 局域网同步,与 Android / macOS / iOS 同一套协议:六位配对码人工核对、
+  ECDH P-256 + HKDF-SHA256 + AES-256-GCM、合并订阅 / 收藏 / 印记 / 批注 / 历史 / 收听统计。
+- 删除墓碑随快照传播:对端的退订 / 取消收藏 / 删印记 / 删批注,本机下一次同步跟着删,
+  不会把对面刚删掉的条目再带回去。
+- 隐私同意页补上「局域网同步」那一段(五语种),与 Android / Apple 的同一份文案同口径。
+
+> **工程要点**
+> - `sync/` 下四份 ArkTS 实现:`LanSyncCrypto`(EC / ECDH / HKDF / AES-GCM)、`LanSyncProtocol`(帧与信封)、
+>   `LanSyncMerge`(备份 v1 合并 + 墓碑)、`SyncTombstones`;发现走 `net/Mdns`(`_reverb._tcp`)。
+> - **坑**:`cryptoFramework.HKDFSpec.algName` 只能写基名 `'HKDF'`;写成 `'HKDF|SHA256'` 会在
+>   `JsKdfGenerateSecret` 里报 `build context fail.`(见 `docs/TROUBLESHOOTING.md` H273)。
+> - 五语资源改完要用 `aapt2 compile` 而不是只做 XML 解析(裸撇号,见 H274)。
+> - 验收(真机 Mate 60 ↔ Pixel 3,同一 Wi-Fi):两端六位码一致 → 双向合并(鸿蒙侧 新增 1/0/0/0/2/2,
+>   Android 侧 6/1/2/0/17/9)→ 第二轮两端「没有新增」;在鸿蒙退订一条后同步,
+>   Android `subscriptions.json` 7→6 且 `sync_tombstones.json` 留下对端那条记录。
+> - 仍未实跑:鸿蒙面板的自动发现只有单向(对端能看到鸿蒙,鸿蒙看不到对端),手动填地址是可靠路径。
 
 ### Android:章节(Podcasting 2.0)(2026-11-11)
 
@@ -321,11 +340,12 @@
 - 合并是**双向并集**:两端同步完拿到的内容一致;订阅按规范化后的 feed URL 去重。
 - ~~**已知限制**:删除不会传播~~ —— **2026-11-12 补齐**,见下文「局域网同步:删除会传播了」;
   现在取消订阅/删批注也会同步到对端。
-- **鸿蒙端尚未接入**(按调研计划,先 Android + Apple,鸿蒙 mDNS 真机互通验过再并入)。
+- **鸿蒙端 2026-11-13 起已并入**(同一套协议,真机与 Android 双向跑通,见下文「鸿蒙:接入局域网同步」)。
 
 > **工程要点**
 > - 协议与合并内核四份:Android `sync/LanSync*.kt`、Apple `macos/Sources/Reverb/Sync/LanSync*.swift`
->   (iOS 直接编译同一批文件),界面两端共用 `macos/Sources/Reverb/UI/LanSyncView.swift`。
+>   (iOS 直接编译同一批文件)、鸿蒙 `entry/src/main/ets/sync/*.ets`;界面三份(Android Compose、
+>   Apple 共用的 `macos/Sources/Reverb/UI/LanSyncView.swift`、鸿蒙 `view/LanSyncDialog.ets`)。
 > - 线格式:4 字节大端长度 + UTF-8 JSON;握手明文,配对后全部走密封信封;
 >   单帧上限 8 MiB,快照切 256 KiB 块,整份上限 64 MiB。
 > - 字节契约有同一组 KAT(密钥/会话密钥/配对码/GCM),Android 8 条 + Apple 9 条逐字节一致。
