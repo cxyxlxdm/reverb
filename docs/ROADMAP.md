@@ -1025,13 +1025,13 @@ UI/文案一变,截图与对外物料就会过期 —— 但它们是本地运�
 | macOS 运行验收(逐字稿搜索导出、局域网面板、桌面组件渲染与按键) | 0 帧 | 运行验收固定在另一台机器,由维护者拍(§三-A);本轮只到编译门 + `swift test` |
 | iOS 运行验收(桌面组件上主屏、局域网面板、逐字稿搜索导出) | 模拟器只到"状态文件写入";无图形界面可加卡片/点击 | 需要人点一下,或真机(本机 WDA 装不上) |
 | iOS TestFlight 上传 | 未跑 | 免费 Personal Team 拿不到分发描述文件;要 Apple Developer Program 会员 + App Store Connect 记录 |
-| 删除墓碑的两机整轮实测 | 单测 + 三端编译门 | A 删、配对、B 跟着删;需要手机装一版含墓碑的包 + 一次配对确认。**2026-11-13:Android 与鸿蒙的 1.0.8 发布包都已重打(含墓碑),Pixel 3 已覆盖安装** —— 现在缺的只剩"两台设备都装上、人点一下配对" |
-| 四端 1.0.8 发布包 | **2026-11-13 四端都出了一轮**(判据见各自 `dist/` 的字节数与 `ls -lT`):Android `reverb.apk` 270,255,441 B @08:19:46 sha256 `784718e7…`;鸿蒙 `reverb.app` 181,964,047 B + `reverb-symbol.zip` @08:29:44 sha256 `cb7ebaa3…`;macOS `余音-Reverb-1.0.8-universal.dmg` 6,207,236 B @08:30:52 sha256 `d1c2b4cc…`(`package.sh` 全部断言通过);iOS 编译门 7 条全过 + 未签名归档 ipa `reverb-ios-1.0.8-2-unsigned.ipa` 2,910,794 B @08:31:34 sha256 `d3f2d4c1…` | Android / 鸿蒙 / macOS 可按硬规矩 20 上传;**iOS 的 ipa 没有签名**(免费 Personal Team 拿不到分发描述文件),只能归档与结构校验,TestFlight 仍等会员。⚠️ Android 重打前先归档 `reverb-mapping.txt`(本轮已重打,旧 mapping 只在归档里) |
+| 删除墓碑的两机整轮实测 | ✅ **2026-11-13 已真机整轮跑通**(Mate 60 ↔ Pixel 3,debug 包):鸿蒙退订一条 → 同步 → Android `subscriptions.json` 7→6,且 `sync_tombstones.json` 留下对端那条记录(见 `CHANGELOG.md` 同日节) | 无 |
+| 四端 1.0.8 发布包 | **2026-11-13 四端都出了一轮**(判据见各自 `dist/` 的字节数与 `ls -lT`):Android `reverb.apk` 270,255,441 B @08:19:46 sha256 `784718e7…`;鸿蒙 `reverb.app` 181,964,047 B + `reverb-symbol.zip` @08:29:44 sha256 `cb7ebaa3…`;macOS `余音-Reverb-1.0.8-universal.dmg` 6,207,236 B @08:30:52 sha256 `d1c2b4cc…`(`package.sh` 全部断言通过);iOS 编译门 7 条全过 + 未签名归档 ipa `reverb-ios-1.0.8-2-unsigned.ipa` 2,910,794 B @08:31:34 sha256 `d3f2d4c1…` | Android / 鸿蒙 / macOS 可按硬规矩 20 上传;**iOS 的 ipa 没有签名**(免费 Personal Team 拿不到分发描述文件),只能归档与结构校验,TestFlight 仍等会员。⚠️ Android 重打前先归档 `reverb-mapping.txt`(本轮已重打,旧 mapping 只在归档里)。⚠️ **Android 与鸿蒙这两份包都不含 2026-11-13 晚间的局域网同步面板修复**(鸿蒙按钮点击区 / Android MulticastLock 与新增权限 / 配对提示 / 连接置灰)⇒ **发版前必须重打**,重打后权限数从 11 变 12(多 `CHANGE_WIFI_MULTICAST_STATE`) |
 | `CHANGELOG.md` 1.0.8 整段重写为对外口径 + `docs/RELEASE-NOTES.md` | **2026-11-13:`docs/RELEASE-NOTES.md` 的 1.0.8 段已起草**(标题写「待发布」,只写新增 / 修复 / 说明,不含验收读数);`CHANGELOG.md` 仍是内部账本(硬规矩 19),1.0.8 各节齐全 | 发版当天把标题改成日期、按最终包核一遍措辞(尤其"待发布"三字与版本号),再贴到发布页 |
 | 截图整套重拍 + 商店图 / 官网 `shots/` 两条出口 | 未做 | 界面动过(章节、逐字稿工具条、组件只是桌面层);按硬规矩 20 |
 | 官网正文 / 隐私页 | 隐私页已同步删除墓碑口径(11-12) | 首页是否需要提局域网同步,发版前按硬规矩 5 核一遍 |
 | 灵动岛 / Live Activity(iOS) | 未做,且非本轮必需 | 组件形态已满足"桌面可见 + 可控";要做另立一项 |
-| 鸿蒙局域网同步 | **2026-11-13 已接入并真机跑通**(Mate 60 ↔ Pixel 3,双向合并 + 删除墓碑) | 发起方仍以 Android 手动填地址为主;鸿蒙的 mDNS 发现只单向(对端能看到鸿蒙,鸿蒙看不到对端),见 H265 同族限制 |
+| 鸿蒙局域网同步 | **2026-11-13 已接入并真机跑通**(Mate 60 ↔ Pixel 3,双向合并 + 删除墓碑) | 自动发现**双向都已成立**(Android 侧补 `MulticastLock` 后 0.7 s 发现鸿蒙、两端面板互相列名,见 H276);手动填地址仍保留作兜底 |
 | Android 17 `ACCESS_LOCAL_NETWORK` 适配 | 未做 | 目标平台升到 36 时就地补;当前不影响 1.0.8 |
 | 播放进度跨设备交接(P1) | 未做 | 研究文档 §6;不在 1.0.8 承诺范围 |
 
