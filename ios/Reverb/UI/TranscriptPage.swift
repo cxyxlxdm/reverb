@@ -1,5 +1,17 @@
 import SwiftUI
 
+/// 段落 = 连续 3 句(≈3 行),段间比行间多留 `paraGap`。
+///
+/// **为什么段落是"排"出来的,不是"量"出来的**:本机识别出的句子之间没有停顿可测 ——
+/// 2026-11-13 拿一集 1.5 小时的稿子量过,1753 个间隔里中位数 0ms、最大 840ms,
+/// ≥500ms 的只有 5 个;按停顿分段等于整篇一段。所以段落只能是一条确定的排版规则,
+/// 三端必须用同一个数(Android `TranscriptPane.kt` / 鸿蒙 `TranscriptPane.ets`)。
+private let paraLines = 3
+/// 段内行距。与 `LazyVStack` 的 `spacing` 同一个数。
+private let lineGap: CGFloat = 4
+/// 段间**额外**留白;与段内行距相加才是段距。
+private let paraGap: CGFloat = 16
+
 /// 播放页「逐字稿」sheet:优先发布方官方稿,没有时在本机离线转写。
 /// 与 macOS 版同一套 `TranscriptStore` 状态机;差别只有系统版本门槛写 iOS。
 struct TranscriptPage: View {
@@ -263,9 +275,11 @@ struct TranscriptPage: View {
         let current = currentIndex
         return ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                LazyVStack(alignment: .leading, spacing: lineGap) {
                     ForEach(Array(transcripts.segments.enumerated()), id: \.offset) { idx, seg in
                         row(idx: idx, seg: seg, current: current)
+                            // 段首多留一块(见文件头 paraLines 那条注释);段内只留 lineGap
+                            .padding(.top, idx > 0 && idx % paraLines == 0 ? paraGap : 0)
                     }
                     if runningTail {
                         if !transcripts.volatileTail.isEmpty {

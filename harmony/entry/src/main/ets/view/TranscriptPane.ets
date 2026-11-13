@@ -27,6 +27,23 @@ class TextSlice {
   }
 }
 
+/**
+ * 段落 = 连续 3 句(≈3 行),段与段之间空出 `PARA_GAP_VP`,段内行距只有 `LINE_GAP_VP`。
+ *
+ * **为什么段落是"排"出来的,不是"量"出来的**:本机识别出的句子之间**没有停顿可测** ——
+ * 2026-11-13 拿一集 1.5 小时的稿子量过,1753 个间隔里中位数 0ms、最大 840ms,
+ * ≥500ms 的只有 5 个;按停顿分段等于整篇一段。所以段落只能是一条**确定的排版规则**,
+ * 三端必须用同一个数,否则同一份稿子在两端的段落位置不一样。
+ *
+ * 3 行是"一眼看得出是段"与"段不至于太碎"的折中:1.5 小时 / 1753 句 ≈ 585 段,
+ * 每段 3 行、行高 24vp ⇒ 一段约 72vp,段间留 16vp 时行距与段距的比例是 1.6 倍。
+ */
+const PARA_LINES: number = 3;
+/** 段内行距。与 `List({ space })` 同一个数,别只改一边。 */
+const LINE_GAP_VP: number = 4;
+/** 段间**额外**留白;与段内行距相加才是段距。 */
+const PARA_GAP_VP: number = 16;
+
 
 /**
  * 播放页第三页:逐字稿。对应 Android `ui/screens/TranscriptPane.kt`、macOS `UI/TranscriptPage.swift`。
@@ -446,12 +463,14 @@ export struct TranscriptPane {
 
   @Builder
   lines() {
-    List({ space: 10, scroller: this.scroller }) {
+    List({ space: LINE_GAP_VP, scroller: this.scroller }) {
       ForEach(this.store.segments, (seg: TranscribedSegment, index?: number) => {
         ListItem() {
           this.lineText(seg, index === undefined ? -1 : index,
             this.isCurrentLine(index === undefined ? -1 : index))
         }
+        // 段首多留一块(见文件头 PARA_LINES 那条注释);段内只留 LINE_GAP_VP
+        .padding({ top: this.paraTop(index === undefined ? -1 : index) })
         // 点一句跳到那儿 —— 逐字稿最实用的一点
         .onClick(() => { this.player.seekTo(seg.startMs); })
       }, (seg: TranscribedSegment, index?: number) => `${index}-${seg.startMs}`)
@@ -460,7 +479,7 @@ export struct TranscriptPane {
       if (this.store.volatileTail.length > 0) {
         ListItem() {
           Text(this.store.volatileTail)
-            .fontSize(TypeScale.body * this.fontScale)
+            .fontSize(TypeScale.bodyLarge * this.fontScale)
             .fontColor(withAlpha(this.scheme.onSurfaceVariant, 0.55))
             .lineHeight(24)
             .width('100%')
@@ -529,7 +548,7 @@ export struct TranscriptPane {
               })
           }, (p: TextSlice, k?: number) => `${k}-${p.text}`)
         }
-        .fontSize(TypeScale.body * this.fontScale)
+        .fontSize(TypeScale.bodyLarge * this.fontScale)
         .lineHeight(24)
         .width('100%')
       } else {
@@ -543,7 +562,7 @@ export struct TranscriptPane {
                 ? FontWeight.Medium : FontWeight.Normal)
           }, (w: TranscribedWord, k?: number) => `${k}-${w.startMs}`)
         }
-        .fontSize(TypeScale.body * this.fontScale)
+        .fontSize(TypeScale.bodyLarge * this.fontScale)
         .lineHeight(24)
         .width('100%')
       }
@@ -559,12 +578,12 @@ export struct TranscriptPane {
             })
         }, (p: TextSlice, k?: number) => `${k}-${p.text}`)
       }
-      .fontSize(TypeScale.body * this.fontScale)
+      .fontSize(TypeScale.bodyLarge * this.fontScale)
       .lineHeight(24)
       .width('100%')
     } else {
       Text(seg.text)
-        .fontSize(TypeScale.body * this.fontScale)
+        .fontSize(TypeScale.bodyLarge * this.fontScale)
         .fontColor(isCurrent ? this.scheme.primary : this.scheme.onSurfaceVariant)
         .fontWeight(isCurrent ? FontWeight.Medium : FontWeight.Normal)
         .lineHeight(24)
@@ -593,6 +612,15 @@ export struct TranscriptPane {
     const segs = this.store.segments;
     if (segs[i].startMs > this.nowMs) return false;
     return i + 1 >= segs.length || segs[i + 1].startMs > this.nowMs;
+  }
+
+  /**
+   * 段首要不要多留一块。**纯算术判据**(按句号下标取模),不做任何扫描 ——
+   * 渲染侧每句都要问一次,按"先算出段落边界数组"那种形状就变成每档重渲 O(句)(硬规矩 6)。
+   * 三端同一条规则:Android `TranscriptPane.kt` / Apple `TranscriptPage.swift` 里的 `PARA_LINES`。
+   */
+  private paraTop(i: number): number {
+    return i > 0 && i % PARA_LINES === 0 ? PARA_GAP_VP : 0;
   }
 
   /// 这一句的第 `k` 个词是不是正在读的那个 —— 同样 O(1),理由见 `isCurrentLine`
