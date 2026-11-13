@@ -1585,6 +1585,10 @@
       "value": "Aucun appareil trouvé pour l'instant. Vérifiez que l'autre appareil a cette page ouverte ; sinon, saisissez l'adresse affichée sur son écran."
     },
     {
+      "name": "lan_peers_hint",
+      "value": "Touchez un appareil ci-dessous pour l'associer."
+    },
+    {
       "name": "lan_manual_hint",
       "value": "Adresse de l'autre appareil, ex. 192.168.1.5:47820"
     },

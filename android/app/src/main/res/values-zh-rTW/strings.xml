@@ -262,6 +262,7 @@
     <string name="lan_own_address">本機位址，可讓對方手動輸入</string>
     <string name="lan_peers">附近的裝置</string>
     <string name="lan_no_peers">還沒發現裝置。確認對方也開啟了這個頁面；找不到就直接輸入對方螢幕上顯示的位址。</string>
+    <string name="lan_peers_hint">點下面的裝置即可配對</string>
     <string name="lan_peer_row">%1$s\n%2$s</string>
     <string name="lan_manual_hint">對方位址，如 192.168.1.5:47820</string>
     <string name="lan_connect">連線</string>

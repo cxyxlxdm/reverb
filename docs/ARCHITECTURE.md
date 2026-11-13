@@ -362,8 +362,11 @@ macOS 端解码**不做秒/毫秒归一** —— 没有一端写秒,归一只会
 **Android 的发现是两条路并行**(2026-11-12,H265):系统 NSD + 自己发的 **QU 查询**。
 后者从临时端口向 `224.0.0.251:5353` 发一条类字段带 `0x8000` 的 PTR 查询,应答方按
 RFC 6762 单播回来 —— 不经过 AP 的组播转发,所以「组播只丢一个方向」的 AP 上也能用
-(实测 H3C:NSD 永远为空,QU 3 秒内列出 Mac)。只发查询、只收单播,不需要 `MulticastLock`
-或额外权限;报文编解码是 `MdnsCodec`(只认 PTR/SRV/TXT/A 四类与 IPv4)。
+(实测 H3C:NSD 永远为空,QU 3 秒内列出 Mac)。**面板打开期间另持一把 `WifiManager.MulticastLock`**
+(`CHANGE_WIFI_MULTICAST_STATE`,normal 权限;2026-11-13 加,见 H276):有的设备(实测 Pixel 3)
+上系统 NSD 没有关掉驱动的组播过滤,不持锁时 `mdnssd` 既不发查询也不收应答,
+鸿蒙因此永远发现不了;锁是设备级,NSD 与 QU 一起受益,`stop()` 即释放。
+QU 报表编解码是 `MdnsCodec`(只认 PTR/SRV/TXT/A 四类与 IPv4)。
 两路结果在控制器里取并集、互不清空;系统 NSD 侧另有解析超时、队列去重与
 `FAILURE_ALREADY_ACTIVE` 退避 —— 那个 API 没有取消接口,一次不回调会卡住全局解析槽位。
 
@@ -396,9 +399,9 @@ P0 不做锁屏/后台常驻。
 **取舍**:墓碑优先于对端快照 —— 订阅/收藏没有 `updatedAt`,"重新添加晚于删除"无法证明,
 要彻底解决得给每条记录带 HLC(研究文档 §5)。历史与收听统计不参与:前者 LWW、后者按设备取 max。
 
-**跨端范围**:Android 与 macOS/iOS 已落地;鸿蒙按调研计划
-(`docs/research/2026-11-11-lan-sync.md` Q5)**暂不并入**,等 `@ohos.net.mdns` 与
-Android/Apple 的真实互通先验过。iOS 与 macOS 共用 `macos/Sources/Reverb/Sync`
+**跨端范围**:Android 与 macOS/iOS 已落地;**鸿蒙 2026-11-13 并入并真机双向跑通**
+(`harmony/entry/src/main/ets/sync/` 下四份 ArkTS 实现,协议与 Apple/Android 同一份契约,
+见 H273 的 HKDF 坑)。iOS 与 macOS 共用 `macos/Sources/Reverb/Sync`
 与 `UI/LanSyncView.swift`,iOS 工程对这批共享文件是显式引用(见 H260/H261)。
 
 ---
@@ -453,7 +456,7 @@ app/src/{default,store}/   ← 已删除(H205)
 unzip -l dist/reverb.apk | grep -icE 'lib/|assets/sensevoice/'         # 4(两个 .so + 模型 + 词表)
 unzip -l dist/reverb.apk | grep -cE 'assets/seed_podcasts\.json'       # 1
 unzip -p dist/reverb.apk classes.dex | LC_ALL=C grep -ao 'itunes.apple.com\|fyyd\|gpodder' | wc -l  # 13(4/5/4)
-"$SDK/build-tools/<ver>/aapt2" dump permissions dist/reverb.apk | wc -l  # 13(含 RECORD_AUDIO)
+"$SDK/build-tools/<ver>/aapt2" dump permissions dist/reverb.apk | grep -c uses-permission  # 12(含 RECORD_AUDIO;1.0.8 新增 CHANGE_WIFI_MULTICAST_STATE)
 # HarmonyOS 商店包:目录 URL 非 0;1.0.8 起本机转写产物也在(sherpa har 的 .so + rawfile 模型/词表),
 # 真实频谱产物仍不存在
 unzip -l dist/reverb.app 'resources/rawfile/sensevoice/*' | grep -cE 'model\.int8\.onnx|tokens\.txt'   # 2

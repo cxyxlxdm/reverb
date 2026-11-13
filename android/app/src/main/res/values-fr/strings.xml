@@ -262,6 +262,7 @@
     <string name="lan_own_address">Adresse de cet appareil, saisissable manuellement sur l\'autre</string>
     <string name="lan_peers">Appareils proches</string>
     <string name="lan_no_peers">Aucun appareil détecté. Vérifiez que la page est ouverte sur l\'autre appareil, ou saisissez l\'adresse affichée sur son écran.</string>
+    <string name="lan_peers_hint">Touchez un appareil ci-dessous pour l\'associer.</string>
     <string name="lan_peer_row">%1$s\n%2$s</string>
     <string name="lan_manual_hint">Adresse de l\'autre appareil, par ex. 192.168.1.5:47820</string>
     <string name="lan_connect">Se connecter</string>

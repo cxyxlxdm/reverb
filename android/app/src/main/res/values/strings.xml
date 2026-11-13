@@ -272,6 +272,7 @@
     <string name="lan_own_address">本机地址，可让对方手动输入</string>
     <string name="lan_peers">附近的设备</string>
     <string name="lan_no_peers">还没发现设备。确认对方也打开了这个页面；找不到就直接输入对方屏幕上显示的地址。</string>
+    <string name="lan_peers_hint">点下面的设备即可配对</string>
     <string name="lan_peer_row">%1$s\n%2$s</string>
     <string name="lan_manual_hint">对方地址，如 192.168.1.5:47820</string>
     <string name="lan_connect">连接</string>

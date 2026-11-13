@@ -522,6 +522,18 @@ macOS 侧 2026-10-07 才补上(见 **H159**):`saveWithPanel` 原先返回 `Void`
 > Android `subscriptions.json` 从 7 条降到 6 条、`sync_tombstones.json` 里留下
 > `{"kind":"subscriptions","id":"https://example.com/reverb-probe.xml","deletedAt":…}` ——
 > 对端发来的条目被墓碑挡住,没有被"带回来"。
+>
+> **2026-11-13 面板与发现修复(用户反馈四条)**:
+> ① 鸿蒙「取消 / 一致,开始同步」点不动 —— 根因是 `onClick` 挂在 `Text` 上、命中区只有 46 px,
+> 改为 `Row` + 14vp 内边距(≈46vp);真机按行边缘点也能生效,两端确认后都显示「同步完成」(见 H275)。
+> ② Android 同网段发现不了鸿蒙 —— 系统 `mdnssd` 在 Pixel 3 上收不到组播,面板打开期间增持
+> `WifiManager.MulticastLock`(`CHANGE_WIFI_MULTICAST_STATE`,normal 权限),0.7 秒内列出
+> HUAWEI Mate 60,两端互列(见 H276)。
+> ③ 两端「附近的设备」下多一句「点下面的设备即可配对」。
+> ④ 手动地址为空时「连接」两端都置灰不可点(此前 Android 点了只报「地址格式不对:」,
+> 鸿蒙静默 return)。
+> 验收:两端面板互列 → 配对码一致 → 各点一次确认 → 「同步完成 / 两端已经一致」;
+> 按钮命中区用 `uitest dumpLayout` 的 `Row` bounds 与行边缘点击双重确认。
 
 - **同步哪六样**:订阅、收藏、听觉印记、批注、播放历史、收听统计。**下载与设置不参与** ——
   下载是逐设备的大文件,设置里含设备特定的路径/语言选择,合并只会造成"看起来同步了其实没有"。

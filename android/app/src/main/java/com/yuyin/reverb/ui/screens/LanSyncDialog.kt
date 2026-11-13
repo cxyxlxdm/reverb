@@ -275,6 +275,12 @@ private fun ListeningBody(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
+            // 光列名字没人知道可以点 —— 与鸿蒙同一句提示(lan_peers_hint)。
+            Text(
+                stringResource(R.string.lan_peers_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             for (peer in state.peers) {
                 Row(
                     Modifier
@@ -304,7 +310,11 @@ private fun ListeningBody(
             label = { Text(stringResource(R.string.lan_manual_hint)) }
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-            TextButton(onClick = onConnect) { Text(stringResource(R.string.lan_connect)) }
+            // 空串时置灰不可点:先前点下去只会得到「地址格式不对:」,一句没有信息量的失败
+            // (鸿蒙那边干脆静默 return,看起来像按钮坏了)。两端统一成"没地址就不可点"。
+            TextButton(onClick = onConnect, enabled = manual.isNotBlank()) {
+                Text(stringResource(R.string.lan_connect))
+            }
         }
         Text(
             stringResource(R.string.lan_tip),

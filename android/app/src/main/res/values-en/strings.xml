@@ -262,6 +262,7 @@
     <string name="lan_own_address">This device\u2019s address — the other device can enter it manually</string>
     <string name="lan_peers">Nearby devices</string>
     <string name="lan_no_peers">No devices yet. Make sure the other device has this page open, or enter the address shown on its screen.</string>
+    <string name="lan_peers_hint">Tap a device below to pair.</string>
     <string name="lan_peer_row">%1$s\n%2$s</string>
     <string name="lan_manual_hint">Other device address, e.g. 192.168.1.5:47820</string>
     <string name="lan_connect">Connect</string>

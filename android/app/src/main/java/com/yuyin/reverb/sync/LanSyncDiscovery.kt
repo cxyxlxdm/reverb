@@ -3,6 +3,7 @@ package com.yuyin.reverb.sync
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.net.wifi.WifiManager
 import android.os.Handler
 import android.os.Looper
 import com.yuyin.reverb.util.Logger
@@ -13,7 +14,8 @@ data class LanSyncPeer(val name: String, val host: String, val port: Int) {
 }
 
 /**
- * mDNS/DNS-SD 发现(`_reverb._tcp`),走系统 NSD 服务,**不引三方库、不加组播锁**。
+ * mDNS/DNS-SD 发现(`_reverb._tcp`),走系统 NSD 服务,**不引三方库**;
+ * 面板打开期间持一把 MulticastLock(**2026-11-13 起**,理由见 [acquireMulticastLock])。
  *
  * 三条容易踩的坑:
  * 1. **解析必须串行**。同一时刻只允许一个 `resolveService`,并发会回调
@@ -36,6 +38,7 @@ class LanSyncDiscovery(
     private val onError: (String) -> Unit
 ) {
     private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
+    private val appContext = context.applicationContext
 
     private val lock = Any()
     private val main = Handler(Looper.getMainLooper())
@@ -49,6 +52,7 @@ class LanSyncDiscovery(
     private var registration: NsdManager.RegistrationListener? = null
     private var discovery: NsdManager.DiscoveryListener? = null
     private var ownServiceName = ""
+    private var multicastLock: WifiManager.MulticastLock? = null
 
     fun advertise(serviceName: String, deviceName: String, port: Int) {
         ownServiceName = serviceName
@@ -82,8 +86,36 @@ class LanSyncDiscovery(
             }
     }
 
+    /**
+     * 面板打开期间持一把 MulticastLock,让 Wi-Fi 驱动放行组播帧。
+     *
+     * 2026-11-13 实测(同一 Wi-Fi,Mac 侧抓包):鸿蒙对 `_reverb._tcp` 查询的组播应答
+     * 是**正常**的(PTR+SRV+TXT+A 齐全),而本机 `mdnssd` 既不发查询、也从不回应,
+     * 日志里只有自己那条 `SERVICE_FOUND` —— Android 因此永远发现不了鸿蒙。系统 NSD 本该
+     * 自己持这把锁,但在这台 Pixel 3 上显然没把驱动过滤关掉。锁是**设备级**开关
+     * (不是 socket 级),所以对 mdnssd 的收包同样生效。只在这一页打开时持有,关闭即释放。
+     */
+    private fun acquireMulticastLock() {
+        if (multicastLock != null) return
+        runCatching {
+            val wifi = appContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            multicastLock = wifi?.createMulticastLock("reverb-lan-sync")?.apply {
+                setReferenceCounted(false)
+                acquire()
+            }
+            Logger.i(TAG, "MulticastLock ${if (multicastLock == null) "不可用" else "已持有"}")
+        }.onFailure { Logger.w(TAG, "MulticastLock 失败:${it.message}") }
+    }
+
+    private fun releaseMulticastLock() {
+        val l = multicastLock ?: return
+        multicastLock = null
+        runCatching { if (l.isHeld) l.release() }
+    }
+
     fun startDiscovery() {
         if (discovery != null) return
+        acquireMulticastLock()
         val listener = object : NsdManager.DiscoveryListener {
             override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) {
                 Logger.w(TAG, "发现启动失败 code=$errorCode")
@@ -129,6 +161,7 @@ class LanSyncDiscovery(
         stopAdvertising()
         discovery?.let { runCatching { nsd.stopServiceDiscovery(it) } }
         discovery = null
+        releaseMulticastLock()
         invalidate()
         synchronized(lock) {
             peers.clear()
