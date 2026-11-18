@@ -80,9 +80,10 @@ Xcode 又没有任何已登录账号,直接报 `No Accounts` / `No profiles for 
 ⚠️ **本机没有 JDK 17 —— 但不需要它。** 2026-10-24 换机(旧机 `MacBookPro11,4` / macOS 12 / 用户 `liang`
 → 新机 Apple Silicon / macOS 27 / 用户 `cxyxl`)之后,原先写死在本文与 `README.md`、`CLAUDE.md` 里的
 `/Users/liang/.java/jdk-17.0.12+7/Contents/Home` **整条路径不存在**。项目要的是 **language level 17**
-(`build.gradle` 的 `sourceCompatibility/targetCompatibility = VERSION_17` + `jvmTarget = '17'`),
-不是 JDK 17 这个运行时 —— 实测用 Temurin 21 出包全绿:编译门 exit 0、`build-release.sh` exit 0、
-解包审计 6/6 PASS(AGP 8.5.2 / Gradle wrapper 8.7 / Kotlin 1.9.24 都跑在 21 上)。逐条来源见 H208。
+(`build.gradle` 的 `sourceCompatibility/targetCompatibility = VERSION_17`;AGP 9 起内置 Kotlin 的 jvmTarget
+跟随这里,不再单独写 `kotlinOptions`)。10-24 实测用 Temurin 21 出包全绿:编译门 exit 0、`build-release.sh` exit 0、
+解包审计 6/6 PASS(当时 AGP 8.5.2 / Gradle wrapper 8.7 / Kotlin 1.9.24 都跑在 21 上;2026-11-15 已升到
+AGP 9.5.1 / Gradle 9.9.1 / Kotlin 2.2.10,仍跑在 Temurin 21 上,见 H282)。逐条来源见 H208。
 
 ⚠️ **`java_home -v 17` 在这台机器上会给你另一个版本(10-24 实测)。** 它**忽略版本参数**、
 直接返回当前注册的最新 JVM(Temurin 21)并 **exit 0**;`-v 99` 给的是同一个串。
@@ -761,7 +762,7 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 
 | 端 | 命令 | 判据 |
 |---|---|---|
-| Android(`app/src/test`) | `cd android && ./gradlew :app:testReleaseUnitTest` | `app/build/test-results/testReleaseUnitTest/*.xml` 里 failures / errors 都为 0 |
+| Android(`app/src/test`) | `cd android && ./gradlew :app:testDebugUnitTest` | `app/build/test-results/testDebugUnitTest/*.xml` 里 failures / errors 都为 0。⚠️ AGP 9 起无 `testReleaseUnitTest`(只建 debug 单测变体),别按旧任务名跑后把"任务不存在"当失败(见 H282) |
 | 鸿蒙(`entry/src/test`) | `export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk && /Applications/DevEco-Studio.app/Contents/tools/hvigor/bin/hvigorw test --mode module -p product=default -p buildMode=debug --no-daemon` | `entry/.test/default/intermediates/test/coverage_data/test_result.txt` 末行 `Failure: 0, Error: 0`。⚠️ 断言失败时 hvigor **仍打 BUILD SUCCESSFUL**,别拿退出码当判据 |
 | Swift 共享层(`macos/Tests/ReverbTests`,iOS 直接编译同一批源码) | `cd macos && swift test` | XCTest 汇总 exit 0 |
 
@@ -770,7 +771,7 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 
 | 改了什么 | 最小自证 | 不够的 |
 |---|---|---|
-| Android 任意 Kotlin | `:app:testReleaseUnitTest` 全绿 + `./gradlew :app:compileReleaseKotlin -q` exit 0(合并 flavor 后只有一份 release,H205) | 只跑 debug 变体 |
+| Android 任意 Kotlin | `:app:testDebugUnitTest` 全绿 + `./gradlew :app:compileReleaseKotlin -q` exit 0(合并 flavor 后只有一份 release,H205;AGP 9 下 debug 单测与 release 同源码,见 H282) | 只跑编译 |
 | Android 界面 / 播放 / 缓存 | 上面 + **装机跑一遍**对应路径 | 只看编译通过 |
 | 降级档相关(动 `CATALOG` / `SPECTRUM` / `HAS_ENGINE`) | 上面 + **解包 grep**(硬规矩 1)。**合并前这一行写的是「渠道裁剪相关」——渠道没了,但这条自证更严了:降级现在只是一行常量,改完不验包就没人拦得住** | 只改代码不验包 |
 | 鸿蒙任意 `.ets` | `hvigorw test` 全绿 + `assembleHap` BUILD SUCCESSFUL | 只跑 IDE 预览 |

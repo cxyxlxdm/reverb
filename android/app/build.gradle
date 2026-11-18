@@ -1,6 +1,6 @@
 plugins {
     id 'com.android.application'
-    id 'org.jetbrains.kotlin.android'
+    id 'org.jetbrains.kotlin.plugin.compose'
 }
 
 def keystorePropsFile = rootProject.file("keystore.properties")
@@ -11,7 +11,10 @@ if (keystorePropsFile.exists()) {
 
 android {
     namespace 'com.yuyin.reverb'
-    compileSdk 34
+    // 37 = Android 17。编译与目标都升到这一档(2026-11-14),行为变更见
+    // docs/TROUBLESHOOTING.md H282:edge-to-edge 本应用早已手动处理(`setDecorFitsSystemWindows(false)`
+    // + systemBarsPadding),真正要补的是局域网同步的 ACCESS_LOCAL_NETWORK 运行时授权。
+    compileSdk 37
 
     // 包名(1.0.1 起 Android 只有一个):com.yuyin.reverb.android。
     //   com.yuyin.reverb.android  全部 Android 分发 —— 官网 / GitHub 自分发 + 大陆商店
@@ -34,7 +37,7 @@ android {
     defaultConfig {
         applicationId "com.yuyin.reverb.android"
         minSdk 26
-        targetSdk 34
+        targetSdk 37
         versionCode 9
         versionName "1.0.8"
         vectorDrawables {
@@ -83,9 +86,14 @@ android {
         }
     }
 
-    applicationVariants.all { variant ->
-        variant.outputs.all { output ->
-            output.outputFileName = "Reverb(余音).apk"
+    // AGP 9 删掉了 `android.applicationVariants` 这套老接口(未知属性),
+    // 产物改名走新的 Variants API。名字本身不是契约:build-release.sh 用 `find … -name '*.apk'`
+    // 取产物,人眼认的是拷进 dist/ 之后的名字。
+    androidComponents {
+        onVariants(selector().all()) { variant ->
+            variant.outputs.each { output ->
+                output.outputFileName.set("Reverb(余音).apk")
+            }
         }
     }
 
@@ -93,15 +101,9 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = '17'
-    }
     buildFeatures {
         compose true
         buildConfig true
-    }
-    composeOptions {
-        kotlinCompilerExtensionVersion '1.5.14'
     }
     packaging {
         resources {

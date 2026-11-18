@@ -2,9 +2,10 @@ import type common from '@ohos.app.ability.common';
 import { LineHeight, Scheme, TypeScale, withAlpha } from '../theme/Theme';
 import { L } from '../util/L';
 import { AppContainer } from '../AppContainer';
-import { LanSyncController, LanSyncPhase, LanSyncViewState, LanSyncPeer } from '../sync/LanSyncController';
+import { LanSyncController, LanSyncPhase, LanSyncViewState, LanSyncPeer, LanHandoffState } from '../sync/LanSyncController';
 import { LanSyncFail } from '../sync/LanSyncWire';
 import { LanSyncResult, LanSyncStage } from '../sync/LanSyncSession';
+import { LanPeerHint } from '../sync/LanSyncLive';
 
 /**
  * 「局域网同步」面板(Android `LanSyncDialog.kt` 的同构体)。
@@ -31,6 +32,12 @@ export struct LanSyncDialog {
 
   @State private view: LanSyncViewState = new LanSyncViewState();
   @State private manual: string = '';
+  /**
+   * 交接状态:与 `view` 分开,因为它每秒都在动(心跳 + 位置外推)。
+   * 本组件只把它**传给子组件**;字段级刷新由 `HandoffSection` 的 `@ObjectLink` 承担 ——
+   * 挂在 `view` 上就是每次心跳重建整个面板(硬规矩 7)。
+   */
+  @State private handoff: LanHandoffState = new LanHandoffState();
 
   private app: AppContainer = AppContainer.get();
   private controller: LanSyncController | null = null;
@@ -42,6 +49,7 @@ export struct LanSyncDialog {
       this.view = s;
     });
     this.controller = c;
+    this.handoff = c.handoff;
     c.start();
   }
 
@@ -281,6 +289,19 @@ export struct LanSyncDialog {
           this.labelLine(L.s('lan_done_nothing'), this.scheme.onSurfaceVariant)
         }
       }
+      // 交接是同步之后的「加时赛」:对端支持时才出现。老版本对端没有这一段,
+      // 结果页与以前完全一样。
+      if (this.handoff.available || this.handoff.note.length > 0) {
+        HandoffSection({
+          handoff: this.handoff,
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          onTake: (): void => {
+            const c = this.controller;
+            if (c !== null) c.takePlayback();
+          }
+        })
+      }
     }
     .width('100%')
   }
@@ -408,5 +429,98 @@ export struct LanSyncDialog {
     }
     .width('100%')
     .height('100%')
+  }
+}
+
+/**
+ * 同步完成之后的交接区:另一台在播什么、能不能接过来。
+ *
+ * **独立子组件而不是 @Builder**:这里的值每秒都在变(心跳 + 位置外推)。`@ObjectLink`
+ * 让重渲只落在这一块,而不是整个面板(硬规矩 7;与播放页把进度条独立成 `SeekBar` 同一个做法)。
+ */
+@Component
+struct HandoffSection {
+  @ObjectLink handoff: LanHandoffState;
+  @Prop scheme: Scheme;
+  @Prop fontScale: number;
+  onTake: () => void = () => {};
+
+  private clockText(ms: number): string {
+    const total = Math.max(0, Math.floor(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor(total % 3600 / 60);
+    const s = total % 60;
+    const two = (n: number): string => n < 10 ? `0${n}` : `${n}`;
+    return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${m}:${two(s)}`;
+  }
+
+  /// 本机已经在放这一集(刚接手成功)时不再摆按钮 —— 按下去只会从当前位置重开一遍。
+  private alreadyHere(hint: LanPeerHint | null): boolean {
+    if (hint === null) return false;
+    return this.handoff.localPlayingNow && this.handoff.localEpisodeId === hint.episode.id;
+  }
+
+  build() {
+    Column() {
+      // ⚠️ 这段**必须内联在 build() 里**,不能包成 `@Builder hintLine(hint)`。
+      // 2026-11-15 真机实测:传成员表达式(`this.handoff.peerHint`)给 @Builder 是**按值**传,
+      // `@ObjectLink` 更新后 build() 会重跑、按钮会跟着出现/消失,但 @Builder 里那两行 Text
+      // **停在首次渲染的形态** —— 屏幕上一直写「另一台设备还没有在播放任何内容。」,
+      // 而它下面「在此设备继续」是可点的(点下去真的接过去了)。
+      // 判据:对方开始播放后,这一行必须在 1~2 秒内变成「正在播放/暂停在这一集 + 集名 · 位置」。
+      if (this.handoff.peerHint !== null) {
+        Text(L.s(this.handoff.peerHint.playing ? 'lan_handoff_playing' : 'lan_handoff_paused'))
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.scheme.primary)
+          .width('100%')
+          .margin({ top: 10 })
+        Text(`《${this.handoff.peerHint.episode.title}》 · ` +
+          (this.handoff.peerHint.approximate
+            ? L.f('lan_handoff_approx', this.clockText(this.handoff.peerHint.positionMs))
+            : this.clockText(this.handoff.peerHint.positionMs)))
+          .fontSize(TypeScale.body * this.fontScale)
+          .lineHeight(TypeScale.body * this.fontScale * LineHeight.body)
+          .fontColor(this.scheme.onBackground)
+          .width('100%')
+          .margin({ top: 2 })
+      } else {
+        Text(L.s('lan_handoff_none'))
+          .fontSize(TypeScale.caption * this.fontScale)
+          .lineHeight(TypeScale.caption * this.fontScale * LineHeight.label)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .width('100%')
+          .margin({ top: 10 })
+      }
+      if (this.handoff.note.length > 0) {
+        Text(this.handoff.note)
+          .fontSize(TypeScale.caption * this.fontScale)
+          .lineHeight(TypeScale.caption * this.fontScale * LineHeight.label)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .width('100%')
+          .margin({ top: 4 })
+      }
+      if (this.handoff.peerHint !== null && !this.alreadyHere(this.handoff.peerHint)) {
+        Row() {
+          Text(this.handoff.takingOver ? L.s('lan_handoff_taking') : L.s('lan_handoff_take'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.handoff.takingOver
+              ? withAlpha(this.scheme.primary, 0.38)
+              : this.scheme.primary)
+            .padding({ left: 14, right: 14, top: 14, bottom: 14 })
+            .onClick(() => {
+              if (!this.handoff.takingOver) this.onTake();
+            })
+        }
+        .width('100%')
+        .justifyContent(FlexAlign.End)
+      }
+      Text(L.s('lan_handoff_boundary'))
+        .fontSize(TypeScale.caption * this.fontScale)
+        .lineHeight(TypeScale.caption * this.fontScale * LineHeight.label)
+        .fontColor(this.scheme.onSurfaceVariant)
+        .width('100%')
+        .margin({ top: 4 })
+    }
+    .width('100%')
   }
 }

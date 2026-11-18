@@ -187,7 +187,56 @@ struct LanSyncView: View {
                 Text("两端已经一致，没有新增内容。")
                     .foregroundStyle(.secondary)
             }
+
+            if controller.handoffLive {
+                Divider().padding(.vertical, 4)
+                handoff
+            }
         }
+    }
+
+    /// 同步之后的「在这台设备接着听」。**不自动播、不自动接管** ——
+    /// 用户点了才发请求,对方先暂停并回最终位置,本机才 seek 起播。
+    @ViewBuilder
+    private var handoff: some View {
+        if let hint = controller.peerHint {
+            Text(hint.playing ? "另一台设备正在播放" : "另一台设备暂停在这一集")
+                .font(.subheadline.weight(.semibold))
+            (Text(verbatim: "《\(hint.episode.title)》 · ")
+                + Text(hint.approximate ? "约 " : "")
+                + Text(verbatim: clockText(hint.positionMs)))
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            if !(controller.localPlayingNow && controller.localEpisodeId == hint.episode.id) {
+                Button(controller.takingOver ? "正在接手…" : "在此设备继续") {
+                    controller.takePlayback()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(controller.takingOver)
+            }
+        } else {
+            Text("另一台设备还没有在播放任何内容。")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        if let note = controller.handoffNote {
+            Text(note)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        Text("交接只在两台设备都停在这个页面、且另一台正在播放时可用；直播流不参与交接。")
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+    }
+
+    private func clockText(_ ms: Int) -> String {
+        let total = max(0, ms) / 1000
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        return h > 0
+            ? String(format: "%d:%02d:%02d", h, m, s)
+            : String(format: "%d:%02d", m, s)
     }
 
     private func failed(fail: LanSyncFail, detail: String) -> some View {

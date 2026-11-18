@@ -1026,14 +1026,14 @@ UI/文案一变,截图与对外物料就会过期 —— 但它们是本地运�
 | iOS 运行验收(桌面组件上主屏、局域网面板、逐字稿搜索导出) | 模拟器只到"状态文件写入";无图形界面可加卡片/点击 | 需要人点一下,或真机(本机 WDA 装不上) |
 | iOS TestFlight 上传 | 未跑 | 免费 Personal Team 拿不到分发描述文件;要 Apple Developer Program 会员 + App Store Connect 记录 |
 | 删除墓碑的两机整轮实测 | ✅ **2026-11-13 已真机整轮跑通**(Mate 60 ↔ Pixel 3,debug 包):鸿蒙退订一条 → 同步 → Android `subscriptions.json` 7→6,且 `sync_tombstones.json` 留下对端那条记录(见 `CHANGELOG.md` 同日节) | 无 |
-| 四端 1.0.8 发布包 | **2026-11-13 晚四端都已按最终源码重打**(判据见各自 `dist/` 的字节数与 `ls -lT`):Android `reverb.apk` **270,259,537 B @21:24:43 sha256 `7d2b0813…`**(含 ECDH 修复,`aapt2 dump permissions` = **12 项**;解包 4/1/13;`-newer` 0 命中);鸿蒙 `reverb.app` **182,007,692 B @21:30:29 sha256 `7dd43a10…`** + `reverb-symbol.zip` 14,952,613 B(嵌套 hap 内模型+词表 2、native 3;`-newer` 0 命中);macOS `余音-Reverb-1.0.8-universal.dmg` **6,203,997 B @21:34:01 sha256 `8cbc0070…`**(`package.sh` 断言全过;`-newer` 0 命中);iOS 编译门 7 条全过 + 未签名归档 ipa `reverb-ios-1.0.8-2-unsigned.ipa` **2,911,408 B @21:34:40 sha256 `388cbc34…`**(`-newer` 0 命中) | Android / 鸿蒙 / macOS 可按硬规矩 20 上传;**macOS 那份要改名为 `Reverb.dmg` 再传**(应用内更新按这个名字挑资产,漏传 = macOS 端从此查不到更新);**iOS 的 ipa 没有签名**(免费 Personal Team 拿不到分发描述文件),只能归档与结构校验,TestFlight 仍等会员。⚠️ 每次重打 Android 前先归档 mapping(H204/H205;本轮已归档 21:24 前那份) |
+| 四端 1.0.8 发布包 | **2026-11-13 晚四端都已按最终源码重打**(判据见各自 `dist/` 的字节数与 `ls -lT`):Android `reverb.apk` **270,259,537 B @21:24:43 sha256 `7d2b0813…`**(含 ECDH 修复,`aapt2 dump permissions` = **12 项**;解包 4/1/13;`-newer` 0 命中);鸿蒙 `reverb.app` **182,007,692 B @21:30:29 sha256 `7dd43a10…`** + `reverb-symbol.zip` 14,952,613 B(嵌套 hap 内模型+词表 2、native 3;`-newer` 0 命中);macOS `余音-Reverb-1.0.8-universal.dmg` **6,203,997 B @21:34:01 sha256 `8cbc0070…`**(`package.sh` 断言全过;`-newer` 0 命中);iOS 编译门 7 条全过 + 未签名归档 ipa `reverb-ios-1.0.8-2-unsigned.ipa` **2,911,408 B @21:34:40 sha256 `388cbc34…`**(`-newer` 0 命中)。**⚠️ 2026-11-15 targetSdk 37 升级后又重打过 Android 一份**:270,179,532 B @21:04:22 sha256 `9442a1bc…`、权限 13 项(见 H282)—— 发版以这一份为准,其余三端未动 | Android / 鸿蒙 / macOS 可按硬规矩 20 上传;**macOS 那份要改名为 `Reverb.dmg` 再传**(应用内更新按这个名字挑资产,漏传 = macOS 端从此查不到更新);**iOS 的 ipa 没有签名**(免费 Personal Team 拿不到分发描述文件),只能归档与结构校验,TestFlight 仍等会员。⚠️ 每次重打 Android 前先归档 mapping(H204/H205;11-15 重打前那份已归档为 `dist/_backup-1.0.8-preTargetSdk37-20261115/`,含 apk + mapping) |
 | `CHANGELOG.md` 1.0.8 整段重写为对外口径 + `docs/RELEASE-NOTES.md` | **2026-11-13:`docs/RELEASE-NOTES.md` 的 1.0.8 段已起草**(标题写「待发布」,只写新增 / 修复 / 说明,不含验收读数);`CHANGELOG.md` 仍是内部账本(硬规矩 19),1.0.8 各节齐全 | 发版当天把标题改成日期、按最终包核一遍措辞(尤其"待发布"三字与版本号),再贴到发布页 |
-| 截图整套重拍 + 商店图 / 官网 `shots/` 两条出口 | 未做 | 界面动过(章节、逐字稿工具条、组件只是桌面层);按硬规矩 20 |
-| 官网正文 / 隐私页 | 隐私页已同步删除墓碑口径(11-12) | 首页是否需要提局域网同步,发版前按硬规矩 5 核一遍 |
-| 灵动岛 / Live Activity(iOS) | 未做,且非本轮必需 | 组件形态已满足"桌面可见 + 可控";要做另立一项 |
+| 截图整套重拍 + 商店图 / 官网 `shots/` 两条出口 | ✅ **2026-11-15 两端整套重拍完成**:Android master 1080×2160(22:59 落盘)+ 发布图 8 张 1080×1920;鸿蒙 master 1216×2688(23:02–23:06)+ 发布图 8 张(补边色 7 张 `#141E20`、04-library `#151D1F` 单独导);官网 `site/reverb/shots/` 4 张 407×900 同源导出;**两份 kit 已用当前 `dist/` 重建**(Android zip 182,448,728 B / 鸿蒙 201,388,449 B,均 19 条目,三方核验 `diff -r` 零差异)。与 1.0.7 旧批逐张 DIFF(两端各 8/8) | **剩下的是维护者动作**:商店后台上传、官网逐文件 `--dry-run` 部署。口径与读数见 `docs/STORE-OPS.md` §十九 |
+| 官网正文 / 隐私页 | 隐私页已同步删除墓碑口径(11-12);**2026-11-15`docs/PRIVACY.md` + `site/reverb/privacy.html` 已补播放交接**(当前集标题/封面/音频地址/位置/播放态,同一条加密连接、不进六分区,不自动接管) | 首页是否需要提这种"接着听",发版前按硬规矩 5 再核一遍 |
+| 灵动岛 / Live Activity(iOS) | ✅ **2026-11-15 代码完成、编译门 8 条全过,模拟器系统侧实跑** | 共享契约 `WidgetContract/PlaybackActivity.swift` + 扩展 UI `ReverbWidget/PlaybackLiveActivity.swift` + App 侧 `PlaybackLiveActivityBridge`;锁屏行与灵动岛三形态都被渲染器判 `LIVE`,稳态播放 0 次 update,结束 / 换集各一拍;`Info.plist` 的 `NSSupportsLiveActivities` 已进编译门(第 2b 条)。**未验**:实际观感与按键点按(本机无 Simulator 图形界面)、真机(签名 `No Accounts` 挡住)。复查口:H283、`docs/IOS.md` 同节 |
 | 鸿蒙局域网同步 | **2026-11-13 已接入并真机跑通**(Mate 60 ↔ Pixel 3,双向合并 + 删除墓碑) | 自动发现**双向都已成立**(Android 侧补 `MulticastLock` 后 0.7 s 发现鸿蒙、两端面板互相列名,见 H276);手动填地址兜底**已实测**(不带端口 → 默认 47820,见 FEATURES 同日晚节);鸿蒙「连接」按钮永远灰已修(H277);**三端 ECDH 改为每会话临时密钥**(H278,修复后连续两轮 SAS `974 870` → `020 444`) |
-| Android 17 `ACCESS_LOCAL_NETWORK` 适配 | 未做 | 目标平台升到 36 时就地补;当前不影响 1.0.8 |
-| 播放进度跨设备交接(P1) | 未做 | 研究文档 §6;不在 1.0.8 承诺范围 |
+| Android 17 `ACCESS_LOCAL_NETWORK` 适配 | ✅ **2026-11-15 已完成**:compileSdk / targetSdk 34 → **37**,工具链 AGP 8.5.2 → **9.5.1**、Gradle wrapper 8.7 → **9.9.1**、Kotlin 1.9.24 → 内建 **2.2.10**(Compose 编译器插件同版本);manifest 加 `ACCESS_LOCAL_NETWORK`,同步入口按 `SDK_INT >= 37` 运行时请求,拒绝弹 `lan_perm_denied`(五语种)。验收见 `docs/TROUBLESHOOTING.md` **H282**(API 37 模拟器拒绝/允许两条路径 + Pixel 3 Android 12 无弹窗 + 授权后与 Pixel 3 配对码 `542 933`);解包 `reverb.apk` **270,179,532 B @21:04:22 sha256 `9442a1bc…`**、`aapt2 dump permissions` = **13 项**、`-newer` 0 命中(**这是 21:04 那轮的读数;交接重打后的当前包见 `CHANGELOG.md` 同版末条**) | 未验:大屏(600dp+)强制可调整性只做了 manifest 核对,**没有平板模拟器实跑**;Android 17 的其它行为变更未逐条评估 |
+| 播放进度跨设备交接(P1) | ✅ **2026-11-15 四端代码完成,Android ↔ 鸿蒙真机双向跑通** | 复用同步那条已认证连接(`hello` 带 `live: true`,老版本忽略);1 Hz 状态 + 暂停/跳转/换集补帧;取过去时播放方先暂停并回 `taken`,请求方按 `pos + rtt/2 × rate`(上限整集结束前 1.5 s)seek 起播;**从不自动接管 / 自动播放**;直播流不参与。读数:Android `state=3 position=371601` → 暂停 `375090`;鸿蒙日志 `交接暂停 … at=442778ms` → Android `state=3 position=445799`。附修一个只在鸿蒙出现的刷新问题(H284)。**未验**:macOS / iOS 面板上的交接运行(Apple 侧只过编译) | 研究文档 §6;隐私版本同轮 +1(Android / 鸿蒙 5,macOS / iOS 6) |
 | 回滚预案 | **2026-11-13 已落文 `docs/ROLLBACK.md`**(取件处、四渠道分步动作、回滚包验收、数据兼容) | 口径是"用旧代码出更高版本";**真正回滚一次与商店后台上操作仍未演练**,文末 §八 如实列着 |
 
 ---
@@ -1093,8 +1093,10 @@ UI/文案一变,截图与对外物料就会过期 —— 但它们是本地运�
   **2026-11-12:同一网段(mDNS 跨端发现)已补测成立** —— Android 换到 H3C 后与 Mac 同段,
   Android 面板 3 秒内列出 Mac 并完成配对合并、探针反向连手机也通(走的是新增的 QU 单播通道,
   该 AP 只放行一个方向的组播,见 H265);`dns-sd` 从 Mac 侧解析得到手机的 `Android.local.:…`。
-  **仍未做**:iOS/macOS App 面板的运行与点击(Apple 侧仍是探针 + `dns-sd`)、
-  播放进度交接(P1)、Android 17 的 `ACCESS_LOCAL_NETWORK` 适配。
+  **仍未做**:iOS/macOS App 面板的运行与点击(Apple 侧仍是探针 + `dns-sd`)。
+  ~~播放进度交接(P1)、Android 17 的 `ACCESS_LOCAL_NETWORK` 适配~~ **这两项已于 2026-11-15 落地**:
+  交接在 Android ↔ 鸿蒙真机双向跑通(见三-A 该行与 H284),Android 17 适配见 H282;
+  **剩余的是 macOS / iOS 面板上的交接运行**。
   **2026-11-12:删除墓碑已落地**(墙钟版,90 天,`tombstones` 段随快照传;Android 7 条单测 +
   Apple 2 条纯函数判据全绿,三端编译门同轮通过)。**未做**:两台真机上的「A 删 B 跟着删」整轮实测、
   HLC 升级(现在墓碑优先于对端快照,"A 删 / B 重订"这一次仍会被删)。
@@ -1108,7 +1110,7 @@ UI/文案一变,截图与对外物料就会过期 —— 但它们是本地运�
 |---|---|---|---|
 | **云端备份 / 换机恢复(三端)** | 存在四条约束全保的路线(macOS 直写 iCloud Drive 目录 / Android SAF 目录导出 / 鸿蒙 Backup Kit 收尾),代价是 UX 从「静默自动」变「一键备份 + 装回一键恢复」 | **要「装回即自动同步」就必须破约束一**(WebDAV / 鸿蒙 Cloud Kit),连带六处口径同步翻(硬规矩 5/19)⇒ 等用户拍板;另有 4 条要人工在 AGC 控制台/真机核实 | `docs/research/2026-10-18-cloud-backup.md` |
 | ~~**B 站视频转播客(搜索 → 列表 → 播放)**~~ | **2026-10-28 已拍板,2026-10-29 三端代码实现完成,移出入口** —— 结论翻面:不建 Worker,**由设备直连 B 站公开接口**,零后端照旧。范围收成「粘链接单集 + 关键词搜单集」,订阅 UP 主不做(P2 由用户拍板砍掉) | 1.0.6 已实现;Android 真机六步验过,鸿蒙/macOS 只过编译(见三-A 那一行) | `docs/research/2026-09-15-bilibili-audio-proxy.md` |
-| **局域网同步 + 播放交接(四端)** | mDNS 发现 + TCP 帧 + ECDH/AES-GCM + 六位配对码;数据复用备份 v1 合并。**同网段能做,Spotify 式跨网络无感接力不能**(需账号/云端)。真难点是删除墓碑与进度冲突,不是传输 | **P0 已实现(2026-11-11,Android + macOS/iOS;鸿蒙 2026-11-13 并入并真机跑通)**。Android 真机 ↔ Apple 共享层探针双向跑通;**2026-11-12 同网段发现与双向直连已补测**(见 `docs/research/2026-11-11-lan-sync.md` 与 H265);**同日补了删除墓碑**(墙钟版 90 天,未上 HLC);剩余:iOS/macOS 面板未实跑、播放交接(P1)、Android 17 的 `ACCESS_LOCAL_NETWORK` 适配 | `docs/research/2026-11-11-lan-sync.md` |
+| **局域网同步 + 播放交接(四端)** | mDNS 发现 + TCP 帧 + ECDH/AES-GCM + 六位配对码;数据复用备份 v1 合并。**同网段能做,Spotify 式跨网络无感接力不能**(需账号/云端)。真难点是删除墓碑与进度冲突,不是传输 | **P0 已实现(2026-11-11,Android + macOS/iOS;鸿蒙 2026-11-13 并入并真机跑通)**。Android 真机 ↔ Apple 共享层探针双向跑通;**2026-11-12 同网段发现与双向直连已补测**(见 `docs/research/2026-11-11-lan-sync.md` 与 H265);**同日补了删除墓碑**(墙钟版 90 天,未上 HLC);**播放交接 2026-11-15 已落地并在 Android ↔ 鸿蒙双向实测**;Android 17 的 `ACCESS_LOCAL_NETWORK` 适配亦已完成(H282);剩余:iOS/macOS 面板未实跑、跨设备自动接管(有意不做) | `docs/research/2026-11-11-lan-sync.md` |
 
 **上面那条不是「没调研」,是「调研完了等着被拒绝或被拍板」。** 拍板前不要开工。
 

@@ -782,6 +782,36 @@ object PlayerController {
         play(episode)
     }
 
+    /** 交接用:播放器此刻的**精确**位置。`position` 那个 StateFlow 是每约 500ms 跳一格,
+     *  交接要的是「按下暂停那一刻」,差半秒接手方会听出重复。 */
+    fun currentPositionMs(): Long {
+        val c = controller ?: return _position.value
+        return if (c.currentPosition >= 0) c.currentPosition else _position.value
+    }
+
+    fun currentDurationMs(): Long {
+        val c = controller ?: return _duration.value
+        return if (c.duration > 0) c.duration else _duration.value
+    }
+
+    /**
+     * 播放交接的「让位」:先把声音停掉,再把**停下来的那一刻**位置交出去。
+     *
+     * 顺序不能反 —— 先取位置再暂停,交出去的是暂停前那一瞬,接手方跳过去会往回退半秒重听。
+     * 直播流没有时间轴,不参与交接(返回 null,对端显示「没有可交接的内容」)。
+     * **必须在主线程调用**:`controller` 的命令走 App 的 Looper。
+     */
+    fun pauseForHandoff(): Pair<Episode, Long>? {
+        val ep = _current.value ?: return null
+        if (ep.isLive) return null
+        val c = controller
+        if (c?.isPlaying == true) c.pause()
+        val ms = currentPositionMs()
+        _position.value = ms
+        log.i(TAG, "交接暂停 id=${ep.id} at=${ms}ms")
+        return ep to ms
+    }
+
     /**
      * 从一个列表开始播放:该列表成为队列,决定上/下一集。startIndex 为起播位置。
      *

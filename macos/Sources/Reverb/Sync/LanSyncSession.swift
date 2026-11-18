@@ -52,6 +52,9 @@ final class LanSyncSession {
     private let stage: Stage
 
     private var peerName = ""
+    /// 对方 `hello` 里有没有报「同步完可以继续交接播放」。老版本没有这个键:
+    /// 它们在同步完成后直接断开,本端就不会白等一条永远不会来的状态帧。
+    private(set) var peerSupportsLive = false
 
     init(
         identity: LanSyncIdentity.Material,
@@ -106,7 +109,10 @@ final class LanSyncSession {
             "id": identity.deviceId,
             "name": identity.name,
             "pub": LanSyncCrypto.base64(LanSyncCrypto.encodePublicKey(ephemeral.publicKey)),
-            "nonce": LanSyncCrypto.base64(nonce)
+            "nonce": LanSyncCrypto.base64(nonce),
+            // 交接是同步之后的**加时赛**:同一把会话密钥、同一条 TCP。
+            // 老版本忽略这个键,同步完照旧断开,不会影响它们。
+            "live": true
         ])
         let hello: [String: Any]
         do {
@@ -145,7 +151,29 @@ final class LanSyncSession {
         channel.useKey(LanSyncCrypto.sessionKey(shared: shared, clientNonce: clientNonce, serverNonce: serverNonce))
         let raw = (hello["name"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         peerName = String(raw.prefix(64)).isEmpty ? "设备" : String(raw.prefix(64))
+        peerSupportsLive = (hello["live"] as? Bool) == true
         return shared
+    }
+
+    /// 同步完成之后,把同一条已认证连接交给交接层。对端不支持时返回 nil(照旧立即断开)。
+    func makeLive(
+        provider: @escaping LanSyncLive.Provider,
+        pauseForTake: @escaping LanSyncLive.PauseForTake,
+        onPeer: @escaping LanSyncLive.OnPeer,
+        onTaken: @escaping LanSyncLive.OnTaken,
+        onEnded: @escaping LanSyncLive.OnEnded
+    ) -> LanSyncLive? {
+        guard peerSupportsLive else { return nil }
+        let ch = channel
+        return LanSyncLive(
+            send: { frame in try await ch.send(frame) },
+            receive: { try await ch.receive() },
+            provider: provider,
+            pauseForTake: pauseForTake,
+            onPeer: onPeer,
+            onTaken: onTaken,
+            onEnded: onEnded
+        )
     }
 
     // MARK: - 两程

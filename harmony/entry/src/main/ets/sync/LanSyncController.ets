@@ -10,6 +10,10 @@ import { LanSyncChannel, LanSyncException, LanSyncFail, FrameSender } from './La
 import { LanSyncSession, LanSyncStage, LanSyncResult, LanSyncUiBridge } from './LanSyncSession';
 import { LanSyncIdentity, LanSyncMaterial } from './LanSyncIdentity';
 import { LanSyncMerge } from './LanSyncMerge';
+import { LanSyncLive, LanPlaybackStatus, LanPeerHint, LanClockEstimator } from './LanSyncLive';
+import { PlayerController } from '../playback/PlayerController';
+import { Episode } from '../model/Models';
+import { L } from '../util/L';
 
 /** 手动输入的连接目标。 */
 export class LanSyncTarget {
@@ -88,6 +92,23 @@ export class LanSyncViewState {
 }
 
 /**
+ * 同步完成之后的「加时赛」状态:另一台在播什么、能不能接过来。
+ *
+ * **为什么不并进 [LanSyncViewState]**:那个对象只在阶段变化时换值;而这里的心跳与位置
+ * 每秒都在动。并进去就是每次心跳把整个面板重建一遍(硬规矩 7 的同一条道理)。
+ * 这个类是 `@Observed`,界面用 `@ObjectLink` 只重建交接那一小块。
+ */
+@Observed
+export class LanHandoffState {
+  available: boolean = false;
+  peerHint: LanPeerHint | null = null;
+  note: string = '';
+  takingOver: boolean = false;
+  localPlayingNow: boolean = false;
+  localEpisodeId: string = '';
+}
+
+/**
  * 局域网同步的总控(鸿蒙版)。一台设备上**同时**做服务端和客户端。
  *
  * 与 Android `LanSyncController` 同一套协议(端口 47820、mDNS 服务类型 `_reverb._tcp`、
@@ -125,6 +146,19 @@ export class LanSyncController {
   private runToken: number = 0;
   private ownServiceName: string = '';
 
+  /**
+   * 交接通道与其状态。`handoff` 由本类持有、对话框拿到**同一个引用**并用 `@ObjectLink`
+   * 观察 —— 心跳是每秒级的量,不能塞进按阶段换值的 `LanSyncViewState`(硬规矩 7)。
+   */
+  readonly handoff: LanHandoffState = new LanHandoffState();
+  private live: LanSyncLive | null = null;
+  /**
+   * 当前会话那条 socket 的关闭口。面板关掉时要靠它把**阻塞在 receive 上**的交接读循环
+   * 唤醒 —— 只把 channel 置 null 不会让 await 结束,读循环会一直挂到进程退出。
+   */
+  private closeCurrent: (() => Promise<void>) | null = null;
+  private takeTimeout: number = -1;
+
   constructor(ctx: common.UIAbilityContext, app: AppContainer, onState: (s: LanSyncViewState) => void) {
     this.ctx = ctx;
     this.app = app;
@@ -141,6 +175,7 @@ export class LanSyncController {
     if (this.running) return;
     this.running = true;
     this.stopping = false;
+    this.resetHandoff();
     const token = ++this.runToken;
     try {
       const m = await this.identity.material();
@@ -175,6 +210,17 @@ export class LanSyncController {
     this.runToken++;
     this.closeServer();
     this.stopDiscovery();
+    // 先停定时器、再断 socket:读循环靠 socket 关闭唤醒(见 closeCurrent 的注释)。
+    const live = this.live;
+    this.live = null;
+    if (live !== null) live.stop();
+    const closer = this.closeCurrent;
+    this.closeCurrent = null;
+    if (closer !== null) {
+      closer().catch((e: Error) => Log.w('LanSync', `关闭连接失败:${e.message}`));
+    }
+    this.cancelTakeTimeout();
+    this.resetHandoff();
     this.channel = null;
     this.busy = false;
     const w = this.confirmWaiter;
@@ -459,6 +505,7 @@ export class LanSyncController {
       (): Promise<string> => LanSyncMerge.build(this.app),
       (json: string): Promise<Int32Array> => LanSyncMerge.apply(this.app, json)
     );
+    this.closeCurrent = close;
     try {
       const result = await session.run();
       this.state = new LanSyncViewState();
@@ -468,6 +515,17 @@ export class LanSyncController {
       this.state.peers = this.peers.slice(0);
       this.state.result = result;
       this.onState(this.state);
+      // 同步之后的「加时赛」:复用同一条已认证的连接。老版本对端没有 `live` 声明,
+      // 同步完就断开;这里读到 false 就直接进 finally 收连接。
+      if (session.peerSupportsLive && !this.stopping) {
+        const live = this.makeLive(ch);
+        this.live = live;
+        this.handoff.available = true;
+        this.handoff.note = '';
+        Log.i('LanSync', `同步完成,进入交接通道 peer=${result.peerName}`);
+        await live.run();
+        this.live = null;
+      }
     } catch (e) {
       if (!this.stopping) {
         if (e instanceof LanSyncException) {
@@ -493,6 +551,124 @@ export class LanSyncController {
       if (w !== null) w(false);
       await close();
     }
+  }
+
+  // ---- 播放交接 ----
+
+  /**
+   * 把已认证的连接交给交接层。回调里统一做"数据层 → 播放器"的翻译,
+   * 协议层(`LanSyncLive`)不认识 `PlayerController`,也不该认识。
+   */
+  private makeLive(ch: LanSyncChannel): LanSyncLive {
+    return new LanSyncLive(
+      (f: Record<string, Object>): Promise<void> => ch.send(f),
+      (): Promise<Record<string, Object>> => ch.receive(0),
+      (): Promise<LanPlaybackStatus | null> => this.localPlaybackStatus(),
+      (): Promise<LanPlaybackStatus | null> => this.pauseForTake(),
+      (hint: LanPeerHint | null, clock: LanClockEstimator): void => this.onPeerHint(hint),
+      (ep: Episode, positionMs: number): void => this.applyTaken(ep, positionMs),
+      (): void => this.onLiveEnded()
+    );
+  }
+
+  /**
+   * 用户点「在此设备继续」。**只发请求**;等对方先暂停并回最终位置,再由 [applyTaken] 起播。
+   * 两台同时出声是这类功能最典型的翻车方式(研究文档 §6),所以这里没有"本机先播"的分支。
+   */
+  takePlayback(): void {
+    const live = this.live;
+    if (live === null || this.handoff.peerHint === null || this.handoff.takingOver) return;
+    this.handoff.takingOver = true;
+    this.handoff.note = '';
+    this.cancelTakeTimeout();
+    this.takeTimeout = setTimeout((): void => {
+      this.takeTimeout = -1;
+      live.cancelTake();
+      if (!this.handoff.takingOver) return;
+      this.handoff.takingOver = false;
+      this.handoff.note = L.s('lan_handoff_timeout');
+    }, LanSyncController.TAKE_TIMEOUT_MS);
+    live.allowTakeAgain();
+    live.take().catch((e: Error) => {
+      Log.w('LanSync', `交接请求发送失败:${e.message}`);
+    });
+  }
+
+  private cancelTakeTimeout(): void {
+    if (this.takeTimeout >= 0) {
+      clearTimeout(this.takeTimeout);
+      this.takeTimeout = -1;
+    }
+  }
+
+  private localPlaybackStatus(): Promise<LanPlaybackStatus | null> {
+    const p = PlayerController.get();
+    const ep = p.current;
+    // 直播流不参与交接:它没有时间轴,交接过去只会从头开始放一条流。
+    if (ep === null || ep.isLive === true) return Promise.resolve(null);
+    const s = new LanPlaybackStatus();
+    s.episode = ep;
+    s.positionMs = Math.max(0, p.positionMs);
+    s.durationMs = Math.max(0, p.durationMs);
+    s.playing = p.isPlaying;
+    s.rate = p.speed;
+    s.atMs = LanPlaybackStatus.nowMs();
+    return Promise.resolve(s);
+  }
+
+  /** 对端来 `take`:先暂停、再回最终位置 —— 交付的位置是**停下来那一刻**。 */
+  private async pauseForTake(): Promise<LanPlaybackStatus | null> {
+    const p = PlayerController.get();
+    const ep = p.current;
+    if (ep === null || ep.isLive === true) return null;
+    const pos = await p.pauseForHandoff();
+    const s = new LanPlaybackStatus();
+    s.episode = ep;
+    s.positionMs = pos;
+    s.durationMs = Math.max(0, p.durationMs);
+    s.playing = false;
+    s.rate = p.speed;
+    s.atMs = LanPlaybackStatus.nowMs();
+    Log.i('LanSync', `交接暂停 id=${ep.id} at=${pos}ms`);
+    return s;
+  }
+
+  private applyTaken(ep: Episode, positionMs: number): void {
+    this.cancelTakeTimeout();
+    this.handoff.takingOver = false;
+    this.handoff.note = L.s('lan_handoff_done');
+    this.handoff.localEpisodeId = ep.id;
+    this.handoff.localPlayingNow = true;
+    Log.i('LanSync', `交接起播 id=${ep.id} at=${positionMs}ms`);
+    PlayerController.get().playAt(ep, Math.max(0, Math.floor(positionMs)));
+  }
+
+  private onPeerHint(hint: LanPeerHint | null): void {
+    this.handoff.peerHint = hint;
+    // 「本机是不是已经在放这一集」:同一集刚被接手时不该再摆一颗「在此设备继续」。
+    // 直接读播放器而不是长期挂 onStateChanged —— 那条链是外壳与 AVSession 共用的,
+    // 多挂一层就要管摘除(H6 那族问题)。
+    const p = PlayerController.get();
+    const cur = p.current;
+    this.handoff.localPlayingNow = p.isPlaying;
+    this.handoff.localEpisodeId = cur === null ? '' : cur.id;
+    if (hint !== null && !this.handoff.takingOver) this.handoff.note = '';
+  }
+
+  private onLiveEnded(): void {
+    if (this.stopping) return;
+    this.handoff.peerHint = null;
+    this.handoff.takingOver = false;
+    this.handoff.note = L.s('lan_handoff_left');
+  }
+
+  private resetHandoff(): void {
+    this.handoff.available = false;
+    this.handoff.peerHint = null;
+    this.handoff.note = '';
+    this.handoff.takingOver = false;
+    this.handoff.localPlayingNow = false;
+    this.handoff.localEpisodeId = '';
   }
 
   private closeServer(): void {
@@ -600,4 +776,6 @@ export class LanSyncController {
 
   private static readonly DEFAULT_PORT: number = 47820;
   private static readonly SERVICE_TYPE: string = '_reverb._tcp';
+  /** 点了「在此设备继续」之后等对方的 `taken`;超时后可以再试一次。 */
+  private static readonly TAKE_TIMEOUT_MS: number = 4_000;
 }

@@ -260,10 +260,13 @@
   `cd macos && ./package.sh` 才算数(它的架构硬断言与解包验收才是判据),那之前 macOS 侧仍然只有
   `bash macos/tools/selftest-verify.sh` 是实测过的。
 - **Android 端**:**只有 Temurin 21,没有 JDK 17** —— 这不影响出包:项目钉的是
-  `VERSION_17` / `jvmTarget '17'`(**language level**),不是 JDK 17 这个运行时。
-  10-24 用 21 全绿:编译门 exit 0、`build-release.sh` exit 0、解包审计 6 项全 PASS。
-  Android SDK 在 `/Users/cxyxl/Library/Android/sdk`(`platforms` 有 android-34 与 37.0,
-  `build-tools` 有 34.0.0 与 36.0.0);`./gradlew` wrapper 已在库中
+  `VERSION_17` / `jvmTarget '17'`(**language level**,AGP 9 起 jvmTarget 跟随 `compileOptions`),
+  不是 JDK 17 这个运行时。10-24 用 21 全绿:编译门 exit 0、`build-release.sh` exit 0、解包审计 6 项全 PASS。
+  Android SDK 在 `/Users/cxyxl/Library/Android/sdk`(`platforms` 有 android-34 与 **37.0**,
+  **API 37 的平台包目录带小版本号,没有裸 `android-37`**;`build-tools` 有 34.0.0 与 36.0.0);
+  `./gradlew` wrapper 已在库中(**9.9.1**)。⚠️ 2026-11-15 起工具链是 AGP 9.5.1 / Gradle 9.9.1 /
+  Kotlin 2.2.10;Gradle 9.9.1 的发行包从官方站下载极慢,本机是从腾讯镜像取的、sha256 对齐官方后才放进
+  `~/.gradle/wrapper/dists/`(见 H282)
 - **鸿蒙端**:DevEco Studio(内含 SDK、`hvigorw`、`ohpm`、`hdc`);
   `export DEVECO_SDK_HOME=/Applications/DevEco-Studio.app/Contents/sdk`(AGENTS.md 常用命令一节)。
   **`hdc` 不在 PATH**(10-24 实测),全路径 `$DEVECO_SDK_HOME/default/openharmony/toolchains/hdc` 存在

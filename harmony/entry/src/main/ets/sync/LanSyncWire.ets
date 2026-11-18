@@ -118,12 +118,17 @@ export class LanSyncChannel {
         }
       };
       this.waiters.push(done);
-      timer = setTimeout(() => {
-        // 超时后把自己从队列里摘掉,否则下一次 pump 会唤醒一个已经 reject 的等待者。
-        const i = this.waiters.indexOf(done);
-        if (i >= 0) this.waiters.splice(i, 1);
-        done(null);
-      }, timeoutMs);
+      // `timeoutMs <= 0` = 不设超时。交接通道(同步完成之后)只有心跳,对端暂停时可能
+      // 长时间不说话,30 秒那条同步期超时会把一条好连接判成"网络中断" —— 与 Android
+      // `socket.soTimeout = 0` 同一个口径。连接真正断开时由 `onClosed` 唤醒。
+      if (timeoutMs > 0) {
+        timer = setTimeout(() => {
+          // 超时后把自己从队列里摘掉,否则下一次 pump 会唤醒一个已经 reject 的等待者。
+          const i = this.waiters.indexOf(done);
+          if (i >= 0) this.waiters.splice(i, 1);
+          done(null);
+        }, timeoutMs);
+      }
       // 数据可能刚好在入队前到齐
       this.pump();
     });

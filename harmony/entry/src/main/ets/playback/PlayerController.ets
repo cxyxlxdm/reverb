@@ -1164,6 +1164,23 @@ export class PlayerController {
     });
   }
 
+  /**
+   * 播放交接的「让位」:先把声音停掉,再返回**停下来的那一刻**位置。
+   *
+   * 顺序不能反 —— 先取位置再暂停,交出去的是暂停前那一瞬,接手方跳过去会往回退半秒重听。
+   * `pausePlayback()` 是 fire-and-forget,这里要等它落地(`playbackActionTask`)才读位置;
+   * 否则读到的是 AVPlayer 还在走的那一帧。与 Android `PlayerController.pauseForHandoff` 同构。
+   */
+  async pauseForHandoff(): Promise<number> {
+    if (this.isPlaying || this.playbackDesiredPlaying) {
+      this.pausePlayback();
+      await this.playbackActionTask.catch((e: Error): void => {
+        Log.w('Player', `交接暂停失败 ${e.message}`);
+      });
+    }
+    return Math.max(0, this.positionMs);
+  }
+
   private async pausePlaybackAsync(actionGeneration: number): Promise<void> {
     if (actionGeneration !== this.playbackActionGeneration) return;
     const p = this.player;

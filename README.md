@@ -146,5 +146,5 @@ BUILD_NUMBER=2 DEVELOPMENT_TEAM=XXXXXXXXXX \
 内部 / 外部测试员差异)见 `docs/IOS.md`。
 
 ## 配置项
-- Android：minSdk 26 / targetSdk 34 / compileSdk 34
+- Android：minSdk 26 / targetSdk 37 / compileSdk 37（Android 17；构建工具链 AGP 9.5.1 / Gradle 9.9.1 / Kotlin 2.2.10，见 H282）
 - 无需任何配置或密钥：所有播客源均为公开、免鉴权接口。

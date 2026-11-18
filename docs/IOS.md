@@ -73,7 +73,7 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
 ## 这一版有什么 / 没有什么
 
 **有**:四格(发现 / 追更 / 音阁 / 设置)、频道详情与订阅、播放页、后台播放 + 锁屏遥控、
-**主屏「继续收听」小组件**(WidgetKit,见下一节)、
+**主屏「继续收听」小组件**(WidgetKit,见下一节)、**锁屏 / 灵动岛的实时活动**(Live Activity,见再下一节)、
 倍速 / 快进快退 / 睡眠定时 / 播放模式 / 自动续播、单集下载、逐字稿(iOS 26 本机离线转写 + 发布方逐字稿)、
 节目笔记、听觉印记、收听统计、B 站视频与直播流、收藏/历史/待播/批注、备份与 OPML、隐私同意门、
 主题与语言(5 语种)。
@@ -124,6 +124,37 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
 **没验过**:主屏上把卡片加出来看渲染与按控制键(本机没有 Simulator 图形界面,加卡片需要人点一下);
 点卡片后播放页是否弹出(`simctl openurl` 会弹系统确认框,需要人点一下);
 真机 / TestFlight 的 App Group 受付费会员限制,签名结果未实测。
+
+---
+
+## 锁屏 / 灵动岛实时活动(Live Activity,1.0.8)
+
+- **只在这台设备真的在播时起**;暂停保留 15 分钟(`staleDate`),换集先撤旧再起新,
+  没有当前集就撤下。**同一时刻只允许一条**,避免锁屏叠两张。
+- **契约在共享层**:`../macos/Sources/WidgetContract/PlaybackActivity.swift`(`PlaybackActivityAttributes`
+  + `LiveActivityIntent` 控制意图),App 与扩展编译同一份(与小组件同一种做法)。
+- **扩展 UI**:`ios/ReverbWidget/PlaybackLiveActivity.swift`,锁屏行 + 灵动岛三形态
+  (compactLeading 波形 / compactTrailing 倒计时进度圈 / minimal)。控制键(播放暂停、上一集、下一集)
+  走 `LiveActivityIntent`,由 `WidgetCommandCenter` 交回 App,不打开界面。
+- **进度用绝对时间锚点外推**:`ProgressView(timerInterval:)` / `Text(timerInterval:)` 按
+  `anchor - position/rate` 算区间,App 被挂起时系统自己走;**稳态播放 0 次 update**,
+  只有暂停 / 续播 / 拖动 / 换集 / 换主题才写一次。⚠️ 判「是不是用户拖了进度」时
+  **`positionMs` 是毫秒、`dt` 是秒**,外推要乘 1000 —— 少了它不会崩,只会让每 5 秒那拍
+  都被判成 seek(2026-11-15 实测过,见 H283)。
+- **不依赖 App Group**:主屏卡片读组容器,锁屏 / 灵动岛不走。`WidgetBridge.flush()` 里
+  `PlaybackLiveActivityBridge.sync` 必须在「容器存在吗」那道判据**之前**调用 ——
+  免费团队签名拿不到组容器时,卡片退空态,锁屏/灵动岛仍应工作(顺序写反过一次,
+  见 H283)。
+- **`ios/Info.plist` 必须有 `NSSupportsLiveActivities=true`**。缺这个键时 `Activity.request`
+  不抛错、活动就是不出现;`build-ios.sh` 的编译门已断言这一项(第 2b 条)。
+- **验收状态(2026-11-15)**:编译门 exit 0(8 条判据全过);模拟器(iPhone 17 / iOS 27.2,
+  adhoc、无 App Group)实跑:日志 `[LiveActivity] 已开始`;SpringBoard 注册了活动
+  (`ActivityID`, platter target `com.yuyin.reverb`);chronod 拉起扩展进程,渲染器对
+  `listItem`(锁屏)、`dynamicIsland-compactLeading / compactMinimal / expanded` 三形态都报 `LIVE`,
+  expanded 视图边界 374 × 99.3;稳态播放 25 秒内 `Activity did update` = **0 次**;
+  播放结束来一拍(带 `staleDate`);换集时「已结束:换集」+「已开始」各一条。
+  **没验过**:锁屏/灵动岛的实际观感(本机没有 Simulator 图形界面,`simctl io screenshot`
+  不合成 SystemAperture 那层),按钮点按(需要人点),真机(签名被 `No Accounts` 挡住,见「本机现状」)。
 
 ---
 
@@ -229,9 +260,9 @@ xcodebuild -project Reverb.xcodeproj -scheme Reverb -configuration Debug \
   -sdk iphonesimulator -destination 'platform=iOS Simulator,name=iPhone 17' \
   -derivedDataPath build/SimDerived CODE_SIGNING_ALLOWED=NO build
 xcrun simctl install booted build/SimDerived/Build/Products/Debug-iphonesimulator/Reverb.app
-# 免点击过隐私门(等价于点「同意并继续」)。**要写当前 privacyVersion**,1.0.7 是 5;
+# 免点击过隐私门(等价于点「同意并继续」)。**要写当前 privacyVersion**,1.0.8 开发中是 6;
 # 走 cfprefsd,和直接改 plist 不是一回事(见本节末尾那条警告)。
-xcrun simctl spawn booted defaults write com.yuyin.reverb privacy_version -int 5
+xcrun simctl spawn booted defaults write com.yuyin.reverb privacy_version -int 6
 xcrun simctl launch booted com.yuyin.reverb -autoplay-guide -open-player
 xcrun simctl io booted screenshot /tmp/ios-player.png
 # 退后台:改成前台打开「设置」,再看日志里的音频队列仍在推进
@@ -395,14 +426,16 @@ privacy_version -int <当前版本>` 走的是 cfprefsd,2026-11-09 实测可用(
 | 项 | 状态 |
 |---|---|
 | Debug / Release 编译 | ✅ 均 exit 0 |
-| `./build-ios.sh` 编译门 | ✅ exit 0,七条判据全过(处理量由脚本自己打印;2026-11-13 对 1.0.8 复跑仍是七条) |
+| `./build-ios.sh` 编译门 | ✅ exit 0,八条判据全过(处理量由脚本自己打印;2026-11-15 加第 2b 条 `NSSupportsLiveActivities=true` 后复跑仍全过) |
 | 签名身份 | ✅ 已建 `Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`;Team = `J4YCBW8ZG7`(**免费 Personal Team**);`DEVELOPMENT_TEAM` 仍不写进工程,只走命令行 |
 | archive / export / upload | ❌ 仍未跑通。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员。**2026-11-10 试了 `--archive`**:报 `No Accounts: Add a new account in Accounts settings.` 与 `No profiles for 'com.yuyin.reverb'` —— 11-02 那份开发描述文件已于 **2026-11-09 14:57:39 UTC 到期**,而 Xcode 现在没有任何已登录账号,重签要维护者先登录(见下) |
 | iOS 模拟器运行时 | ✅ 已装 iOS 27.2;iPhone 17 模拟器上跑过(见上节) |
 | 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动。**2026-11-09**:1.0.7(1) 在机上,截图与 App 日志都取得到;但重新拉起被 `FBSOpenApplicationErrorDomain error 3` 拒(当时锁屏;免费 7 天描述文件 11-02 装、可能到期),WDA runner 仍 `host_command_failed` ⇒ 点击类验收仍缺 |
-| 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊;同日**真机**复跑:设置三段 / 追更与音阁空态 / 英文界面 / 权限说明本地化 / 后台音频 / 冷启动暂停态时长(H247);**11-08 真机**补验音阁历史多选浮条;**11-09 模拟器**补验 B 站过滤读数、直播流结果行与播放页直播态(无进度条 / 无倍速 / 上下集置灰)、直播不记历史 |
+| 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊;同日**真机**复跑:设置三段 / 追更与音阁空态 / 英文界面 / 权限说明本地化 / 后台音频 / 冷启动暂停态时长(H247);**11-08 真机**补验音阁历史多选浮条;**11-09 模拟器**补验 B 站过滤读数、直播流结果行与播放页直播态(无进度条 / 无倍速 / 上下集置灰)、直播不记历史;**2026-11-15 模拟器**内置引导音频与远程 mp3 都能 `readyToPlay` 并出声(此前那轮 `-12746` 是模拟器媒体服务卡死,重启设备即恢复) |
+| 锁屏 / 灵动岛实时活动 | ◐ 2026-11-15 编译门 + 模拟器系统侧实跑:活动注册、扩展被 chronod 拉起、锁屏与灵动岛三形态都 `LIVE`、稳态 0 次 update、结束/换集各一拍。**没看实际画面、没点过键**(本机无 Simulator 图形界面),真机未跑(见下行) |
+| 真机签名重装(1.0.8) | ❌ **2026-11-15 复跑被签名挡住**:`xcodebuild … -allowProvisioningUpdates DEVELOPMENT_TEAM=J4YCBW8ZG7 build` → exit 65,报 `No Accounts: Add a new account in Accounts settings.` 与 `No profiles for 'com.yuyin.reverb'` / `'com.yuyin.reverb.widget'`。机上现有的仍是较早安装的那份,**不代表当前源码**;要让真机跑上本轮代码,先由维护者在 Xcode 登录任意 Apple 账号 |
 | 局域网同步 | ◐ 三端编译门与共享层单测通过(KAT、回环握手);**2026-11-11 用探针补了跨端协议互通** —— Android 真机与 Apple 共享层双向各一次,SAS 一致、订阅导入与去重成立;当晚又用**真实 Wi-Fi** 由 Mac 直连手机(手动地址、无端口转发)跑了两轮,配对码一致、订阅导入、二次同步去重成立;**2026-11-12 补了删除墓碑**(共享层 `Sync/LanSyncTombstones.swift`,随快照传 `tombstones` 段),iOS 编译门 7 条全过、`swift test` 61 条 0 失败;**iOS 面板、mDNS 发现仍未跑**(模拟器无点击注入、真机 WDA 装不上),Apple 侧跑的是探针而不是 App 面板 |
-| 仍未验 | ◐ 订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看)、**2026-11-04 新增能力的运行侧**:后台巡检与本地通知(BGTask 需真机跨 6 小时)、通知权限拒绝分支、相册保存、邮件草稿、蜂窝闸门(要在真机上切 Wi-Fi / 蜂窝);**2026-11-09 补记**:401 弹框、朋友圈海报生成、双击回顶、追更自动回顶、继续收听卡片点开,在 iOS 上**仍没有任何运行时读数**(模拟器无点击注入、真机 WDA 装不上);直播流的 UI 已由模拟器补上,**出声**仍只有真机可证(模拟器这一轮连内置引导音频都加载失败,见 §3) |
+| 仍未验 | ◐ 订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看)、**2026-11-04 新增能力的运行侧**:后台巡检与本地通知(BGTask 需真机跨 6 小时)、通知权限拒绝分支、相册保存、邮件草稿、蜂窝闸门(要在真机上切 Wi-Fi / 蜂窝);**2026-11-09 补记**:401 弹框、朋友圈海报生成、双击回顶、追更自动回顶、继续收听卡片点开,在 iOS 上**仍没有任何运行时读数**(模拟器无点击注入、真机 WDA 装不上);直播流的 UI 已由模拟器补上,**出声**仍只有真机可证(11-09 那轮模拟器连内置引导音频都加载失败,11-15 重启模拟器后已能出声,见上一行) |
 
 **所以 TestFlight 链接目前还不可用**:缺的是 **Apple Developer Program 会员**(现在登录的是免费
 Personal Team,7 天有效的开发描述文件只够装自己的机器),不是代码。付费后按上节四条命令走。

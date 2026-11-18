@@ -691,6 +691,9 @@ private fun MiniPlayerBar(
             // 下次起播(重新插入)天然复位,不用手写清零。
             var ghost by remember { mutableStateOf(false) }
             val bounds = remember { mutableStateOf(Rect.Zero) }
+            // ⚠️ 粒子撒的是**胶囊本体**,不是上面那块盒子 —— 后者带着 `lift` 让位,
+            // 展开态高 = 胶囊 56dp + 64dp 空档,照它撒网格会得到 2.5 倍大的方块、1/2.5 的数量(H285)。
+            val capsule = remember { mutableStateOf(Rect.Zero) }
             val scope = rememberCoroutineScope()
             Box(
                 Modifier
@@ -709,7 +712,7 @@ private fun MiniPlayerBar(
                     onExpand = onExpand,
                     onClose = {
                         ghost = true
-                        onDissolveRequest(bounds.value)
+                        onDissolveRequest(capsule.value.takeIf { it.width > 0f } ?: bounds.value)
                         scope.launch {
                             delay(650)
                             PlayerController.close()
@@ -720,7 +723,8 @@ private fun MiniPlayerBar(
                     ballIcon = ballIcon,
                     onRestore = onRestore,
                     collapseIntoBar = collapseIntoBar,
-                    coverOpensChannel = coverOpensChannel
+                    coverOpensChannel = coverOpensChannel,
+                    capsuleModifier = Modifier.onGloballyPositioned { capsule.value = it.boundsInRoot() }
                 )
             }
         }

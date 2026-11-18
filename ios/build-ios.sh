@@ -104,6 +104,12 @@ verify_bundle() {
     || die "Info.plist 缺 UIBackgroundModes=audio"
   echo "   ok: UIBackgroundModes 含 audio"
 
+  # 2b) 实时活动:缺这个键时 `Activity.request` 不抛错、活动也不出现(模拟器上
+  #     表现为"什么都没发生" —— 2026-11-15 实测过一次旧包),所以必须在门上拦。
+  [ "$(plutil -extract NSSupportsLiveActivities raw "$app/Info.plist" 2>/dev/null || true)" = "true" ] \
+    || die "Info.plist 缺 NSSupportsLiveActivities=true(锁屏 / 灵动岛的实时活动不会出现)"
+  echo "   ok: NSSupportsLiveActivities=true"
+
   # 3) 本地化集合相等(不是"至少有")
   local got
   got="$(plutil -extract CFBundleLocalizations json -o - "$app/Info.plist" | tr -d '[]" \n' | tr ',' '\n' | sed '/^$/d' | sort)"

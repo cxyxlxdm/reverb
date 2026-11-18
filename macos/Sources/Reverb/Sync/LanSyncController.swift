@@ -30,6 +30,16 @@ enum LanSyncState: Equatable {
 final class LanSyncController: ObservableObject {
     @Published private(set) var state: LanSyncState = .idle
 
+    // 同步完成之后的「加时赛」:另一台在播什么、能不能接过来。
+    // 与 `state` 分开,是因为同步结果不再变,而这几项每秒都在动(硬规矩 7 的同一条道理:
+    // 别把高频状态塞进那个只在阶段变化时换值的枚举里)。
+    @Published private(set) var peerHint: LanPeerHint?
+    @Published private(set) var handoffLive = false
+    @Published private(set) var handoffNote: String?
+    @Published private(set) var takingOver = false
+    @Published private(set) var localEpisodeId: String?
+    @Published private(set) var localPlayingNow = false
+
     private let env: AppEnvironment
     private let identity = LanSyncIdentity()
     private var material: LanSyncIdentity.Material?
@@ -42,9 +52,22 @@ final class LanSyncController: ObservableObject {
     private var currentPeer: String?
     private var running = false
     private var stopping = false
+    private var live: LanSyncLive?
+    private var takeTimeout: Task<Void, Never>?
+    private var bag = Set<AnyCancellable>()
 
     init(env: AppEnvironment) {
         self.env = env
+        // 界面要知道「本机是不是已经在播这一集」:同一集刚被接手时不该再摆一颗「在此设备继续」。
+        env.player.$current
+            .map { $0?.id }
+            .removeDuplicates()
+            .sink { [weak self] in self?.localEpisodeId = $0 }
+            .store(in: &bag)
+        env.player.$isPlaying
+            .removeDuplicates()
+            .sink { [weak self] in self?.localPlayingNow = $0 }
+            .store(in: &bag)
     }
 
     var isBusy: Bool { sessionTask != nil }
@@ -69,10 +92,21 @@ final class LanSyncController: ObservableObject {
         session = nil
         sessionTask?.cancel()
         sessionTask = nil
+        // `LanSyncLive` 是 actor,stop() 是隔离方法:同步上下文里只能甩出去,
+        // 不能等它 —— 面板关闭不该卡在主线程上。
+        let dying = live
+        live = nil
+        if let dying { Task { await dying.stop() } }
+        takeTimeout?.cancel()
+        takeTimeout = nil
         confirmContinuation?.resume(returning: false)
         confirmContinuation = nil
         peers = []
         currentPeer = nil
+        peerHint = nil
+        handoffLive = false
+        handoffNote = nil
+        takingOver = false
         state = .idle
         Log.i("LanSync", "已停止监听")
     }
@@ -243,8 +277,16 @@ final class LanSyncController: ObservableObject {
         sessionTask = Task { [weak self] in
             do {
                 let result = try await s.run()
-                guard let self else { return }
-                if !self.stopping { self.state = .done(result) }
+                guard let self, !self.stopping else { s.close(); return }
+                self.state = .done(result)
+                if let live = self.makeLive(s) {
+                    self.live = live
+                    self.handoffLive = true
+                    self.handoffNote = nil
+                    Log.i("LanSync", "同步完成,进入交接通道 peer=\(result.peerName)")
+                    await live.run()
+                    self.live = nil
+                }
             } catch let e as LanSyncException {
                 Log.w("LanSync", "会话结束 \(e.fail):\(e.message)")
                 if let self, !self.stopping {
@@ -259,6 +301,102 @@ final class LanSyncController: ObservableObject {
             s.close()
             self?.finishSession()
         }
+    }
+
+    /// 把已认证的连接交给交接层。闭包在这里统一往主线程跳一次,
+    /// 协议层(actor)不认识 `PlayerController`,也不该认识。
+    private func makeLive(_ session: LanSyncSession) -> LanSyncLive? {
+        session.makeLive(
+            provider: { [weak self] in
+                guard let self else { return nil }
+                return await MainActor.run { self.localPlaybackStatus() }
+            },
+            pauseForTake: { [weak self] in
+                guard let self else { return nil }
+                return await MainActor.run { self.pauseForTake() }
+            },
+            onPeer: { [weak self] hint, _ in
+                guard let self else { return }
+                await MainActor.run {
+                    self.peerHint = hint
+                    if hint != nil, !self.takingOver { self.handoffNote = nil }
+                }
+            },
+            onTaken: { [weak self] episode, positionMs in
+                guard let self else { return }
+                await MainActor.run { self.applyTaken(episode, positionMs: positionMs) }
+            },
+            onEnded: { [weak self] in
+                guard let self else { return }
+                await MainActor.run {
+                    self.handoffLive = false
+                    self.peerHint = nil
+                    self.takingOver = false
+                    self.handoffNote = "另一台设备已离开，交接结束。"
+                }
+            }
+        )
+    }
+
+    /// 用户点「在此设备继续」。**只发请求**;等对方先暂停并回最终位置,再由 `applyTaken` 起播。
+    /// 两台同时出声是这类功能最典型的翻车方式(研究文档 §6),所以这里没有"本机先播"的分支。
+    func takePlayback() {
+        guard let live, peerHint != nil, !takingOver else { return }
+        takingOver = true
+        handoffNote = nil
+        takeTimeout?.cancel()
+        takeTimeout = Task { [weak self, weak live] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled, let live else { return }
+            await live.cancelTake()
+            await MainActor.run {
+                guard let self, self.takingOver else { return }
+                self.takingOver = false
+                self.handoffNote = "对方没有回应，可以再试一次。"
+            }
+        }
+        Task { [weak live] in
+            guard let live else { return }
+            await live.allowTakeAgain()
+            do {
+                try await live.take()
+            } catch {
+                Log.w("LanSync", "交接请求发送失败:\(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func localPlaybackStatus() -> LanPlaybackStatus? {
+        guard let ep = env.player.current, !ep.isLive else { return nil }
+        return LanPlaybackStatus(
+            episode: ep,
+            positionMs: env.player.positionMs,
+            durationMs: env.player.durationMs,
+            playing: env.player.isPlaying,
+            rate: env.player.speed,
+            atMs: LanPlaybackStatus.nowMs()
+        )
+    }
+
+    private func pauseForTake() -> LanPlaybackStatus? {
+        guard let (ep, ms) = env.player.pauseForHandoff() else { return nil }
+        return LanPlaybackStatus(
+            episode: ep,
+            positionMs: ms,
+            durationMs: env.player.durationMs,
+            playing: false,
+            rate: env.player.speed,
+            atMs: LanPlaybackStatus.nowMs()
+        )
+    }
+
+    private func applyTaken(_ episode: Episode, positionMs: Int) {
+        takeTimeout?.cancel()
+        takeTimeout = nil
+        takingOver = false
+        handoffNote = "已在这台设备继续。"
+        Log.i("LanSync", "交接起播 id=\(episode.id) at=\(positionMs)ms")
+        env.player.playAt(episode, startMs: positionMs)
     }
 
     private func finishSession() {

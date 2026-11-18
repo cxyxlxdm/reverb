@@ -52,6 +52,7 @@
 		B1B2C3D4E5F60718293A00C5 /* LanSyncSession.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00C5 /* LanSyncSession.swift */; };
 		B1B2C3D4E5F60718293A00C6 /* LanSyncWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00C6 /* LanSyncWire.swift */; };
 		B1B2C3D4E5F60718293A00C7 /* LanSyncController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00C7 /* LanSyncController.swift */; };
+		B1C2D3E4F5A6000000000037 /* LanSyncLive.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000036 /* LanSyncLive.swift */; };
 		B1B2C3D4E5F60718293A00C8 /* LanSyncView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00C8 /* LanSyncView.swift */; };
 		EF5E39333A8B9DF641D1AB92 /* seed_podcasts.json in Resources */ = {isa = PBXBuildFile; fileRef = 957E2E743CCAB95EFFF8AEFC /* seed_podcasts.json */; };
 		1F5D398D5F8FABAAB7319584 /* guide_intro.m4a in Resources */ = {isa = PBXBuildFile; fileRef = D8312527917CCF29180C9DD6 /* guide_intro.m4a */; };
@@ -64,6 +65,9 @@
 		B1C2D3E4F5A6000000000023 /* WidgetControlIntent.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000021 /* WidgetControlIntent.swift */; };
 		B1C2D3E4F5A600000000000F /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A600000000000E /* Localizable.strings */; };
 		B1C2D3E4F5A6000000000016 /* ReverbWidget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000010 /* ReverbWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B1C2D3E4F5A6000000000032 /* PlaybackActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000031 /* PlaybackActivity.swift */; };
+		B1C2D3E4F5A6000000000033 /* PlaybackActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000031 /* PlaybackActivity.swift */; };
+		B1C2D3E4F5A6000000000035 /* PlaybackLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1C2D3E4F5A6000000000034 /* PlaybackLiveActivity.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -135,6 +139,7 @@
 		A1B2C3D4E5F60718293A00C4 /* LanSyncMerge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LanSyncMerge.swift; path = "../macos/Sources/Reverb/Sync/LanSyncMerge.swift"; sourceTree = "<group>"; };
 		B1C2D3E4F5A6000000000024 /* LanSyncTombstones.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LanSyncTombstones.swift; path = "../macos/Sources/Reverb/Sync/LanSyncTombstones.swift"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A00C5 /* LanSyncSession.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LanSyncSession.swift; path = "../macos/Sources/Reverb/Sync/LanSyncSession.swift"; sourceTree = "<group>"; };
+		B1C2D3E4F5A6000000000036 /* LanSyncLive.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LanSyncLive.swift; path = "../macos/Sources/Reverb/Sync/LanSyncLive.swift"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A00C6 /* LanSyncWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LanSyncWire.swift; path = "../macos/Sources/Reverb/Sync/LanSyncWire.swift"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A00C7 /* LanSyncController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LanSyncController.swift; path = "../macos/Sources/Reverb/Sync/LanSyncController.swift"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A00C8 /* LanSyncView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LanSyncView.swift; path = "../macos/Sources/Reverb/UI/LanSyncView.swift"; sourceTree = "<group>"; };
@@ -170,6 +175,8 @@
 		B1C2D3E4F5A600000000000C /* fr */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = fr; path = ReverbWidget/fr.lproj/Localizable.strings; sourceTree = "<group>"; };
 		B1C2D3E4F5A600000000000D /* zh-Hant */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = zh-Hant; path = ReverbWidget/zh-Hant.lproj/Localizable.strings; sourceTree = "<group>"; };
 		B1C2D3E4F5A6000000000010 /* ReverbWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ReverbWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		B1C2D3E4F5A6000000000031 /* PlaybackActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "../macos/Sources/WidgetContract/PlaybackActivity.swift"; sourceTree = "<group>"; };
+		B1C2D3E4F5A6000000000034 /* PlaybackLiveActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReverbWidget/PlaybackLiveActivity.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -257,6 +264,7 @@
 				A1B2C3D4E5F60718293A00C4 /* LanSyncMerge.swift */,
 				B1C2D3E4F5A6000000000024 /* LanSyncTombstones.swift */,
 				A1B2C3D4E5F60718293A00C5 /* LanSyncSession.swift */,
+				B1C2D3E4F5A6000000000036 /* LanSyncLive.swift */,
 				A1B2C3D4E5F60718293A00C6 /* LanSyncWire.swift */,
 				A1B2C3D4E5F60718293A00C7 /* LanSyncController.swift */,
 				A1B2C3D4E5F60718293A00C8 /* LanSyncView.swift */,
@@ -288,6 +296,8 @@
 				B1C2D3E4F5A6000000000002 /* ReverbWidget.swift */,
 				B1C2D3E4F5A6000000000004 /* WidgetState.swift */,
 				B1C2D3E4F5A6000000000021 /* WidgetControlIntent.swift */,
+				B1C2D3E4F5A6000000000031 /* PlaybackActivity.swift */,
+				B1C2D3E4F5A6000000000034 /* PlaybackLiveActivity.swift */,
 				B1C2D3E4F5A6000000000007 /* Info.plist */,
 				B1C2D3E4F5A600000000000E /* Localizable.strings */,
 				B1C2D3E4F5A6000000000009 /* Reverb.entitlements */,
@@ -450,11 +460,13 @@
 				B1B2C3D4E5F60718293A00C4 /* LanSyncMerge.swift in Sources */,
 				B1C2D3E4F5A6000000000025 /* LanSyncTombstones.swift in Sources */,
 				B1B2C3D4E5F60718293A00C5 /* LanSyncSession.swift in Sources */,
+				B1C2D3E4F5A6000000000037 /* LanSyncLive.swift in Sources */,
 				B1B2C3D4E5F60718293A00C6 /* LanSyncWire.swift in Sources */,
 				B1B2C3D4E5F60718293A00C7 /* LanSyncController.swift in Sources */,
 				B1B2C3D4E5F60718293A00C8 /* LanSyncView.swift in Sources */,
 				B1C2D3E4F5A6000000000005 /* WidgetState.swift in Sources */,
 				B1C2D3E4F5A6000000000022 /* WidgetControlIntent.swift in Sources */,
+				B1C2D3E4F5A6000000000032 /* PlaybackActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -463,8 +475,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				B1C2D3E4F5A6000000000003 /* ReverbWidget.swift in Sources */,
+				B1C2D3E4F5A6000000000035 /* PlaybackLiveActivity.swift in Sources */,
 				B1C2D3E4F5A6000000000006 /* WidgetState.swift in Sources */,
 				B1C2D3E4F5A6000000000023 /* WidgetControlIntent.swift in Sources */,
+				B1C2D3E4F5A6000000000033 /* PlaybackActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

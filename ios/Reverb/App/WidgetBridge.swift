@@ -91,13 +91,6 @@ final class WidgetBridge {
     /// 计算 → 与上次逐字节比较 → 变了才落盘并重载。
     private func flush() {
         guard let player, let history, let settings else { return }
-        guard let container = WidgetShared.containerURL else {
-            if !missingContainerLogged {
-                missingContainerLogged = true
-                Log.w("Widget", "没有 App Group 容器,卡片只能显示空态(免费团队签名没有这项能力)")
-            }
-            return
-        }
 
         var state = WidgetState()
         state.dark = Self.isDark(settings)
@@ -125,14 +118,27 @@ final class WidgetBridge {
             } else if ep.isLive {
                 state.time = NSLocalizedString("直播", comment: "直播流的时长位置占位")
             }
-            state.art = writeArt(ep, to: container)
             state.empty = false
         } else {
             state.empty = true
             state.title = NSLocalizedString("挑一集开始听", comment: "卡片空态标题")
             state.podcast = NSLocalizedString("上次听到哪一集，会出现在这里", comment: "卡片空态副标题")
-            state.art = writeArt(nil, to: container)
         }
+
+        // 锁屏 / 灵动岛与主屏卡片同源:同一份字段、同一拍更新。放在逐字节比较**之前** ——
+        // 卡片内容没变时 flush 会提前返回,但 Live Activity 可能仍需因暂停/续播/拖动而重锚。
+        // ⚠️ 这一步**必须在 App Group 判据之前**:Live Activity 不依赖组容器,
+        // 免费团队签名拿不到 App Group 时,主屏卡片退化为空态,锁屏/灵动岛仍应工作。
+        PlaybackLiveActivityBridge.shared.sync(state: state, player: player)
+
+        guard let container = WidgetShared.containerURL else {
+            if !missingContainerLogged {
+                missingContainerLogged = true
+                Log.w("Widget", "没有 App Group 容器,卡片只能显示空态(免费团队签名没有这项能力)")
+            }
+            return
+        }
+        state.art = writeArt(episode, to: container)
 
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]

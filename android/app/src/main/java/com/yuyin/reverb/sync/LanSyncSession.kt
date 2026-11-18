@@ -1,5 +1,6 @@
 package com.yuyin.reverb.sync
 
+import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.util.Logger
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
@@ -60,6 +61,15 @@ class LanSyncSession(
     private lateinit var peerName: String
     private lateinit var shared: ByteArray
 
+    /**
+     * 对端是否声明支持「同步之后的播放交接」(`hello.live`)。
+     *
+     * 这是**加时赛**不是新协议:老版本没有这个键,读到 false 就不进交接,
+     * 也就不用担心把一条老版本的会话拖在一个永远等不到帧的读上。
+     */
+    var peerSupportsLive: Boolean = false
+        private set
+
     suspend fun run(): LanSyncResult {
         socket.tcpNoDelay = true
         socket.soTimeout = TIMEOUT_MS
@@ -98,7 +108,10 @@ class LanSyncSession(
                 "id" to identity.deviceId,
                 "name" to identity.name,
                 "pub" to LanSyncCrypto.base64(LanSyncCrypto.encodePublicKey(ephemeral.public)),
-                "nonce" to LanSyncCrypto.base64(nonce)
+                "nonce" to LanSyncCrypto.base64(nonce),
+                // 交接是同步之后的**加时赛**:同一把会话密钥、同一条 TCP。
+                // 老版本忽略这个键,同步完就断开;我们这边读到 false 就不进读循环。
+                "live" to true
             )
         )
         val hello = runCatching { channel.receivePlain() }.getOrElse {
@@ -130,7 +143,34 @@ class LanSyncSession(
         val serverNonce = if (initiator) peerNonce else nonce
         shared = LanSyncCrypto.sharedSecret(ephemeral.private, peerPub)
         channel.useKey(LanSyncCrypto.sessionKey(shared, clientNonce, serverNonce))
+        peerSupportsLive = hello.optBoolean("live", false)
         peerName = hello.optString("name").trim().take(64).ifBlank { "设备" }
+    }
+
+    /**
+     * 同步完成之后进入「播放交接」通道。对端不支持时返回 null(界面就不出现交接区)。
+     *
+     * 这里顺手把 socket 读超时关掉:交接期间对端暂停时可能长时间只发心跳,
+     * 30 秒那条同步期超时会把一条好连接判成"网络中断"。结束时靠关闭 socket 收尾。
+     */
+    fun makeLive(
+        provider: suspend () -> LanPlaybackStatus?,
+        pauseForTake: suspend () -> LanPlaybackStatus?,
+        onPeer: suspend (LanPeerHint?, LanClockEstimator) -> Unit,
+        onTaken: suspend (Episode, Long) -> Unit,
+        onEnded: suspend () -> Unit
+    ): LanSyncLive? {
+        if (!peerSupportsLive) return null
+        runCatching { socket.soTimeout = 0 }
+        return LanSyncLive(
+            send = { channel.send(it) },
+            receive = { channel.receive() },
+            provider = provider,
+            pauseForTake = pauseForTake,
+            onPeer = onPeer,
+            onTaken = onTaken,
+            onEnded = onEnded
+        )
     }
 
     private suspend fun runInitiator(): LanSyncResult {
