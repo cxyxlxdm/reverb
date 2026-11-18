@@ -5,3 +5,5 @@
 "挑一集开始听" = "Pick an episode";
 "上次听到哪一集，会出现在这里" = "Your last episode shows up here";
 "显示上次听到的节目与进度，点一下接着听" = "Shows where you left off — tap to keep listening";
+/* Live Activity(锁屏 / 灵动岛)里的直播占位。 */
+"直播" = "LIVE";

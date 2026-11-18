@@ -13951,3 +13951,274 @@ Android 同场景输入后立刻变亮可点。这不是渲染慢 —— 等十�
    条目越短、行数越多,溢出越常见。
 ③ **样本的形状决定判据的形状**。只看首条、只看"汉字是否过半",都是被最常见的样本教出来的规则;
    真机上那几条反例(混排数字开头、47% 汉字)才是判据该覆盖的。
+
+### H282. targetSdk 升到 37(Android 17):平台目录带小版本、AGP 必须 9.x,升完还多一条运行时权限
+
+**现象(2026-11-14 ~ 15)**。
+
+- 只改 `compileSdk/targetSdk = 37` 后构建直接报
+  `Failed to find Platform SDK with path: platforms;android-37`,可 SDK Manager 里明明装着 Android 17。
+- 决定升工具链之后,报错换了四种:AGP 9 不认 `org.jetbrains.kotlin.android`;
+  开了 Compose 却没装 `org.jetbrains.kotlin.plugin.compose`;
+  `Could not get unknown property 'applicationVariants'`;`:app:testReleaseUnitTest` **任务不存在**。
+- 装上 37 的包之后,同一 Wi-Fi 下的局域网同步「看起来正常、就是发现不到对端」——不崩、不报错,只有超时。
+
+**根因**。
+
+- **API 37 起平台包按小版本目录发布**:实际落盘是 `platforms;android-37.0`(另有 37.1 / 37.2),
+  **没有裸 `platforms;android-37`**;AGP 8.5.2 只按 `platforms;android-<大版本数字>` 精确查。
+  编译 API 37 的最低 AGP 是 **9.2.0**(官方 release note),所以这不是"补个目录"能绕的。
+- **AGP 9 把 Kotlin 内建了**(9.5.1 解析出 KGP **2.2.10**):不再 apply `org.jetbrains.kotlin.android`;
+  Compose 编译器插件成为必需,且版本必须与内建 Kotlin 对齐;
+  `android.applicationVariants` 与 `kotlinOptions` / `composeOptions` 老 DSL 一并移除。
+  单测变体也变了:AGP 9 默认只建 **debug** 单测,`testReleaseUnitTest` 不存在。
+- **Android 17 把「本地网络」拆成运行时权限** `ACCESS_LOCAL_NETWORK`(`prot=dangerous`):
+  mDNS 组播、局域网扫描与 47820 直连都要它。不申请**不会崩**,只会静默发现不到对端
+  —— 这类"没现象"的故障最容易被当成代码 bug 查很久。
+
+**修法**。
+
+- 根 `android/build.gradle`:AGP `9.5.1` + `org.jetbrains.kotlin.plugin.compose` `2.2.10`;
+  `android/app/build.gradle` 去掉 `org.jetbrains.kotlin.android`,`compileSdk/targetSdk 37`;
+  wrapper 从 8.7 升到 **9.9.1**(AGP 9 要求 Gradle 9.x)。
+- 产物改名走新 Variants API:`androidComponents { onVariants(...) { outputs.outputFileName } }`。
+  **文件名不是契约** —— `build-release.sh` 用 `find … -name '*.apk'` 取产物。
+- `jvmTarget` 不再单独配:沿用 `compileOptions` 的 17;实测产物 class 头 `cafe babe 0000 003d`
+  (`0x3d = 61` = Java 17),这条判据比看构建日志硬。
+- manifest 加 `ACCESS_LOCAL_NETWORK`;`SettingsScreen` 的同步入口按
+  `SDK_INT >= 37 && checkSelfPermission != GRANTED` 先请求,拒绝弹 `lan_perm_denied`(五语种)。
+  36 及以下不弹、也不摆"去设置里允许"那句。
+- Gradle 发行包:services.gradle.org 实测约 200 KB/s(135 MB 下不完),
+  改用腾讯镜像下载后 **sha256 对齐官方** `d8a18a7a841dd5df825d35a685fad6f2d7f12ac0c280e57b67c27b4a520ba228`
+  再放进 `~/.gradle/wrapper/dists/` 并补 `*.zip.ok`。
+- 单测门从 `:app:testReleaseUnitTest` 改成 **`:app:testDebugUnitTest`**(本仓单测只测纯逻辑,debug 变体等价;
+  产物落 `app/build/test-results/testDebugUnitTest/`)。
+
+**验收(2026-11-15 本机)**。
+
+- `:app:compileReleaseKotlin` exit 0;`:app:assembleDebug` BUILD SUCCESSFUL;
+  `:app:testDebugUnitTest` **89 条 / 0 失败 / 0 错误**(14 个 XML)。
+- API 37 模拟器(`Medium_Phone_API_37.0`,1080×2400):debug 与 release 都装得上;
+  `dumpsys package` 显示 `targetSdk=37`、`ACCESS_LOCAL_NETWORK: granted=false`;
+  点「局域网同步」弹出系统权限框("Allow Reverb to find, connect to, and determine the relative position of nearby devices?");
+  **拒绝** → 应用弹 `lan_perm_denied`,面板不打开;**允许** → `granted=true` 且面板直接打开(`10.0.2.15:47820`)。
+- 授权后的直连路径:模拟器到不了宿主 LAN(192.168.6.x 超时,这是 NAT 限制),改用
+  `adb -s <Pixel3> forward tcp:47820 tcp:47820` + 在模拟器里输入 `10.0.2.2:47820`,
+  两端都显示配对码 **542 933**(Pixel 3 上显示对方名 `sdk_gphone64_arm64`)⇒ 权限放行后 TCP 直连可用。
+- Pixel 3(Android 12 / SDK 31):不弹框,点「局域网同步」面板直接打开(旧系统无此权限)。
+- 解包审计(`dist/reverb.apk`):13 条 `uses-permission`(新增项在第 9 行)、
+  `RECORD_AUDIO|REQUEST_INSTALL_PACKAGES` = 2、lib/model = 4、seed = 1、源名 = 13;
+  `versionCode=9 / versionName=1.0.8 / targetSdk=37 / compileSdk=37`;apksigner `CN=Yuyin Reverb`;
+  **270,179,532 B**,`ls -lT` = `Nov 15 21:04:22 2026`;`-newer`(括号版)= 0。
+- 文案同步:五语种 `privacy_consent_lan` 各加一句「Android 17 起首次打开时系统询问本地网络权限」,
+  `python3 tools/check-l10n.py` PASS;`docs/PRIVACY.md` 与 `site/reverb/privacy.html` 权限表同步。
+- **未验**:Android 17 的大屏强制可调整性只在 manifest 上核过(本应用没有 `screenOrientation` /
+  `resizeableActivity` 锁定,理论上无影响),**没有平板模拟器实跑**;
+  16 KB page size 等 Android 17 其它变更未逐条评估。
+
+**教训 / 可复用的规律**。
+
+① **「装了某个 SDK」要按目录实名核,版本号不是目录名**。`sdkmanager` 里写 Android 17,
+   落盘是 `android-37.0` —— 先 `ls platforms/` 再谈工具链。
+② **工具链大版本要成组核**:Gradle wrapper / AGP / Kotlin / Compose 编译器四者互锁,
+   单升一个只会换一种报错;报错文案里那句 "required" 的版本号才是下一跳。
+③ **新运行时权限不以崩溃形式出现**。真机表现是「功能静默失效」时,先查权限是否被新系统拆出去了,
+   再查网络 —— 这次两者都占了一半(NAT 另说)。
+④ **官方下载慢不等于没装好**:镜像件必须 sha256 对齐官方再放进 wrapper 缓存,
+   否则下一次构建的问题会出在分发链上,而不是代码里。
+
+### H283. iOS 实时活动「什么都不发生」的三种真相:缺申报键、调用顺序、毫秒混秒
+
+**现象(2026-11-15,模拟器 iPhone 17 / iOS 27.2)**。
+
+- 代码全绿、编译门 exit 0,装上去播起来,锁屏与灵动岛什么都没有;App 日志里连一行
+  `[LiveActivity]` 都没有 —— 不是失败,是**静默**。
+- 修好之后能起来,但系统日志每 5 秒一条 `SpringBoard … Activity did update`,
+  与 `WidgetBridge.flush()` 同频,像是把 5 秒的进度推送当成了 Live Activity 更新。
+- 同一轮里,模拟器上**任何**音频都起不来:内置引导音频与远程 mp3 都是
+  `AVFoundationErrorDomain Code=-11800 … 未知错误(-12746)`,重试耗尽;`afinfo` 读那份
+  m4a 完全正常(141,562 B / 32.53 s)。
+
+**根因**。
+
+- **① 装的是旧包**:`Info.plist` 的 `NSSupportsLiveActivities` 是在这一轮才加的,但模拟器里
+  那份是加键之前编的。缺这个键时 `ActivityAuthorizationInfo().areActivitiesEnabled` 直接是
+  `false`,我们的 bridge 在第一个 guard 就 return —— **不抛错、不打日志**,于是看起来像"没接上"。
+- **② 调用顺序**:`WidgetBridge.flush()` 原先把 `PlaybackLiveActivityBridge.sync(...)` 放在
+  「拿得到 App Group 容器吗」那道判据**之后**。模拟器/免费团队签名下容器不存在,
+  函数在到达 sync 之前就 return 了。而锁屏 / 灵动岛**根本不用 App Group**(只有主屏卡片要),
+  这条顺序把一条不依赖容器的功能绑死在了容器上。
+- **③ 毫秒混秒**:判断"用户是不是拖了进度"用的是外推
+  `expected = lastPositionMs + dt * speed`,其中 `positionMs` 是**毫秒**、`dt` 是**秒**。
+  少乘 1000 之后 `expected` 每拍只前进约 5 ms,而真实进度每拍前进约 5000 ms ⇒
+  5 秒一次 flush 的偏移恒等于一拍长度(实测 `drift=4994`),**每拍都被判成 seek**,
+  于是每拍都 `update`。这种错不会崩,只会把系统的更新配额当水喝。
+- **④ 模拟器媒体栈是会话级的**:那次 `-12746` 不是素材问题(同一份文件在重启后 `readyToPlay`),
+  是模拟器这一"会话"里的媒体服务卡死后,连远程流一起拒。换素材、换 URL 都白换。
+
+**修法**。
+
+- `Info.plist` 加 `NSSupportsLiveActivities=true`,并在 `ios/build-ios.sh` 的验收段加第 2b 条断言
+  (`plutil -extract … raw` 必须等于 `true`)—— 这条必须在门上拦,因为它**没有任何运行时症状**。
+- `flush()` 顺序改成:算 `WidgetState` → `PlaybackLiveActivityBridge.sync` → 容器判据 →
+  `writeArt` → 编码落盘。sync 之前不再有任何提前 return。
+- 外推改成 `expected = lastPositionMs + dt * speed * 1000`,并把 `dt` 提成局部常量、
+  同一份值同时用于判据与(调试时的)日志,避免两处各算一遍。
+- 模拟器遇到 `-11800 / -12746`:**先 `xcrun simctl shutdown <udid> && boot && bootstatus -b`**,
+  再判断素材/代码。实测重启后同一条 URL、同一份内置音频都 `readyToPlay`。
+
+**验收(2026-11-15,模拟器,无 App Group)**。
+
+- App 日志:`[Widget] 没有 App Group 容器…`(预期)之后仍有 `[LiveActivity] 已开始
+  id=… playing=true`;锁屏 / 灵动岛不依赖容器这一点被这一行同时证掉。
+- 系统日志:SpringBoard 注册 `ActivityID`,platter target `com.yuyin.reverb`;
+  chronod 拉起 `com.yuyin.reverb.widget`;`WidgetRenderer_Activities` 对
+  `listItem`(锁屏)、`dynamicIsland-compactLeading`、`-compactMinimal`、`-expanded`
+  四份视图都报 `Evaluated inner view with result: LIVE`,expanded 边界 374 × 99.3。
+- 稳态播放 25 秒:`Activity did update` = **0 次**;播放结束那一拍 = 1 次(带 `staleDate`);
+  换集时 `[LiveActivity] 已结束:换集` + `已开始` 各一条。
+- 编译门 8 条全过(第 2b 条就是这次新加的)。
+- **未验**:实际观感(本机没有 Simulator 图形界面,`simctl io screenshot` 不合成
+  SystemAperture 那层)、按钮点按(需要人点)、真机(`No Accounts` / `No profiles` 挡住)。
+
+**教训 / 可复用的规律**。
+
+① **"没有日志"要先怀疑门与版本,不要先怀疑逻辑**。这次的 ①② 都不是算法错,
+   而是"根本没走到";一个功能既然失败时可能静默,就该在入口处留一条能证明"走过了"的日志,
+   并把静默失败的条件加进编译门。
+② **单位混算不会崩,只会让频控失效**。凡是"外推 + 阈值"的判据,先把两边的单位写出来
+   (`ms` / `s` / `rate`),再看阈值数量级是否与一拍长度同量级 —— 本次 `drift≈5000`
+   与 5 秒一拍严丝合缝,那就是单位错,而不是播放器乱跳。
+③ **模拟器的媒体故障是会话级的**,换素材/换 URL 是无效对照;重启设备本身才是那个变量。
+   与 H156 的"命令没跑成"同构:先确认基础设施活着,再谈被测对象。
+
+### H284. 鸿蒙交接那一行字停在上一次的形态 —— `@Builder` 按值收参,`build()` 重跑了而它没重组
+
+**现象(2026-11-15,Mate 60 真机,debug 包)**。
+
+- 双向交接本身都通(Android 播 → 鸿蒙接、鸿蒙播 → Android 接,读数见 `docs/FEATURES.md`
+  2026-11-15 那块)。**鸿蒙这一侧唯一不对的是面板上那行提示**。
+- 刚打开面板时写「另一台设备还没有在播放任何内容。」;**对方开始播放之后**,
+  下面的「在此设备继续」按钮**出现了、也能点**(点下去确实接过去了),
+  而上面那行文字**一直还是「……还没有在播放任何内容」**,位置与集名一个都没出现。
+- 换一次状态(对方暂停 → 我方接手 → 对方又播放)之后,**这行字终于对了**,
+  但停在上一拍的值(显示「正在播放 · 7:34」,而对方实际已经暂停)。
+  也就是说:它**会动,但永远慢一个"重建"的节拍**,而且首帧之后的那一步丢得最彻底。
+
+**根因**。
+
+- 那两行文字原先是 `@Builder hintLine(hint: LanPeerHint | null)`,调用处写
+  `this.hintLine(this.handoff.peerHint)`。`@ObjectLink` 的更新确实让 `build()` 重跑了
+  (否则按钮不会出现——按钮的判断写在 `build()` 里),但 **`@Builder` 的入参是按值传入的**:
+  实参在调用那一瞬间求值并拷进 `@Builder` 自己的状态,**后续 `peerHint` 的更新不会传进去**。
+  ArkUI 里 `@Builder` 的重组只看它自己的参数是否"变过",而它拿到的永远是最初那份
+  —— 于是 `null → 有值` 这一步在 `@Builder` 内部从未发生。
+- 与硬规矩 6 那条「`@Builder` 体内不能声明局部变量」是同一族限制的两个面:
+  `@Builder` 在本端既不能承接成员表达式的最新值,也不能在体内算中间值,只能吃字面量/`@Prop`。
+- 为什么 Android / macOS 没有这个问题:那两端这一行就是普通视图树里的条件分支,
+  每次重渲都重新求值,不存在"参数快照"这一层。
+
+**修法**。
+
+- 把 `if (peerHint !== null) { 正在播放/暂停 + 集名 · 位置 } else { 还没有在播放任何内容 }`
+  直接**内联进 `build()`**(`harmony/entry/src/main/ets/view/LanSyncDialog.ets:471-493`),
+  `@Builder` 取消。高频刷新那层不受影响:整块本来就是独立子组件 `HandoffSection` +
+  `@ObjectLink`(硬规矩 7),重渲仍只落在这一块。
+- 原位留了一条长注释,写明为什么不能包回 `@Builder`(就在那行 `if` 上面)。
+
+**验收(2026-11-15,真机,双向各一次)**。
+
+- 正向(Android 播 → 鸿蒙接):Android `dumpsys media_session` 由 `state=3 position=371601`
+  变 `state=2 position=375090`;鸿蒙面板**1 秒内**出现「另一台设备暂停在这一集 · 6:15」。
+- 反向(鸿蒙播 → Android 接):鸿蒙日志 `交接暂停 id=… at=442778ms`(7:22.8),
+  Android `state=3 position=445799`(7:25.8)起播;鸿蒙面板随即变成
+  「另一台设备正在播放 … · 7:34」+ 可点的按钮,等对方暂停后又变成「暂停在这一集 · 7:22」。
+- 「交接期间关掉面板」那一项:对端显示「另一台设备已离开,交接结束。」(`note` 行,走的是 `build()` 里的条件,没受影响)。
+- **未验**:macOS / iOS 面板上的交接运行(见 `docs/FEATURES.md` 同一块)。
+
+**教训 / 可复用的规律**。
+
+① **ArkUI 的"会更新"要按"值从哪条路进来"判断**:`@ObjectLink` / `@Prop` 是订阅,
+   **`@Builder` 的参数不是**。凡是"这个值每秒在变"的区块,先用普通组件 + 显式订阅,
+   别先包 `@Builder` 省那几行 —— 它省下的是代码行,赔进去的是这一类"半更新"。
+② **"按钮能点、文字不动"是最省事的定位形状**:同一块界面里两半一个跟着变一个不变,
+   说明**数据到了、渲染路径断了**,而不是数据没到。先看那两半的差别(这里:一个在 `build()`,
+   一个在 `@Builder`),不要回头查同步逻辑。
+③ 与硬规矩 6 归并记忆:**本端 `@Builder` 既不能算、也不接最新值**,它的适用面只有
+   纯静态结构。动态块要下沉成组件(硬规矩 7)。
+
+**附带观察(未定位,2026-11-15 同轮)**:Android 侧发现列表里出现过 `172.17.1.1:47820` 一条,
+而同一时刻鸿蒙侧发现 Pixel 3 得到的是正确的 `192.168.6.228:47820`。两端配对与交接都走的是
+手输/正确地址那条,`172.17.1.1` 没有参与,因此**没有实证影响,也没有根因**;
+怀疑与 NSD/mDNS 解析到的接口地址有关(A 记录可能命中了非本机 LAN 网段的那张网卡)。
+下次在别的网络里复现时,先 `ip route` / `ifconfig` 记下各接口地址,再判断是不是同一族问题。
+
+### H285. Android 播放条消散「变成稀疏的大方块」—— 矩阵量的是让位盒、画布原点在另一个空间、粒子画满了格子
+
+**现象(2026-11-16,用户报,Pixel 3 真机 release 包录屏确认)**。
+
+- 点播放条上的 X,鸿蒙是整条化成细碎粒子向上散;Android 却是**一把对齐的小方块**,
+  数量明显少、单块明显大,而且**第一帧读成"条子换了个质地"**(马赛克墙),不是"散成渣"。
+- 同一时刻两端源码里的物理参数(k=2.4、寿命 600–1000ms、70% 上抛)本来是逐字相同的,
+  所以第一反应"参数对不上"是错的方向 —— 差的是**矩形、坐标空间与粒子/格距的比例**。
+
+**根因(四层,前两层叠加才最像"大方块")**。
+
+1. **矩形量在了让位盒上。** 粒子层的矩形来自 `onGloballyPositioned { boundsInRoot() }`,
+   而它挂的是 `MiniPlayer` **外层**那个带 `padding(bottom = lift)` 的盒子
+   (`Components.kt` 的 `lift = (GLASS_BAR_H + MINI_GAP) * (1f − fc)`):展开态下这份矩形 =
+   56dp 胶囊 **+** 64dp 让位 ≈ 330px,胶囊本身只有 154px。行数按"矩形高 / 8.5"算,
+   于是 step ≈ 39px、单块 32–44px、总数只剩 ~230 —— 数量与尺寸**同时**错,而且数量是平方级地掉。
+2. **画布原点与被测矩形不在同一个空间。** 粒子层的 Canvas 挂在带 `statusBarsPadding()` 的容器里,
+   `DrawScope` 的原点在那个容器的左上角;而矩形是**根坐标**。差一个状态栏高(Pixel 3 ≈66px),
+   整群碎片被整体画低一截 —— 单独看像"从底栏里冒出来",叠在第 1 条上则更难看出是量错了。
+3. **首帧空档。** 撒粒子原先写在 `LaunchedEffect(tick)` 里:点 X 那一下同时置 ghost(条子 alpha=0)
+   与 `tick++`,而 `LaunchedEffect` 要等这一帧组合 + 布局之后才跑,粒子再等下一帧才画出来 ——
+   录屏逐帧读到过"条子没了、什么都没有"的那一帧。
+4. **粒子画满了格子(参数漂移)。** 修好 1、2 之后第一版按"11 行 + 出生接近满格(0.82~1.14 × 步长)"
+   去调,期望"第一帧看起来还是一条,只是变成了碎屑" —— 装机录屏第一帧正是**铺满的马赛克墙**。
+   对照 `harmony/entry/src/main/ets/view/DissolveParticles.ets` 才看清:那边碎片只有 **0.35~0.70 × 步长**
+   (封面 0.55~1.0)、出生带 **0~60ms** 延迟、右区 30% 主色、中段**一律** `#8A8D93`。
+   **碎片小于格距**,第一帧才读成"一把渣";铺满格子 + 随机延迟则会读出缺块,于是当时又不得不
+   删掉延迟去补洞 —— 两个症状是一个原因。
+
+**修法**。
+
+- `ReverbRoot.kt`(`MiniPlayerBar`):新增 `capsule` 状态,用 `capsuleModifier =
+  Modifier.onGloballyPositioned { capsule.value = it.boundsInRoot() }` **单独量胶囊本体**
+  (`MiniPlayer` 里挂在那个圆角 `Box` 上,新参数名就叫 `capsuleModifier`);
+  `onClose` 里 `onDissolveRequest(capsule.value.takeIf { it.width > 0f } ?: bounds.value)` ——
+  兜底分支留着,只用在首帧尚未布局的极端情况。
+- `DissolveParticles.kt`:Canvas 上加 `onGloballyPositioned { origin = it.positionInRoot() }`,
+  绘制时减掉 `origin`;丢粒子从 `LaunchedEffect` 挪进 **`remember(tick, primary)`**(组合期),
+  ghost 与粒子同一帧生效。
+- 参数**逐字对齐鸿蒙**:`ROWS = 8.5f`、尺寸 `0.35~0.70`(封面 `0.55~1.0`)、随寿命缩到 65%、
+  `delayMs = rnd.nextInt(60)`、右区 `tone < 0.3f` 取主色、中段回到 `#8A8D93`。
+  早先把中段大部分调成胶囊底色 `#232B2D` 是给"满格铺满"打的压亮度补丁,碎片变小后不再需要。
+
+**验收(2026-11-16,Pixel 3 / `8CBX1LP64`,release 包覆盖安装,开机播放后录屏)**。
+
+- `logcat -s Dissolve`:`spawn 451 shards rect=Rect.fromLTRB(66.0, 1769.0, 1014.0, 1923.0) step=18.117647`
+  —— 矩形 = 948×154 的胶囊本体(与 uiautomator 读到的条带 1780–1912 一致),step 18px,451 粒。
+  修前同一条命令读到的是 step≈39、~230 粒。
+- 录屏(`screenrecord --time-limit 3`,点击落在 0.8s)抽 61 帧(30fps):第 1–20 帧条子在,
+  第 21 帧起爆,第 24 帧(≈100ms)全量粒子云、覆盖范围与胶囊等宽(x 70–1010),第 45 帧(≈730ms)
+  尾迹将尽;**没有"条子在 / 粒子不在"的空帧**。前两帧只见到十来粒是 0–60ms 出生延迟的正常形状
+  (鸿蒙同样),50ms 内铺满。
+- ⚠️ 抽帧必须 `ffmpeg -fps_mode cfr -r 30`;`passthrough` 会按 dts 乱序输出,
+  看起来像"先没粒子后有粒子"的假故障(本轮踩过一次)。
+- **未验**:鸿蒙 / macOS 本轮没有改动(鸿蒙是效果基准,按它对齐);也没有在 120Hz 机型上看过。
+
+**教训 / 可复用的规律**。
+
+① **画布坐标必须与测量坐标在同一空间。** `boundsInRoot()` 出来的矩形只能喂给根坐标里的画布;
+   画布只要被 padding / 状态栏内缩包过一层,就得用 `positionInRoot()` 量一次自己再减掉。
+   症状不是"没画",而是"整体偏了一截" —— 那比空白更难归因,先怀疑空间不一致。
+② **量控件要量它本身,不是它的布局占位盒。** 带让位/动画 padding 的外层盒子会把矩形悄悄放大,
+   而"行数 = 高 / 常数"会把这份误差**同时**放大成粒子更大、更少。凡是"用尺寸推参数"的代码,
+   矩形都要从被描述的物体本体上取。
+③ **复刻另一端的观感,先抄它的稀疏度,别按"第一帧要像原物"去反推。** 粒子层不需要第一帧
+   还原条子的形状;粒子小于格距才读成粒子,铺满格子读成换皮。这一轮先按"满格"试,前后改了六次参数,
+   最后逐字照抄 `DissolveParticles.ets` 才对齐 —— 参数"看起来一样"不等于一样。
+④ **子帧级的空档只能靠录屏逐帧取证。** "闪了一帧空白"在真机上肉眼几乎不可见,但录屏能把它钉成
+   确定性缺陷(本仓 H154 的"包比码旧"也是同一类:靠产物/画面取证,不靠日志推断)。

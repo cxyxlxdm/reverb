@@ -1052,6 +1052,21 @@ final class PlayerController: ObservableObject {
         if isPlaying { player.pause() } else { player.play(); player.rate = Float(speed) }
     }
 
+    /// 跨设备交接用:**暂停并返回暂停那一刻的位置**。
+    ///
+    /// 不能只读 `positionMs` —— 它由 0.5 秒的周期观察者刷新,读到的可能是半秒前。
+    /// 交接的语义是「对方停下时到哪,我这就从哪开始」,半秒误差会在两台设备上各出现一次。
+    /// 直播流没有时间轴,直接返回 nil(不进交接)。
+    func pauseForHandoff() -> (Episode, Int)? {
+        guard let ep = current, !ep.isLive else { return nil }
+        if isPlaying { player.pause() }
+        let seconds = player.currentTime().seconds
+        let ms = seconds.isFinite ? max(0, Int(seconds * 1000)) : positionMs
+        positionMs = ms
+        Log.i("Player", "交接暂停 id=\(ep.id) at=\(ms)ms")
+        return (ep, ms)
+    }
+
     func seek(toMs ms: Int) {
         let t = max(0, ms)
         // 直播流没有可跳的时间轴:播放器还没报出时长时,durationMs 是 0,

@@ -21,6 +21,10 @@ import AppIntents
 struct ReverbWidgetBundle: WidgetBundle {
     var body: some Widget {
         ReverbWidget()
+        // 播放中的锁屏 / 灵动岛。与主屏卡片共用同一个扩展(target 与 Info.plist 的
+        // widgetkit-extension 扩展点),不另起 target —— Live Activity 与 WidgetKit
+        // 本来就是同一个进程模型。
+        PlaybackLiveActivity()
     }
 }
 

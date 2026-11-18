@@ -61,6 +61,14 @@ export class LanSyncSession {
   private peerName: string = '设备';
   private shared: Uint8Array = new Uint8Array(0);
 
+  /**
+   * 对端是否声明支持「同步之后的播放交接」(`hello.live`)。
+   *
+   * 这是**加时赛**不是新协议:老版本没有这个键,读到 false 就不进交接,
+   * 也就不用担心把一条老版本的会话拖在一个永远等不到帧的读上。
+   */
+  peerSupportsLive: boolean = false;
+
   constructor(
     identity: LanSyncMaterial,
     channel: LanSyncChannel,
@@ -118,6 +126,9 @@ export class LanSyncSession {
     hello['name'] = this.identity.name;
     hello['pub'] = LanSyncCrypto.base64(LanSyncCrypto.encodePublicKey(ephemeral.pubKey));
     hello['nonce'] = LanSyncCrypto.base64(nonce);
+    // 交接是同步之后的**加时赛**:同一把会话密钥、同一条 TCP。
+    // 老版本忽略这个键,同步完就断开;我们这边读到 false 就不进读循环。
+    hello['live'] = true;
     await this.channel.sendPlain(JSON.stringify(hello));
 
     const text = await this.channel.receivePlain(LanSyncSession.HANDSHAKE_TIMEOUT_MS);
@@ -148,6 +159,7 @@ export class LanSyncSession {
     // 放在人眼比对**之前**是对的 —— Android 也是先装密钥再弹配对码,配对码只是
     // "两边算出来的同一个密钥"的证明,不参与加解密本身。
     this.channel.useKey(this.sessionKeyCache);
+    this.peerSupportsLive = remote['live'] === true;
     const rawName = remote['name'] as string;
     const trimmed = rawName === undefined || rawName === null ? '' : rawName.trim();
     this.peerName = trimmed.length > 0 ? trimmed.substring(0, 64) : '设备';

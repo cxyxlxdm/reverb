@@ -5,6 +5,7 @@ import transcriptLinesTest from './TranscriptLines.test';
 import chaptersTest from './Chapters.test';
 import transcriptSearchExportTest from './TranscriptSearchExport.test';
 import senseVoiceTextTest from './SenseVoiceText.test';
+import lanSyncLiveTest from './LanSyncLive.test';
 
 /**
  * 本地单测入口。`hvigorw test` 会生成 `.test/testability/pages/Index.ets`,
@@ -21,4 +22,5 @@ export default function testsuite(): void {
   chaptersTest();
   transcriptSearchExportTest();
   senseVoiceTextTest();
+  lanSyncLiveTest();
 }

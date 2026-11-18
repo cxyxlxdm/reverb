@@ -16,6 +16,20 @@
 > **版本号**:四端都已改到 1.0.8 —— Android `9` / 鸿蒙 `1000008` / macOS `1.0.8(5)` /
 > iOS `1.0.8(2)`。章节移植到鸿蒙与苹果两端时各自动了源码,版本号随之更新。
 
+### Android:播放条 X 的粒子消散与鸿蒙对齐(2026-11-16)
+
+- 用户反馈:点 X 之后 Android 是「稀疏的大方块」,鸿蒙才是粒子消散。查下来是三处叠加:
+  1) 粒子矩阵量的是播放条**外面带让位 padding 的盒子**(≈330px)而不是胶囊本体(154px),
+     行数按矩形高算 ⇒ 步长 39px、单块 32–44px、总数只剩 ~230;
+  2) 粒子画布挂在带 `statusBarsPadding()` 的容器里而矩形是根坐标,整群碎片被画低一个状态栏;
+  3) 撒粒子在 `LaunchedEffect` 里,晚一帧,录屏能看到「条子没了、粒子还没出」的一帧。
+- 修法:单独量胶囊本体喂给粒子层、画布用 `positionInRoot()` 换算、撒粒子挪到组合期;
+  并把稀疏度参数**逐字对齐鸿蒙**(8.5 行、碎片 0.35~0.70 × 步长、出生 0~60ms 延迟、中段灰色 `#8A8D93`)。
+- 验收:Pixel 3 release 包覆盖安装后录屏抽帧 —— `logcat` 读到 451 粒、
+  `rect=Rect.fromLTRB(66.0, 1769.0, 1014.0, 1923.0) step=18.1`;第 21 帧起爆、≈100ms 铺满、
+  ≈730ms 尾迹散尽,无空帧。**鸿蒙与 macOS 本轮未改动**(鸿蒙是效果基准)。
+  逐条现象/根因/读数见 `docs/TROUBLESHOOTING.md` **H285**。
+
 ### 鸿蒙:targetSdkVersion 升到 26.0.0(2026-11-11)
 
 - 两个 product 的 `targetSdkVersion` 从 `6.1.0(23)` 升到 `26.0.0`(平台要求);
@@ -25,6 +39,67 @@
   `targetAPIVersion=260000026` / `minAPIVersion=60100023`;`hvigorw test` 30 条 0 失败;
   Mate 60 覆盖安装成功并启动(进程非空)。
 - `build-profile.template.json5` 同步更新(它此前还停在 `6.0.2(22)`,与真实配置不一致)。
+
+### Android:targetSdk 升到 37(Android 17)(2026-11-15)
+
+- `compileSdk` / `targetSdk` 从 34 升到 **37**;构建工具链随之升到 **AGP 9.5.1 / Gradle wrapper 9.9.1 /
+  Kotlin 2.2.10(AGP 9 内置)**,新增 `org.jetbrains.kotlin.plugin.compose` 2.2.10,
+  去掉 `kotlinOptions` / `composeOptions` 与老 `applicationVariants` 接口(产物改名改走 `androidComponents`)。
+  Compose BOM 仍是 2024.06.00,本轮未动。
+- **Android 17 的「本地网络」是新的运行时权限**(`ACCESS_LOCAL_NETWORK`,危险级别):
+  mDNS 发现与局域网同步的 47820 直连都要它。manifest 已声明;首次打开「设置 → 局域网同步」时按
+  `SDK_INT >= 37` 请求一次,拒绝会明确提示「没有本地网络权限,无法发现或连接另一台设备」(五语种),
+  Android 16 及更早不弹。隐私政策、官网隐私页与同意页文案同步补了这一句。
+- 验收:`:app:compileReleaseKotlin` exit 0、`:app:assembleDebug` 成功、`:app:testDebugUnitTest`
+  **89 条 0 失败**(AGP 9 已没有 `testReleaseUnitTest`);API 37 模拟器上拒绝/允许两条路径都走通,
+  允许后与 Pixel 3 手动地址配对成功(两端同码 `542 933`);Pixel 3(Android 12)不弹框、面板直接打开。
+  解包 `dist/reverb.apk` = **270,179,532 B @21:04:22 sha256 `9442a1bc…`**,
+  `aapt2 dump permissions` **13 项**(新增项第 9 行),其余判据 4/1/13 与 `-newer` 0 命中不变;
+  签名 `CN=Yuyin Reverb`。
+- 未验:大屏(≥600dp)强制可调整性只核了 manifest(本应用没有方向/大小锁定),没有平板模拟器实跑;
+  Android 17 的其它行为变更未逐条评估。逐条踩坑见 `docs/TROUBLESHOOTING.md` **H282**。
+- 工程要点:`android.enableR8.fullMode=false` 在 AGP 9 已是弃用警告(默认 true,AGP 10 移除)。
+  本轮**不改**(改它等于换 R8 行为,sherpa 的 keep 规则要重验);升级 AGP 10 前必须先做那一步。
+
+### iOS:锁屏 / 灵动岛实时活动(2026-11-15)
+
+- 新增 Live Activity:**真的在播时**锁屏与灵动岛常驻一张播放卡(集名、频道名、已听 / 剩余时间,
+  以及上一集 / 播放暂停 / 下一集)。暂停保留 15 分钟,换集先撤旧再起新,同一时刻只有一条;
+  直播显示「直播」而不画进度。进度用绝对时间锚点交给系统走,稳态播放**不主动 update**。
+- 契约放共享层(`macos/Sources/WidgetContract/PlaybackActivity.swift`,App 与扩展编译同一份),
+  控制键走 `LiveActivityIntent` 经 `WidgetCommandCenter` 交回 App,不打开界面。
+- **不依赖 App Group**:免费团队签名拿不到组容器时主屏卡片退空态,锁屏 / 灵动岛照常工作
+  (`WidgetBridge.flush()` 里 sync 提到容器判据之前)。
+- `Info.plist` 新增 `NSSupportsLiveActivities=true`;`build-ios.sh` 编译门加第 2b 条断言
+  (缺这个键时活动**静默不出现**,没有任何运行时症状)。
+- 验收:编译门 8 条全过;模拟器(iPhone 17 / iOS 27.2,adhoc、无 App Group)实跑 ——
+  SpringBoard 注册活动、chronod 拉起扩展、锁屏行与灵动岛三形态都被渲染器判 `LIVE`;
+  25 秒稳态播放 `Activity did update` = 0 次;结束 / 换集各一拍。
+- 未验:实际观感与按键点按(本机没有 Simulator 图形界面),真机(签名 `No Accounts` / `No profiles`)。
+  逐条踩坑见 `docs/TROUBLESHOOTING.md` **H283**。
+
+### 局域网同步:跨设备播放进度交接(2026-11-15)
+
+- 两台设备在同一 Wi-Fi 下打开「局域网同步」并完成合并后,正在播放的一方会让另一台看到
+  「另一台设备正在播放 / 暂停在这一集 … · 12:34」,点「在此设备继续」就从那一秒接着听;
+  接力时播放方先暂停、接手方按网络往返补上半程,两端不会同时出声。
+- **不自动接管、不自动播放**;关掉页面连接即断,不后台常驻;直播流不参与交接。
+- 四端同一套协议:复用同步已完成的那条加密连接(`hello` 带 `live: true`,老版本忽略后照旧断开),
+  播放中每秒一条状态、暂停 / 跳转 / 换集立即补;位置按时钟偏差外推,样本不足时界面写「约 12:34」。
+- 验收:Pixel 3 ↔ Mate 60 真机双向 —— Android 播→鸿蒙接(Android `state=3 position=371601` → 暂停
+  `375090`,鸿蒙面板改「暂停在这一集 · 6:15」并从那里起播)、鸿蒙播→Android 接(鸿蒙日志
+  `交接暂停 … at=442778ms`,Android `state=3 position=445799` 起播);交接中关面板,对端显示
+  「另一台设备已离开,交接结束。」。鸿蒙 `hvigorw test` 全绿、`assembleHap` 成功。
+- 修了一个只在鸿蒙出现的界面问题:交接那一行文字不随状态刷新(屏幕上一直写「另一台设备还没有在播放任何内容。」,
+  下面的按钮却已可点)—— `@Builder` 按值收参导致 `build()` 重跑而 `@Builder` 内不重组,已改为内联,见 **H284**。
+- 未验:macOS / iOS 面板上的交接运行(Apple 侧只有编译门与单测);三台以上设备;弱网 / 掉线恢复。
+- 工程要点:交接新增一条数据流(当前集标题、封面、音频地址、位置与播放态,只发给已配对设备),
+  隐私政策、官网隐私页与同意页各补一句,隐私版本 +1(Android / 鸿蒙 5,macOS / iOS 6)。
+- 本版重打(22:39):`android/dist/reverb.apk` **270,204,108 B**,sha256 `df1a0aab…c8e0`,
+  解包 `lib/model=4 / seed=1 / 源名=13 / permissions=13`,`resources.arsc` 里能数到
+  `lan_handoff_take|lan_handoff_paused` = 2;`harmony/dist/reverb.app` **182,019,385 B**,
+  嵌套 `entry-default.hap` 里 model=2 / lib=3、`resources.index` 里 `lan_handoff_take` = 1。
+  两端 `-newer`(括号版)均 0 命中;Android mapping 与鸿蒙符号包同批落盘。
 
 ### 鸿蒙:服务卡片补上封面与播放控制(2026-11-12)
 

@@ -36,6 +36,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
+import com.yuyin.reverb.sync.LanHandoffState
 import com.yuyin.reverb.sync.LanSyncController
 import com.yuyin.reverb.sync.LanSyncFail
 import com.yuyin.reverb.sync.LanSyncStage
@@ -57,6 +58,7 @@ import androidx.compose.ui.res.stringResource
 @Composable
 fun LanSyncDialog(controller: LanSyncController, onDismiss: () -> Unit) {
     val state by controller.state.collectAsStateWithLifecycle()
+    val handoff by controller.handoff.collectAsStateWithLifecycle()
     var manual by rememberSaveable { mutableStateOf("") }
 
     LaunchedEffect(Unit) { controller.start() }
@@ -161,6 +163,11 @@ fun LanSyncDialog(controller: LanSyncController, onDismiss: () -> Unit) {
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+                        // 同步之后的加时赛:同一台对端、同一条连接,不重新配对。
+                        if (handoff.available || handoff.note != null) {
+                            Spacer(Modifier.height(14.dp))
+                            HandoffBody(handoff, onTake = { controller.takePlayback() })
                         }
                     }
 
@@ -348,6 +355,73 @@ private fun ConfirmBody(state: LanSyncState.Confirm) {
         Spacer(Modifier.height(8.dp))
         Text(stringResource(R.string.lan_confirm_body), style = MaterialTheme.typography.bodySmall)
     }
+}
+
+@Composable
+private fun HandoffBody(state: LanHandoffState, onTake: () -> Unit) {
+    Column {
+        val hint = state.peerHint
+        if (hint != null) {
+            Text(
+                stringResource(
+                    if (hint.playing) R.string.lan_handoff_playing else R.string.lan_handoff_paused
+                ),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.height(2.dp))
+            val clock = clockText(hint.positionMs)
+            Text(
+                "《${hint.episode.title}》 · " +
+                    if (hint.approximate) stringResource(R.string.lan_handoff_approx, clock) else clock,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        } else {
+            Text(
+                stringResource(R.string.lan_handoff_none),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        state.note?.let {
+            Spacer(Modifier.height(4.dp))
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        // 本机已经在放这一集(刚接手成功)时不再摆按钮 —— 按下去只会从当前位置重开一遍。
+        val alreadyHere = state.localPlayingNow && state.localEpisodeId == hint?.episode?.id
+        if (hint != null && !alreadyHere) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = onTake, enabled = !state.takingOver) {
+                    Text(
+                        stringResource(
+                            if (state.takingOver) R.string.lan_handoff_taking
+                            else R.string.lan_handoff_take
+                        )
+                    )
+                }
+            }
+        }
+
+        Text(
+            stringResource(R.string.lan_handoff_boundary),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun clockText(ms: Long): String {
+    val total = (ms / 1000).coerceAtLeast(0)
+    val h = total / 3600
+    val m = total % 3600 / 60
+    val s = total % 60
+    return if (h > 0) "%d:%02d:%02d".format(h, m, s) else "%d:%02d".format(m, s)
 }
 
 @Composable

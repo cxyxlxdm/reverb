@@ -96,6 +96,12 @@ class LanSyncChannel(private val socket: Socket) : Closeable {
         return JSONObject(String(plain, Charsets.UTF_8))
     }
 
+    /**
+     * `@Synchronized`:同步期只有一条写线程,但交接期心跳(tick)与用户点「在此设备继续」
+     * (take)会从两个协程同时进来。两条帧的 `writeInt + write` 交错就是一个对端永远解不开的
+     * 坏帧,而且症状是"对端突然不说话了",很难归因。
+     */
+    @Synchronized
     private fun writeFrame(bytes: ByteArray) {
         if (bytes.size > LanSyncWire.MAX_FRAME) {
             throw LanSyncException(LanSyncFail.PROTOCOL, "单帧 ${bytes.size} 字节,超过上限")

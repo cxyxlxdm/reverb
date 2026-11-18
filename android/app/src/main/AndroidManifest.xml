@@ -13,6 +13,12 @@
          Android 永远发现不了鸿蒙。只在同步面板打开期间持锁,关闭即释放。
          同一件事的另一半证据与兜底见 docs/TROUBLESHOOTING.md H276。 -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
+    <!-- Android 17(targetSdk 37)起,"本地网络"是独立权限:组播发现与直连 TCP 都要它。
+         本应用唯一的使用者是局域网同步(H276 那套 mDNS + QU 发现 + 47820 直连)。
+         ⚠️ 它是**运行时**权限,已在 SettingsScreen 的同步入口按 SDK_INT >= 37 申请;
+         不申请不会崩,但会静默发现不到对端(组播被丢、连接超时),比报错更难查。
+         36 及以下没有这条权限,声明在旧系统上无副作用。 -->
+    <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- 真实频谱(RECORD_AUDIO + MODIFY_AUDIO_SETTINGS)与应用内更新(REQUEST_INSTALL_PACKAGES)
          原先只声明在 src/default/AndroidManifest.xml,商店那份没有 —— 2026-10-18 两 flavor 合成
          一份包之后,这三条进了唯一的 manifest(理由与代价见 H205):

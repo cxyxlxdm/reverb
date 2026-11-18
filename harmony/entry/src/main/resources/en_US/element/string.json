@@ -1554,7 +1554,7 @@
     },
     {
       "name": "set_lan_sync_sub",
-      "value": "Merge subscriptions, favorites, stamps, notes and progress with another device on the same Wi-Fi"
+      "value": "Merge subscriptions, favorites, stamps, notes and progress with another device on the same Wi-Fi, and continue the episode you are listening to there"
     },
     {
       "name": "lan_title",
@@ -1653,6 +1653,46 @@
       "value": "Both devices are already identical; nothing new."
     },
     {
+      "name": "lan_handoff_playing",
+      "value": "The other device is playing"
+    },
+    {
+      "name": "lan_handoff_paused",
+      "value": "The other device is paused on this episode"
+    },
+    {
+      "name": "lan_handoff_approx",
+      "value": "about %1$s"
+    },
+    {
+      "name": "lan_handoff_none",
+      "value": "The other device isn't playing anything yet."
+    },
+    {
+      "name": "lan_handoff_take",
+      "value": "Continue on this device"
+    },
+    {
+      "name": "lan_handoff_taking",
+      "value": "Taking over…"
+    },
+    {
+      "name": "lan_handoff_done",
+      "value": "Continued on this device."
+    },
+    {
+      "name": "lan_handoff_timeout",
+      "value": "The other device didn't respond. Try again."
+    },
+    {
+      "name": "lan_handoff_left",
+      "value": "The other device has left. Handoff ended."
+    },
+    {
+      "name": "lan_handoff_boundary",
+      "value": "Handoff works only while both devices are on this screen and the other one is playing. Live streams are not included."
+    },
+    {
       "name": "lan_failed_title",
       "value": "Sync failed"
     },
@@ -1706,7 +1746,7 @@
     },
     {
       "name": "privacy_consent_lan",
-      "value": "Local network sync (optional). After you open “Local network sync” in Settings, the app advertises a service name (including this device's name and a short random identifier) on the same Wi-Fi and temporarily opens a TCP port; both stop when the page closes. After you tap the other device or enter its address, each device shows a six-digit pairing code, and transfer starts only when you confirm both screens match. The transfer carries the same six sections as a full backup (subscriptions, favourites, stamps, notes, history and listening stats, with stats merged per device); it excludes audio, binary caches, private-feed usernames and passwords, app settings and the play queue. Data is encrypted with keys negotiated between the two devices (ECDH P-256 and AES-256-GCM) and goes directly only between the two paired devices — never through any server, and never uploaded to the developer. Deletions also sync: when you unsubscribe, remove a favorite, or delete a stamp or note on one device, this device records which kind, which item and when, and sends it with the sync so the other device deletes it too; the record stays only on this device and is cleared after 90 days. A deletion record takes precedence over the other device's data: if the other device re-added the same item just before syncing, it is still deleted this time."
+      "value": "Local network sync (optional). After you open “Local network sync” in Settings, the app advertises a service name (including this device's name and a short random identifier) on the same Wi-Fi and temporarily opens a TCP port; both stop when the page closes. After you tap the other device or enter its address, each device shows a six-digit pairing code, and transfer starts only when you confirm both screens match. The transfer carries the same six sections as a full backup (subscriptions, favourites, stamps, notes, history and listening stats, with stats merged per device); it excludes audio, binary caches, private-feed usernames and passwords, app settings and the play queue. Data is encrypted with keys negotiated between the two devices (ECDH P-256 and AES-256-GCM) and goes directly only between the two paired devices — never through any server, and never uploaded to the developer. Deletions also sync: when you unsubscribe, remove a favorite, or delete a stamp or note on one device, this device records which kind, which item and when, and sends it with the sync so the other device deletes it too; the record stays only on this device and is cleared after 90 days. A deletion record takes precedence over the other device's data: if the other device re-added the same item just before syncing, it is still deleted this time. The same connection also carries playback handoff while the page stays open: the playing device sends the current episode's title, cover and audio address, position, play state and speed once a second, and immediately on pause, seek or an episode change. When you tap “Continue on this device”, the playing device pauses first and replies with its exact position, and the other device seeks there and starts playing. This part is not written to disk on either device, is not part of any backup, never takes over or starts playback automatically, excludes live streams, and stops when the page closes."
     }
   ]
 }

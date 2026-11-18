@@ -1336,7 +1336,11 @@ fun MiniPlayer(
     ballIcon: ImageVector? = null,
     onRestore: () -> Unit = {},
     collapseIntoBar: Boolean = false,
-    coverOpensChannel: Boolean = true
+    coverOpensChannel: Boolean = true,
+    /// 挂在**胶囊本体**上的修饰符(点 X 的粒子层要它的根坐标)。
+    /// 外层那块盒子带 `padding(bottom = lift)`(展开态 = 栏高 + 8dp),量它会把 64dp 的
+    /// 空档也算进去 —— 网格按 330px 摊,单块大 2.5 倍、总数少 2.5 倍,见 H285。
+    capsuleModifier: Modifier = Modifier
 ) {
     val f by animateFloatAsState(
         targetValue = if (collapsed) 1f else 0f,
@@ -1412,6 +1416,7 @@ fun MiniPlayer(
                 Modifier
                     .weight(1f)
                     .height(blockH)
+                    .then(capsuleModifier)
                     .clip(CircleShape)
                     // 不透明实底:收束态底下就是列表内容,半透明会让胶囊和文字一起糊掉
                     // (鸿蒙那边靠系统材质做到"随背后内容动",本端没有等价物,先按不透明保底)。

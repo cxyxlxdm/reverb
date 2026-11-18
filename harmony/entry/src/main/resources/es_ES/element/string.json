@@ -1554,7 +1554,7 @@
     },
     {
       "name": "set_lan_sync_sub",
-      "value": "Fusiona suscripciones, favoritos, sellos, notas y progreso con otro dispositivo en la misma Wi-Fi"
+      "value": "Fusiona suscripciones, favoritos, sellos, notas y progreso con otro dispositivo en la misma Wi-Fi, y sigue allí el episodio que escuchas"
     },
     {
       "name": "lan_title",
@@ -1653,6 +1653,46 @@
       "value": "Ambos dispositivos ya coinciden; no hay nada nuevo."
     },
     {
+      "name": "lan_handoff_playing",
+      "value": "El otro dispositivo está reproduciendo"
+    },
+    {
+      "name": "lan_handoff_paused",
+      "value": "El otro dispositivo está en pausa en este episodio"
+    },
+    {
+      "name": "lan_handoff_approx",
+      "value": "aprox. %1$s"
+    },
+    {
+      "name": "lan_handoff_none",
+      "value": "El otro dispositivo aún no está reproduciendo nada."
+    },
+    {
+      "name": "lan_handoff_take",
+      "value": "Continuar en este dispositivo"
+    },
+    {
+      "name": "lan_handoff_taking",
+      "value": "Retomando…"
+    },
+    {
+      "name": "lan_handoff_done",
+      "value": "Continuado en este dispositivo."
+    },
+    {
+      "name": "lan_handoff_timeout",
+      "value": "El otro dispositivo no respondió. Inténtalo de nuevo."
+    },
+    {
+      "name": "lan_handoff_left",
+      "value": "El otro dispositivo se ha ido. Transferencia finalizada."
+    },
+    {
+      "name": "lan_handoff_boundary",
+      "value": "La transferencia solo funciona mientras ambos dispositivos estén en esta pantalla y el otro esté reproduciendo. Las transmisiones en directo no están incluidas."
+    },
+    {
       "name": "lan_failed_title",
       "value": "Error de sincronización"
     },
@@ -1706,7 +1746,7 @@
     },
     {
       "name": "privacy_consent_lan",
-      "value": "Sincronización en red local (opcional). Al abrir «Sincronización en red local» en Ajustes, la aplicación anuncia un nombre de servicio (con el nombre de este dispositivo y un identificador aleatorio corto) en la misma Wi-Fi y abre temporalmente un puerto TCP; ambos se detienen al cerrar la página. Cuando tocas el otro dispositivo o escribes su dirección, cada dispositivo muestra un código de emparejamiento de seis cifras, y la transferencia solo empieza cuando confirmas que ambas pantallas coinciden. La transferencia lleva las mismas seis secciones que una copia completa (suscripciones, favoritos, sellos, notas, historial y estadísticas de escucha, estas últimas fusionadas por dispositivo); excluye audio, cachés binarias, el usuario y la contraseña de fuentes privadas, los ajustes y la cola de reproducción. Los datos se cifran con claves negociadas entre ambos dispositivos (ECDH P-256 y AES-256-GCM) y viajan directamente solo entre los dos dispositivos emparejados: nunca pasan por un servidor ni se suben al desarrollador. Las eliminaciones también se sincronizan: al darse de baja, quitar un favorito o borrar un sello o una nota en un dispositivo, este anota de qué tipo, qué elemento y cuándo, y lo envía en la sincronización para que el otro también lo borre; ese registro queda solo en este dispositivo y se borra a los 90 días. El registro de borrado prevalece sobre los datos del otro dispositivo: si el otro volvió a añadir el mismo elemento justo antes de sincronizar, esta vez también se borra."
+      "value": "Sincronización en red local (opcional). Al abrir «Sincronización en red local» en Ajustes, la aplicación anuncia un nombre de servicio (con el nombre de este dispositivo y un identificador aleatorio corto) en la misma Wi-Fi y abre temporalmente un puerto TCP; ambos se detienen al cerrar la página. Cuando tocas el otro dispositivo o escribes su dirección, cada dispositivo muestra un código de emparejamiento de seis cifras, y la transferencia solo empieza cuando confirmas que ambas pantallas coinciden. La transferencia lleva las mismas seis secciones que una copia completa (suscripciones, favoritos, sellos, notas, historial y estadísticas de escucha, estas últimas fusionadas por dispositivo); excluye audio, cachés binarias, el usuario y la contraseña de fuentes privadas, los ajustes y la cola de reproducción. Los datos se cifran con claves negociadas entre ambos dispositivos (ECDH P-256 y AES-256-GCM) y viajan directamente solo entre los dos dispositivos emparejados: nunca pasan por un servidor ni se suben al desarrollador. Las eliminaciones también se sincronizan: al darse de baja, quitar un favorito o borrar un sello o una nota en un dispositivo, este anota de qué tipo, qué elemento y cuándo, y lo envía en la sincronización para que el otro también lo borre; ese registro queda solo en este dispositivo y se borra a los 90 días. El registro de borrado prevalece sobre los datos del otro dispositivo: si el otro volvió a añadir el mismo elemento justo antes de sincronizar, esta vez también se borra. La misma conexión sirve para retomar la reproducción mientras la página siga abierta: el dispositivo que reproduce envía una vez por segundo el título, la portada y la dirección de audio del episodio actual, la posición, si está reproduciendo y la velocidad, y de inmediato al pausar, saltar o cambiar de episodio. Cuando tocas «Continuar en este dispositivo», el dispositivo que reproduce pausa primero y devuelve su posición exacta; el otro salta a ella y empieza a reproducir. Estos datos no se escriben en disco en ningún dispositivo ni forman parte de ninguna copia, nunca se retoma ni se inicia la reproducción automáticamente, las emisiones en directo no participan y todo se detiene al cerrar la página."
     }
   ]
 }

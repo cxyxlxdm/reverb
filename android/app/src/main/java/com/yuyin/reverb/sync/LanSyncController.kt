@@ -2,16 +2,22 @@ package com.yuyin.reverb.sync
 
 import android.content.Context
 import com.yuyin.reverb.AppContainer
+import com.yuyin.reverb.data.model.Episode
+import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.util.Logger
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.net.Inet4Address
 import java.net.InetSocketAddress
 import java.net.NetworkInterface
@@ -41,6 +47,23 @@ sealed class LanSyncState {
 }
 
 /**
+ * 同步完成之后的「播放交接」面板。**与 [LanSyncState.Done] 并存**:
+ * 交接不是又一次同步,它复用同一条已认证的 TCP,面板不重画、不重新配对。
+ */
+data class LanHandoffState(
+    /** 对端声明支持交接(hello.live)且通道已建立。 */
+    val available: Boolean = false,
+    /** 对端此刻的播放状态(位置已外推到"现在")。null = 对方没在播任何东西。 */
+    val peerHint: LanPeerHint? = null,
+    /** 一行结果/失败说明(已在这台设备继续 / 对方没有回应 …)。 */
+    val note: String? = null,
+    val takingOver: Boolean = false,
+    /** 本机此刻是否正在播这一集:同一集刚接手时不该再摆一颗「在此设备继续」。 */
+    val localPlayingNow: Boolean = false,
+    val localEpisodeId: String? = null
+)
+
+/**
  * 局域网同步的总控:一台设备上**同时**做服务端和客户端。
  *
  * 这不是"文件互传",是**双向合并**:任何一端发起,双方最终都拿到并集。所以界面上只需要
@@ -64,6 +87,9 @@ class LanSyncController(
     private val _state = MutableStateFlow<LanSyncState>(LanSyncState.Idle)
     val state: StateFlow<LanSyncState> = _state.asStateFlow()
 
+    private val _handoff = MutableStateFlow(LanHandoffState())
+    val handoff: StateFlow<LanHandoffState> = _handoff.asStateFlow()
+
     @Volatile private var running = false
     @Volatile private var stopping = false
     /** 每次 start/stop 自增。异步铺开的中途发现代号变了,就把自己刚拿到的东西收掉。 */
@@ -74,6 +100,9 @@ class LanSyncController(
     private var serverJob: Job? = null
     private var sessionJob: Job? = null
     private var session: LanSyncSession? = null
+    private var live: LanSyncLive? = null
+    private var takeTimeout: Job? = null
+    private var playerWatch: Job? = null
     private var confirmWaiter: CompletableDeferred<Boolean>? = null
     private var material: LanSyncIdentity.Material? = null
     private var nsdPeers: List<LanSyncPeer> = emptyList()
@@ -87,6 +116,7 @@ class LanSyncController(
         running = true
         stopping = false
         val token = runToken.incrementAndGet()
+        watchPlayer()
         scope.launch {
             val m = try {
                 identity.material
@@ -151,6 +181,12 @@ class LanSyncController(
         server = null
         session?.let { runCatching { it.close() } }
         session = null
+        live?.stop()
+        live = null
+        takeTimeout?.cancel()
+        takeTimeout = null
+        playerWatch?.cancel()
+        playerWatch = null
         serverJob?.cancel()
         serverJob = null
         sessionJob?.cancel()
@@ -163,6 +199,7 @@ class LanSyncController(
         nsdPeers = emptyList()
         quPeers = emptyList()
         currentPeer = null
+        _handoff.value = LanHandoffState()
         _state.value = LanSyncState.Idle
         Logger.i(TAG, "已停止监听")
     }
@@ -171,6 +208,93 @@ class LanSyncController(
     fun confirm(accept: Boolean) {
         val waiter = synchronized(lock) { confirmWaiter }
         if (waiter != null && !waiter.isCompleted) waiter.complete(accept)
+    }
+
+    /**
+     * 用户点「在此设备继续」。4 秒内没有 `taken` 就放开重试 ——
+     * 对方可能在忙 / 已关面板,而这里**不会**自己开播(两台同时出声是这个功能最典型的翻车方式)。
+     */
+    fun takePlayback() {
+        val live = live ?: return
+        val h = _handoff.value
+        if (h.peerHint == null || h.takingOver) return
+        _handoff.value = h.copy(takingOver = true, note = null)
+        takeTimeout?.cancel()
+        takeTimeout = scope.launch {
+            delay(TAKE_TIMEOUT_MS)
+            live.cancelTake()
+            _handoff.update {
+                if (it.takingOver) it.copy(takingOver = false, note = "对方没有回应，可以再试一次。") else it
+            }
+        }
+        scope.launch {
+            // 上一轮超时过的话 takeTimedOut 还立着;用户再点一次就是「再试」。
+            live.allowTakeAgain()
+            runCatching { live.take() }.onFailure { e ->
+                takeTimeout?.cancel()
+                _handoff.update { it.copy(takingOver = false, note = "交接请求没有发出去:${e.message}") }
+            }
+        }
+    }
+
+    /** 本机播放状态的变化要反映到交接面板上(同一集刚接手时不该再摆「在此设备继续」)。 */
+    private fun watchPlayer() {
+        playerWatch?.cancel()
+        playerWatch = scope.launch {
+            combine(PlayerController.current, PlayerController.isPlaying) { ep, playing ->
+                ep?.id to playing
+            }.collect { (id, playing) ->
+                _handoff.update { it.copy(localEpisodeId = id, localPlayingNow = playing) }
+            }
+        }
+    }
+
+    /** 本机此刻的播放状态。直播流没有时间轴,不参与交接(返回 null)。 */
+    private suspend fun localPlaybackStatus(): LanPlaybackStatus? = withContext(Dispatchers.Main) {
+        val ep = PlayerController.current.value
+        if (ep == null || ep.isLive) {
+            null
+        } else {
+            LanPlaybackStatus(
+                episode = ep,
+                positionMs = PlayerController.currentPositionMs(),
+                durationMs = PlayerController.currentDurationMs(),
+                playing = PlayerController.isPlaying.value,
+                rate = PlayerController.speed.value,
+                atMs = LanPlaybackStatus.nowMs()
+            )
+        }
+    }
+
+    /** 对端要接管:本机先停,再把停下来的那一刻位置交出去(顺序见 [PlayerController.pauseForHandoff])。 */
+    private suspend fun pauseForTake(): LanPlaybackStatus? = withContext(Dispatchers.Main) {
+        val paused = PlayerController.pauseForHandoff()
+        if (paused == null) {
+            null
+        } else {
+            LanPlaybackStatus(
+                episode = paused.first,
+                positionMs = paused.second,
+                durationMs = PlayerController.currentDurationMs(),
+                playing = false,
+                rate = PlayerController.speed.value,
+                atMs = LanPlaybackStatus.nowMs()
+            )
+        }
+    }
+
+    private suspend fun applyTaken(ep: Episode, positionMs: Long) {
+        takeTimeout?.cancel()
+        takeTimeout = null
+        _handoff.update { it.copy(takingOver = false, note = "已在这台设备继续。") }
+        withContext(Dispatchers.Main) { PlayerController.playAt(ep, positionMs) }
+        Logger.i(TAG, "接手播放 id=${ep.id} at=${positionMs}ms")
+    }
+
+    private fun onPeerHint(hint: LanPeerHint?) {
+        _handoff.update { h ->
+            h.copy(peerHint = hint, note = if (hint != null && !h.takingOver) null else h.note)
+        }
     }
 
     /**
@@ -260,6 +384,25 @@ class LanSyncController(
             session = s
             val result = s.run()
             _state.value = LanSyncState.Done(result)
+            // 同步之后**同一条 TCP 不休**,进入播放交接。对端不支持(live != null 为假)就照旧断开。
+            val channel = s.makeLive(
+                provider = { localPlaybackStatus() },
+                pauseForTake = { pauseForTake() },
+                onPeer = { hint, _ -> onPeerHint(hint) },
+                onTaken = { ep, pos -> applyTaken(ep, pos) },
+                onEnded = {
+                    if (!stopping) {
+                        _handoff.value = LanHandoffState(note = "另一台设备已离开，交接结束。")
+                    }
+                }
+            )
+            if (channel != null) {
+                live = channel
+                _handoff.value = LanHandoffState(available = true)
+                Logger.i(TAG, "进入播放交接通道 peer=${result.peerName}")
+                channel.run()
+                live = null
+            }
         } catch (e: LanSyncException) {
             Logger.w(TAG, "会话结束 ${e.fail}:${e.message}")
             if (!stopping) _state.value = LanSyncState.Failed(currentPeer, e.fail, e.message ?: "")
@@ -371,5 +514,6 @@ class LanSyncController(
         const val TAG = "LanSync"
         const val DEFAULT_PORT = 47820
         const val CONNECT_TIMEOUT_MS = 6_000
+        const val TAKE_TIMEOUT_MS = 4_000L
     }
 }

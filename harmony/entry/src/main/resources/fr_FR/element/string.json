@@ -1554,7 +1554,7 @@
     },
     {
       "name": "set_lan_sync_sub",
-      "value": "Fusionner abonnements, favoris, sceaux, notes et progression avec un autre appareil sur le même Wi-Fi"
+      "value": "Fusionner abonnements, favoris, sceaux, notes et progression avec un autre appareil sur le même Wi-Fi, et y poursuivre l'épisode en cours"
     },
     {
       "name": "lan_title",
@@ -1653,6 +1653,46 @@
       "value": "Les deux appareils sont déjà identiques ; rien de nouveau."
     },
     {
+      "name": "lan_handoff_playing",
+      "value": "L'autre appareil lit en cours"
+    },
+    {
+      "name": "lan_handoff_paused",
+      "value": "L'autre appareil est en pause sur cet épisode"
+    },
+    {
+      "name": "lan_handoff_approx",
+      "value": "env. %1$s"
+    },
+    {
+      "name": "lan_handoff_none",
+      "value": "L'autre appareil ne lit encore rien."
+    },
+    {
+      "name": "lan_handoff_take",
+      "value": "Continuer sur cet appareil"
+    },
+    {
+      "name": "lan_handoff_taking",
+      "value": "Reprise en cours…"
+    },
+    {
+      "name": "lan_handoff_done",
+      "value": "Repris sur cet appareil."
+    },
+    {
+      "name": "lan_handoff_timeout",
+      "value": "L'autre appareil n'a pas répondu. Réessayez."
+    },
+    {
+      "name": "lan_handoff_left",
+      "value": "L'autre appareil est parti. Transfert terminé."
+    },
+    {
+      "name": "lan_handoff_boundary",
+      "value": "Le transfert ne fonctionne que lorsque les deux appareils sont sur cet écran et que l'autre appareil lit. Les flux en direct ne sont pas inclus."
+    },
+    {
       "name": "lan_failed_title",
       "value": "Échec de la synchronisation"
     },
@@ -1706,7 +1746,7 @@
     },
     {
       "name": "privacy_consent_lan",
-      "value": "Synchronisation en réseau local (facultative). Après avoir ouvert « Synchronisation en réseau local » dans les réglages, l'application annonce un nom de service (comprenant le nom de cet appareil et un court identifiant aléatoire) sur le même Wi-Fi et ouvre temporairement un port TCP ; les deux s'arrêtent à la fermeture de la page. Après avoir touché l'autre appareil ou saisi son adresse, chaque appareil affiche un code d'appairage à six chiffres ; le transfert ne commence qu'une fois que vous avez confirmé que les deux écrans concordent. Le transfert contient les six mêmes sections qu'une sauvegarde complète (abonnements, favoris, empreintes, notes, historique et statistiques d'écoute, ces dernières fusionnées par appareil) ; il exclut l'audio, les caches binaires, les identifiants des flux privés, les réglages et la file de lecture. Les données sont chiffrées avec des clés négociées entre les deux appareils (ECDH P-256 et AES-256-GCM) et circulent directement entre les deux appareils appairés — jamais via un serveur, jamais vers le développeur. Les suppressions sont aussi synchronisées : lorsque vous vous désabonnez, retirez un favori ou supprimez un sceau ou une note sur un appareil, celui-ci note de quelle catégorie, quel élément et quand, puis l'envoie à la synchronisation pour que l'autre le supprime aussi ; cet enregistrement reste uniquement sur cet appareil et est effacé après 90 jours. L'enregistrement de suppression prime sur les données de l'autre appareil : si celui-ci a réajouté le même élément juste avant la synchronisation, il est quand même supprimé cette fois."
+      "value": "Synchronisation en réseau local (facultative). Après avoir ouvert « Synchronisation en réseau local » dans les réglages, l'application annonce un nom de service (comprenant le nom de cet appareil et un court identifiant aléatoire) sur le même Wi-Fi et ouvre temporairement un port TCP ; les deux s'arrêtent à la fermeture de la page. Après avoir touché l'autre appareil ou saisi son adresse, chaque appareil affiche un code d'appairage à six chiffres ; le transfert ne commence qu'une fois que vous avez confirmé que les deux écrans concordent. Le transfert contient les six mêmes sections qu'une sauvegarde complète (abonnements, favoris, empreintes, notes, historique et statistiques d'écoute, ces dernières fusionnées par appareil) ; il exclut l'audio, les caches binaires, les identifiants des flux privés, les réglages et la file de lecture. Les données sont chiffrées avec des clés négociées entre les deux appareils (ECDH P-256 et AES-256-GCM) et circulent directement entre les deux appareils appairés — jamais via un serveur, jamais vers le développeur. Les suppressions sont aussi synchronisées : lorsque vous vous désabonnez, retirez un favori ou supprimez un sceau ou une note sur un appareil, celui-ci note de quelle catégorie, quel élément et quand, puis l'envoie à la synchronisation pour que l'autre le supprime aussi ; cet enregistrement reste uniquement sur cet appareil et est effacé après 90 jours. L'enregistrement de suppression prime sur les données de l'autre appareil : si celui-ci a réajouté le même élément juste avant la synchronisation, il est quand même supprimé cette fois. La même connexion sert aussi à reprendre l'écoute tant que la page reste ouverte : l'appareil qui lit envoie une fois par seconde le titre, la pochette et l'adresse audio de l'épisode en cours, la position, l'état de lecture et la vitesse, et immédiatement à la pause, au saut ou au changement d'épisode. Quand vous touchez « Continuer sur cet appareil », l'appareil qui lit se met d'abord en pause et renvoie sa position exacte ; l'autre s'y positionne et démarre la lecture. Ces données ne sont écrites sur aucun appareil, ne font partie d'aucune sauvegarde, ne prennent jamais la main ni ne lancent la lecture automatiquement, les directs n'y participent pas et tout s'arrête à la fermeture de la page."
     }
   ]
 }

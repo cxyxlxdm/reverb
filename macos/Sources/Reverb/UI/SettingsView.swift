@@ -176,7 +176,7 @@ private struct SettingsForm: View {
                     Label {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("局域网同步")
-                            Text("在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度")
+                            Text("在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度，正在听的一集可接着听")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

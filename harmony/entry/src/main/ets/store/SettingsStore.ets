@@ -29,10 +29,14 @@ export class SettingsStore {
    *       用户为某个源输入的用户名与密码(HTTP Basic),只发给该源自己的主机。
    *       这是"改变数据的收集或用途",按上面的口径要 +1。同意页多一段「私有订阅」。
    *       Android 同步到 4;macOS / iOS 原来因桌面应用内更新停在 4,本轮一起到 5。
+   *   5 = 未发版(跨设备播放交接,2026-11-15)。同步配对后、页面不关闭期间,把**当前这一集**的
+   *       标题、封面与音频地址、播放位置、播放态与倍速发给对端 —— 一类新的离开本机的数据,
+   *       不属于原来自述的六个备份分区,所以 +1。没有新增加密连接、没有新的第三方地址,
+   *       同意页只在「局域网同步」那一段补一句。同轮 Android 4 → 5、macOS / iOS 5 → 6。
    *
    * 改这个数之后**必须重新打包两端**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
    */
-  static readonly PRIVACY_VERSION: number = 4;
+  static readonly PRIVACY_VERSION: number = 5;
 
   /// 0 跟随系统 / 1 浅色(宣纸) / 2 深色(水墨) / 3 纯白
   /// **默认 2(水墨)**,与 Android `theme_mode` 的默认值一致 —— 品牌主观感是水墨,

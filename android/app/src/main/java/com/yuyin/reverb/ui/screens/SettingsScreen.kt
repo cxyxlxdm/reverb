@@ -215,6 +215,14 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     var backupExportOpen by remember { mutableStateOf(false) }
     // 局域网同步面板。打开时才创建控制器(container.lanSync 是 lazy),关闭即停止监听。
     var showLanSync by remember { mutableStateOf(false) }
+    // Android 17(targetSdk 37)起「本地网络」是运行时权限:局域网同步的组播发现与
+    // 47820 直连都要它,不加就是静默发现不到对端(没有异常,只有超时)。
+    // 36 及以下系统里没有这条权限,`launch` 会立刻以 false 回调 —— 所以入口先按 SDK_INT
+    // 分流,旧系统不弹、也不摆"去设置里允许"那句。
+    val lanPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) showLanSync = true
+        else backupMsg = context.getString(R.string.lan_perm_denied)
+    }
     var backupExportSel by remember { mutableStateOf(BackupManager.Section.entries.toSet()) }
     var backupImportJson by remember { mutableStateOf<String?>(null) }
     var backupImportAvail by remember { mutableStateOf(emptySet<BackupManager.Section>()) }
@@ -369,7 +377,13 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             // 局域网同步单独一段:它既不是"备份文件"也不是"日志",放在备份段里会被读成
             // "又一种导出格式";而它实际是**两台设备之间实时合并**(协议见 sync/ 目录)。
             SectionLabel(stringResource(R.string.sec_lan))
-            SettingRow(stringResource(R.string.set_lan_sync), stringResource(R.string.set_lan_sync_sub)) { showLanSync = true }
+            SettingRow(stringResource(R.string.set_lan_sync), stringResource(R.string.set_lan_sync_sub)) {
+                val needLanPerm = Build.VERSION.SDK_INT >= 37 &&
+                    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
+                    PackageManager.PERMISSION_GRANTED
+                if (needLanPerm) lanPermLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+                else showLanSync = true
+            }
 
             SectionLabel(stringResource(R.string.set_logs))
             SettingRow(stringResource(R.string.set_share_log), stringResource(R.string.set_share_log_sub)) {
