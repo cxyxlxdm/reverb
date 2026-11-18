@@ -29,6 +29,12 @@
   `rect=Rect.fromLTRB(66.0, 1769.0, 1014.0, 1923.0) step=18.1`;第 21 帧起爆、≈100ms 铺满、
   ≈730ms 尾迹散尽,无空帧。**鸿蒙与 macOS 本轮未改动**(鸿蒙是效果基准)。
   逐条现象/根因/读数见 `docs/TROUBLESHOOTING.md` **H285**。
+- 发版收尾(2026-11-18):四端代码合入 `feat/1.0.8` 并推送;Android 包按本版重打
+  —— `android/dist/reverb.apk` **270,204,108 B @11-18 21:23:35**
+  sha256 `f993443f…3c973`,mapping 49,062,344 B;解包四项 **4 / 1 / 13 / 2**、
+  权限 13 条、`versionCode 9 / versionName 1.0.8`;`-newer` 对 Android / 鸿蒙 / macOS
+  各 **0** 命中。商店提交套件里的 apk 与 mapping 已同步替换。
+  ⚠️ 鸿蒙与 macOS 的 dist 产物已晚于各自源码(11-15 出包),本轮**没有重打**。
 
 ### 鸿蒙:targetSdkVersion 升到 26.0.0(2026-11-11)
 
