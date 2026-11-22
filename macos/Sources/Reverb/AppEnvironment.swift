@@ -8,6 +8,8 @@ final class AppEnvironment: ObservableObject {
     private var bag = Set<AnyCancellable>()
     let repository = PodcastRepository()
     let subscriptions = SubscriptionStore()
+    /// 直播电台账本(只进备份,不进局域网同步,见 `StationStore` 顶部注释)。
+    let stations = StationStore()
     let favorites = FavoriteStore()
     let history = HistoryStore()
     let stamps = StampStore()
@@ -79,7 +81,7 @@ final class AppEnvironment: ObservableObject {
 
         // 把低频本地存储的变更转发到自身,使观察 env 的视图能即时刷新(订阅/收藏/印记/批注/历史/下载)。
         // 不转发高频的 player(每 0.5s 进度)/settings,以免整树无谓重渲。
-        for pub in [subscriptions.objectWillChange, favorites.objectWillChange,
+        for pub in [subscriptions.objectWillChange, stations.objectWillChange, favorites.objectWillChange,
                     history.objectWillChange, stamps.objectWillChange, notes.objectWillChange,
                     inbox.objectWillChange,
                     chapters.objectWillChange,
@@ -88,7 +90,7 @@ final class AppEnvironment: ObservableObject {
         }
 
         let lang = settings.language.isEmpty ? "auto(\(Locale.preferredLanguages.first ?? "?"))" : settings.language
-        Log.i("App", "本地数据就绪 region=\(region) language=\(lang) 订阅=\(subscriptions.subscriptions.count) 收藏=\(favorites.favorites.count) 历史=\(history.history.count) 印记=\(stamps.stamps.count) 批注=\(notes.notes.count) 下载=\(downloads.downloads.count)")
+        Log.i("App", "本地数据就绪 region=\(region) language=\(lang) 订阅=\(subscriptions.subscriptions.count) 电台=\(stations.stations.count) 收藏=\(favorites.favorites.count) 历史=\(history.history.count) 印记=\(stamps.stamps.count) 批注=\(notes.notes.count) 下载=\(downloads.downloads.count)")
     }
 
     /// 当前生效地区:设置覆盖优先,否则跟随系统区域,再退化为 us。

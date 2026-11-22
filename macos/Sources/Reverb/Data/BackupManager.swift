@@ -7,11 +7,12 @@ enum BackupManager {
     /// **顺序与 Android `BackupManager.Section` / 鸿蒙那份一一对应**(notes 都紧跟 stamps):
     /// 恢复弹窗按这个顺序列勾选框,两端同一份 `reverb-backup.json` 时用户看到的次序才一致。
     enum Section: String, CaseIterable, Identifiable {
-        case subscriptions, favorites, stamps, notes, downloads, history, listenStats, settings
+        case subscriptions, stations, favorites, stamps, notes, downloads, history, listenStats, settings
         var id: String { rawValue }
         var label: String {
             switch self {
             case .subscriptions: return "订阅"
+            case .stations: return "电台"
             case .favorites: return "收藏"
             case .stamps: return "听觉印记"
             case .notes: return "批注"
@@ -90,6 +91,8 @@ enum BackupManager {
     private struct Payload: Codable {
         var version: Int = 1
         var subscriptions: [Podcast]?
+        /// 直播电台。装一层 `StationList` 是为了坏一条只丢那一条,不让整份备份解码失败。
+        var stations: StationList?
         var favorites: [Episode]?
         var stamps: [Stamp]?
         var notes: [EpisodeNote]?
@@ -105,6 +108,7 @@ enum BackupManager {
     static func build(_ env: AppEnvironment, _ include: Set<Section>) -> String {
         var p = Payload()
         if include.contains(.subscriptions) { p.subscriptions = env.subscriptions.subscriptions }
+        if include.contains(.stations) { p.stations = StationList(items: env.stations.stations) }
         if include.contains(.favorites) { p.favorites = env.favorites.favorites }
         if include.contains(.stamps) { p.stamps = env.stamps.stamps }
         if include.contains(.notes) { p.notes = env.notes.notes }
@@ -129,7 +133,7 @@ enum BackupManager {
             Log.e("Backup", "导出编码失败")
             return "{}"
         }
-        Log.i("Backup", "导出备份 分区=[\(include.map { $0.rawValue }.sorted().joined(separator: ","))] 订阅=\(p.subscriptions?.count ?? 0) 收藏=\(p.favorites?.count ?? 0) 印记=\(p.stamps?.count ?? 0) 批注=\(p.notes?.count ?? 0) 下载=\(p.downloads?.count ?? 0) 历史=\(p.history?.count ?? 0)")
+        Log.i("Backup", "导出备份 分区=[\(include.map { $0.rawValue }.sorted().joined(separator: ","))] 订阅=\(p.subscriptions?.count ?? 0) 电台=\(p.stations?.items.count ?? 0) 收藏=\(p.favorites?.count ?? 0) 印记=\(p.stamps?.count ?? 0) 批注=\(p.notes?.count ?? 0) 下载=\(p.downloads?.count ?? 0) 历史=\(p.history?.count ?? 0)")
         return str
     }
 
@@ -139,6 +143,7 @@ enum BackupManager {
               let p = try? JSONDecoder().decode(Payload.self, from: data) else { return [] }
         var s = Set<Section>()
         if let v = p.subscriptions, !v.isEmpty { s.insert(.subscriptions) }
+        if let v = p.stations?.items, !v.isEmpty { s.insert(.stations) }
         if let v = p.favorites, !v.isEmpty { s.insert(.favorites) }
         if let v = p.stamps, !v.isEmpty { s.insert(.stamps) }
         if let v = p.notes, !v.isEmpty { s.insert(.notes) }
@@ -160,6 +165,10 @@ enum BackupManager {
         }
         Log.i("Backup", "恢复备份 分区=[\(include.map { $0.rawValue }.sorted().joined(separator: ","))]")
         if include.contains(.subscriptions), let v = p.subscriptions { Log.i("Backup", "恢复订阅 \(v.count) 条"); env.subscriptions.addAll(v) }
+        if include.contains(.stations), let v = p.stations?.items {
+            Log.i("Backup", "恢复电台 \(v.count) 条")
+            env.stations.addAll(v)
+        }
         if include.contains(.favorites), let v = p.favorites { Log.i("Backup", "恢复收藏 \(v.count) 条"); env.favorites.addAll(v) }
         if include.contains(.stamps), let v = p.stamps { Log.i("Backup", "恢复印记 \(v.count) 条"); env.stamps.addAll(v) }
         if include.contains(.notes), let v = p.notes { Log.i("Backup", "恢复批注 \(v.count) 条"); env.notes.addAll(v) }
