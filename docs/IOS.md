@@ -72,7 +72,8 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
 
 ## 这一版有什么 / 没有什么
 
-**有**:四格(发现 / 追更 / 音阁 / 设置)、频道详情与订阅、播放页、后台播放 + 锁屏遥控、
+**有**:五格(发现 / 电台 / 追更 / 音阁 / 设置)、频道详情与订阅、播放页、后台播放 + 锁屏遥控、
+**直播电台**(自建电台账本 + `radio-browser.info` 目录检索 + 随包精选)与 **AirPlay 投播**(系统 `AVRoutePickerView`)、
 **主屏「继续收听」小组件**(WidgetKit,见下一节)、**锁屏 / 灵动岛的实时活动**(Live Activity,见再下一节)、
 倍速 / 快进快退 / 睡眠定时 / 播放模式 / 自动续播、单集下载、逐字稿(iOS 26 本机离线转写 + 发布方逐字稿)、
 节目笔记、听觉印记、收听统计、B 站视频与直播流、收藏/历史/待播/批注、备份与 OPML、隐私同意门、
@@ -81,7 +82,6 @@ macOS 用 `swift build -c release`(或 typecheck 差分),iOS 用 `ios/build-ios.
 **没有**:
 
 - **应用内更新** —— App Store/TestFlight 自己管;其余各端那种「查 GitHub Releases」在这里没有意义。
-- **投播** —— 其余各端也没有,不在这一版。
 - **桌面式三格外壳** —— iOS 用系统 TabView(触屏 + 安全区)。
 
 ---
@@ -486,7 +486,7 @@ release 正文与公开仓 README 都写明了「不能直接安装」。
 |---|---|
 | `ios/build-ios.sh` | 编译门 / 归档 / 导出 / 上传 |
 | `ios/Reverb/App/AppEnvironment.swift` | 依赖容器(仓库、各 store、播放器) |
-| `ios/Reverb/App/RootView.swift` | 四格 Tab + 迷你播放条 + 全屏播放页 |
+| `ios/Reverb/App/RootView.swift` | 五格 Tab(发现 / 电台 / 追更 / 音阁 / 设置)+ 迷你播放条 + 全屏播放页 |
 | `ios/Reverb/App/ReverbApp.swift` | 启动、隐私门、后台落盘 flush |
 | `ios/Reverb/UI/*` | 各页面(触屏形态) |
 | `macos/Sources/Reverb/Data`、`Playback` | 与 macOS 共用的数据/播放层 |

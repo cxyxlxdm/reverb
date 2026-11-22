@@ -90,7 +90,8 @@
   声明"有"和声明"没有"两侧都要跑 grep,而「扫不到」必须先证明扫描跑过。中文串按 `LC_ALL=C grep -a` 搜原始字节。
 - **没做逐项的三端字段级 diff**(比如同一功能的默认值是否一致),只盘了"有没有这段实现"。
 - 未打开读过的文件:`macos/Sources/Reverb/Data/{AppleChartsSource,GpodderSource,ITunesSource,FyydSource,PopularCacheStore,ListenStatsStore,DownloadManager}.swift` 与 `UI/{FootprintView,ListenStatsView,ShareCards}.swift` 只按需要略读,不构成"这些模块没问题"的结论。
-- **电台(播客 RSS 之外的音频电台)** 三端都没做(`ROADMAP.md` A 段末尾),不在本表。
+- **电台(播客 RSS 之外的音频电台)** 1.0.9 起四端都做了(顶层「电台」页 + `radio-browser.info` 目录检索 +
+  随包精选;投播见 `FEATURES.md`「投播」一节),本表不再按缺口列。
 - 本表的 Android / 鸿蒙落点是**本轮工作区状态**(那 14 个 harmony 文件尚未提交),提交后再引用行号才稳定。
 
 ---
