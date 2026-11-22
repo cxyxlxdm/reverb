@@ -237,8 +237,9 @@ Android 走 OkHttp 的 `enqueue` + 回调,响应一到就 `call.cancel()`;macOS 
 | macOS / iOS | 系统 `AVRoutePickerView` 的 SwiftUI 包装(`RoutePickerView.swift`,两端各一份) | 路由由系统 AirPlay 负责,音频仍走本端 `AVPlayer`;桌面端电台页工具栏另有一枚 |
 
 **状态机的落点**:Android 的 `CastController` 挂在应用级容器(`AppContainer.cast`),不放 ViewModel ——
-弹层关掉之后电视仍在播,状态不能随界面销毁。**本会话没有真实渲染设备可用**,四端的投播链路都未做运行验收,
-Android 只到纯逻辑单测 8 条。
+弹层关掉之后电视仍在播,状态不能随界面销毁。**运行验收现状**:Android 侧 2026-11-22 用软件渲染器
+(Macast 0.7,跑在本机 macOS)跑通了发现 → 描述 → `SetAVTransportURI` → `Play` → `Stop` 整条链路;
+鸿蒙与 Apple 仍只到编译门 + 选择器拉起,**四端都未在真实的电视 / 音箱 / AirPlay 设备上验过**。
 
 ---
 
