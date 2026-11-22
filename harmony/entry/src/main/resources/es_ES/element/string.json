@@ -13,6 +13,134 @@
       "value": "Novedades"
     },
     {
+      "name": "nav_radio",
+      "value": "Radio"
+    },
+    {
+      "name": "radio_subtitle",
+      "value": "Tus radios en directo, siempre a mano"
+    },
+    {
+      "name": "radio_search_hint",
+      "value": "Buscar emisoras por nombre"
+    },
+    {
+      "name": "radio_my_stations",
+      "value": "Mis emisoras"
+    },
+    {
+      "name": "radio_hot_stations",
+      "value": "Emisoras populares"
+    },
+    {
+      "name": "radio_search_results",
+      "value": "Resultados"
+    },
+    {
+      "name": "radio_seed_stations",
+      "value": "Emisoras destacadas"
+    },
+    {
+      "name": "radio_add",
+      "value": "Añadir emisora"
+    },
+    {
+      "name": "radio_edit",
+      "value": "Editar emisora"
+    },
+    {
+      "name": "radio_delete",
+      "value": "Eliminar emisora"
+    },
+    {
+      "name": "radio_delete_msg",
+      "value": "¿Eliminar «%s»?"
+    },
+    {
+      "name": "radio_name",
+      "value": "Nombre"
+    },
+    {
+      "name": "radio_name_hint",
+      "value": "Déjalo vacío para nombrarla automáticamente"
+    },
+    {
+      "name": "radio_url",
+      "value": "URL del flujo"
+    },
+    {
+      "name": "radio_logo_optional",
+      "value": "URL del logotipo (opcional)"
+    },
+    {
+      "name": "radio_group",
+      "value": "Grupo"
+    },
+    {
+      "name": "radio_group_none",
+      "value": "Ninguno"
+    },
+    {
+      "name": "radio_group_news",
+      "value": "Noticias"
+    },
+    {
+      "name": "radio_group_music",
+      "value": "Música"
+    },
+    {
+      "name": "radio_group_talk",
+      "value": "Charla"
+    },
+    {
+      "name": "radio_group_retro",
+      "value": "Retro"
+    },
+    {
+      "name": "radio_empty_my",
+      "value": "Aún no hay emisoras. Toca + para añadir una o elige una de abajo"
+    },
+    {
+      "name": "radio_empty_search",
+      "value": "No se encontró la emisora. Prueba con otro nombre"
+    },
+    {
+      "name": "radio_load_failed",
+      "value": "El directorio en línea no está disponible ahora mismo"
+    },
+    {
+      "name": "radio_retry",
+      "value": "Reintentar"
+    },
+    {
+      "name": "radio_invalid_url",
+      "value": "La dirección debe empezar por http:// o https://"
+    },
+    {
+      "name": "radio_not_stream",
+      "value": "Esa dirección no devolvió un flujo de audio. Compruébala"
+    },
+    {
+      "name": "radio_duplicate",
+      "value": "Esa dirección ya está en tu lista"
+    },
+    {
+      "name": "radio_added",
+      "value": "Añadida a mis emisoras"
+    },
+    {
+      "name": "radio_already_added",
+      "value": "Ya está en tu lista"
+    },
+    {
+      "name": "radio_live_name",
+      "value": "En directo"
+    },
+    {
+      "name": "radio_checking",
+      "value": "Comprobando la dirección…"
+    },
+    {
       "name": "app_title",
       "value": "Reverb"
     },
@@ -699,6 +827,10 @@
     {
       "name": "backup_row_subscriptions",
       "value": "Suscripciones"
+    },
+    {
+      "name": "backup_row_stations",
+      "value": "Emisoras en directo"
     },
     {
       "name": "backup_row_favorites",

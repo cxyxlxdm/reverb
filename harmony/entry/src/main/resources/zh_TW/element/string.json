@@ -13,6 +13,134 @@
       "value": "追更"
     },
     {
+      "name": "nav_radio",
+      "value": "電台"
+    },
+    {
+      "name": "radio_subtitle",
+      "value": "我的直播電台，隨時開聽"
+    },
+    {
+      "name": "radio_search_hint",
+      "value": "搜尋電台名稱"
+    },
+    {
+      "name": "radio_my_stations",
+      "value": "我的電台"
+    },
+    {
+      "name": "radio_hot_stations",
+      "value": "熱門電台"
+    },
+    {
+      "name": "radio_search_results",
+      "value": "搜尋結果"
+    },
+    {
+      "name": "radio_seed_stations",
+      "value": "精選電台"
+    },
+    {
+      "name": "radio_add",
+      "value": "新增電台"
+    },
+    {
+      "name": "radio_edit",
+      "value": "編輯電台"
+    },
+    {
+      "name": "radio_delete",
+      "value": "刪除電台"
+    },
+    {
+      "name": "radio_delete_msg",
+      "value": "確定刪除「%s」嗎？"
+    },
+    {
+      "name": "radio_name",
+      "value": "名稱"
+    },
+    {
+      "name": "radio_name_hint",
+      "value": "留空則自動取名"
+    },
+    {
+      "name": "radio_url",
+      "value": "串流位址"
+    },
+    {
+      "name": "radio_logo_optional",
+      "value": "台標位址（選填）"
+    },
+    {
+      "name": "radio_group",
+      "value": "分組"
+    },
+    {
+      "name": "radio_group_none",
+      "value": "未分組"
+    },
+    {
+      "name": "radio_group_news",
+      "value": "新聞"
+    },
+    {
+      "name": "radio_group_music",
+      "value": "音樂"
+    },
+    {
+      "name": "radio_group_talk",
+      "value": "談話"
+    },
+    {
+      "name": "radio_group_retro",
+      "value": "懷舊"
+    },
+    {
+      "name": "radio_empty_my",
+      "value": "還沒有自己的電台。點右上角「+」手動新增，或從下面挑一個"
+    },
+    {
+      "name": "radio_empty_search",
+      "value": "找不到這個電台，換個名字試試"
+    },
+    {
+      "name": "radio_load_failed",
+      "value": "線上目錄暫時連不上"
+    },
+    {
+      "name": "radio_retry",
+      "value": "重試"
+    },
+    {
+      "name": "radio_invalid_url",
+      "value": "位址要以 http:// 或 https:// 開頭"
+    },
+    {
+      "name": "radio_not_stream",
+      "value": "這個位址沒有回傳音訊串流，請檢查後再試"
+    },
+    {
+      "name": "radio_duplicate",
+      "value": "這個位址已經在清單裡了"
+    },
+    {
+      "name": "radio_added",
+      "value": "已加入我的電台"
+    },
+    {
+      "name": "radio_already_added",
+      "value": "已在清單裡"
+    },
+    {
+      "name": "radio_live_name",
+      "value": "直播"
+    },
+    {
+      "name": "radio_checking",
+      "value": "正在檢查這個位址…"
+    },
+    {
       "name": "app_title",
       "value": "餘音"
     },
@@ -699,6 +827,10 @@
     {
       "name": "backup_row_subscriptions",
       "value": "訂閱"
+    },
+    {
+      "name": "backup_row_stations",
+      "value": "直播電台"
     },
     {
       "name": "backup_row_favorites",

@@ -13,6 +13,134 @@
       "value": "追更"
     },
     {
+      "name": "nav_radio",
+      "value": "电台"
+    },
+    {
+      "name": "radio_subtitle",
+      "value": "我的直播电台，随时开听"
+    },
+    {
+      "name": "radio_search_hint",
+      "value": "搜索电台名称"
+    },
+    {
+      "name": "radio_my_stations",
+      "value": "我的电台"
+    },
+    {
+      "name": "radio_hot_stations",
+      "value": "热门电台"
+    },
+    {
+      "name": "radio_search_results",
+      "value": "搜索结果"
+    },
+    {
+      "name": "radio_seed_stations",
+      "value": "精选电台"
+    },
+    {
+      "name": "radio_add",
+      "value": "添加电台"
+    },
+    {
+      "name": "radio_edit",
+      "value": "编辑电台"
+    },
+    {
+      "name": "radio_delete",
+      "value": "删除电台"
+    },
+    {
+      "name": "radio_delete_msg",
+      "value": "确定删除「%s」吗？"
+    },
+    {
+      "name": "radio_name",
+      "value": "名称"
+    },
+    {
+      "name": "radio_name_hint",
+      "value": "留空则自动取名"
+    },
+    {
+      "name": "radio_url",
+      "value": "流地址"
+    },
+    {
+      "name": "radio_logo_optional",
+      "value": "台标地址（可选）"
+    },
+    {
+      "name": "radio_group",
+      "value": "分组"
+    },
+    {
+      "name": "radio_group_none",
+      "value": "未分组"
+    },
+    {
+      "name": "radio_group_news",
+      "value": "新闻"
+    },
+    {
+      "name": "radio_group_music",
+      "value": "音乐"
+    },
+    {
+      "name": "radio_group_talk",
+      "value": "谈话"
+    },
+    {
+      "name": "radio_group_retro",
+      "value": "怀旧"
+    },
+    {
+      "name": "radio_empty_my",
+      "value": "还没有自己的电台。点右上角「+」手动添加，或从下面挑一个"
+    },
+    {
+      "name": "radio_empty_search",
+      "value": "没找到这个电台，换个名字试试"
+    },
+    {
+      "name": "radio_load_failed",
+      "value": "在线目录暂时连不上"
+    },
+    {
+      "name": "radio_retry",
+      "value": "重试"
+    },
+    {
+      "name": "radio_invalid_url",
+      "value": "地址要以 http:// 或 https:// 开头"
+    },
+    {
+      "name": "radio_not_stream",
+      "value": "这个地址没有返回音频流，请检查后再试"
+    },
+    {
+      "name": "radio_duplicate",
+      "value": "这个地址已经在列表里了"
+    },
+    {
+      "name": "radio_added",
+      "value": "已加入我的电台"
+    },
+    {
+      "name": "radio_already_added",
+      "value": "已在列表里"
+    },
+    {
+      "name": "radio_live_name",
+      "value": "直播"
+    },
+    {
+      "name": "radio_checking",
+      "value": "正在检查这个地址…"
+    },
+    {
       "name": "app_title",
       "value": "余音"
     },
@@ -699,6 +827,10 @@
     {
       "name": "backup_row_subscriptions",
       "value": "订阅"
+    },
+    {
+      "name": "backup_row_stations",
+      "value": "直播电台"
     },
     {
       "name": "backup_row_favorites",

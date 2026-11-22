@@ -81,6 +81,15 @@ export class Sym {
    * 判据写在 `BottomBar.SystemTabItem.hasFill`。
    */
   static readonly feed: Resource = $r('sys.symbol.dot_radiowaves_left_and_right');
+  /**
+   * 底部 tab「电台」。Android 侧是 `Icons.Rounded.Radio`;Symbol 表里正好有 `radio` 这个名字
+   * (取自 SDK 的 `toolchains/id_defined.json`,type=symbol,已核对存在 —— `sys.symbol.*`
+   * 写错**不报错、直接空白**)。
+   * ⚠️ 它**没有 `_fill` 变体**(`radio_fill` 不在表里),所以这一格选中态只换色 + 加粗,
+   * 判据与「追更」那条同形,见 `BottomBar.SystemTabItem.hasFill`。
+   */
+  static readonly radio: Resource = $r('sys.symbol.radio');
+  static readonly plus: Resource = $r('sys.symbol.plus');
   static readonly shuffle: Resource = $r('sys.symbol.shuffle');                 // Rounded.Shuffle
   // 播放模式三态里的「单曲循环」。Material 侧是 Rounded.RepeatOne,Symbol 字体的对等件
   // 就是 repeat_1(循环箭头里带一个 1);**不要拿 `repeat` 冒充** —— 那枚是"列表循环",

@@ -4,6 +4,7 @@ import { Prefs } from './store/Prefs';
 import { JsonFile } from './store/JsonFile';
 import { SettingsStore } from './store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore, PopularCacheStore } from './store/Stores';
+import { StationStore } from './store/StationStore';
 import { InboxStore } from './store/InboxStore';
 import { SeedCatalog } from './store/SeedCatalog';
 import { FeedCacheStore } from './store/FeedCacheStore';
@@ -40,6 +41,8 @@ export class AppContainer {
 
   readonly settings: SettingsStore = new SettingsStore();
   readonly subscriptions: SubscriptionStore = new SubscriptionStore();
+  /// 直播电台账本:**进手动备份,不进局域网同步**(边界写在 `StationStore` 类注释)
+  readonly stations: StationStore = new StationStore();
   readonly favorites: FavoriteStore = new FavoriteStore();
   readonly history: HistoryStore = new HistoryStore();
   readonly inbox: InboxStore = new InboxStore();
@@ -93,6 +96,9 @@ export class AppContainer {
 
     this.settings.load();
     this.subscriptions.load();
+    // 电台:纯本地读 + 记下 rawfile 上下文(精选清单首次进电台页才装)
+    this.stations.attach(ctx);
+    this.stations.load();
     this.favorites.load();
     this.history.load();
     this.inbox.load();
