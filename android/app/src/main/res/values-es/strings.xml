@@ -11,6 +11,9 @@
     <string name="save_confirm_title">Guardar en galería</string>
     <string name="save_confirm_msg">¿Guardar esta imagen en tu galería?</string>
     <string name="action_save">Guardar</string>
+    <string name="action_clip">Clip</string>
+    <string name="action_note">Nota</string>
+    <string name="action_stamp">Sello</string>
     <string name="footprint_save">Guardar en galería</string>
     <string name="saved_ok">Guardado en la galería</string>
     <string name="saved_fail">Error al guardar</string>

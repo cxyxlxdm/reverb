@@ -11,6 +11,9 @@
     <string name="save_confirm_title">Save to gallery</string>
     <string name="save_confirm_msg">Save this image to your gallery?</string>
     <string name="action_save">Save</string>
+    <string name="action_clip">Clip</string>
+    <string name="action_note">Note</string>
+    <string name="action_stamp">Stamp</string>
     <string name="footprint_save">Save to gallery</string>
     <string name="saved_ok">Saved to gallery</string>
     <string name="saved_fail">Save failed</string>

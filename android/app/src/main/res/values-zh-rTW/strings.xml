@@ -11,6 +11,9 @@
     <string name="save_confirm_title">儲存到相簿</string>
     <string name="save_confirm_msg">將目前圖片儲存到系統相簿?</string>
     <string name="action_save">儲存</string>
+    <string name="action_clip">剪藏</string>
+    <string name="action_note">批註</string>
+    <string name="action_stamp">蓋章</string>
     <string name="footprint_save">儲存到相簿</string>
     <string name="saved_ok">已儲存到相簿</string>
     <string name="saved_fail">儲存失敗</string>
