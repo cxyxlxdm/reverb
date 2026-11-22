@@ -14292,3 +14292,25 @@ Text 于是按单行截断(fixedSize 单独加在 Text 上也没用,按钮样式
 ② 桌面端"没有更新日志"不等于"检测没执行":锁屏时 SwiftUI 的 `.task` 不跑,日志文件里一条都没有。
 ③ 本仓库已经三次看到 GitHub 两个域名的可达性**方向相反**(H199 是 `github.com` 超时而 API 可达;
    本轮反过来也会发生)。排障时两侧都要实测,别按上一次的方向类推。
+
+---
+
+### H288. 鸿蒙 Symbol 图标用 `Image` 画会静默空白 —— `sys.symbol.*` 只能由 `SymbolGlyph` 绘制
+
+**现象**(2026-11-22,播放页动作排改造第一版)。四格动作(保存 / 剪藏 / 批注 / 盖章)在真机上只剩四个文字标签,
+图标格是空的;构建 BUILD SUCCESSFUL、运行日志里没有任何报错。
+
+**根因**。第一版把图标写成了 `GlyphImage` —— 它内部是 `Image($r(...))`,给 `sys.media` 位图用的;
+`sys.symbol.*` 是 Symbol 字体的字形,`Image` 解析不了,渲染为空。Symbol 只能由 `SymbolGlyph`(本项目的 `Glyph`)绘制。
+这与 Widgets 顶部那条老账叠在一起:**`sys.symbol.*` 名字写错同样不报错、直接空白**,所以"构建过了"与"图标画出来了"是两件独立的事。
+
+**修法**(`harmony/entry/src/main/ets/view/PlayerPage.ets`)。动作排四格统一走 `Glyph`;
+`GlyphImage` 只留给 `sys.media` 位图。新加的 `Sym.note`(`square_and_pencil`)/ `Sym.seal`(`seal`)
+先查 SDK 的 `toolchains/id_defined.json`(type=symbol)再写进代码 —— 表里有名只保证它不会被静默丢弃,
+不等于真机渲染得出图形。
+
+**教训 / 可复用的规律**。
+① 鸿蒙图标有两个来源、组件不能混用:`sys.media.*` → `Image` / `GlyphImage`;`sys.symbol.*` → `SymbolGlyph` / `Glyph`。
+   混用的失败形态是**空白且无日志**,没有类型检查能兜住。
+② 图标"不显示"时先查组件、再查资源名 —— 两者都静默,顺序反了会白改一轮。
+③ 装机验收必须**看图形**:这一轮四个文字标签齐全、四个图标全空,只扫文字很容易误判通过。

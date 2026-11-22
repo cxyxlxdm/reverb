@@ -108,12 +108,18 @@ export class Sym {
   // 同形不同义会让人以为点它也是「打开队列」(真机反馈)。
   static readonly queueAdd: Resource = $r('sys.symbol.add_songlist');           // AutoMirrored.PlaylistAdd
   static readonly share: Resource = $r('sys.symbol.share');                     // Rounded.Share
+  // 播放页动作排:批注 / 盖章。名字取自 SDK 的 `toolchains/id_defined.json`
+  // (type=symbol,已核对存在),不是凭形状猜的 —— `sys.symbol.*` 写错**不报错、直接空白**。
+  // Android 侧分别是 `Icons.Rounded.EditNote` 与 `Icons.Rounded.Verified`;
+  // 鸿蒙这枚 `seal` 是字面意义上的印章,比 Verified 的徽章更贴本端叫法(听觉印记 / 盖章)。
+  static readonly note: Resource = $r('sys.symbol.square_and_pencil');          // Rounded.EditNote
+  static readonly seal: Resource = $r('sys.symbol.seal');                       // Rounded.Verified
   static readonly playing: Resource = $r('sys.symbol.hi_waveform_2');           // Rounded.GraphicEq
   static readonly played: Resource = $r('sys.symbol.checkmark');                // Rounded.Check(裸对勾)
   // 注:Symbol 字体里 `more` 是「更多应用」的 2×2 方块,不是省略号;纯省略号只有
-  // ellipsis_bubble / ellipsis_circle 这类带容器的变体。三点用系统 media 里的标准件
-  // `ohos_ic_public_more`(见 Widgets.GlyphImage) —— Android 是竖排三点 MoreVert,
-  // 鸿蒙的平台惯例是横排三点,按「缺资源按平台特性补齐」取鸿蒙形态。
+  // ellipsis_bubble / ellipsis_circle 这类带容器的变体。播放页的「更多」菜单已撤
+  // (四项动作移到播放键下方),顶栏不再需要三点 —— 历史实现用的是系统 media 里的
+  // `ohos_ic_public_more` / 自绘 `ic_more_vert`,留在这里只为记录形状取法的来历。
   // 列表封面上叠的播放/暂停:**裸三角与双竖条**,对齐 Android 的 Rounded.PlayArrow / Pause。
   // 不用 `sys.media.ohos_ic_public_play` —— 那枚带白色圆底,叠在封面上显得笨重。
   static readonly playFill: Resource = $r('sys.symbol.play_fill');              // Rounded.PlayArrow
