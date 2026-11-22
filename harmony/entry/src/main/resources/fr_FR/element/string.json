@@ -1257,6 +1257,10 @@
       "value": "Réduire"
     },
     {
+      "name": "a11y_cast",
+      "value": "Diffuser"
+    },
+    {
       "name": "a11y_queue_up",
       "value": "Monter"
     },

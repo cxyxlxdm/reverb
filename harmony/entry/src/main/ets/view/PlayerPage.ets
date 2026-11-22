@@ -22,6 +22,7 @@ import { Features } from '../Features';
 import { Episode } from '../model/Models';
 import { Log } from '../util/Logger';
 import type common from '@ohos.app.ability.common';
+import AVCastPicker from '@ohos.multimedia.avCastPicker';
 
 /// 全屏播放页:两页轮播(封面+水墨 / shownotes)+ 进度 + 主控制 + 倍速/睡眠/收藏。
 /// 对应 Android `PlayerScreen.kt`(首版不含印记/剪藏/队列页)。
@@ -164,6 +165,19 @@ export struct PlayerPage {
         Blank()
         // 间距统一由这里决定(各元素的视觉盒都贴紧内容,见 iconAction 注释)
         Row({ space: 14 }) {
+          // 投播:系统自带的接收端选择器。不引三方 SDK、不自己扫网 —— 列表与动作
+          // 由系统 AVSession 提供,本页已有的会话就是它的输入(见 AvSessionBridge)。
+          // 着色跟主题走:未投放时与其它图标同色,投放中变主色(与 Android 那枚
+          // CastConnected 的判据一致)。
+          AVCastPicker({
+            normalColor: this.scheme.onSurfaceVariant,
+            activeColor: this.scheme.primary
+          })
+            .width(24)
+            .height(24)
+            .margin({ left: -4, right: -3 })
+            .responseRegion({ x: -6, y: -10, width: 38, height: 42 })
+            .accessibilityText(L.s('a11y_cast'))
           // 各图标带一点负边距,把「墨迹内缩」抵掉,可见间距才真正齐平。
           //
           // 为什么不是放大图标:图标是**等比缩放**的,放大时内部留白同比例变大 ——

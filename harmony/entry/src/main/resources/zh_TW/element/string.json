@@ -1257,6 +1257,10 @@
       "value": "收起"
     },
     {
+      "name": "a11y_cast",
+      "value": "投放"
+    },
+    {
       "name": "a11y_queue_up",
       "value": "上移"
     },
