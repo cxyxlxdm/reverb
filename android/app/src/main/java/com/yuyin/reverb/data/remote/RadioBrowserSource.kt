@@ -3,6 +3,9 @@ package com.yuyin.reverb.data.remote
 import com.yuyin.reverb.data.model.Station
 import com.yuyin.reverb.util.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import okhttp3.HttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -14,8 +17,12 @@ import org.json.JSONArray
  * 在线电台目录:radio-browser.info(公共社区数据库,数据 CC0,无需 Key)。
  *
  * 这一路只解决「找得到」:用户搜一个台名、或先看一屏热门,点「+」收藏进本机账本。
- * 播放与收藏之后的地址校验仍走 `LiveStreamSource` 的探针 —— 目录里的 `lastcheckok`
- * 是别人最近一次的结果,不是此刻的保证。
+ *
+ * **展示前逐条探活**:目录里的 `lastcheckok` 是别人最近一次的结果,不是此刻的保证 ——
+ * 2026-11-22 实测中国区热门 30 条里有 7 条根本连不上,列出来就是一个点了没反应的按钮。
+ * 所以这里对每条结果发一次只取响应头的请求(与粘贴直播流同一判据,见 `LiveStreamSource.isPlayable`),
+ * 连不上或不是音频的不返回。代价是整页要多等一轮探测:5 s 上限、8 路并发,
+ * 活着的台通常不到 1 s 就回;日志只记条数,不记这些第三方地址。
  *
  * 两个镜像按序尝试:`de1` 与 `de2`(2026-11-22 本机实测可达)。`at1`/`nl1` 当时不可达,
  * 不放进表里 —— 放进去只会让每次失败多等一轮超时。
@@ -23,6 +30,8 @@ import org.json.JSONArray
  * **只记结果条数与镜像名,不记用户输入的原词**(隐私政策第二节:日志不落完整 URL 与检索词)。
  */
 class RadioBrowserSource(private val client: OkHttpClient) {
+
+    private val live = LiveStreamSource(client)
 
     /**
      * @return 成功时返回目录条目(已过滤掉 url 为空 / 最近一次检查失败的),全镜像失败返回空列表。
@@ -71,8 +80,9 @@ class RadioBrowserSource(private val client: OkHttpClient) {
                         return@use
                     }
                     val body = resp.body?.string().orEmpty()
-                    val list = parseStations(body)
-                    Logger.i(TAG, "ok host=$host n=${list.size}")
+                    val parsed = parseStations(body)
+                    val list = filterPlayable(parsed)
+                    Logger.i(TAG, "ok host=$host n=${list.size} probed=${parsed.size}")
                     return@withContext list
                 }
             } catch (e: Exception) {
@@ -82,8 +92,29 @@ class RadioBrowserSource(private val client: OkHttpClient) {
         emptyList()
     }
 
+    /**
+     * 逐条探活,顺序按原列表保持。按批并发而不是一次全发:对端是几十个互不相干的小站,
+     * 一次性打出去既没有收益,也会让列表顺序变得难以解释。批次内任何一条慢的只拖这一批。
+     */
+    private suspend fun filterPlayable(list: List<Station>): List<Station> = coroutineScope {
+        val kept = ArrayList<Station>(list.size)
+        for (chunk in list.chunked(PROBE_CONCURRENCY)) {
+            val alive = chunk.map { st ->
+                async(Dispatchers.IO) { live.isPlayable(st.url, PROBE_TIMEOUT_MS) }
+            }.awaitAll()
+            chunk.forEachIndexed { i, st -> if (alive[i]) kept.add(st) }
+        }
+        kept
+    }
+
     companion object {
         private const val TAG = "RadioDir"
+
+        /** 一批同时探多少条。8 是「20 条两批、30 条四批」与对端礼节的折中。 */
+        private const val PROBE_CONCURRENCY = 8
+
+        /** 单条探活上限。活着的台实测不到 1 s;到这个数还没回头的基本就是黑洞地址。 */
+        private const val PROBE_TIMEOUT_MS = 5000L
 
         /** 按序尝试;新增镜像前先在本机实测可达性,别把超时写进正常路径。 */
         internal val MIRRORS = listOf("de1.api.radio-browser.info", "de2.api.radio-browser.info")

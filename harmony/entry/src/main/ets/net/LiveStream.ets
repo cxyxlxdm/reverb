@@ -65,26 +65,20 @@ export class LiveStream {
     const probe = await LiveStream.probe(url);
     if (probe === null) return null;
 
-    const type = LiveStream.headerOf(probe.head, 'content-type')
-      .split(';')[0].trim().toLowerCase();
-    const hasIcy = new RegExp('"icy-', 'i').test(probe.head);
-    // 路径判据自己切掉查询串:电台常见 `.m3u8?token=…` 这种形态。
-    const lower = url.toLowerCase();
-    const qIdx = lower.indexOf('?');
-    const pathPart = qIdx >= 0 ? lower.substring(0, qIdx) : lower;
-    const isHls = LiveStream.HLS_TYPES.indexOf(type) >= 0 || pathPart.endsWith('.m3u8');
-    const isAudio = type.startsWith('audio/') || type === 'application/ogg';
-    // 拿不到状态码时(只有 `headersReceive` 有读数)按 0 处理 = 不否决:
-    // 判据的主语是"响应头自己说不说它是音频",状态码只是额外一道。
-    const okStatus = probe.code === 0 || (probe.code >= 200 && probe.code <= 299) || probe.code === 416;
     const host = Http.host(url);
-    if (!okStatus || !(isHls || isAudio || hasIcy)) {
+    if (!LiveStream.streamLike(url, probe)) {
+      const type = LiveStream.headerOf(probe.head, 'content-type')
+        .split(';')[0].trim().toLowerCase();
+      const hasIcy = new RegExp('"icy-', 'i').test(probe.head);
       Log.i('Live', `不是直播流 code=${probe.code} type='${type}' icy=${hasIcy} host=${host}`);
       return null;
     }
-
+    const type = LiveStream.headerOf(probe.head, 'content-type')
+      .split(';')[0].trim().toLowerCase();
+    const hasIcy = new RegExp('"icy-', 'i').test(probe.head);
     const name = LiveStream.headerOf(probe.head, 'icy-name').trim();
-    Log.i('Live', `直播流确认 type='${type}' icy=${hasIcy} hls=${isHls} host=${host} name='${name}'`);
+    Log.i('Live', `直播流确认 type='${type}' icy=${hasIcy} hls=${LiveStream.isHls(url, type)}`
+      + ` host=${host} name='${name}'`);
     const ep: Episode = {
       // id 带上地址:同一路流的两次粘贴视为同一集,重复点不会在队列里堆两条
       id: 'live:' + url,
@@ -108,6 +102,41 @@ export class LiveStream {
   }
 
   /**
+   * 在线目录筛选用:与 [resolve] 同一份判据,但不构造 Episode。
+   *
+   * 超时由调用方给(默认 5 s):一整页要探 20~30 条,用 resolve 的 8 s,只要有一条
+   * 黑洞地址(不回包也拒连)整页就多等一轮。2026-11-22 实测中国区热门 30 条里 7 条连不上,
+   * 它们大多在几秒内失败,5 s 足够分开「慢但活着」与「根本连不上」。
+   */
+  static async isPlayable(rawUrl: string, timeoutMs: number = 5000): Promise<boolean> {
+    const url = rawUrl.trim();
+    if (!LiveStream.looksLikeStream(url)) return false;
+    const probe = await LiveStream.probe(url, timeoutMs, false);
+    if (probe === null) return false;
+    return LiveStream.streamLike(url, probe);
+  }
+
+  /// 判据本体。路径判据自己切掉查询串:电台常见 `.m3u8?token=…` 这种形态。
+  private static streamLike(url: string, probe: LiveHead): boolean {
+    const type = LiveStream.headerOf(probe.head, 'content-type')
+      .split(';')[0].trim().toLowerCase();
+    const hasIcy = new RegExp('"icy-', 'i').test(probe.head);
+    const isHls = LiveStream.isHls(url, type);
+    const isAudio = type.startsWith('audio/') || type === 'application/ogg';
+    // 拿不到状态码时(只有 `headersReceive` 有读数)按 0 处理 = 不否决:
+    // 判据的主语是"响应头自己说不说它是音频",状态码只是额外一道。
+    const okStatus = probe.code === 0 || (probe.code >= 200 && probe.code <= 299) || probe.code === 416;
+    return okStatus && (isHls || isAudio || hasIcy);
+  }
+
+  private static isHls(url: string, type: string): boolean {
+    const lower = url.toLowerCase();
+    const qIdx = lower.indexOf('?');
+    const pathPart = qIdx >= 0 ? lower.substring(0, qIdx) : lower;
+    return LiveStream.HLS_TYPES.indexOf(type) >= 0 || pathPart.endsWith('.m3u8');
+  }
+
+  /**
    * 只要响应头,拿到就 `destroy`。
    *
    * `headersReceive` 在**第一段数据到达前**就会回调,这正是无限流唯一能拿到的时刻:
@@ -117,9 +146,13 @@ export class LiveStream {
    * 探测本身也带 `Range: bytes=0-0`(只要一个字节)与 `Icy-MetaData: 1`
    * (让支持 ICY 的服务器把 `icy-*` 头带回来,尤其是 icy-name,拿它当标题)。
    */
-  private static async probe(url: string): Promise<LiveHead | null> {
+  private static async probe(url: string, timeoutMs: number = LiveStream.PROBE_TIMEOUT_MS,
+    logHost: boolean = true): Promise<LiveHead | null> {
     const req = http.createHttp();
     const host = Http.host(url);
+    // 目录批量探活一次 20~30 条,不落主机名(只记条数与错误类,见 RadioBrowserSource);
+    // 用户自己粘的地址仍带 host,便于排障。
+    const who = logHost ? ` host=${host}` : '';
     const startedAt = Date.now();
     return await new Promise<LiveHead | null>((resolve: (v: LiveHead | null) => void) => {
       let settled = false;
@@ -133,7 +166,7 @@ export class LiveStream {
         } catch (_e) {
           // 释放失败不影响判定
         }
-        Log.d('Live', `探测 ${stage} host=${host} 耗时=${Date.now() - startedAt}ms`);
+        Log.d('Live', `探测 ${stage}${who} 耗时=${Date.now() - startedAt}ms`);
         resolve(head);
       };
 
@@ -146,7 +179,7 @@ export class LiveStream {
         }
         finish(new LiveHead(0, text), '完成');
       });
-      timerId = setTimeout(() => { finish(null, '硬超时'); }, LiveStream.PROBE_TIMEOUT_MS);
+      timerId = setTimeout(() => { finish(null, '硬超时'); }, timeoutMs);
       try {
         req.requestInStream(url, {
           method: http.RequestMethod.GET,
@@ -155,15 +188,15 @@ export class LiveStream {
             'Icy-MetaData': '1',
             'Range': 'bytes=0-0'
           },
-          connectTimeout: LiveStream.PROBE_TIMEOUT_MS,
-          readTimeout: LiveStream.PROBE_TIMEOUT_MS
+          connectTimeout: timeoutMs,
+          readTimeout: timeoutMs
         }).then((code: number) => {
           // 走到这里说明响应体已经读完 —— 对直播不可能,只有"其实是有限文件"才会。
           // 状态码这时候才有读数,补交给判据。
           finish(new LiveHead(code, ''), `完成 code=${code}`);
         }).catch((e: BusinessError) => {
           // destroy 之后自己抛的那一条也走这里;settled 已经为真,finish 会自动忽略。
-          if (!settled) Log.w('Live', `探测失败 host=${host} code=${e.code} msg=${e.message}`);
+          if (!settled) Log.w('Live', `探测失败${who} code=${e.code} msg=${e.message}`);
           finish(null, '请求异常');
         });
       } catch (_e) {
