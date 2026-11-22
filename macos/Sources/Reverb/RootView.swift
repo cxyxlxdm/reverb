@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// 根视图:顶部工具栏内的 发现/追更/音阁 分段切换 + 齿轮设置,内容区填满窗口,
+/// 根视图:顶部工具栏内的 发现/电台/追更/音阁 分段切换 + 齿轮设置,内容区填满窗口,
 /// 底部常驻播放条(仅当有正在播放的内容)。使用 NavigationStack 让详情页原生推入。
 struct RootView: View {
-    /// 三格的顺序与两端一致(发现 / 追更 / 音阁):换端时手指/眼睛不用重新找。
-    /// 「追更」是 2026-10-25 从音阁分段提上来的第三格(见 docs/MACOS-GAPS.md M6)。
+    /// 四格的顺序与手机两端一致(发现 / 电台 / 追更 / 音阁):换端时手指/眼睛不用重新找。
+    /// 「追更」是 2026-10-25 从音阁分段提上来的第三格(见 docs/MACOS-GAPS.md M6);
+    /// 「电台」是 1.0.9 按商店评论加的独立入口(用户要求:能编辑、能添加、能搜在线台)。
     enum Section: String, CaseIterable, Identifiable {
         case discover = "发现"
+        case radio = "电台"
         case inbox = "追更"
         case library = "音阁"
         var id: String { rawValue }
@@ -33,6 +35,7 @@ struct RootView: View {
                 Group {
                     switch section {
                     case .discover: DiscoverView()
+                    case .radio: RadioView()
                     case .inbox: InboxView()
                     case .library: LibraryView()
                     }
@@ -45,9 +48,10 @@ struct RootView: View {
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
-                        // 三格是定宽:最长的一组是法语(Découvrir / Nouveautés / Bibliothèque)。
-                        // 加第三格之后会不会截断标签,只有把界面跑起来才看得见 —— 别凭猜再调这个数。
-                        .frame(width: 300)
+                        // 四格是定宽:最长的一组是法语(Découvrir / Radio / Nouveautés / Bibliothèque)。
+                        // 从三格加到四格时把 300 调到 400 —— 加格之后会不会截断标签,
+                        // 仍只有把界面跑起来才看得见,别凭猜再动这个数(本轮屏幕被锁,没看过)。
+                        .frame(width: 400)
                         // 换分段 = 换了一个根视图,NavigationStack 里已经推上去的详情页要一起清掉
                         // (见 REVIEW-2026-10-25 族 E)。原先只换根视图、`path` 不动,
                         // 于是栈顶停在某频道主页时点「追更」/「音阁」**没有任何可见效果** ——

@@ -147,7 +147,9 @@ struct PlayerView: View {
             Spacer()
             Text("正在播放").font(.headline)
             Spacer()
-            Color.clear.frame(width: 44, height: 44)
+            AirPlayRouteButton(tint: UIColor(accent))
+                .frame(width: 44, height: 44)
+                .accessibilityLabel(Text("投放"))
         }
         .padding(.horizontal, 4)
     }

@@ -1,10 +1,10 @@
 import SwiftUI
 import UIKit
 
-/// 根视图:四格 Tab(发现 / 追更 / 音阁 / 设置),每格自带 `NavigationStack`。
+/// 根视图:五格 Tab(发现 / 电台 / 追更 / 音阁 / 设置),每格自带 `NavigationStack`。
 /// 迷你播放条挂在内容底部、Tab 栏之上;点开是全屏播放页。
 struct RootView: View {
-    enum Tab: Hashable { case discover, inbox, library, settings }
+    enum Tab: Hashable { case discover, radio, inbox, library, settings }
 
     @EnvironmentObject var settings: SettingsStore
     @EnvironmentObject var player: PlayerController
@@ -13,6 +13,7 @@ struct RootView: View {
     @State private var tab: Tab = .discover
     @State private var showPlayer = false
     @State private var discoverPath = NavigationPath()
+    @State private var radioPath = NavigationPath()
     @State private var inboxPath = NavigationPath()
     @State private var libraryPath = NavigationPath()
     @State private var settingsPath = NavigationPath()
@@ -32,6 +33,7 @@ struct RootView: View {
         if let i = args.firstIndex(of: "-start-tab"), i + 1 < args.count {
             switch args[i + 1] {
             case "discover": _tab = State(initialValue: .discover)
+            case "radio": _tab = State(initialValue: .radio)
             case "inbox": _tab = State(initialValue: .inbox)
             case "library": _tab = State(initialValue: .library)
             case "settings": _tab = State(initialValue: .settings)
@@ -49,6 +51,12 @@ struct RootView: View {
             }
                 .tabItem { Label("发现", systemImage: "sparkles") }
                 .tag(Tab.discover)
+
+            TabRoot(path: $radioPath, showPlayer: $showPlayer) {
+                RadioView()
+            }
+                .tabItem { Label("电台", systemImage: "radio") }
+                .tag(Tab.radio)
 
             TabRoot(path: $inboxPath, showPlayer: $showPlayer) {
                 InboxView(scrollTopToken: inboxTopToken)
@@ -72,9 +80,9 @@ struct RootView: View {
             TabBarDoubleTapProbe { idx in
                 switch idx {
                 case 0: discoverTopToken += 1
-                case 1: inboxTopToken += 1
-                case 2: libraryTopToken += 1
-                default: break   // 设置页没有长列表,双击不做任何事
+                case 2: inboxTopToken += 1
+                case 3: libraryTopToken += 1
+                default: break   // 电台搜完自然停在顶部,设置页没有长列表,双击不做任何事
                 }
             }
         }
