@@ -8,10 +8,12 @@
 
 ---
 
-## 1.0.9 — 2026-11-22
+## 1.0.9 — 2026-11-22(已发布)
 
 > 本章记落地项与验收边界。**四端 dist 产物已按 1.0.9 重打**(包体读数见「工程要点与验收边界」);
 > 对外版本说明已同步到 `docs/RELEASE-NOTES.md`。
+> 已于 2026-11-22 发布至 GitHub Releases(公开分发仓 `revert-cast`),官网同步部署;
+> 大陆商店与 TestFlight 仍待提交。
 
 ### 直播电台:顶层「电台」页(四端)
 
@@ -36,7 +38,7 @@
 - 日志只记探活前后条数(`n=` / `probed=` 与错误类),不记搜索词、完整地址或主机名。
 - **隐私口径变了**:探测会向结果里的每个电台主机各发一次只取响应头的请求,对方因此能看到 IP 与 User-Agent。
   四端同意页(Android / 鸿蒙各 5 语种、macOS / iOS 的 4 套 `.lproj`)与
-  `docs/PRIVACY.md` / `site/reverb/privacy.html` 已同步;因 1.0.9 尚未发版,同意版本号不再二次 +1。
+  `docs/PRIVACY.md` / `site/reverb/privacy.html` 已同步;因当时 1.0.9 尚未发布,同意版本号不再二次 +1。
 - 2026-11-22 实测(改前的独立探针):中国区热门 30 条里 7 条连接不上,原先会原样列出来。
 - 装机复验(debug 包):Android 热门 30 → 28、鸿蒙 30 → 26,连不上的不再出现;
   日志只剩 `n=` / `probed=` 与错误类,批量探活不再打印第三方主机名。整页耗时约 10 s
@@ -193,7 +195,14 @@
 - **mtime 判定**:`-newer` 对 Android `app/src` + `shared/`、鸿蒙 `entry/src` + `shared/`、
   macOS `Sources/Localization/Info.plist/Package.swift` + `shared/`、
   iOS `Reverb`/`Localization` + 共享 `Data/Playback` 逐个查,四端均 **0 条比包新**。
-- **未做**:商店提交 kit 与商店截图未按硬规矩 20 重拍重建;GitHub Releases 上传未执行(等维护者确认)。
+- **发布(2026-11-22)**:GitHub Releases `1.0.9` 已发布(公开分发仓 `revert-cast`):
+  `reverb.apk` 270,294,292 B / sha256 `e5ba9a07…0bec`,`Reverb.dmg` 6,622,867 B / sha256 `d48502ad…505a`,
+  与本地 dist 逐字节一致;公开仓 README 已同步为 1.0.9。官网 `site/reverb/` 已部署
+  (index / privacy / 4 张 `shots/`,仓库—服务器—线上三方 sha256 相等)。
+  商店提交 kit 与截图已按硬规矩 20 重拍重建:Android / 鸿蒙各 8 张(2026-11-22 18:44),
+  kit 分别为 182,275,473 B(sha256 `d2b1be10…d5a2`)与 200,960,274 B(sha256 `976dee31…e521`);
+  流水线与逐版记录见本地 `docs/STORE-OPS.md` 二十。
+- **未做**:大陆商店与 TestFlight 尚未提交;iOS 1.0.9 仍只有未签名归档包。
 
 ## 1.0.8 — 2026-11-18(已发布)
 
