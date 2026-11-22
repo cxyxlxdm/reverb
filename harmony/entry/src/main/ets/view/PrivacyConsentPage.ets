@@ -66,7 +66,9 @@ export struct PrivacyConsentPage {
           // 本端拆开是为了两端文案能逐段对照,改动时不容易只改一边)
           // 局域网同步那一段是 2026-11-13 补的:之前只写了「六分区/加密/不经服务器」,
           // 没写删除墓碑随后补齐 —— 与 Android `privacy_consent_lan` 同一份文案。
-          Text(`${L.s('privacy_consent_body')}\n\n${L.s('privacy_consent_auth')}\n\n${L.s('privacy_consent_video')}\n\n${L.s('privacy_consent_asr')}\n\n${L.s('privacy_consent_lan')}`)
+          // 1.0.9 的直播电台 + 投播另起一段:电台目录是新的第三方地址,投播用的是
+          // 系统接收端选择器(本端不自己扫网),所以那一段的措辞与 Android 不同。
+          Text(`${L.s('privacy_consent_body')}\n\n${L.s('privacy_consent_auth')}\n\n${L.s('privacy_consent_video')}\n\n${L.s('privacy_consent_asr')}\n\n${L.s('privacy_consent_lan')}\n\n${L.s('privacy_consent_radio')}`)
             .fontSize(TypeScale.bodyLarge * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
             .lineHeight(TypeScale.bodyLarge * this.fontScale * 1.7)

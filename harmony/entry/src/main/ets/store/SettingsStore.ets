@@ -33,10 +33,14 @@ export class SettingsStore {
    *       标题、封面与音频地址、播放位置、播放态与倍速发给对端 —— 一类新的离开本机的数据,
    *       不属于原来自述的六个备份分区,所以 +1。没有新增加密连接、没有新的第三方地址,
    *       同意页只在「局域网同步」那一段补一句。同轮 Android 4 → 5、macOS / iOS 5 → 6。
+   *   6 = 未发版(1.0.9 直播电台 + 投播)。新增第三方目录地址 `radio-browser.info`
+   *       (搜索词发给它),并在播放页接入系统接收端选择器 —— 后者由系统负责发现与传输,
+   *       本端不自己扫网;鸿蒙的「本地网络」也不是需要单独申请的运行时权限。
+   *       同意页多一段「直播电台与投播」。同轮 Android 5 → 6、macOS / iOS 6 → 7。
    *
    * 改这个数之后**必须重新打包两端**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
    */
-  static readonly PRIVACY_VERSION: number = 5;
+  static readonly PRIVACY_VERSION: number = 6;
 
   /// 0 跟随系统 / 1 浅色(宣纸) / 2 深色(水墨) / 3 纯白
   /// **默认 2(水墨)**,与 Android `theme_mode` 的默认值一致 —— 品牌主观感是水墨,
