@@ -46,9 +46,18 @@
 - **已验**:Android `:app:testDebugUnitTest` **119 条 0 失败**(其中投播 8 条)、`:app:compileReleaseKotlin` exit 0;
   鸿蒙 `hvigorw test` **69 条 0 失败**、`assembleHap` BUILD SUCCESSFUL;`swift test` 全绿、
   `swift build -c release` exit 0、`ios/build-ios.sh` exit 0;`python3 tools/check-l10n.py` PASS。
+- **已验(装机,debug 包)**:
+  - 鸿蒙:电台页布局、随包精选、目录搜索(**de1 超时、de2 2.7 s 回 20 条**)、加进我的电台、
+    直播播放(显示「直播中」、无进度条与倍速)、播放页投播按钮拉起系统选择器(无可用接收端,
+    系统日志 `no cast`,符合预期 —— 没有真实电视 / 音箱)。
+  - Android:电台页、热门列表(30 条)、目录搜索(`RadioDir` 日志 de1 **2.8 s 回 20 条**,BBC)。
+    加台 / 直播播放 / DLNA 弹层未及确认:手机在验证中途从 USB 掉线,待设备恢复后补验。
 - **未验**:`android/dist/reverb.apk` / `harmony/dist/reverb.app` / `macos/dist/*.dmg` / `ios/dist/*.ipa`
-  **均未按 1.0.9 重打**;四端界面都没有装机运行(本轮屏幕锁定,无法点按);
-  投播没有接真实电视 / 音箱,电台没有在真机搜过目录。
+  **均未按 1.0.9 重打**;macOS / iOS 界面没有跑过;投播全线没有接真实接收端。
+- **装机时抓到的真问题**:radio-browser 的响应耗时随 `limit` **超线性**增长 —— 2026-11-22 实测
+  同一关键词 `limit=50` 要 31.8 s、`20` 只要 2.5 s;热门 `40` 要 9.4 s、`30` 只要 2.6 s。
+  原先 50 条稳定撞上三端 12~20 s 的读超时,用户看到的是「目录连不上」。已把两端默认值压到
+  热门 30 / 搜索 20,鸿蒙与 Apple 的超时提到 20 s(见 7f529d7)。
 - 设备描述解析从 `XmlPullParser` 换成 **DOM**:JVM 单测里 `XmlPullParserFactory` 是 android.jar 的 stub,
   会把解析静默打回 null,单测会误判成"没有设备"。
 
