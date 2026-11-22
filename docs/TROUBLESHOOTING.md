@@ -14222,3 +14222,73 @@ Android 同场景输入后立刻变亮可点。这不是渲染慢 —— 等十�
    最后逐字照抄 `DissolveParticles.ets` 才对齐 —— 参数"看起来一样"不等于一样。
 ④ **子帧级的空档只能靠录屏逐帧取证。** "闪了一帧空白"在真机上肉眼几乎不可见,但录屏能把它钉成
    确定性缺陷(本仓 H154 的"包比码旧"也是同一类:靠产物/画面取证,不靠日志推断)。
+
+---
+
+### H286. macOS 设置页按钮下的说明文字被截成一行(省略号)—— Button 标签默认按单行排版
+
+**现象**(2026-11-19,用户报「设置页面很多按钮下方的文字都被挡住了」)。
+设置窗口里「局域网同步」「清除缓存」「检查更新」「隐私政策」四行按钮,标题下那句 caption 只显示一行,
+超出部分变成 `…`。中文下「局域网同步」那句最长、必中;英文 / 法文 / 西班牙文三条副标题在 460 宽下**都会中**。
+
+**根因**。SwiftUI 在 macOS 上把 **Button 标签当单行**排版:标签拿到的高度只有一行,
+Text 于是按单行截断(fixedSize 单独加在 Text 上也没用,按钮样式仍然压着高度)。
+行高不会为第二行长出来 —— 不是 grouped Form 的裁切,是按钮标签自己的行数上限。
+
+**修法**(`macos/Sources/Reverb/UI/SettingsView.swift`)。
+四处 caption 统一挂 `.captionWrap()`(文件内 `private extension View`):
+`.lineLimit(nil)` + `.fixedSize(horizontal: false, vertical: true)` + `.multilineTextAlignment(.leading)`。
+前两条让文字按理想高度展开、行高跟着长;第三条把 Button 默认的**居中**改回左对齐(只加前两条时第二行是居中的)。
+只给按钮标签里的 caption 用 —— 普通行里的说明文字本来就会换行,加了反而多一个约束。
+
+**取证**。当时会话锁屏(`CGSSessionScreenIsLocked=true`):`screencapture` 出全黑帧、`System Events`
+数不到任何窗口,屏幕上的验收做不了。改用**离屏渲染**:`NSHostingView` + `bitmapImageRepForCachingDisplay`,
+在 460 宽的真实窗口里渲染同一段 `Form(.grouped)` 行 —— 修前 caption 一行 + `…`,修后两行左对齐、行高随之变高。
+`swift build` / `swift test`(92 tests)均通过。⚠️ **这条是离屏取证,不是上屏验收**,解锁后应在真窗口里再看一眼。
+
+**教训 / 可复用的规律**。
+① **Button 不是普通文字容器。** 多行标签要显式 `lineLimit(nil) + fixedSize(vertical:)`,
+   否则 macOS 默认单行,而且**中文短句往往刚好放得下,只有非中文语种会踩**(与 H217 那条同理)。
+② 判"文字截没截断"只能看像素:AX/字符串里是全须全尾的,省略号正好吃掉唯一的那几个字。
+③ 截屏全黑、AX 0 扇窗时先查 `ioreg -n Root -d1 -a | grep CGSSessionScreenIsLocked` ——
+   那是环境阻塞(要本人输密码解锁),不是应用起不来;别在这一步去改代码。
+
+---
+
+### H287. macOS「检查更新」报失败 —— 先把 403 限额、TLS 瞬时失败与"根本没跑到"分开
+
+**现象**(2026-11-19,用户报「检查更新,也提示检查更新失败」)。设置页那一行显示
+「检查失败，看看网络之后再试一次」。
+
+**取证**(全部来自用户本机日志与同参数探针,不是推断)。
+- 日志里 update 相关的失败只有两类:2026-11-09 22:17 `[HTTP] 状态 403 https://api.github.com`
+  紧跟 `update check got nothing manual=false`;2026-11-11 当天一次下载走 `api.github.com`
+  报「TLS错误导致安全连接失败」,随后 `github.com` 直链成功。其余历史检查都成功。
+- 本机今天用一个**与 App 同参数**(同 UA、`reloadIgnoringLocalCacheData`、20s)的 URLSession 独立探针
+  请求同一 URL:200 / 8 条 release / 1.0.8 带 `Reverb.dmg`;`api.github.com` 0.3s 可达。
+  **同一时刻 `github.com` 连 15s 无响应** —— 两个域名的可达性方向会随网络变,不能把任何一侧当恒定前提(同 H199)。
+- 锁屏状态下 `RootView` 不构建,挂在它 `.task` 上的更新检测不会执行,也点不了按钮 ——
+  所以"用户那一次"没法在本机复现;能证明的是:链路会瞬时失败,失败会原样落成“检查失败”。
+
+**修法**(`macos/Sources/Reverb/Update/SelfUpdate.swift`)。
+1. 检测改用 `HTTP.fetch`,**只对"传输层没拿到响应"重试一次**(间隔 1.2 秒);
+   服务端给了非 2xx 就不再重试 —— 403 是未带 token 的每小时限额,重试只会多占一次。
+2. 把状态码打进日志(`update check http <code>`),解析失败与"没有任何带 dmg 的发布"
+   也各有一条独立日志,不再只剩一句 `got nothing`。
+3. 请求补 `Accept: application/vnd.github+json`,与 Android `SelfUpdate.fetchLatest` 一致。
+4. 补单测 `Tests/ReverbTests/SelfUpdateParseTests.swift`:用真实接口形状的夹具钉住
+   「跳过 draft / prerelease、跳过只有 apk 的条目、挑带 dmg 的最高版本、`1.0.10 > 1.0.9`」
+   与解析失败时的收缩方向。以前这条链路的纯逻辑一条测都没有,挑错条目只会表现为同一句「检查失败」。
+   为此 `parseReleases` / `isNewer` 从 `private` 放宽为 internal,并标 `nonisolated`(纯函数,
+   不该继承类的 `@MainActor`)。
+
+**没做的 / 没验的**。没加镜像、没加 token、没改自动检测频率(用户 2026-11 已拍板"还用 GitHub")。
+**没有**把这次失败判死成某个根因:403 与 TLS 都是瞬时失败,重试只是给瞬时失败第二次机会;
+真被墙到连不上时,用户仍会看到「检查失败」,只是日志里能区分是哪一种。
+
+**教训 / 可复用的规律**。
+① 一句话读数("检查失败")背后至少三种原因:限额 / 传输失败 / 代码根本没跑到。
+   先把它们各自落成一行日志,再谈修 —— 否则下一次仍然只能猜。
+② 桌面端"没有更新日志"不等于"检测没执行":锁屏时 SwiftUI 的 `.task` 不跑,日志文件里一条都没有。
+③ 本仓库已经三次看到 GitHub 两个域名的可达性**方向相反**(H199 是 `github.com` 超时而 API 可达;
+   本轮反过来也会发生)。排障时两侧都要实测,别按上一次的方向类推。

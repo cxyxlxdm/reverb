@@ -175,21 +175,52 @@ final class SelfUpdate: ObservableObject {
     }
 
     /// 拉发布列表,挑「有 dmg 资产的、版本最高的、非草稿非预发布」那一条。
+    ///
+    /// **只对「传输层没拿到响应」重试一次**(间隔 1.2 秒)。依据是本机日志:2026-11-09 一次
+    /// `403`(未带 token 的限额)之后紧跟 `got nothing`,2026-11-11 同一天的下载还撞过
+    /// 「TLS 错误导致安全连接失败」;2026-11-19 实测本机 `github.com` 连 15 秒无响应、
+    /// 同一时刻 `api.github.com` 200 —— 这条链路的失败**是瞬时的**,单次失败不代表发布页不可达。
+    /// 服务端给了非 2xx 就不再重试:那是明确答复(403 是限额,重试只会再占一次)。
+    /// 注意这**不是**根因修复:真被墙到连不上时,重试也只会把失败推迟一秒。
     private func fetchLatest() async -> Release? {
-        guard let list = await HTTP.jsonArray(Self.releasesURL) else { return nil }
+        for attempt in 0..<2 {
+            guard let (data, code) = await HTTP.fetch(
+                Self.releasesURL, headers: ["Accept": "application/vnd.github+json"]) else {
+                Log.w(Self.category, "update check transport failed attempt=\(attempt + 1)")
+                if attempt == 0 {
+                    try? await Task.sleep(for: .seconds(1.2))
+                    continue
+                }
+                return nil
+            }
+            guard (200...299).contains(code) else {
+                Log.w(Self.category, "update check http \(code) endpoint=\(Log.endpoint(Self.releasesURL))")
+                return nil
+            }
+            return Self.parseReleases(data)
+        }
+        return nil
+    }
+
+    /// release 列表 JSON → 最高的那条。解析失败与「没有任何带 dmg 的发布」分开记日志,
+    /// 免得下一次排查又只看到一句 `got nothing`。
+    nonisolated static func parseReleases(_ data: Data) -> Release? {
+        guard let list = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else {
+            Log.w(category, "update check parse failed bytes=\(data.count)")
+            return nil
+        }
         var best: Release?
-        for item in list {
-            guard let dict = item as? [String: Any] else { continue }
+        for dict in list {
             if dict["draft"] as? Bool == true || dict["prerelease"] as? Bool == true { continue }
             guard let tag = dict["tag_name"] as? String,
                   let assets = dict["assets"] as? [[String: Any]] else { continue }
-            let asset = assets.first { ($0["name"] as? String) == Self.dmgAssetName }
+            let asset = assets.first { ($0["name"] as? String) == dmgAssetName }
                 ?? assets.first { (($0["name"] as? String) ?? "").lowercased().hasSuffix(".dmg") }
             guard let asset else { continue }
             let size = (asset["size"] as? NSNumber)?.int64Value ?? 0
             var urls: [String] = []
             if let id = (asset["id"] as? NSNumber)?.intValue {
-                urls.append(Self.assetAPIURL + String(id))
+                urls.append(assetAPIURL + String(id))
             }
             if let direct = asset["browser_download_url"] as? String { urls.append(direct) }
             guard !urls.isEmpty else { continue }
@@ -199,13 +230,14 @@ final class SelfUpdate: ObservableObject {
                 sha = String(digest.dropFirst("sha256:".count))
             }
             let rel = Release(tag: tag, urls: urls, size: size, sha256: sha)
-            if best == nil || Self.isNewer(rel.tag, than: best!.tag) { best = rel }
+            if best == nil || isNewer(rel.tag, than: best!.tag) { best = rel }
         }
+        if best == nil { Log.w(category, "update check no dmg release in \(list.count) entries") }
         return best
     }
 
     /// 逐段比数字:1.0.10 > 1.0.9(字符串比大小会反过来)。缺的段按 0 补。
-    private static func isNewer(_ remote: String, than local: String) -> Bool {
+    nonisolated static func isNewer(_ remote: String, than local: String) -> Bool {
         let a = numericParts(remote), b = numericParts(local)
         for i in 0..<max(a.count, b.count) {
             let x = i < a.count ? a[i] : 0
@@ -215,7 +247,7 @@ final class SelfUpdate: ObservableObject {
         return false
     }
 
-    private static func numericParts(_ s: String) -> [Int] {
+    nonisolated private static func numericParts(_ s: String) -> [Int] {
         var t = s.trimmingCharacters(in: .whitespaces)
         while let f = t.first, f == "v" || f == "V" { t.removeFirst() }
         return t.split(whereSeparator: { !$0.isNumber }).map { Int($0) ?? 0 }
