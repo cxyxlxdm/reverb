@@ -408,13 +408,16 @@ enum AppSupport {
     /// **6 = 未发版(跨设备播放交接,2026-11-15)** —— 同步配对后、页面不关闭期间,把当前这一集的
     /// 标题、封面与音频地址、播放位置、播放态与倍速发给对端;一类新的离开本机的数据,不属于原来
     /// 自述的六个备份分区。四端同一轮一起 +1:Android / 鸿蒙 4 → 5,macOS / iOS 5 → 6。
+    /// **7 = 未发版(1.0.9 直播电台 + 投播)** —— 新增第三方目录地址 `radio-browser.info`
+    /// (搜索词发给它),并在播放页接入系统 AirPlay 选路控件;后者由系统发现与传输,本应用
+    /// 不自己扫网。同意页多一段「直播电台与投播」。四端同一轮 +1:Android / 鸿蒙 5 → 6。
     ///
     /// ⚠️ 4 是**唯一一次**桌面比手机先行:Android 自 1.0.5 起就在请求同一个接口,
     /// 它的同意页早就写过这件事,所以 Android / 鸿蒙的 `PRIVACY_VERSION` 当时停在 3 不动 ——
     /// 让手机用户为一件他们已经同意过的事再点一次同意,不是谨慎,是骚扰。
     /// **1.0.7 的直播流没有 +1**:它不引入任何有名有姓的第三方 —— 请求的就是用户自己
     /// 粘贴的那条流地址,与「粘 RSS」同一类,同意页正文早已写明「直接请求发布方或托管方」。
-    static let privacyVersion = 6
+    static let privacyVersion = 7
     @Published private(set) var privacyAccepted: Bool
     /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。
     @Published var language: String {

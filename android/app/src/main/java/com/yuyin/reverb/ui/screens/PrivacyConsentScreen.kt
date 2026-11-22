@@ -123,7 +123,8 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                             stringResource(R.string.privacy_consent_update),
                             stringResource(R.string.privacy_consent_asr),
                             stringResource(R.string.privacy_consent_mic),
-                            stringResource(R.string.privacy_consent_lan)
+                            stringResource(R.string.privacy_consent_lan),
+                            stringResource(R.string.privacy_consent_radio)
                         ).filter { it.isNotBlank() }.joinToString("\n\n"),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant

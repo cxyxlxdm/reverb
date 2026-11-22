@@ -216,9 +216,15 @@ class SettingsStore(context: Context) {
          *       这是一类新的、离开本机的数据(不属于原来自述的那六个备份分区),所以 +1。
          *       它没有新增加密连接、没有新的第三方地址,同意页只在「局域网同步」那一段里补一句。
          *       同轮的 macOS/iOS 从 5 到 6、鸿蒙从 4 到 5,四端一起重问(见 Stores.swift / SettingsStore.ets)。
+         *   6 = 未发版(1.0.9 直播电台 + 投播)。两件事:新增一个**第三方目录地址**
+         *       `radio-browser.info`(搜索词发给它,与 apple/fyyd/gpodder 同一类公开目录);
+         *       投播会把同一 Wi-Fi 下某台设备的地址拿来做 HTTP/SOAP 与音频直传,并在
+         *       Android 17 上首次查找时请求「本地网络」权限(那条权限 1.0.8 已为局域网同步声明,
+         *       这一轮多了一个使用者)。同意页多一段「直播电台与投播」。
+         *       同轮 macOS/iOS 6 → 7、鸿蒙 5 → 6。
          *
          * 改这个数之后**必须重新打包**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
          */
-        const val PRIVACY_VERSION = 5
+        const val PRIVACY_VERSION = 6
     }
 }
