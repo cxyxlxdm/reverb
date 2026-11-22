@@ -453,30 +453,30 @@ fun formatListenDuration(sec: Long): String {
 @Composable
 fun Artwork(url: String, size: Int, corner: Int = 12) {
     val shape = RoundedCornerShape(corner.dp)
-    if (url.isBlank()) {
-        Box(
-            modifier = Modifier
-                .size(size.dp)
-                .clip(shape)
-                .background(CeladonDim.copy(alpha = 0.18f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Rounded.GraphicEq,
+    // 默认图标垫在底下:地址为空、还在加载、或者地址失效(封面 404)时都露出它。
+    // 图片成功加载后会盖住 —— 不给 AsyncImage 设 error/placeholder,正是为了失败时不留空白。
+    Box(
+        modifier = Modifier
+            .size(size.dp)
+            .clip(shape)
+            .background(CeladonDim.copy(alpha = 0.18f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            Icons.Rounded.GraphicEq,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary
+        )
+        if (url.isNotBlank()) {
+            AsyncImage(
+                model = url,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(size.dp)
+                    .clip(shape)
             )
         }
-    } else {
-        AsyncImage(
-            model = url,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(size.dp)
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        )
     }
 }
 

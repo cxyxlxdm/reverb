@@ -353,10 +353,9 @@ export struct Artwork {
         .width(this.dim).height(this.dim)
         .backgroundColor(withAlpha(this.scheme.primary, 0.18))
       // 无封面时叠一枚波形图标(对齐 Android Artwork 的 GraphicEq 占位)。
-      // 注:此前注释写了"波形图标占位",但代码里只有色块、并没有画图标 —— sys.media.* 无此形状。
-      if (this.url.length === 0) {
-        Glyph({ symbol: Sym.playing, dim: Math.max(14, this.dim * 0.42), color: this.scheme.primary })
-      }
+      // 图标**不按 url 是否为空来分支**:地址失效时 Image 是透明的,垫在底下的图标正好顶上来,
+      // 不会留下一个空色块。图片加载成功后整张盖住它。
+      Glyph({ symbol: Sym.playing, dim: Math.max(14, this.dim * 0.42), color: this.scheme.primary })
       if (this.url.length > 0) {
         Image(this.localUri.length > 0 ? this.localUri : this.url)
           .width(this.dim).height(this.dim)

@@ -176,9 +176,16 @@ struct Artwork: View {
     var corner: CGFloat = 8
 
     var body: some View {
-        RemoteImage(url: url) { Rectangle().fill(.quaternary) }
-            .frame(width: size, height: size)
-            .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+        RemoteImage(url: url) {
+            ZStack {
+                Rectangle().fill(.quaternary)
+                Image(systemName: "waveform")
+                    .font(.system(size: max(12, size * 0.4)))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
     }
 }
 
