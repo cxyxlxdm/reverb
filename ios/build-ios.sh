@@ -136,7 +136,8 @@ verify_bundle() {
   # 4) 内置物料
   [ -s "$app/seed_podcasts.json" ] || die "缺 seed_podcasts.json(发现页无兜底)"
   [ -s "$app/guide_intro.m4a" ] || die "缺 guide_intro.m4a(首启引导不可用)"
-  echo "   ok: seed_podcasts.json / guide_intro.m4a 都在"
+  [ -s "$app/radio_stations.json" ] || die "缺 radio_stations.json(电台页无内置兜底)"
+  echo "   ok: seed_podcasts.json / guide_intro.m4a / radio_stations.json 都在"
 
   # 5) 图标(TestFlight 不收缺图标的包)
   [ -f "$app/AppIcon60x60@2x.png" ] || die "缺 AppIcon60x60@2x.png —— 上传会被拒"

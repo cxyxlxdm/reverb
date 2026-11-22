@@ -79,6 +79,14 @@ else
   echo "   ⚠ 缺 Resources/guide_intro.m4a,首启不显示引导入口(跑 shared/guide/sync.sh 补上)"
 fi
 
+# 内置精选电台:电台页在无网/无目录时的兜底(规范副本在 shared/radio/,由 sync.sh 分发)。
+# 缺了不拦出包,电台页退化为「在线目录 + 手动添加」。
+if [ -f "Resources/radio_stations.json" ]; then
+  cp "Resources/radio_stations.json" "$BUNDLE/Contents/Resources/radio_stations.json"
+else
+  echo "   ⚠ 缺 Resources/radio_stations.json,电台页将无内置兜底(跑 shared/radio/sync.sh 补上)"
+fi
+
 # ---- 卡片扩展(WidgetKit)---------------------------------------------------
 # SwiftPM 只会给出一个可执行文件,不认 .appex 这种 bundle;这里把它按宿主 App 的布局装进去:
 #   Reverb.app/Contents/PlugIns/ReverbWidget.appex/Contents/{Info.plist,MacOS/,Resources/}

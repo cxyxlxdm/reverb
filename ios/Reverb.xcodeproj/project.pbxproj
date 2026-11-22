@@ -33,6 +33,10 @@
 		8A276D2CD87C7E55354F1142 /* RssParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A5EC6CD5EBC9A5110506DB /* RssParser.swift */; };
 		DD2807C53AA6EACA38B80F5C /* SeedCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6BC876B7A662616B3EC7486 /* SeedCatalog.swift */; };
 		E4B424E7FCD3F5E779D79ED9 /* Stores.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6E7222B31E0A0E9523FBEE0 /* Stores.swift */; };
+		B1B2C3D4E5F60718293A00F1 /* Station.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00F1 /* Station.swift */; };
+		B1B2C3D4E5F60718293A00F2 /* StationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00F2 /* StationStore.swift */; };
+		B1B2C3D4E5F60718293A00F3 /* RadioBrowserSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00F3 /* RadioBrowserSource.swift */; };
+		B1B2C3D4E5F60718293A00F4 /* radio_stations.json in Resources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00F4 /* radio_stations.json */; };
 		595913D4AFC5B0A7682BC85B /* Transcriber.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3037D8516ABDD0937BBC044 /* Transcriber.swift */; };
 		3D7F606C8F32153A25EA151B /* TranscriptFetcher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65E8B85C61A8BB6469BADA08 /* TranscriptFetcher.swift */; };
 		B7C1D2E3F4012345678ABC01 /* ChapterStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7C1D2E3F4012345678ABCD1 /* ChapterStore.swift */; };
@@ -122,6 +126,10 @@
 		E2A5EC6CD5EBC9A5110506DB /* RssParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RssParser.swift; path = "../macos/Sources/Reverb/Data/RssParser.swift"; sourceTree = "<group>"; };
 		B6BC876B7A662616B3EC7486 /* SeedCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SeedCatalog.swift; path = "../macos/Sources/Reverb/Data/SeedCatalog.swift"; sourceTree = "<group>"; };
 		F6E7222B31E0A0E9523FBEE0 /* Stores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Stores.swift; path = "../macos/Sources/Reverb/Data/Stores.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A00F1 /* Station.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Station.swift; path = "../macos/Sources/Reverb/Data/Station.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A00F2 /* StationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StationStore.swift; path = "../macos/Sources/Reverb/Data/StationStore.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A00F3 /* RadioBrowserSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RadioBrowserSource.swift; path = "../macos/Sources/Reverb/Data/RadioBrowserSource.swift"; sourceTree = "<group>"; };
+		A1B2C3D4E5F60718293A00F4 /* radio_stations.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = radio_stations.json; sourceTree = "<group>"; };
 		A3037D8516ABDD0937BBC044 /* Transcriber.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Transcriber.swift; path = "../macos/Sources/Reverb/Data/Transcriber.swift"; sourceTree = "<group>"; };
 		65E8B85C61A8BB6469BADA08 /* TranscriptFetcher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TranscriptFetcher.swift; path = "../macos/Sources/Reverb/Data/TranscriptFetcher.swift"; sourceTree = "<group>"; };
 		B7C1D2E3F4012345678ABCD1 /* ChapterStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ChapterStore.swift; path = "../macos/Sources/Reverb/Data/ChapterStore.swift"; sourceTree = "<group>"; };
@@ -246,9 +254,12 @@
 				BEE616F17EC5E99D2F6B278F /* PlaybackStateStore.swift */,
 				0BE5D3065694828DE40F7963 /* PodcastRepository.swift */,
 				86A891F370767460838933D7 /* PopularCacheStore.swift */,
+				A1B2C3D4E5F60718293A00F3 /* RadioBrowserSource.swift */,
 				E2A5EC6CD5EBC9A5110506DB /* RssParser.swift */,
 				B6BC876B7A662616B3EC7486 /* SeedCatalog.swift */,
 				F6E7222B31E0A0E9523FBEE0 /* Stores.swift */,
+				A1B2C3D4E5F60718293A00F1 /* Station.swift */,
+				A1B2C3D4E5F60718293A00F2 /* StationStore.swift */,
 				A3037D8516ABDD0937BBC044 /* Transcriber.swift */,
 				65E8B85C61A8BB6469BADA08 /* TranscriptFetcher.swift */,
 				CBC13DFF3D51FD74D2C2F24B /* TranscriptLines.swift */,
@@ -277,6 +288,7 @@
 			children = (
 				957E2E743CCAB95EFFF8AEFC /* seed_podcasts.json */,
 				D8312527917CCF29180C9DD6 /* guide_intro.m4a */,
+				A1B2C3D4E5F60718293A00F4 /* radio_stations.json */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -397,6 +409,7 @@
 			files = (
 				EF5E39333A8B9DF641D1AB92 /* seed_podcasts.json in Resources */,
 				1F5D398D5F8FABAAB7319584 /* guide_intro.m4a in Resources */,
+				B1B2C3D4E5F60718293A00F4 /* radio_stations.json in Resources */,
 				DE74722481C4638535DF4F53 /* Localizable.strings in Resources */,
 				B1A0C7D3E5F2468A9B0C1D2E /* InfoPlist.strings in Resources */,
 			);
@@ -440,8 +453,11 @@
 				5BE1CBADD4872514EC406A7E /* PlaybackStateStore.swift in Sources */,
 				463BB019A20E1506225ECA0E /* PodcastRepository.swift in Sources */,
 				342A68C03DB1E7E9FDB25918 /* PopularCacheStore.swift in Sources */,
+				B1B2C3D4E5F60718293A00F3 /* RadioBrowserSource.swift in Sources */,
 				8A276D2CD87C7E55354F1142 /* RssParser.swift in Sources */,
 				DD2807C53AA6EACA38B80F5C /* SeedCatalog.swift in Sources */,
+				B1B2C3D4E5F60718293A00F1 /* Station.swift in Sources */,
+				B1B2C3D4E5F60718293A00F2 /* StationStore.swift in Sources */,
 				E4B424E7FCD3F5E779D79ED9 /* Stores.swift in Sources */,
 				595913D4AFC5B0A7682BC85B /* Transcriber.swift in Sources */,
 				3D7F606C8F32153A25EA151B /* TranscriptFetcher.swift in Sources */,

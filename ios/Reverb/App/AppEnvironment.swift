@@ -8,6 +8,8 @@ final class AppEnvironment: ObservableObject {
     private var bag = Set<AnyCancellable>()
     let repository = PodcastRepository()
     let subscriptions = SubscriptionStore()
+    /// 直播电台账本(只进备份,不进局域网同步,见 `StationStore` 顶部注释)。
+    let stations = StationStore()
     let favorites = FavoriteStore()
     let history = HistoryStore()
     let stamps = StampStore()
@@ -114,7 +116,7 @@ final class AppEnvironment: ObservableObject {
         }
         #endif
 
-        for pub in [subscriptions.objectWillChange, favorites.objectWillChange,
+        for pub in [subscriptions.objectWillChange, stations.objectWillChange, favorites.objectWillChange,
                     history.objectWillChange, stamps.objectWillChange, notes.objectWillChange,
                     inbox.objectWillChange,
                     chapters.objectWillChange,
@@ -123,7 +125,7 @@ final class AppEnvironment: ObservableObject {
         }
 
         let lang = settings.language.isEmpty ? "auto(\(Locale.preferredLanguages.first ?? "?"))" : settings.language
-        Log.i("App", "本地数据就绪 region=\(region) language=\(lang) 订阅=\(subscriptions.subscriptions.count) 收藏=\(favorites.favorites.count) 历史=\(history.history.count) 印记=\(stamps.stamps.count) 批注=\(notes.notes.count) 下载=\(downloads.downloads.count)")
+        Log.i("App", "本地数据就绪 region=\(region) language=\(lang) 订阅=\(subscriptions.subscriptions.count) 电台=\(stations.stations.count) 收藏=\(favorites.favorites.count) 历史=\(history.history.count) 印记=\(stamps.stamps.count) 批注=\(notes.notes.count) 下载=\(downloads.downloads.count)")
 
         // 后台任务注册必须在启动早期完成(Info.plist 里已申报同一个 identifier)。
         // `updatesEnabled` 关着时它只撤销排期,不发通知。
