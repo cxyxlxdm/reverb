@@ -548,6 +548,8 @@
 >   两端 `-newer` 判据均 0 命中。重打前的旧包已归档:
 >   `android/dist/_archive/mapping-1.0.8-vc9-20261113-2215-preLanSyncUiFix.txt`(+ apk 的 `.sha256`)、
 >   `harmony/dist/_backup-1.0.8-preLanSyncUiFix-20261113-2215/`。
+>   （上述 1.0.8 中间构建的归档**已于 2026-11-22 清理 dist 时删除**;它们是未分发构建,
+>   在架 1.0.8 的 mapping 仍在 `android/dist/_backup-1.0.8-mapping-published-20261122/`。）
 
 ### 补齐:macOS 官方稿解析器单测(2026-11-13)
 
@@ -593,6 +595,7 @@
 >   四端 `-newer` 判据均 0 命中。重打前的旧包已归档:
 >   `android/dist/_archive/mapping-1.0.8-vc9-20261113-2301-preSegRuler.txt`(+ apk 的 `.sha256`)、
 >   `harmony/dist/_backup-1.0.8-preSegRuler-20261113-2301/`。
+>   （上述 1.0.8 中间构建的归档**已于 2026-11-22 清理 dist 时删除**;未分发构建,在架 mapping 保留。）
 > - **未验**:Android 真机这次没有重装重转(只过了单测);iOS / macOS 界面运行未跑(与之前同一道边界)。
 
 ### 逐字稿:尺子改对之后的残余形状,以及最后一道闸(2026-11-13 晚)
@@ -628,7 +631,7 @@
 > - 验收里那四个 20 字是**允许**的:18 字正文 + `GLUE_OVERHANG` 2 的并句余量;判据看的是 20 这个上限。
 > - 四端发布物按本批重打:Android `reverb.apk` **270,259,537 B @23:48:08**
 >   sha256 `a133640c…`、`mapping` 46,822,039 B(重打前的 mapping 与旧包哈希归档在
->   `android/dist/_archive/mapping-1.0.8-vc9-20261113-2347-preFitLine.txt`);鸿蒙 `reverb.app`
+>   `android/dist/_archive/mapping-1.0.8-vc9-20261113-2347-preFitLine.txt`)(已于 2026-11-22 清理);鸿蒙 `reverb.app`
 >   **182,008,644 B @23:58:28** sha256 `a88c22af…`、`reverb-symbol.zip` **14,953,342 B @23:58:28**
 >   sha256 `a41c5bc0…`,嵌套 hap 内模型+词表 2、native 库 3;macOS `余音-Reverb-1.0.8-universal.dmg`
 >   **6,207,830 B @2026-11-14 00:01** sha256 `3acefc6a…`(解包验收 13 条判据全过);
