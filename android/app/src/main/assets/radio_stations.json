@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "note": "内置精选电台(只读兜底)。规范副本在 shared/radio/stations.json,由 sync.sh 分发到四端随包资源;各端拷贝不要手改。字段口径见 docs/ARCHITECTURE.md「直播电台」一节:group 只取 news/music/talk/retro,由界面本地化;url 取 radio-browser 的 url_resolved(2026-11-22 实测响应头为音频)。",
+  "stations": [
+    {
+      "name": "CNR-1 中国之声",
+      "url": "https://lhttp.qtfm.cn/live/15318317/64k.mp3",
+      "group": "news",
+      "country": "CN"
+    },
+    {
+      "name": "CNR-3 音乐之声",
+      "url": "https://ngcdn001.cnr.cn/live/yyzs/index.m3u8",
+      "logo": "https://cnvod.cnr.cn/audio2017/ondemand/img/1100/20191224/1577155745280.png",
+      "group": "music",
+      "country": "CN"
+    },
+    {
+      "name": "CCTV-13 新闻（伴音）",
+      "url": "https://piccpndali.v.myalicdn.com/audio/cctv13_2.m3u8",
+      "group": "news",
+      "country": "CN"
+    },
+    {
+      "name": "CCTV-4 中文国际（伴音）",
+      "url": "https://piccpndali.v.myalicdn.com/audio/cctv4_2.m3u8",
+      "group": "news",
+      "country": "CN"
+    },
+    {
+      "name": "国际新闻",
+      "url": "https://lhttp.qtfm.cn/live/20500172/64k.mp3",
+      "logo": "https://pic.qtfm.cn/sso/48/1678171152584_a6BwhQSVz.png",
+      "group": "news",
+      "country": "CN"
+    },
+    {
+      "name": "环球资讯广播",
+      "url": "http://sk.cri.cn/905.m3u8",
+      "logo": "https://ytweb.radio.cn/favicon.ico",
+      "group": "news",
+      "country": "CN"
+    },
+    {
+      "name": "891 线上音乐台",
+      "url": "https://live.fm891.net/192k.aac",
+      "logo": "https://pic.qtfm.cn/2025/1001/20251001070637.png",
+      "group": "music",
+      "country": "CN"
+    },
+    {
+      "name": "动听音乐台",
+      "url": "https://lhttp-hw.qtfm.cn/live/5022107/64k.mp3",
+      "logo": "https://pic.qtfm.cn/2021/0411/20210411040015.jpeg",
+      "group": "music",
+      "country": "CN"
+    },
+    {
+      "name": "清晨音乐台",
+      "url": "https://lhttp.qingting.fm/live/4915/64k.mp3",
+      "logo": "https://pic.qtfm.cn/2022/0211/20220211102019.jpeg",
+      "group": "music",
+      "country": "CN"
+    },
+    {
+      "name": "两广之声音乐台",
+      "url": "https://lhttp.qtfm.cn/live/20500149/64k.mp3",
+      "logo": "https://pic.qtfm.cn/2022/0619/20220619063631.jpeg",
+      "group": "music",
+      "country": "CN"
+    },
+    {
+      "name": "江苏经典流行音乐广播",
+      "url": "https://lhttp.qtfm.cn/live/4938/64k.mp3",
+      "logo": "https://www.vojs.cn/favicon.ico",
+      "group": "music",
+      "country": "CN"
+    },
+    {
+      "name": "AsiaFM 亚洲音乐台",
+      "url": "https://live.xmcdn.com/live/764/64.m3u8",
+      "group": "music",
+      "country": "CN"
+    },
+    {
+      "name": "怀旧音乐广播",
+      "url": "https://live.ximalaya.com/radio-first-page-app/live/2629/64.m3u8",
+      "group": "retro",
+      "country": "CN"
+    },
+    {
+      "name": "天籁之音 · 经典正流行",
+      "url": "http://play-radio-stream3.hndt.com/now/WUBA5hW2/chunklist.m3u8",
+      "group": "retro",
+      "country": "CN"
+    },
+    {
+      "name": "听云相声台",
+      "url": "https://m.tyradio.uk/tyxs.mp3",
+      "logo": "http://pic.qtfm.cn/2015/1009/20151009094853845.jpg!200",
+      "group": "talk",
+      "country": "CN"
+    },
+    {
+      "name": "安徽小说评书广播",
+      "url": "https://lhttp.qtfm.cn/live/1951/64k.mp3",
+      "group": "talk",
+      "country": "CN"
+    }
+  ]
+}
