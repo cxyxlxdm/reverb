@@ -179,6 +179,7 @@ private struct SettingsForm: View {
                             Text("在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度，正在听的一集可接着听")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
+                                .captionWrap()
                         }
                     } icon: {
                         Image(systemName: "wifi.router")
@@ -199,6 +200,7 @@ private struct SettingsForm: View {
                                 Text("榜单、频道、图片、逐字稿与已播音频缓存")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .captionWrap()
                             }
                         } icon: {
                             Image(systemName: "trash.slash")
@@ -261,6 +263,7 @@ private struct SettingsForm: View {
                                 Text(updateStatusText)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .captionWrap()
                             }
                         } icon: {
                             Image(systemName: "arrow.triangle.2.circlepath")
@@ -290,6 +293,7 @@ private struct SettingsForm: View {
                                 Text("我们如何处理你的数据")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .captionWrap()
                             }
                         } icon: {
                             Image(systemName: "hand.raised")
@@ -610,6 +614,21 @@ private struct SettingsForm: View {
                 NSWorkspace.shared.activateFileViewerSelecting([url])
             }
         }
+    }
+}
+
+/// 按钮行里那句 caption 的换行口径。
+///
+/// macOS 的 Button 标签默认按**单行**排版,超宽就省略号 —— 放进 grouped Form 的行高里
+/// 连第二行都不会长出来。离屏渲染(460 宽)实测:中文「局域网同步」的说明被截成一行,
+/// 英 / 法 / 西三个语种那四条副标题**全部**被截。`.fixedSize(vertical:)` 让文字按理想高度
+/// 展开、行高跟着长,`multilineTextAlignment` 把 Button 默认的居中改回左对齐。
+/// 只给按钮标签里的 caption 用;普通行里的说明文字本来就会换行,加了反而多余。
+private extension View {
+    func captionWrap() -> some View {
+        lineLimit(nil)
+            .fixedSize(horizontal: false, vertical: true)
+            .multilineTextAlignment(.leading)
     }
 }
 
