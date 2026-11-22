@@ -77,6 +77,11 @@ class AppContainer(app: Application) {
     val stationStore = com.yuyin.reverb.data.local.StationStore(app)
     /** 在线电台目录(radio-browser)。与仓库共用同一个 OkHttpClient,不另建连接池。 */
     val radioBrowser = com.yuyin.reverb.data.remote.RadioBrowserSource(httpClient)
+    /**
+     * DLNA 投播:SSDP 发现 + AVTransport。自研,不引三方 SDK;状态放进程里,
+     * 关掉播放页后电视那边仍在播(见 `cast/CastController` 头注)。
+     */
+    val cast = com.yuyin.reverb.cast.CastController(app, httpClient)
     val inboxStore = InboxStore(app)
     val categoryStore = CategoryStore(app)
     val downloadStore = DownloadStore(app)

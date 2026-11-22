@@ -549,4 +549,15 @@
     <string name="radio_live_name">Live</string>
     <string name="radio_checking">Checking this URL…</string>
     <string name="backup_row_stations">Live stations</string>
+
+    <!-- 投播(DLNA) -->
+    <string name="cast_title">Cast</string>
+    <string name="a11y_cast">Cast</string>
+    <string name="cast_scanning">Looking for devices…</string>
+    <string name="cast_connecting">Connecting to %1$s…</string>
+    <string name="cast_casting_to">Casting to %1$s</string>
+    <string name="cast_none">No devices found. Make sure your phone and TV are on the same Wi-Fi network</string>
+    <string name="cast_failed">Casting failed. Try again</string>
+    <string name="cast_stop">Stop casting</string>
+    <string name="cast_need_network">The “Local network” permission is needed to find devices</string>
 </resources>

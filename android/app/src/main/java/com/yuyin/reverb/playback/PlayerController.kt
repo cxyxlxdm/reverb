@@ -1271,6 +1271,15 @@ object PlayerController {
         }
     }
 
+    /**
+     * 投播成功后停掉本机出声。同一路音频从手机与电视同时响,听感上是回声;
+     * 只暂停、不动队列与进度 —— 用户停止投放后按播放键即可接着听。
+     */
+    fun pauseIfPlaying() {
+        val c = controller ?: return
+        if (c.isPlaying) c.pause()
+    }
+
     fun togglePlayPause() {
         val c = controller ?: return
         log.i(TAG, "togglePlayPause wasPlaying=${c.isPlaying} id=${_current.value?.id}")
