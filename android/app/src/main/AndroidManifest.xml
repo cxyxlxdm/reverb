@@ -17,10 +17,11 @@
          同一件事的另一半证据与兜底见 docs/TROUBLESHOOTING.md H276。 -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />
     <!-- Android 17(targetSdk 37)起,"本地网络"是独立权限:组播发现与直连 TCP 都要它。
-         本应用唯一的使用者是局域网同步(H276 那套 mDNS + QU 发现 + 47820 直连)。
-         ⚠️ 它是**运行时**权限,已在 SettingsScreen 的同步入口按 SDK_INT >= 37 申请;
-         不申请不会崩,但会静默发现不到对端(组播被丢、连接超时),比报错更难查。
-         36 及以下没有这条权限,声明在旧系统上无副作用。 -->
+         使用者有两处:局域网同步(H276 那套 mDNS + QU 发现 + 47820 直连)与 DLNA 投播
+         (SSDP 组播 + 对电视的 HTTP/SOAP,见 cast/)。两处都在打开对应面板时才可能申请。 -->
+    <!-- ⚠️ 它是**运行时**权限:同步入口在 SettingsScreen 里按 SDK_INT >= 37 申请;
+         投播入口在 PlayerScreen 里按同一条件申请。不申请不会崩,但会静默发现不到设备
+         (组播被丢、连接超时),比报错更难查。36 及以下没有这条权限,声明在旧系统上无副作用。 -->
     <uses-permission android:name="android.permission.ACCESS_LOCAL_NETWORK" />
     <!-- 真实频谱(RECORD_AUDIO + MODIFY_AUDIO_SETTINGS)与应用内更新(REQUEST_INSTALL_PACKAGES)
          原先只声明在 src/default/AndroidManifest.xml,商店那份没有 —— 2026-10-18 两 flavor 合成

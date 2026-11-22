@@ -1,5 +1,11 @@
 package com.yuyin.reverb.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -24,6 +30,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Bedtime
+import androidx.compose.material.icons.rounded.Cast
+import androidx.compose.material.icons.rounded.CastConnected
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
@@ -70,6 +78,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
+import com.yuyin.reverb.cast.CastController
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.local.ChapterStore
 import com.yuyin.reverb.playback.PlayerController
@@ -129,6 +138,22 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
     val currentSeal = stamps.firstOrNull { it.episodeId == episode.id }?.seal
     val scope = rememberCoroutineScope()
     val ctx = LocalContext.current
+    /**
+     * 投播(DLNA)。状态在应用级 [CastController] 里:弹层关掉、播放页收起,
+     * 电视那边仍在播,所以界面只消费状态、不持有会话。
+     */
+    val castState by container.cast.state.collectAsStateWithLifecycle()
+    val isCasting = castState is CastController.State.Casting
+    var castOpen by remember { mutableStateOf(false) }
+    val castPermMessage = stringResource(R.string.cast_need_network)
+    // Android 17 起「本地网络」是运行时权限(与局域网同步同一条):不申请不会崩,
+    // 但组播会被丢、设备一个都发现不到 —— 比报错更难查(见 manifest 那段注释)。
+    val castPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) castOpen = true
+        else Toast.makeText(ctx, castPermMessage, Toast.LENGTH_LONG).show()
+    }
+    // 换集就收尾:投出去的那一路没有跟随换集的能力,继续留着会让「界面 A、电视 B」。
+    LaunchedEffect(episode.id) { container.cast.onEpisodeChanged(episode.id) }
     val saveImage = rememberImageSaver()
     var sealDialogOpen by remember { mutableStateOf(false) }
     /**
@@ -211,6 +236,20 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                IconButton(onClick = {
+                    val needPerm = Build.VERSION.SDK_INT >= 37 &&
+                        ContextCompat.checkSelfPermission(ctx.applicationContext, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
+                        PackageManager.PERMISSION_GRANTED
+                    if (needPerm) castPermLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+                    else castOpen = true
+                }) {
+                    Icon(
+                        if (isCasting) Icons.Rounded.CastConnected else Icons.Rounded.Cast,
+                        contentDescription = stringResource(R.string.a11y_cast),
+                        tint = if (isCasting) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 IconButton(onClick = onOpenQueue) {
                     Icon(
                         Icons.AutoMirrored.Rounded.QueueMusic,
@@ -511,6 +550,10 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
             },
             onDismiss = { noteDialogOpen = false }
         )
+    }
+
+    if (castOpen) {
+        CastDialog(cast = container.cast, episode = episode, onDismiss = { castOpen = false })
     }
 }
 

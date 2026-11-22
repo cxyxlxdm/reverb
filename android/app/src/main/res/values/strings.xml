@@ -568,4 +568,16 @@
     <string name="radio_live_name">直播</string>
     <string name="radio_checking">正在检查这个地址…</string>
     <string name="backup_row_stations">直播电台</string>
+
+
+    <!-- 投播(DLNA) -->
+    <string name="cast_title">投放</string>
+    <string name="a11y_cast">投放</string>
+    <string name="cast_scanning">正在查找可投放的设备…</string>
+    <string name="cast_connecting">正在连接 %1$s…</string>
+    <string name="cast_casting_to">正在投放到 %1$s</string>
+    <string name="cast_none">没找到可投放的设备。请确认手机和电视在同一个 Wi-Fi 下</string>
+    <string name="cast_failed">投放失败，请重试</string>
+    <string name="cast_stop">停止投放</string>
+    <string name="cast_need_network">需要「本地网络」权限才能查找可投放的设备</string>
 </resources>

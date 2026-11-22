@@ -549,4 +549,15 @@
     <string name="radio_live_name">En directo</string>
     <string name="radio_checking">Comprobando la dirección…</string>
     <string name="backup_row_stations">Emisoras en directo</string>
+
+    <!-- 投播(DLNA) -->
+    <string name="cast_title">Emitir</string>
+    <string name="a11y_cast">Emitir</string>
+    <string name="cast_scanning">Buscando dispositivos…</string>
+    <string name="cast_connecting">Conectando con %1$s…</string>
+    <string name="cast_casting_to">Emitiendo en %1$s</string>
+    <string name="cast_none">No se encontraron dispositivos. Comprueba que el teléfono y la TV estén en la misma red Wi-Fi</string>
+    <string name="cast_failed">No se pudo emitir. Inténtalo de nuevo</string>
+    <string name="cast_stop">Detener emisión</string>
+    <string name="cast_need_network">Se necesita el permiso «Red local» para buscar dispositivos</string>
 </resources>

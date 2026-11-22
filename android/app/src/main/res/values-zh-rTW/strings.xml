@@ -549,4 +549,15 @@
     <string name="radio_live_name">直播</string>
     <string name="radio_checking">正在檢查這個位址…</string>
     <string name="backup_row_stations">直播電台</string>
+
+    <!-- 投播(DLNA) -->
+    <string name="cast_title">投放</string>
+    <string name="a11y_cast">投放</string>
+    <string name="cast_scanning">正在尋找可投放的裝置…</string>
+    <string name="cast_connecting">正在連線 %1$s…</string>
+    <string name="cast_casting_to">正在投放到 %1$s</string>
+    <string name="cast_none">找不到可投放的裝置。請確認手機和電視在同一個 Wi-Fi 下</string>
+    <string name="cast_failed">投放失敗，請重試</string>
+    <string name="cast_stop">停止投放</string>
+    <string name="cast_need_network">需要「區域網路」權限才能尋找可投放的裝置</string>
 </resources>

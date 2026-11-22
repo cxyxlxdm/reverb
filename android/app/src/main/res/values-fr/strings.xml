@@ -549,4 +549,15 @@
     <string name="radio_live_name">Direct</string>
     <string name="radio_checking">Vérification de l\'adresse…</string>
     <string name="backup_row_stations">Radios en direct</string>
+
+    <!-- 投播(DLNA) -->
+    <string name="cast_title">Diffuser</string>
+    <string name="a11y_cast">Diffuser</string>
+    <string name="cast_scanning">Recherche d’appareils…</string>
+    <string name="cast_connecting">Connexion à %1$s…</string>
+    <string name="cast_casting_to">Diffusion sur %1$s</string>
+    <string name="cast_none">Aucun appareil trouvé. Vérifiez que le téléphone et la TV sont sur le même réseau Wi-Fi</string>
+    <string name="cast_failed">La diffusion a échoué. Réessayez</string>
+    <string name="cast_stop">Arrêter la diffusion</string>
+    <string name="cast_need_network">L’autorisation « Réseau local » est nécessaire pour chercher des appareils</string>
 </resources>
