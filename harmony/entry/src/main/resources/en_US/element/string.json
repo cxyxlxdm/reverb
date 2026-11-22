@@ -1886,7 +1886,7 @@
     },
     {
       "name": "privacy_consent_radio",
-      "value": "Live radio and casting (optional). In the Radio tab you can add a station address manually, or search the public online radio directory (radio-browser.info) by keyword: your search term is sent only to that directory, with no login and no user identifier. The station names and addresses you add stay on this device and travel only in a full backup you export. On the player, Cast uses the system cast picker: the system discovers TVs, speakers and other devices on the same Wi-Fi and carries the audio, while the app only hands over this playback. Device names and addresses are never uploaded to the developer and never written to logs."
+      "value": "Live radio and casting (optional). In the Radio tab you can add a station address manually, or search the public online radio directory (radio-browser.info) by keyword: your search term is sent only to that directory, with no login and no user identifier. After the directory returns results, the app sends one header-only request to each station address in the results so unreachable stations can be hidden; those servers will see your IP address and User-Agent. The station names and addresses you add stay on this device and travel only in a full backup you export. On the player, Cast uses the system cast picker: the system discovers TVs, speakers and other devices on the same Wi-Fi and carries the audio, while the app only hands over this playback. Device names and addresses are never uploaded to the developer and never written to logs."
     }
   ]
 }
