@@ -1305,6 +1305,18 @@
       "value": "Guardar"
     },
     {
+      "name": "action_clip",
+      "value": "Clip"
+    },
+    {
+      "name": "action_note",
+      "value": "Nota"
+    },
+    {
+      "name": "action_stamp",
+      "value": "Sello"
+    },
+    {
       "name": "stamp_edit",
       "value": "Editar sello · Marca de escucha"
     },

@@ -1305,6 +1305,18 @@
       "value": "Save"
     },
     {
+      "name": "action_clip",
+      "value": "Clip"
+    },
+    {
+      "name": "action_note",
+      "value": "Note"
+    },
+    {
+      "name": "action_stamp",
+      "value": "Stamp"
+    },
+    {
       "name": "stamp_edit",
       "value": "Edit stamp · Listening mark"
     },

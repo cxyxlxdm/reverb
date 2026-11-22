@@ -1305,6 +1305,18 @@
       "value": "保存"
     },
     {
+      "name": "action_clip",
+      "value": "剪藏"
+    },
+    {
+      "name": "action_note",
+      "value": "批注"
+    },
+    {
+      "name": "action_stamp",
+      "value": "盖章"
+    },
+    {
       "name": "stamp_edit",
       "value": "改章 · 听觉印记"
     },

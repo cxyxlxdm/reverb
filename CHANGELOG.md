@@ -83,7 +83,7 @@
 - `radio-browser.info` 是新的第三方地址;投播会把音频地址交给局域网内用户选定的设备。
   两件事都写进了四端同意页与 `docs/PRIVACY.md` / `site/reverb/privacy.html`,并按口径 +1 重新征求同意。
 
-### 播放页顶栏:去掉 ⋮,四颗动作挪到播放键下方一排(Android,2026-11-22)
+### 播放页顶栏:去掉 ⋮,四颗动作挪到播放键下方一排(Android / 鸿蒙,2026-11-22)
 
 - 用户反馈:播放页顶栏按钮已经装不下,投播键与收起键挨得太近;口径是**Android 端直接丢掉右侧 ⋮**。
 - 根因(算术复核):1080px(392.7dp)屏、两侧各 24dp 后只剩 948px,而顶栏七颗控件
@@ -101,6 +101,17 @@
   (右侧收藏距屏缘 15dp、左侧 24dp,余量被两端非对称吃掉,但无裁切);**320dp 档顶栏会溢出**
   (收藏整颗出屏、睡眠芯片折行)—— 但同一档的播放键一排**在改动前就破**(30 秒跳转的秒数竖排),
   即 320dp 本来就不是本应用的可用宽度,此次不按回归处理。
+- **鸿蒙同轮跟进**(同一处装不下):本机逻辑宽约 374vp,收起 + 投播 + 队列 + 倍速 + 睡眠 + 收藏
+  六颗之后,⋮ 同样贴住了邻居。改法与 Android 同形:顶栏只留这六颗,四个动作(保存 / 剪藏 / 批注 / 盖章)
+  移到播放键下方一排常驻,短标签复用同一组 `action_save / action_clip / action_note / action_stamp`
+  (五语种新增);全项目图标走 `SymbolGlyph`(本端 `Glyph`),不再用 `Image` 画 Symbol(见 H288)。
+  盖章那格的颜色与无障碍文案随「这一集有没有章」变,不能走按值收参的 builder(H29),单独写在渲染处。
+- 鸿蒙装机验收(Mate 60,debug 包):顶栏六颗齐全、⋮ 已消失;四颗动作逐个点开 ——
+  批注弹「记下这一秒」、盖章弹印记网格、剪藏拉起系统分享面板(此刻卡片 495.95 KB)、
+  保存弹系统「允许余音保存 1 张图片」,允许后 toast「剪藏已存入相册」。`hvigorw test` **69 条 0 失败**。
+  第一版图标用错组件(`GlyphImage` 画 `sys.symbol.*`),真机上只剩四个字,换回 `Glyph` 后复验通过(H288)。
+- **iOS / macOS 不需要改**:两端播放页顶栏本来只有三项(关闭 / 正在播放 / 投放),没有 ⋮;
+  动作行本来就带文字排在播放键下方。iOS 本轮在模拟器上截图核对过顶栏,macOS 读代码核对(两端同形)。
 
 ### 工程要点与验收边界
 
@@ -136,7 +147,7 @@
 - 设备描述解析从 `XmlPullParser` 换成 **DOM**:JVM 单测里 `XmlPullParserFactory` 是 android.jar 的 stub,
   会把解析静默打回 null,单测会误判成"没有设备"。
 
-### 四端 1.0.9 产物(2026-11-22 16:11–16:56;Android 于 16:55 因顶栏改动重打,`-newer` 全部 0 命中)
+### 四端 1.0.9 产物(2026-11-22 16:11–17:16;Android 于 16:55、鸿蒙于 17:15 因顶栏改动重打,`-newer` 全部 0 命中)
 
 - **Android** `android/dist/reverb.apk` 270,294,292 B @16:55:57,sha256 `90b5dd19…79d0`;
   `aapt2 dump badging` = versionCode **10** / versionName **1.0.9**;解包按硬规矩 1 五项为 **4 / 1 / 1 / 13 / 2**;
@@ -148,9 +159,12 @@
   (49,062,344 B,sha256 `69982b15…8015`)已归档至 `dist/_backup-1.0.8-mapping-published-20261122/`。
   新包资源里可检出 `action_clip` / `action_stamp` 两个新键 —— 这是它区别于 preTopBarFix 那份的判据
   (两者字节数恰好相同,R8 混淆后的 `PlayerAction` 符号名已不可 grep)。
-- **鸿蒙** `harmony/dist/reverb.app` 182,044,168 B + `reverb-symbol.zip` 14,968,920 B @16:11:34,
-  sha256 `fa3a6f29…6fda` / `c159a6c7…5619`;嵌套 `entry-default.hap` 解包 **2 / 3 / 1**、
-  `pack.info` = **1000009 / 1.0.9**;`debugKey` 断言无命中。
+- **鸿蒙** `harmony/dist/reverb.app` 182,044,983 B + `reverb-symbol.zip` 14,969,124 B @17:15:57,
+  sha256 `c9025023…fbd9` / `006051ee…6d36`;嵌套 `entry-default.hap` 解包 **2 / 3 / 1**、
+  `pack.info` = **1000009 / 1.0.9**;`debugKey` 断言无命中。`resources.index` 里可检出 `action_stamp`
+  —— 这是它区别于改造前那份的判据;改造前 16:11 的构建(182,044,168 B / 14,968,920 B,
+  sha256 `fa3a6f29…6fda` / `c159a6c7…5619`)已按同一口径留档至
+  `dist/_archive/reverb-1.0.9-vc1000009-20261122-1611-preTopBarFix.sha256`。
 - **macOS** `macos/dist/余音-Reverb-1.0.9-universal.dmg` 6,622,867 B @16:11:12,sha256 `d48502ad…505a`;
   `package.sh` 验收段全过(架构集合 arm64 + x86_64、判据词、4 套 `.lproj`、`codesign --verify`)。
 - **iOS** `ios/dist/reverb-ios-1.0.9-3-unsigned.ipa` 3,152,950 B @16:13:13,sha256 `4d0a71ab…3379`;

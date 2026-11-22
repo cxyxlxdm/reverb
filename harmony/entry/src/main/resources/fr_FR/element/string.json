@@ -1305,6 +1305,18 @@
       "value": "Enregistrer"
     },
     {
+      "name": "action_clip",
+      "value": "Clip"
+    },
+    {
+      "name": "action_note",
+      "value": "Note"
+    },
+    {
+      "name": "action_stamp",
+      "value": "Tampon"
+    },
+    {
       "name": "stamp_edit",
       "value": "Modifier le sceau · Empreinte d'écoute"
     },

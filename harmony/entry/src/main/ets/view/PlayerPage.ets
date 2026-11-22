@@ -64,18 +64,18 @@ export struct PlayerPage {
   @State showSleep: boolean = false;
   @State showSeals: boolean = false;
   /**
-   * 批注弹层的显位,与 `showSeals` 同一手法(半模态,见 moreMenuChip 的注释)。
+   * 批注弹层的显位,与 `showSeals` 同一手法(半模态,见 `episodeActions` 的注释)。
    *
-   * ⚠️ **`.bindSheet` 只能挂在另一个节点上,不能和盖章那个共用 `moreMenuChip`**:
+   * ⚠️ **`.bindSheet` 只能挂在另一个节点上,不能和盖章那个共用同一节点**:
    * 一个节点只有一个 bindSheet 属性,后写的会把先写的顶掉,表现是"点了写批注什么也没弹"。
    * 现在它挂在本页根 Column 上。
    */
   @State showNote: boolean = false;
   /**
    * 章节弹层的显位。`.bindSheet` 挂在「章节入口 + 进度条」那个 Column 上
-   * (根 Column 已被批注占了、moreMenuChip 被盖章占了;一个节点只有一个 bindSheet)。
+   * (根 Column 已被批注占了、动作排那行被盖章占了;一个节点只有一个 bindSheet)。
    * 入口的 onClick 与 sheet 不在同一节点,不会出现 $$ 与 onClick 互相置位的抖动
-   * (那个坑的说明见 moreMenuChip 的长注释)。
+   * (那个坑的说明见 `episodeActions` 的长注释)。
    */
   @State showChapters: boolean = false;
   /**
@@ -156,7 +156,10 @@ export struct PlayerPage {
 
   build() {
     Column() {
-      // 顶栏:收起 | 队列 · 倍速 · 睡眠 · 收藏 · 更多(三项在「更多」里,同 Android)
+      // 顶栏:收起 | 投播 · 队列 · 倍速 · 睡眠 · 收藏
+      // 四颗作用于当前这一集的动作(保存此刻 / 剪藏 / 批注 / 盖章)不在这里 ——
+      // 顶栏在 6.1 那台(逻辑宽约 374vp)上六颗已是上限,再塞一颗「更多」就会被压到
+      // 贴住相邻图标;它们改到播放键下方一排常驻(见 `episodeActions`)。
       Row() {
         // 收起播放页:与 Android 一致用「下折角」(KeyboardArrowDown),不是返回箭头 ——
         // 这是"把全屏播放页收下去"的语义,和二级页返回不同。
@@ -193,7 +196,6 @@ export struct PlayerPage {
           if (!this.liveNoTimeline()) this.speedChip()
           this.sleepChip()
           this.favoriteChip()
-          this.moreMenuChip()
         }
         .alignItems(VerticalAlign.Center)
       }
@@ -274,6 +276,7 @@ export struct PlayerPage {
         })
       }
       this.controls()
+      this.episodeActions()
       if (this.momentHint.length > 0) {
         Text(this.momentHint)
           .fontSize(TypeScale.caption * this.fontScale)
@@ -295,7 +298,7 @@ export struct PlayerPage {
     .height('100%')
     // 左右 24 与 Android 的 `padding(horizontal = 24.dp)` 对齐 —— 原先 20,标题看着贴边
     .padding({ left: 24, right: 24, bottom: 16 })
-    // 批注弹层。挂在这里而不是 moreMenuChip 上:那个节点已经被盖章的 sheet 占了
+    // 批注弹层。挂在这里而不是动作排那行:那个节点已经被盖章的 sheet 占了
     // (一个节点只有一个 bindSheet)。高度按「标题 + 时间 + 三行输入 + 按钮」给足,
     // 键盘弹起时由系统抬升 —— 这条**未真机验过**,装机判据是"输入框不被键盘盖住"。
     .bindSheet($$this.showNote, this.noteSheet(), { height: 320, backgroundColor: this.scheme.surface })
@@ -664,59 +667,72 @@ export struct PlayerPage {
   }
 
   /**
-   * 「更多」溢出菜单:保存此刻 / 剪藏·分享此刻 / 盖章。
+   * 播放键下方一排:保存此刻 / 剪藏·分享此刻 / 写批注 / 盖章。
    *
-   * 与 Android `MoreMenu` 一致 —— Android 的注释写明这三项**收进溢出菜单是为了避免顶栏按钮过多**。
-   * 鸿蒙原先把「章」「藏」两个文字按钮直接摊在顶栏,连收起共 7 个,挤成一排。
+   * 这四项原先收在顶栏的「更多」菜单里(与 Android 的 ⋮ 同形),移出来的理由两边一样:
+   * **顶栏装不下**。本机逻辑宽约 374vp,收起 + 投播 + 队列 + 倍速 + 睡眠 + 收藏六颗
+   * 已经把「更多」压到贴住邻居;菜单入口本身在缩小,里面的动作也就越难到达。
+   * 它们都作用于"当前这一集",放在播放键正下方语义上是连贯的(Android 同轮改动同位置)。
    *
-   * 盖章的半模态**绑在本节点上、由菜单项置位**。原先是把 `.onClick(showSeals = true)` 和
-   * `.bindSheet($$this.showSeals, ...)` 挂在**同一个节点**上:`$$` 是双向绑定,点空白处关闭时
-   * ArkUI 自己把状态置 false,而同节点的 onClick 又会把它置回 true —— 两者竞争,表现就是
-   * 「收回去 → 又弹一次 → 才最终收起」的偶发抖动。菜单项与 sheet 不在同一节点,冲突消失。
+   * **必须带文字**:纯图标的「保存此刻」在 Android 侧被读成「下载本集」(同一枚下载箭头),
+   * 短标签用新增的 `action_save / action_clip / action_note / action_stamp`(五语种),
+   * 完整文案(`clip_save` 等)一行四等分放不下。
+   *
+   * 盖章的半模态**绑在这排 Row 上、由那一项的 onClick 置位**,不与 onClick 同节点 ——
+   * `$$` 是双向绑定,点空白处关闭时 ArkUI 会置 false,同节点的 onClick 又置回 true,
+   * 表现是「收回去 → 又弹一次」的偶发抖动(这个坑原先记在 `moreMenuChip` 上)。
    */
   @Builder
-  moreMenuChip() {
-    // 竖排三点,用与 Android 同一枚 Material 矢量(`Icons.Rounded.MoreVert`)。
-    // 原先用 `sys.media.ohos_ic_public_more` —— 那是**横排**三点(鸿蒙平台惯例),
-    // 两端摆在一起就是两种形状。同 tab 图标那次的判断:图标形状属于品牌一致性,取一致。
-    GlyphImage({ icon: $r('app.media.ic_more_vert'), dim: 21, color: this.scheme.onSurfaceVariant })
-      .margin({ left: -2.5 })
-      .responseRegion({ x: -11, y: -11, width: 43, height: 43 })
-      .accessibilityText(L.s('more'))
-      .bindMenu(this.moreMenu())
-      .bindSheet($$this.showSeals, this.sealSheet(), { height: 330 })
+  episodeActions() {
+    Row() {
+      this.actionCol(Sym.download, L.s('action_save'), L.s('clip_save'), () => { this.saveMoment(); })
+      this.actionCol(Sym.share, L.s('action_clip'), L.s('clip_moment'), () => { this.shareMoment(); })
+      this.actionCol(Sym.note, L.s('action_note'), L.s('note_add'), () => {
+        // 就在这一行取位置:下面两句都要跨一个异步渲染才落地,晚取就不是"这一秒"了
+        const e = this.player.current;
+        if (e === null) return;
+        this.notePosMs = this.player.positionMs;
+        this.noteEpisode = e;
+        this.noteDraft = '';
+        this.showNote = true;
+      })
+      // 盖章的着色与无障碍文案都随"这一集有没有章"变,所以不能走 `actionCol`
+      // —— `@Builder` 的值参数只求值一次,状态变了也不会重算(见 `iconAction` 的 H29 注)。
+      Column({ space: 3 }) {
+        // 图标必须走 `Glyph`(SymbolGlyph):`GlyphImage` 是给 `sys.media` 位图用的,
+        // 拿它画 `sys.symbol.*` 不报错、也不出图 —— 第一版就这么写,真机上只剩四个字(见 H288)。
+        Glyph({
+          symbol: Sym.seal, dim: 22,
+          color: this.currentSeal().length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant
+        })
+        Text(L.s('action_stamp'))
+          .fontSize(TypeScale.caption * this.fontScale)
+          .fontColor(this.currentSeal().length > 0 ? this.scheme.primary : this.scheme.onSurfaceVariant)
+      }
+      .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+      .borderRadius(12)
+      .accessibilityText(this.currentSeal().length > 0 ? L.s('stamp_edit') : L.s('stamp_add'))
+      .onClick(() => { this.showSeals = true; })
+    }
+    .width('100%')
+    .justifyContent(FlexAlign.SpaceEvenly)
+    .margin({ top: 10 })
+    .bindSheet($$this.showSeals, this.sealSheet(), { height: 330 })
   }
 
+  /// 动作排里的一格(图标 + 短标签)。标签是静态的,按值传不会冻结出错(见 `episodeActions`)。
   @Builder
-  moreMenu() {
-    Menu() {
-      MenuItem({ content: L.s('clip_save') })
-        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
-        .onClick(() => { this.saveMoment(); })
-      MenuItem({ content: L.s('clip_moment') })
-        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
-        .onClick(() => { this.shareMoment(); })
-      // 批注排在盖章之前:与 Android `MoreMenu` 同序(保存此刻 / 分享此刻 / 写批注 / 盖章)。
-      MenuItem({ content: L.s('note_add') })
-        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
-        .onClick(() => {
-          // 就在这一行取位置:下面两句都要跨一个异步渲染才落地,晚取就不是"这一秒"了
-          const e = this.player.current;
-          if (e === null) return;
-          this.notePosMs = this.player.positionMs;
-          this.noteEpisode = e;
-          this.noteDraft = '';
-          this.showNote = true;
-        })
-      MenuItem({ content: this.currentSeal().length > 0 ? L.s('stamp_edit') : L.s('stamp_add') })
-        .contentFont(this.menuFont()).contentFontColor(this.scheme.onSurface)
-        .onClick(() => { this.showSeals = true; })
+  actionCol(icon: Resource, label: string, a11y: string, action: () => void) {
+    Column({ space: 3 }) {
+      Glyph({ symbol: icon, dim: 22, color: this.scheme.onSurfaceVariant })
+      Text(label)
+        .fontSize(TypeScale.caption * this.fontScale)
+        .fontColor(this.scheme.onSurfaceVariant)
     }
-    // **面板底色必须显式给**:ArkUI 的菜单默认是浅色面板、不跟随 App 主题,
-    // 而我们把文字设成了 onSurface(深色主题下近白)—— 白字压在白panel上直接看不见。
-    // Android 的 DropdownMenu 是跟随主题的,所以这里也给成深色面板 + 亮字。
-    .backgroundColor(this.scheme.surface)
-    .radius(12)
+    .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+    .borderRadius(12)
+    .accessibilityText(a11y)
+    .onClick(action)
   }
 
   /**
