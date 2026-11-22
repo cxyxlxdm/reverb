@@ -329,8 +329,10 @@ BUILD_NUMBER=2 DEVELOPMENT_TEAM=XXXXXXXXXX \
 # Android 唯一那份,当前期望(H205 / 1.0.8):功能全开,所以四项都非 0
 unzip -l dist/reverb.apk | grep -icE 'lib/|assets/sensevoice/'         # 非 0(4:两个 .so + 模型 + 词表)
 unzip -l dist/reverb.apk | grep -cE 'assets/seed_podcasts\.json'       # 非 0(1)
+unzip -l dist/reverb.apk | grep -cE 'assets/radio_stations\.json'      # 非 0(1;1.0.9 起的电台精选)
 unzip -p dist/reverb.apk classes.dex | LC_ALL=C grep -ao 'itunes.apple.com\|fyyd\|gpodder' | wc -l  # 非 0(13,4/5/4)
-"$SDK/build-tools/<ver>/aapt2" dump permissions dist/reverb.apk | grep -cE 'RECORD_AUDIO|REQUEST_INSTALL_PACKAGES'   # 非 0(2)
+unzip -p dist/reverb.apk classes.dex | LC_ALL=C grep -ao 'radio-browser\.info' | wc -l  # 非 0(1.0.9 电台目录地址,至少 1)
+"$SDK/build-tools/<ver>/aapt2" dump permissions dist/reverb.apk | grep -cE 'RECORD_AUDIO|REQUEST_INSTALL_PACKAGES|ACCESS_LOCAL_NETWORK'   # 非 0(3;Android 17 起)
 # HarmonyOS 商店包:模型、词表与识别库都在**嵌套的 entry-default.hap** 里 ——
 # 直接对 dist/reverb.app grep 这两条会恒得 0(2026-11-13 实测,外层 .app 里只有一个 .hap 条目),
 # 那不是"包里没有",是"查错了容器"。先解一层,清单落文件再数(H272:`grep -q` 直连管道会假阴性)。
@@ -338,6 +340,7 @@ T=$(mktemp -d); unzip -o -q dist/reverb.app '*.hap' -d "$T"
 unzip -l "$T/entry-default.hap" > "$T/hap.list"
 grep -cE 'rawfile/sensevoice/(model\.int8\.onnx|tokens\.txt)' "$T/hap.list"   # 非 0(2)
 grep -cE 'libs/arm64-v8a/lib(sherpa|onnxruntime)' "$T/hap.list"               # 非 0(3)
+grep -cE 'rawfile/radio_stations\.json' "$T/hap.list"                          # 非 0(1;1.0.9 起的电台精选)
 rm -rf "$T"
 ```
 
@@ -608,6 +611,8 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 | `ui/screens/` | 各页面 | 界面改动 → 截图整套重拍(硬规矩 20) |
 | `ui/components/` | 复用组件(`Components.kt` 1 444 行,已偏大) | 加通用控件 |
 | `ui/share/` | 剪藏与足迹海报 | 分享图 |
+| `cast/` | 自研 DLNA 投播:`CastController`(应用级状态机)· `SsdpDiscovery`(M-SEARCH + MulticastLock)· `DlnaClient`(SOAP AVTransport)· `CastDevice`;弹层在 `ui/screens/CastDialog.kt` | 投播链路;设备描述用 DOM 解析(JVM 单测里 XmlPullParser 是 stub) |
+| `ui/screens/RadioScreen.kt` + `data/local/StationStore.kt` + `data/remote/RadioBrowserSource.kt` | 直播电台 tab:我的电台账本 / 在线目录检索 / 随包精选(`assets/radio_stations.json`) | 电台字段与另三端同形;只进手动备份,不进局域网同步 |
 | `update/` | WorkManager 订阅巡检 + 新集通知 + 应用内更新(`SelfUpdate`,合并后商店那份也带,见 H205) | 后台刷新、更新检查 |
 | ~~`app/src/{default,store}/`~~ | **已删除**(2026-10-18 合并 flavor,H205) | 渠道差异不再由 source set 承载;要降级改 `src/main` 里那三个常量 |
 | `android/tools/` | `build-asr.sh` · `glass-shot.sh` · `play-button-check.sh` | ASR 产物、截图、播放键几何 |
@@ -618,24 +623,26 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 |---|---|
 | `view/` | 21 个页面与组件(`DiscoverPage` 1 416 行、`Components` 1 438 行) |
 | `store/` | 21 个 JSON store,与 Android `data/local/` 一一对应;`JsonFile` / `JsonTask` 是底座 |
-| `net/` | 9 个:`Sources` / `PodcastRepository` / `RssParser` / `FeedTask`(`@Concurrent`)/ `Http` … |
-| `playback/` | 8 个:`PlayerController`(1 555 行)/ `PlaybackClock`(高频时钟,硬规矩 7) |
+| `net/` | `Sources` / `PodcastRepository` / `RssParser` / `FeedTask`(`@Concurrent`)/ `Http` / `RadioBrowserSource` … |
+| `playback/` | `PlayerController` / `PlaybackClock`(高频时钟,硬规矩 7)/ 投播用系统 `AVCastPicker`(挂在 `view/PlayerPage.ets`) |
 | `update/` · `backup/` · `theme/` · `util/` · `model/` | 对应 Android 同名职责 |
+| `view/RadioPage.ets` + `store/StationStore.ets` | 直播电台 tab:账本 / 目录检索 / 随包精选(`rawfile/radio_stations.json`) |
 | `harmony/shelved/` | **移出编译树**的代码 —— ArkTS 没有 DCE,只能这么"真的没有"(硬规矩 2) |
 
 ### macOS(`macos/Sources/Reverb/`)
 
 `AppEnvironment` · `ReverbApp` · `RootView` · `Data/` · `Playback/` · `UI/`。
+「电台」页与投播:`UI/RadioView.swift` · `UI/RoutePickerView.swift`(`AVRoutePickerView` 包装)· `Data/StationStore.swift` · `Data/RadioBrowserSource.swift`;iOS 直接编译同一批共享层文件。
 缺口清单见 `docs/MACOS-GAPS.md` —— **盘 macOS 与手机端的一致性先看这份,别重新 grep 一遍。**
 
 ### iOS(`ios/Reverb/`)
 
 | 目录 | 职责 |
 |---|---|
-| `App/` | `ReverbApp`(启动 / 隐私门)· `AppEnvironment`(依赖容器)· `RootView`(四格 Tab + 迷你播放条) |
-| `UI/` | 发现 / 追更 / 音阁 / 设置 / 播放页 / 频道详情 / 逐字稿 / 队列 / 关于 / 同意页 / 主题组件 |
+| `App/` | `ReverbApp`(启动 / 隐私门)· `AppEnvironment`(依赖容器)· `RootView`(五格 Tab:发现 / 电台 / 追更 / 音阁 / 设置 + 迷你播放条) |
+| `UI/` | 发现 / 电台 / 追更 / 音阁 / 设置 / 播放页 / 频道详情 / 逐字稿 / 队列 / 关于 / 同意页 / 主题组件;`RoutePickerView.swift` 是 AirPlay 按钮 |
 | `../Localization/` | 4 套 `.lproj`(简中是基础语言,键名即简中) |
-| `../Resources/` | 种子清单、引导音频(由 `shared/*/sync.sh` 分发) |
+| `../Resources/` | 种子清单、引导音频、电台精选(`radio_stations.json`;由 `shared/*/sync.sh` 分发) |
 
 **数据与播放层不在这个目录**:它直接编译 `macos/Sources/Reverb/{Data,Playback}`。
 工程细节、TestFlight 流程与本机现状表见 `docs/IOS.md`。
@@ -646,6 +653,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 |---|---|
 | `shared/guide/` | 引导音频 + 脚本(`make-guide.sh`),分发到各端 |
 | `shared/seed/` | 种子清单(规范副本;`sync.sh` 分发到 Android + macOS + iOS,**不含鸿蒙**,理由写在脚本头) |
+| `shared/radio/` | 内置精选电台 16 条(规范副本;`sync.sh` 分发到**四端**资源,`--check` 供提交前校验;合规口径与种子播客不同,见脚本头) |
 | `site/reverb/` | 官网 + 隐私页;`shots/` **不入库**,部署时手工上传 |
 | `marketing/<版本>/` | 宣传物料(宣传片 / 封面 / 配乐),流水线见 `marketing/README.md` |
 | `tools/check-l10n.py` | 五语种资源体检(硬规矩 5):键集相等、繁体用字、非中文含汉字;全绿 exit 0 |

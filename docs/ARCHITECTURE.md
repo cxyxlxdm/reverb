@@ -210,8 +210,35 @@ Android 走 OkHttp 的 `enqueue` + 回调,响应一到就 `call.cancel()`;macOS 
 粘一条电台地址的体感会变成"卡十几秒才出声"。三端的写法都是「搜索与探测各起一条,
 哪条先回先上屏」,且都按同一道查询版本号闸门丢弃过期结果。
 
-**已知边界**:流掉线即停,不做自动重连;不做「粘一次就记住」的常驻电台列表(A 档只到"当集听")。
-投播(把流投到别的设备)不在 1.0.7 范围内。
+**已知边界**:流掉线即停,不做自动重连。1.0.7 只到「当集听」,常驻电台列表与投播自 1.0.9 起补上(见下两节)。
+
+### 直播电台(1.0.9):目录是第三方地址,清单是本地账本
+
+顶层「电台」页把两类东西分开:**可留存的电台地址**(用户自己的账本)与**只读来源**(在线目录、随包精选)。
+
+- **账本** `stations.json`,字段只有 `name / url / group / country`(group 取 `news / music / talk / retro`,
+  文案在界面本地化)。地址是唯一键:添加与编辑都先查重,重复直接拒绝。
+- **在线目录** `radio-browser.info`:先 `de1`,失败再 `de2`;请求不登录、不带用户标识,
+  日志只记条数与错误类(不记搜索词、不记完整地址)。目录结果是只读的,要保留必须复制进账本。
+- **随包精选** `shared/radio/stations.json`(16 条,只读)。`shared/radio/sync.sh` 分发到四端资源,
+  自带 `--check` 供提交前校验。它与种子播客的合规口径不同:这份按维护者决定四端都带。
+- **起播**不新造播放路径:现场合成 `isLive=true` 的 `Episode`(`id=live:<url>`),
+  与粘贴地址那条同 id,所以同一路流不会在队列里出现两次。
+- **备份**:只进手动备份的 `stations` 段;**不参与局域网同步**。同步的删除传播靠墓碑账本,
+  给电台另开一套会把本轮拖进同步协议与两端 UI;电台被定义为"这台设备上的快捷方式",
+  换机靠恢复备份即可。真要日常同步时,按 `SyncTombstones` 的现有形状补,不要在 `LanSyncMerge` 里直接塞分区。
+
+### 投播(1.0.9):一端自研 DLNA,三端交系统
+
+| 端 | 机制 | 关键约束 |
+|---|---|---|
+| Android | 自研 DLNA:`SsdpDiscovery` 发 `M-SEARCH`(ST MediaRenderer:1,目的 `239.255.255.250:1900`)→ 设备描述 XML → AVTransport `controlURL`;`DlnaClient` 发 SOAP 1.1 `SetAVTransportURI` / `Play` / `Pause` / `Stop` | 持 `MulticastLock`(同局域网同步,H276);描述 XML 用 **DOM** 解析 —— JVM 单测里 `XmlPullParserFactory` 是 android.jar 的 stub,会把解析静默打回 null。直播用 `audioBroadcast`、点播用 `musicTrack`,`protocolInfo` 用 `http-get:*:*:*` 放行 HLS。投播成功本机 `pauseIfPlaying()`(只暂停,队列与位置保留);换集或停止时同步 `Stop` 设备那一路 |
+| HarmonyOS | 系统 `AVCastPicker` 组件,复用已有的音频 AVSession | 不自己扫网、不加权限、不接三方 SDK;系统完成发现与传输 |
+| macOS / iOS | 系统 `AVRoutePickerView` 的 SwiftUI 包装(`RoutePickerView.swift`,两端各一份) | 路由由系统 AirPlay 负责,音频仍走本端 `AVPlayer`;桌面端电台页工具栏另有一枚 |
+
+**状态机的落点**:Android 的 `CastController` 挂在应用级容器(`AppContainer.cast`),不放 ViewModel ——
+弹层关掉之后电视仍在播,状态不能随界面销毁。**本会话没有真实渲染设备可用**,四端的投播链路都未做运行验收,
+Android 只到纯逻辑单测 8 条。
 
 ---
 
@@ -227,6 +254,7 @@ subscriptions.json  favorites.json   history.json      inbox.json
 downloads.json      stamps.json      notes.json        listen_stats.json
 feed_cache.json     popular_cache.json  playback_state.json
 audio_cache.json    transcripts/<单集>.<语言>.json
+stations.json       (1.0.9;直播电台账本)
 ```
 
 **`audio_cache.json` 是「播放缓存」的账本,它与 `downloads.json` 是两套文件、两本账、两个清理入口**
@@ -265,7 +293,7 @@ audio_cache.json    transcripts/<单集>.<语言>.json
   无条件把它置真,所以移植时给它加了第三个参数 `autoplay`,恢复路径传 `false`。
   预载的隐私口径(打开应用即向发布方拉一次流)同步写在 `docs/PRIVACY.md` 第三节。
 - **不进任何备份**:它不在 Android 的 `backup_rules.xml` / `data_extraction_rules.xml`、
-  也不在鸿蒙的 `backup_config.json` 白名单里,同样不占手动备份的分区(那 8 项的**键名**是三端互通契约;
+  也不在鸿蒙的 `backup_config.json` 白名单里,同样不占手动备份的分区(那 9 项的**键名**是三端互通契约;
   顺序不是 —— 三端按键名读,见 ROADMAP A2-4)。
   判断标准与 `notes.json` 相反 ——
   批注是用户写出来的字,丢了补不回来;队列里每一集都能从历史或订阅里再找到。
@@ -346,6 +374,7 @@ macOS 端解码**不做秒/毫秒归一** —— 没有一端写秒,归一只会
 
 目标只有一句:**两台设备在同一 Wi-Fi 下,一键把订阅/收藏/印记/批注/历史/收听统计合并成并集**。
 它不是"文件互传",双方跑完拿到的内容一致;也不经过任何服务器(约束一)。
+**分区固定为六项**,不含 1.0.9 新增的直播电台(`stations`)—— 电台只走手动备份,理由见「直播电台」一节。
 
 **传输层选 TCP,不选 WebSocket/HTTPS。** 四端都有 TCP socket 系统 API,而 WebSocket
 在 Android/鸿蒙上通常要引库或自己写握手,多一个库就多一条"三方 SDK"审查面。
@@ -808,3 +837,7 @@ Compose 的 `consumed.y` **与手指方向反号**(向上划报负值),以及
 - **本机语音转写的成本是真实的**:自分发 Android 版 1 小时单集约 6.5 分钟满载计算;
   鸿蒙因系统能力不足暂时没有(见 `TRANSCRIPT.md`)。
 - **macOS 没有后台更新检查**,靠手动刷新;也没有真实频谱(平台无等价能力)。
+- **投播只覆盖系统给的口子**:Android 走 DLNA、Apple 走 AirPlay、鸿蒙走系统投播组件;
+  不支持 Chromecast 等需要三方 SDK 的私有协议 —— 这是「不接三方 SDK」约束的直接结果。
+- **在线电台目录依赖 `radio-browser.info`**:它不可用时只剩随包的 16 条精选与用户自己的账本;
+  不内置全量目录,也不做目录缓存。

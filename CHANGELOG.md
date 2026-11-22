@@ -8,6 +8,50 @@
 
 ---
 
+## 1.0.9 — 开发中(2026-11-22 起)
+
+> 本章记开发中的落地项与验收边界。**四端的 dist 产物尚未按 1.0.9 重打**,本轮只过编译门、单测与 l10n;
+> 对外版本说明 `docs/RELEASE-NOTES.md` 留到发版那一轮再写(避免对外声称一个还没出包的版本)。
+
+### 直播电台:顶层「电台」页(四端)
+
+- 需求来自商店审核反馈:要一个单独管理 / 编辑直播电台的入口,并能搜索在线直播电台。
+- 新增「电台」顶层页(Android / 鸿蒙 / macOS 四格,与另一格「随机电台」不是一回事):
+  - **我的电台**:手动添加 / 编辑 / 删除,地址唯一,支持 news / music / talk / retro 四组。
+    账本落 `stations.json`(Android 与鸿蒙 `filesDir`,Apple `Application Support/Reverb/`),与订阅账本同一形状。
+  - **在线目录**:`radio-browser.info`(`de1` / `de2` 逐条回退),按名称搜索;不登录、不带用户标识,
+    日志只记条数与错误类,不记搜索词与完整地址。
+  - **内置精选**:16 条随包清单(`shared/radio/stations.json` + `sync.sh` 分发四端),只读;
+    点「+」复制进自己的账本。合规口径与种子播客不同,脚本头已写明:四端都带。
+  - **起播**:合成 `isLive=true` 的 `Episode`(`id=live:<url>`),与发现页粘地址同一条路径、同 id。
+- 备份:`stations` 段进手动备份,**不参与局域网同步**(理由写在 `StationStore` 类头:同步的删除传播靠墓碑账本,
+  给电台另开一套会把本轮拖进同步协议与两端 UI)。
+
+### 投播(四端)
+
+- 播放页新增「投放」(Apple 两端电台页工具栏也有一枚),把当前声音交给同一 Wi-Fi 下的设备,不经任何服务器。
+- **Android**:自研 DLNA,不接三方库。`SsdpDiscovery`(`M-SEARCH` + MulticastLock) → 设备描述 DOM 解析 →
+  `DlnaClient` 的 `SetAVTransportURI` / `Play` / `Pause` / `Stop`;直播用 `audioBroadcast`、点播用 `musicTrack`。
+  投播成功本机只暂停(队列与位置保留),换集或停止时同步停掉设备那一路。状态机在应用级 `CastController`。
+- **鸿蒙**:系统 `AVCastPicker`,复用已有音频 AVSession;不自己扫网、不加权限。
+- **macOS / iOS**:系统 `AVRoutePickerView` 的 SwiftUI 包装(`RoutePickerView.swift`),路由由系统 AirPlay 负责。
+
+### 隐私政策版本 +1(Android / 鸿蒙 5→6;macOS / iOS 6→7)
+
+- `radio-browser.info` 是新的第三方地址;投播会把音频地址交给局域网内用户选定的设备。
+  两件事都写进了四端同意页与 `docs/PRIVACY.md` / `site/reverb/privacy.html`,并按口径 +1 重新征求同意。
+
+### 工程要点与验收边界
+
+- **已验**:Android `:app:testDebugUnitTest` **119 条 0 失败**(其中投播 8 条)、`:app:compileReleaseKotlin` exit 0;
+  鸿蒙 `hvigorw test` **69 条 0 失败**、`assembleHap` BUILD SUCCESSFUL;`swift test` 全绿、
+  `swift build -c release` exit 0、`ios/build-ios.sh` exit 0;`python3 tools/check-l10n.py` PASS。
+- **未验**:`android/dist/reverb.apk` / `harmony/dist/reverb.app` / `macos/dist/*.dmg` / `ios/dist/*.ipa`
+  **均未按 1.0.9 重打**;四端界面都没有装机运行(本轮屏幕锁定,无法点按);
+  投播没有接真实电视 / 音箱,电台没有在真机搜过目录。
+- 设备描述解析从 `XmlPullParser` 换成 **DOM**:JVM 单测里 `XmlPullParserFactory` 是 android.jar 的 stub,
+  会把解析静默打回 null,单测会误判成"没有设备"。
+
 ## 1.0.8 — 开发中(2026-11-11 起)
 
 > **本节只记已落地并验过的部分。** 1.0.8 的其余内容(局域网同步的真机 / 模拟器复验)仍在进行中,
