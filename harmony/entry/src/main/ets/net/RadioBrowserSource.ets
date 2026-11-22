@@ -12,16 +12,20 @@ import { Log } from '../util/Logger';
  *
  * 与 Android `RadioBrowserSource.kt` 同参数:`popular` 取中国区按点击量倒序,
  * `search` 按名称匹配;`lastcheckok=0`(目录自己标记为不可用)的条目在解析侧剔掉。
+ *
+ * **limit 要压小**:目录耗时随它超线性增长(2026-11-22 本机实测同一关键词:
+ * limit=50 要 31.8 s、20 只要 2.5 s;热门 40 要 9.4 s、30 只要 2.6 s)。
+ * 真机首轮用 40/50 时 search 连续撞上 12 s 硬超时,界面只显示「在线目录暂时连不上」。
  */
 export class RadioBrowserSource {
   private static readonly HOSTS: string[] = ['de1.api.radio-browser.info', 'de2.api.radio-browser.info'];
 
-  async popular(limit: number = 40): Promise<Station[]> {
+  async popular(limit: number = 30): Promise<Station[]> {
     return this.fetch('/json/stations/search?countrycode=CN&hidebroken=true'
       + `&order=clickcount&reverse=true&limit=${limit}`, 'popular');
   }
 
-  async search(query: string, limit: number = 50): Promise<Station[]> {
+  async search(query: string, limit: number = 20): Promise<Station[]> {
     const q = query.trim();
     if (q.length === 0) return [];
     return this.fetch(`/json/stations/search?name=${encodeURIComponent(q)}&hidebroken=true&limit=${limit}`,
@@ -31,7 +35,8 @@ export class RadioBrowserSource {
   private async fetch(path: string, tag: string): Promise<Station[]> {
     for (let i = 0; i < RadioBrowserSource.HOSTS.length; i++) {
       const host = RadioBrowserSource.HOSTS[i];
-      const text = await Http.text(`https://${host}${path}`, 12000);
+      // 20 s:limit 压小之后目录通常 2~6 s 回;慢网仍留一倍余量,同时与 `Http` 的默认读超时一致。
+      const text = await Http.text(`https://${host}${path}`, 20000);
       if (text === null) {
         Log.w('RadioDir', `镜像不可用 ${host} ${tag}`);
         continue;
