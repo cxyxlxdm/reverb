@@ -514,4 +514,39 @@
     <string name="feed_auth_save">Guardar y reintentar</string>
     <string name="feed_auth_cancel">Cancelar</string>
     <string name="feed_auth_wrong">Ese usuario y esa contraseña no se han aceptado. Compruébalos e inténtalo de nuevo.</string>
+
+    <!-- Radio en directo -->
+    <string name="nav_radio">Radio</string>
+    <string name="radio_subtitle">Tus radios en directo, siempre a mano</string>
+    <string name="radio_search_hint">Buscar emisoras por nombre</string>
+    <string name="radio_my_stations">Mis emisoras</string>
+    <string name="radio_hot_stations">Emisoras populares</string>
+    <string name="radio_search_results">Resultados</string>
+    <string name="radio_seed_stations">Emisoras destacadas</string>
+    <string name="radio_add">Añadir emisora</string>
+    <string name="radio_edit">Editar emisora</string>
+    <string name="radio_delete">Eliminar emisora</string>
+    <string name="radio_delete_msg">¿Eliminar «%1$s»?</string>
+    <string name="radio_name">Nombre</string>
+    <string name="radio_name_hint">Déjalo vacío para nombrarla automáticamente</string>
+    <string name="radio_url">URL del flujo</string>
+    <string name="radio_logo_optional">URL del logotipo (opcional)</string>
+    <string name="radio_group">Grupo</string>
+    <string name="radio_group_none">Ninguno</string>
+    <string name="radio_group_news">Noticias</string>
+    <string name="radio_group_music">Música</string>
+    <string name="radio_group_talk">Charla</string>
+    <string name="radio_group_retro">Retro</string>
+    <string name="radio_empty_my">Aún no hay emisoras. Toca + para añadir una o elige una de abajo</string>
+    <string name="radio_empty_search">No se encontró la emisora. Prueba con otro nombre</string>
+    <string name="radio_load_failed">El directorio en línea no está disponible ahora mismo</string>
+    <string name="radio_retry">Reintentar</string>
+    <string name="radio_invalid_url">La dirección debe empezar por http:// o https://</string>
+    <string name="radio_not_stream">Esa dirección no devolvió un flujo de audio. Compruébala</string>
+    <string name="radio_duplicate">Esa dirección ya está en tu lista</string>
+    <string name="radio_added">Añadida a mis emisoras</string>
+    <string name="radio_already_added">Ya está en tu lista</string>
+    <string name="radio_live_name">En directo</string>
+    <string name="radio_checking">Comprobando la dirección…</string>
+    <string name="backup_row_stations">Emisoras en directo</string>
 </resources>

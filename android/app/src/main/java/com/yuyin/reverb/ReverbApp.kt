@@ -70,6 +70,13 @@ class AppContainer(app: Application) {
         // 退订即丢弃这个源的凭据(见 SubscriptionStore.onRemoved 的注释)
         sub.onRemoved = { podcast -> feedAuthStore.forget(podcast.feedUrl) }
     }
+    /**
+     * 直播电台账本。**只进手动备份,不进局域网同步**(理由见 `StationStore` 类注释)。
+     * 随包精选由它从 assets 读,启动时不解析(第一次进电台页才读那 3 KB)。
+     */
+    val stationStore = com.yuyin.reverb.data.local.StationStore(app)
+    /** 在线电台目录(radio-browser)。与仓库共用同一个 OkHttpClient,不另建连接池。 */
+    val radioBrowser = com.yuyin.reverb.data.remote.RadioBrowserSource(httpClient)
     val inboxStore = InboxStore(app)
     val categoryStore = CategoryStore(app)
     val downloadStore = DownloadStore(app)

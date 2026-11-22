@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.Radio
 import androidx.compose.material.icons.rounded.RssFeed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.rememberCoroutineScope
@@ -98,6 +99,7 @@ import com.yuyin.reverb.ui.screens.ListenStatsScreen
 import com.yuyin.reverb.ui.screens.PlayerScreen
 import com.yuyin.reverb.ui.screens.PodcastDetailScreen
 import com.yuyin.reverb.ui.screens.QueueScreen
+import com.yuyin.reverb.ui.screens.RadioScreen
 import com.yuyin.reverb.ui.screens.SettingsScreen
 import com.yuyin.reverb.ui.screens.StampsScreen
 import com.yuyin.reverb.update.SelfUpdateHost
@@ -274,11 +276,11 @@ private fun FullScreen(content: @Composable () -> Unit) {
     }
 }
 
-/** 带底部栏的 tab 外壳：三个顶层 tab 常驻叠层(不走导航栈),详情 / 播放 / 设置由外层承载。 */
+/** 带底部栏的 tab 外壳：四个顶层 tab 常驻叠层(不走导航栈),详情 / 播放 / 设置由外层承载。 */
 @Composable
 private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
     /**
-     * 三个顶层 tab **不走导航栈**,叠在同一个 Box 里用 [tabKept] 切换。
+     * 四个顶层 tab **不走导航栈**,叠在同一个 Box 里用 [tabKept] 切换。
      *
      * 为什么(2026-09-28,Pixel 3 实测):「换 tab 卡」这条被报了**三次**,前两次都当成
      * "切换时多画了一段东西"——第一次怀疑玻璃栏逐帧读 size,第二次抓到 NavHost 缺省的
@@ -299,6 +301,9 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
      */
     val tabs = listOf(
         GlassTabSpec(stringResource(R.string.nav_discover), Icons.Rounded.Explore),
+        // 电台放在发现之后:两者都是"找东西听"的入口,而它是一份长期维护的账本,
+        // 不是音阁那种"自己的库存"。顺序一改,下面所有页号(0..3)都要跟着改。
+        GlassTabSpec(stringResource(R.string.nav_radio), Icons.Rounded.Radio),
         GlassTabSpec(stringResource(R.string.nav_feed), Icons.Rounded.RssFeed),
         GlassTabSpec(stringResource(R.string.nav_library), Icons.Rounded.LibraryMusic)
     )
@@ -310,6 +315,7 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
     ///    这条从 2 格变 3 格之后更重要:原先「进音阁顺带刷最新」是因为两者在同一棵子里,
     ///    现在拆开了,刷新只跟着追更那一格走。
     /// 首建之后一直留着 —— 留着才是要解决的问题(见上面那段差分)。
+    var seenRadio by rememberSaveable { mutableStateOf(false) }
     var seenFeed by rememberSaveable { mutableStateOf(false) }
     var seenLibrary by rememberSaveable { mutableStateOf(false) }
 
@@ -322,20 +328,23 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
      * (见下面 [morphConnection] 那段),那要改三页并把状态穿透进 body;这里只多一个 Int。
      */
     var discoverTopToken by rememberSaveable { mutableIntStateOf(0) }
+    var radioTopToken by rememberSaveable { mutableIntStateOf(0) }
     var feedTopToken by rememberSaveable { mutableIntStateOf(0) }
     var libraryTopToken by rememberSaveable { mutableIntStateOf(0) }
 
     fun requestScrollTop(i: Int) {
         when (i) {
             0 -> discoverTopToken++
-            1 -> feedTopToken++
-            2 -> libraryTopToken++
+            1 -> radioTopToken++
+            2 -> feedTopToken++
+            3 -> libraryTopToken++
         }
     }
 
     fun select(i: Int) {
-        if (i == 1) seenFeed = true
-        if (i == 2) seenLibrary = true
+        if (i == 1) seenRadio = true
+        if (i == 2) seenFeed = true
+        if (i == 3) seenLibrary = true
         selectedTab = i
     }
 
@@ -452,11 +461,11 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
             .nestedScroll(morphConnection)
     ) {
         CompositionLocalProvider(LocalGlassBottomPad provides bottomPad) {
-            // 三页叠在一起,谁可见由 selectedTab 决定。**不要用 if 把它们互斥包起来** ——
+            // 四页叠在一起,谁可见由 selectedTab 决定。**不要用 if 把它们互斥包起来** ——
             // 那就退回"切走即销毁"的老问题(见 MainShell 上面那段差分)。
             // [tabKept] 的语义是"照样测量与布局,但不画、不进无障碍树";
             // 隐藏页因此一直占好尺寸,切回来第一帧就是对的。
-            // 组合顺序按底部栏的格序排(发现 → 追更 → 音阁),这样页号与代码位置对得上。
+            // 组合顺序按底部栏的格序排(发现 → 电台 → 追更 → 音阁),这样页号与代码位置对得上。
             Box(
                 Modifier
                     .fillMaxSize()
@@ -468,12 +477,22 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
                     scrollTopToken = discoverTopToken
                 )
             }
-            if (seenFeed) {
+            if (seenRadio) {
                 Box(
                     Modifier
                         .fillMaxSize()
                         .zIndex(if (selectedTab == 1) Z_VISIBLE else Z_HIDDEN)
                         .tabKept(selectedTab != 1)
+                ) {
+                    RadioScreen(scrollTopToken = radioTopToken)
+                }
+            }
+            if (seenFeed) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .zIndex(if (selectedTab == 2) Z_VISIBLE else Z_HIDDEN)
+                        .tabKept(selectedTab != 2)
                 ) {
                     FeedScreen(scrollTopToken = feedTopToken)
                 }
@@ -482,8 +501,8 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .zIndex(if (selectedTab == 2) Z_VISIBLE else Z_HIDDEN)
-                        .tabKept(selectedTab != 2)
+                        .zIndex(if (selectedTab == 3) Z_VISIBLE else Z_HIDDEN)
+                        .tabKept(selectedTab != 3)
                 ) {
                     LibraryScreen(
                         onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
@@ -494,8 +513,8 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
                 }
             }
             // **吸收层**:夹在所有内容页之上、底部栏之下(命中顺序 可见页 [Z_VISIBLE] → 吸收层 [Z_SHIELD] → 隐藏页 [Z_HIDDEN])。
-            // 隐藏页现在有两张(追更 / 音阁),它们都在 Z_HIDDEN 同一档,而吸收层排在**全部**内容页之后,
-            // 所以这一层照样挡得住两张 —— 不需要按页各摆一颗。
+            // 隐藏页现在有三张(电台 / 追更 / 音阁),它们都在 Z_HIDDEN 同一档,而吸收层排在**全部**内容页之后,
+            // 所以这一层照样挡得住三张 —— 不需要按页各摆一颗。
             //
             // 为什么必须有这一层(2026-09-28,Pixel 3 实测):整层摘掉之后,在「发现」的真空白处
             // 点一下 —— 坐标正好压在隐藏那页的「下载 / 收藏」chip 上 —— 切回音阁**分段真的被改了**。

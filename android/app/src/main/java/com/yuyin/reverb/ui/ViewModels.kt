@@ -13,15 +13,21 @@ import androidx.compose.runtime.Composable
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.local.CategoryStore
+import com.yuyin.reverb.data.local.StationStore
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.FeedCredential
 import com.yuyin.reverb.data.model.Podcast
+import com.yuyin.reverb.data.model.Station
 import com.yuyin.reverb.data.remote.LiveStreamSource
 import com.yuyin.reverb.data.remote.PodcastRepository
+import com.yuyin.reverb.data.remote.RadioBrowserSource
+import com.yuyin.reverb.playback.PlayerController
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 // ---------- 发现（检索）----------
 
@@ -362,6 +368,210 @@ fun podcastViewModel(): PodcastViewModel = viewModel(
         initializer {
             val app = this[APPLICATION_KEY] as ReverbApp
             PodcastViewModel(app.container.repository)
+        }
+    }
+)
+
+// ---------- 直播电台 ----------
+
+/** 在线目录这一段的三态之外还多一档 [Error]:空结果与连不上对用户的下一步动作不同。 */
+sealed interface DirectoryState {
+    data object Idle : DirectoryState
+    data object Loading : DirectoryState
+    data class Success(val stations: List<Station>) : DirectoryState
+    data object Empty : DirectoryState
+    data object Error : DirectoryState
+}
+
+/** 保存失败的三类,由界面翻成五语种文案(VM 不碰 Context)。 */
+enum class StationSaveError { INVALID_URL, DUPLICATE, NOT_STREAM }
+
+/**
+ * 直播电台页的状态:本机账本直接观察 [StationStore],目录检索与保存是这里的两笔异步。
+ *
+ * 目录请求带**代次守卫**,与发现页同一条理由(见 `DiscoverViewModel.searchGen`):
+ * 用户连续换词时,先发后到的旧结果不能盖住新词的结果。
+ */
+class RadioViewModel(
+    private val store: StationStore,
+    private val directory: RadioBrowserSource,
+    private val live: LiveStreamSource
+) : ViewModel() {
+
+    val stations: StateFlow<List<Station>> = store.stations
+
+    var directoryState by mutableStateOf<DirectoryState>(DirectoryState.Idle)
+        private set
+    var query by mutableStateOf("")
+        private set
+    var saving by mutableStateOf(false)
+        private set
+    var saveError by mutableStateOf<StationSaveError?>(null)
+        private set
+
+    /** 热门那一屏的进程内缓存:清空搜索框回到热门时不必再等一次网络。 */
+    private var popular: List<Station>? = null
+    private var requestGen = 0
+
+    fun seedStations(): List<Station> = store.seedStations()
+
+    fun onQueryChange(q: String) {
+        query = q
+        if (q.isBlank()) {
+            requestGen++
+            showPopular()
+        }
+    }
+
+    /** 进页时调一次;已有内容(热门或搜索结果)就不动,免得每次切回 tab 都重发。 */
+    fun ensureDirectory() {
+        if (directoryState !is DirectoryState.Idle) return
+        showPopular()
+    }
+
+    private fun showPopular() {
+        val cached = popular
+        if (cached != null) {
+            directoryState = if (cached.isEmpty()) DirectoryState.Error else DirectoryState.Success(cached)
+            return
+        }
+        val gen = ++requestGen
+        viewModelScope.launch {
+            directoryState = DirectoryState.Loading
+            val list = directory.popular()
+            if (gen != requestGen) return@launch
+            popular = list
+            // 热门拉空与没连上分开报:前者大概率是镜像回了个空数组,后者是两条都超时
+            directoryState = if (list.isEmpty()) DirectoryState.Error else DirectoryState.Success(list)
+        }
+    }
+
+    fun search() {
+        val q = query.trim()
+        if (q.isBlank()) {
+            showPopular()
+            return
+        }
+        val gen = ++requestGen
+        viewModelScope.launch {
+            directoryState = DirectoryState.Loading
+            // 只记词数与结果数,不记原词(隐私政策第二节)
+            com.yuyin.reverb.util.Logger.i("RadioVM", "dir search words=${q.split(Regex("\\s+")).size}")
+            val list = directory.search(q)
+            if (gen != requestGen) return@launch
+            directoryState = if (list.isEmpty()) DirectoryState.Empty else DirectoryState.Success(list)
+        }
+    }
+
+    fun retry() {
+        if (query.isBlank()) {
+            popular = null
+            showPopular()
+        } else {
+            search()
+        }
+    }
+
+    fun isSaved(station: Station): Boolean = store.containsUrl(station.url)
+
+    /** 目录 / 精选里点「+」。返回 false 表示这台已经在自己的列表里。 */
+    fun addCopy(station: Station): Boolean = store.add(station)
+
+    fun remove(id: String) = store.remove(id)
+
+    fun resetSaveState() {
+        saveError = null
+        saving = false
+    }
+
+    /**
+     * 新增或修改一条电台。
+     *
+     * **地址变了才探针**(新条目也算):只改名字不该被网络卡住,而一个新地址若不先确认
+     * 能当音频流播,用户会遇到"列表里有一条,点了没反应" —— 那比当场拒绝更难解释。
+     * 名称留空时用探针拿到的台名(ICY 的 icy-name,其次主机名)兜底。
+     */
+    fun save(
+        existing: Station?,
+        name: String,
+        url: String,
+        logo: String,
+        group: String,
+        onSaved: () -> Unit
+    ) {
+        if (saving) return
+        val cleanUrl = url.trim()
+        if (!cleanUrl.startsWith("http://", ignoreCase = true) &&
+            !cleanUrl.startsWith("https://", ignoreCase = true)
+        ) {
+            saveError = StationSaveError.INVALID_URL
+            return
+        }
+        val duplicate = if (existing == null) store.containsUrl(cleanUrl)
+        else store.containsUrlExcept(cleanUrl, existing.id)
+        if (duplicate) {
+            saveError = StationSaveError.DUPLICATE
+            return
+        }
+        saveError = null
+        saving = true
+        viewModelScope.launch {
+            val changedUrl = existing == null || existing.url.trim() != cleanUrl
+            val probe = if (changedUrl) live.resolve(cleanUrl) else null
+            if (changedUrl && probe == null) {
+                saveError = StationSaveError.NOT_STREAM
+                saving = false
+                return@launch
+            }
+            val finalName = name.trim()
+                .ifBlank { probe?.title.orEmpty() }
+                .ifBlank { hostOf(cleanUrl) }
+            val st = Station(
+                id = existing?.id ?: "local:${UUID.randomUUID()}",
+                name = finalName,
+                url = cleanUrl,
+                logo = logo.trim(),
+                group = Station.normalizeGroup(group),
+                country = existing?.country ?: "",
+                source = existing?.source ?: Station.SOURCE_MANUAL
+            )
+            if (existing == null) store.add(st) else store.update(st)
+            saving = false
+            onSaved()
+        }
+    }
+
+    /**
+     * 起播。合成出来的 Episode 与搜索框粘流那条**同 id**(`live:<url>`):
+     * 同一路流不管从哪个入口点,队列里都只算一条;`isLive` 让播放层关掉历史/缓存/续播。
+     */
+    fun play(station: Station, liveLabel: String) {
+        PlayerController.play(
+            Episode(
+                id = "live:${station.url}",
+                title = station.name,
+                description = "",
+                audioUrl = station.url,
+                artworkUrl = station.logo,
+                podcastTitle = liveLabel,
+                durationSec = 0,
+                pubDate = "",
+                feedUrl = "",
+                isLive = true
+            )
+        )
+    }
+
+    private fun hostOf(url: String): String =
+        url.substringAfter("://").substringBefore('/').ifBlank { url }
+}
+
+@Composable
+fun radioViewModel(): RadioViewModel = viewModel(
+    factory = viewModelFactory {
+        initializer {
+            val app = this[APPLICATION_KEY] as ReverbApp
+            RadioViewModel(app.container.stationStore, app.container.radioBrowser, app.container.repository.live)
         }
     }
 )
