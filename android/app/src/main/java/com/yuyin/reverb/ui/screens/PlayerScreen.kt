@@ -32,16 +32,19 @@ import androidx.compose.material.icons.rounded.ArrowDropDown
 import androidx.compose.material.icons.rounded.Bedtime
 import androidx.compose.material.icons.rounded.Cast
 import androidx.compose.material.icons.rounded.CastConnected
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Replay
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -66,7 +69,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.core.content.ContextCompat
@@ -233,7 +238,11 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                 Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.a11y_collapse_player))
             }
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                // 2dp:48dp 的 IconButton 本身含 12dp 内缩,盒子贴紧后字形间距仍有 ~26dp。
+                // 8dp 时顶栏一排放不下:实测 1080px(392.7dp)屏、两侧各 24dp 后只剩 948px,
+                // 而 收起+投播+待播+倍速+睡眠+收藏+更多 需要 ~1130px —— 多出来的 ⋮ 被挤出屏幕,
+                // 投播键也就贴到了收起键边上。见本轮"⋮ 移出顶栏"的改动。
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 IconButton(onClick = {
@@ -265,23 +274,6 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                 FavoriteButton(
                     favorited = isFavorite,
                     onToggle = { container.favoriteStore.toggle(episode) }
-                )
-                MoreMenu(
-                    stamped = currentSeal != null,
-                    onClip = {
-                        scope.launch {
-                            val bmp = ShareCards.momentCard(ctx, episode, position)
-                            ShareCards.share(ctx, bmp, "reverb-moment-${kotlin.math.abs(episode.id.hashCode())}.png", ctx.getString(R.string.clip_share))
-                        }
-                    },
-                    onSave = {
-                        scope.launch {
-                            val bmp = ShareCards.momentCard(ctx, episode, position)
-                            saveImage(bmp, "reverb-moment-${kotlin.math.abs(episode.id.hashCode())}.png")
-                        }
-                    },
-                    onStamp = { sealDialogOpen = true },
-                    onNote = { noteAtMs = position; noteEpisode = episode; noteDialogOpen = true }
                 )
             }
         }
@@ -486,7 +478,7 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(bottom = 28.dp),
+                .padding(bottom = 12.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -510,6 +502,57 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
             }
             PrevNextButton(next = true, enabled = hasNext && !liveNoTimeline) { PlayerController.next() }
             if (!liveNoTimeline) SkipButton(seconds = fwdSec, forward = true) { PlayerController.skipForward() }
+        }
+
+        // 剪藏 · 保存此刻 · 写批注 · 盖章。原先收在顶栏的 ⋮ 溢出菜单里,但顶栏在
+        // 1080px(392.7dp)屏上已经装不下六颗控件(见顶栏注释),⋮ 会被挤到屏幕外 ——
+        // 移到这排常驻,四颗都作用于当前这一集,顺序沿用原菜单:保存 / 剪藏 / 批注 / 盖章。
+        // 必须带文字:第一版只画图标时,「保存此刻」用了下载箭头,与列表行里「下载本集」
+        // 同形,会被读成下载音频。短标签是新增的 action_save / action_clip / action_note /
+        // action_stamp(五语种),完整文案(clip_save 等)太长,四等分放不下。
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 12.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Top
+        ) {
+            PlayerAction(
+                icon = Icons.Rounded.Download,
+                label = stringResource(R.string.action_save),
+                a11yLabel = stringResource(R.string.clip_save),
+                onClick = {
+                    scope.launch {
+                        val bmp = ShareCards.momentCard(ctx, episode, position)
+                        saveImage(bmp, "reverb-moment-${kotlin.math.abs(episode.id.hashCode())}.png")
+                    }
+                }
+            )
+            PlayerAction(
+                icon = Icons.Rounded.Share,
+                label = stringResource(R.string.action_clip),
+                a11yLabel = stringResource(R.string.clip_moment),
+                onClick = {
+                    scope.launch {
+                        val bmp = ShareCards.momentCard(ctx, episode, position)
+                        ShareCards.share(ctx, bmp, "reverb-moment-${kotlin.math.abs(episode.id.hashCode())}.png", ctx.getString(R.string.clip_share))
+                    }
+                }
+            )
+            PlayerAction(
+                icon = Icons.Rounded.EditNote,
+                label = stringResource(R.string.action_note),
+                a11yLabel = stringResource(R.string.note_add),
+                onClick = { noteAtMs = position; noteEpisode = episode; noteDialogOpen = true }
+            )
+            PlayerAction(
+                icon = Icons.Rounded.Verified,
+                label = stringResource(R.string.action_stamp),
+                a11yLabel = stringResource(if (currentSeal != null) R.string.stamp_edit else R.string.stamp_add),
+                tint = if (currentSeal != null) MaterialTheme.colorScheme.primary
+                else MaterialTheme.colorScheme.onSurfaceVariant,
+                onClick = { sealDialogOpen = true }
+            )
         }
     }
 
@@ -733,41 +776,6 @@ private fun SpeedChip(speed: Float) {
     }
 }
 
-/** 更多:剪藏(分享此刻)、保存此刻、写批注、盖章(听觉印记)收进溢出菜单,避免顶栏按钮过多。 */
-@Composable
-private fun MoreMenu(
-    stamped: Boolean,
-    onClip: () -> Unit,
-    onSave: () -> Unit,
-    onStamp: () -> Unit,
-    onNote: () -> Unit
-) {
-    var open by remember { mutableStateOf(false) }
-    Box {
-        IconButton(onClick = { open = true }) {
-            Icon(Icons.Rounded.MoreVert, contentDescription = stringResource(R.string.more), tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.clip_save)) },
-                onClick = { open = false; onSave() }
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.clip_moment)) },
-                onClick = { open = false; onClip() }
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.note_add)) },
-                onClick = { open = false; onNote() }
-            )
-            DropdownMenuItem(
-                text = { Text(stringResource(if (stamped) R.string.stamp_edit else R.string.stamp_add)) },
-                onClick = { open = false; onStamp() }
-            )
-        }
-    }
-}
-
 /**
  * 写一条批注:标题带**按下的那一刻**的时间,正文一句话。
  *
@@ -881,6 +889,39 @@ private fun SealDialog(current: String?, onPick: (String) -> Unit, onRemove: () 
         },
         confirmButton = {} // 无需按钮:点选即生效,点外部关闭
     )
+}
+
+/**
+ * 播放页底部的一颗动作:图标 + 短标签。四颗等分排开(SpaceEvenly),都作用于当前这一集。
+ *
+ * 标签是**可见文字**,不能只靠 contentDescription:这排的第一版只有图标,
+ * 「保存此刻」的下载箭头与列表行的「下载本集」同形,肉眼分辨不出来(见调用处注释)。
+ * 命中区由 padding 撑到 ~56dp 高,不小于 Material 的 48dp 下限。
+ */
+@Composable
+private fun PlayerAction(
+    icon: ImageVector,
+    label: String,
+    a11yLabel: String,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant
+) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = a11yLabel, tint = tint, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.height(2.dp))
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = tint,
+            maxLines = 1
+        )
+    }
 }
 
 /** 收藏当前单集:填充心表示已收藏,描边心表示未收藏。 */

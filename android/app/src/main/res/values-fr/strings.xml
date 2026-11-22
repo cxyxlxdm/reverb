@@ -11,6 +11,9 @@
     <string name="save_confirm_title">Enregistrer dans la galerie</string>
     <string name="save_confirm_msg">Enregistrer cette image dans la galerie ?</string>
     <string name="action_save">Enregistrer</string>
+    <string name="action_clip">Clip</string>
+    <string name="action_note">Note</string>
+    <string name="action_stamp">Tampon</string>
     <string name="footprint_save">Enregistrer dans la galerie</string>
     <string name="saved_ok">Enregistré dans la galerie</string>
     <string name="saved_fail">Échec de l\'enregistrement</string>

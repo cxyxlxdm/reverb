@@ -83,6 +83,25 @@
 - `radio-browser.info` 是新的第三方地址;投播会把音频地址交给局域网内用户选定的设备。
   两件事都写进了四端同意页与 `docs/PRIVACY.md` / `site/reverb/privacy.html`,并按口径 +1 重新征求同意。
 
+### 播放页顶栏:去掉 ⋮,四颗动作挪到播放键下方一排(Android,2026-11-22)
+
+- 用户反馈:播放页顶栏按钮已经装不下,投播键与收起键挨得太近;口径是**Android 端直接丢掉右侧 ⋮**。
+- 根因(算术复核):1080px(392.7dp)屏、两侧各 24dp 后只剩 948px,而顶栏七颗控件
+  (收起 + 投播 + 待播 + 倍速 + 睡眠 + 收藏 + ⋮,外加 6 道 8dp 间距)约需 1130px,
+  ⋮ 被挤出屏幕,投播键贴住收起键(uiautomator 里两者的命中盒首尾相接)。
+- 改法:顶栏只留 收起 / 投播 / 待播 / 倍速 / 睡眠 / 收藏,间距 8dp → 2dp(IconButton 自含 12dp 内缩);
+  ⋮ 的四个动作(保存此刻 / 剪藏 / 写批注 / 盖章)移到播放键下方一排常驻。**只给图标不够读** ——
+  第一版把「保存此刻」画成下载箭头,与列表行的「下载本集」同形,所以补回短标签
+  `action_save / action_clip / action_note / action_stamp`(五语种新增,完整文案放不下四等分)。
+- 装机验收(Pixel 3,debug 包):顶栏收起→投播的按钮盒间距 **69px**(图标间距 135px),最右一颗只
+  超出内容区 17px(48dp 命中框的不可见外扩,视觉均在页边距内);四颗动作逐个点开 ——
+  批注弹「记下这一秒」、盖章弹「盖一枚印记」、剪藏拉起系统分享面板(带此刻卡片)、保存弹确认后
+  toast「已保存到相册」。`testDebugUnitTest` **119 条 0 失败**,`check-l10n.py` PASS。
+- 窄屏实测(同一台机,`wm density` 临时覆盖后还原):**360dp 档六颗控件仍全在屏内**
+  (右侧收藏距屏缘 15dp、左侧 24dp,余量被两端非对称吃掉,但无裁切);**320dp 档顶栏会溢出**
+  (收藏整颗出屏、睡眠芯片折行)—— 但同一档的播放键一排**在改动前就破**(30 秒跳转的秒数竖排),
+  即 320dp 本来就不是本应用的可用宽度,此次不按回归处理。
+
 ### 工程要点与验收边界
 
 - **已验**:Android `:app:testDebugUnitTest` **119 条 0 失败**(其中投播 8 条)、`:app:compileReleaseKotlin` exit 0;
@@ -117,14 +136,18 @@
 - 设备描述解析从 `XmlPullParser` 换成 **DOM**:JVM 单测里 `XmlPullParserFactory` 是 android.jar 的 stub,
   会把解析静默打回 null,单测会误判成"没有设备"。
 
-### 四端 1.0.9 产物(2026-11-22 16:11–16:13 重打,`-newer` 全部 0 命中)
+### 四端 1.0.9 产物(2026-11-22 16:11–16:56;Android 于 16:55 因顶栏改动重打,`-newer` 全部 0 命中)
 
-- **Android** `android/dist/reverb.apk` 270,294,292 B @16:11:08,sha256 `d9d7642f…0871`;
+- **Android** `android/dist/reverb.apk` 270,294,292 B @16:55:57,sha256 `90b5dd19…79d0`;
   `aapt2 dump badging` = versionCode **10** / versionName **1.0.9**;解包按硬规矩 1 五项为 **4 / 1 / 1 / 13 / 2**;
   权限 14 项,关键三项(RECORD_AUDIO / REQUEST_INSTALL_PACKAGES / ACCESS_LOCAL_NETWORK)全在;
   证书 DN 为 **CN=Yuyin Reverb**(`build-release.sh` 的调试证书闸通过)。
-  mapping 50,080,705 B 与包同批;在架 1.0.8 的 mapping(49,062,344 B,sha256 `69982b15…8015`)
-  已归档至 `dist/_backup-1.0.8-mapping-published-20261122/`。
+  mapping 50,031,543 B 与包同批(sha256 `3d894650…a0d`);顶栏改动前那份 vc10 包与 mapping
+  (270,294,292 B,sha256 `d9d7642f…0871` / `ed84f598…df2d`)已按 H204 归档至
+  `dist/_archive/reverb-1.0.9-vc10-20261122-1655-preTopBarFix.sha256`;在架 1.0.8 的 mapping
+  (49,062,344 B,sha256 `69982b15…8015`)已归档至 `dist/_backup-1.0.8-mapping-published-20261122/`。
+  新包资源里可检出 `action_clip` / `action_stamp` 两个新键 —— 这是它区别于 preTopBarFix 那份的判据
+  (两者字节数恰好相同,R8 混淆后的 `PlayerAction` 符号名已不可 grep)。
 - **鸿蒙** `harmony/dist/reverb.app` 182,044,168 B + `reverb-symbol.zip` 14,968,920 B @16:11:34,
   sha256 `fa3a6f29…6fda` / `c159a6c7…5619`;嵌套 `entry-default.hap` 解包 **2 / 3 / 1**、
   `pack.info` = **1000009 / 1.0.9**;`debugKey` 断言无命中。
