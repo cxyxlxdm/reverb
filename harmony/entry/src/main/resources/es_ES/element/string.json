@@ -1257,6 +1257,10 @@
       "value": "Contraer"
     },
     {
+      "name": "a11y_cast",
+      "value": "Emitir"
+    },
+    {
       "name": "a11y_queue_up",
       "value": "Subir"
     },

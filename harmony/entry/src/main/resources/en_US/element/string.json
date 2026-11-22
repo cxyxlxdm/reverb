@@ -1257,6 +1257,10 @@
       "value": "Collapse"
     },
     {
+      "name": "a11y_cast",
+      "value": "Cast"
+    },
+    {
       "name": "a11y_queue_up",
       "value": "Move up"
     },
