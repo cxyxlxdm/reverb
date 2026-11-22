@@ -89,6 +89,8 @@ final class PlayerController: ObservableObject {
     let speedSteps: [Double] = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0]
 
     private let player = AVPlayer()
+    /// AirPlay 选路控件必须拿到实际出声的 player,否则按钮能点、路由却不跟它走。
+    var avPlayer: AVPlayer { player }
     private var timeObserver: Any?
     private var endObserver: NSObjectProtocol?
     private var statusObserver: AnyCancellable?

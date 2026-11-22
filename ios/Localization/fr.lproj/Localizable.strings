@@ -491,3 +491,39 @@
 "局域网同步（可选）：在设置里打开后，本应用会在同一 Wi-Fi 内广播一个服务名（含本机设备名与一段随机标识）并临时打开一个 TCP 端口，页面关闭即停止。你确认两端显示的六位配对码一致后，订阅、收藏、印记、批注、历史与收听统计（按设备标识合并）会直接发给对方设备，不含音频、缓存、私有订阅的用户名与密码、应用设置或播放队列；数据经两端协商的密钥加密（ECDH P-256 / AES-256-GCM），不经过任何服务器，也不上传给开发者。删除也会同步：在一台设备上退订、取消收藏、删掉印记或批注时，本机会记下「哪一类、哪一条、什么时候删的」并随同步发给对端，让对端也删掉；这份记录只存在本机，90 天后清除。删除记录优先于对端数据，若另一台在同步前刚重新添加了同一条，这一次仍会被删除。配对之后，只要页面不关闭，这条连接还会用来传「在听什么、听到哪」：正在播放的一台每秒一次把当前这一集的标题、封面与音频地址、播到哪儿、是否在播放与倍速发给对方，暂停、跳转或换集时立即再发一次；你点「在此设备继续」时，播放方先暂停并回传准确位置，另一台按那个位置接着播。这部分不写入任何一方的磁盘、不进备份、不参与统计，不会自动接管或自动播放，直播流不参与，关闭页面连接即断。首次使用会由系统询问「本地网络」权限。" = "Synchronisation en réseau local (facultative). Après l'avoir ouverte dans les réglages, l'application annonce un nom de service (comprenant le nom de cet appareil et un court identifiant aléatoire) sur le même Wi-Fi et ouvre temporairement un port TCP ; les deux s'arrêtent à la fermeture de la page. Une fois que vous confirmez que les codes d'appairage à six chiffres affichés sur les deux appareils concordent, vos abonnements, favoris, empreintes, notes, historique et statistiques d'écoute (fusionnées par appareil) sont envoyés directement à l'autre appareil ; l'audio, les caches, les identifiants des flux privés, les réglages et la file de lecture ne sont pas inclus. Les données sont chiffrées avec des clés négociées entre les deux appareils (ECDH P-256 / AES-256-GCM) ; elles ne passent jamais par un serveur et ne sont jamais envoyées au développeur. Les suppressions sont aussi synchronisées : lorsque vous vous désabonnez, retirez un favori ou supprimez un sceau ou une note sur un appareil, celui-ci note de quelle catégorie, quel élément et quand, puis l'envoie à la synchronisation pour que l'autre le supprime aussi ; cet enregistrement reste uniquement sur cet appareil et est effacé après 90 jours. L'enregistrement de suppression prime sur les données de l'autre appareil : si celui-ci a réajouté le même élément juste avant la synchronisation, il est quand même supprimé cette fois. Après l'appairage, tant que la page reste ouverte, la même connexion transmet aussi ce qui est en cours de lecture et où : l'appareil qui lit envoie une fois par seconde le titre, la pochette et l'adresse audio de l'épisode en cours, la position, l'état de lecture et la vitesse, et immédiatement à la pause, au saut ou au changement d'épisode. Quand vous touchez « Continuer sur cet appareil », l'appareil qui lit se met d'abord en pause et renvoie sa position exacte ; l'autre s'y positionne et démarre la lecture. Ces données ne sont écrites sur aucun appareil, ne font partie d'aucune sauvegarde, ne prennent jamais la main ni ne lancent la lecture automatiquement, les directs n'y participent pas et tout s'arrête à la fermeture de la page. La première fois, le système demande l'autorisation « Réseau local ».";
 
 "在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度，正在听的一集可接着听" = "Fusionner abonnements, favoris, sceaux, notes et progression avec un autre appareil sur le même Wi-Fi, et y poursuivre l'épisode en cours";
+
+/* Radio tab (1.0.9) */
+"搜索电台名称" = "Rechercher une station";
+"投放" = "AirPlay";
+"添加电台" = "Ajouter une station";
+"我的电台" = "Mes stations";
+"编辑" = "Modifier";
+"搜索结果" = "Résultats";
+"正在搜索…" = "Recherche…";
+"正在获取…" = "Chargement…";
+"热门电台" = "Stations populaires";
+"精选电台" = "Stations en vedette";
+"谈话" = "Talk";
+"怀旧" = "Nostalgie";
+"目录" = "Annuaire";
+"精选" = "En vedette";
+"手动" = "Manuel";
+"已加入我的电台" = "Ajoutée à Mes stations";
+"已在列表里" = "Déjà dans votre liste";
+"删除电台" = "Supprimer la station";
+"未分组" = "Sans groupe";
+"名称" = "Nom";
+"留空则自动取名" = "Laissez vide pour nommer automatiquement";
+"流地址" = "Adresse du flux";
+"台标地址（可选）" = "Adresse du logo (facultatif)";
+"分组" = "Groupe";
+"正在检查这个地址…" = "Vérification de cette adresse…";
+"编辑电台" = "Modifier la station";
+"地址要以 http:// 或 https:// 开头" = "L’adresse doit commencer par http:// ou https://";
+"这个地址已经在列表里了" = "Cette adresse est déjà dans votre liste";
+"这个地址没有返回音频流，请检查后再试" = "Cette adresse n’a pas renvoyé de flux audio. Vérifiez-la et réessayez";
+"还没有自己的电台。点右上角「+」手动添加，或从下面挑一个" = "Aucune station pour l’instant. Touchez « + » en haut à droite pour en ajouter une, ou choisissez-en une ci-dessous";
+"没找到这个电台，换个名字试试" = "Station introuvable. Essayez un autre nom";
+"在线目录暂时连不上" = "L’annuaire en ligne est injoignable pour le moment";
+"暂时没有可以推荐的电台" = "Aucune station à recommander pour le moment";
+"确定删除「%@」吗？" = "Supprimer « %@ » ?";

@@ -174,7 +174,9 @@ struct PlayerView: View {
             Spacer()
             Text("正在播放").font(.headline)
             Spacer()
-            Image(systemName: "chevron.down").opacity(0) // 占位居中
+            AirPlayRouteButton(player: player.avPlayer)
+                .frame(width: 22, height: 22)
+                .help("投放")
         }
         .padding(.horizontal, 18)
         .padding(.top, 16)
