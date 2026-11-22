@@ -15,7 +15,9 @@ enum RadioBrowserSource {
     private static let mirrors = ["de1.api.radio-browser.info", "de2.api.radio-browser.info"]
 
     /// 热门:按中国区的累计点击排序。空列表表示「没结果或全镜像失败」,界面不区分这两种。
-    static func popular(limit: Int = 40) async -> [Station] {
+    /// limit 压到 30/20:目录耗时随 limit 超线性增长(2026-11-22 本机实测同一关键词
+    /// limit=50 要 31.8 s、20 只要 2.5 s;热门 40 要 9.4 s、30 只要 2.6 s)。
+    static func popular(limit: Int = 30) async -> [Station] {
         await fetch(params: [
             ("countrycode", "CN"),
             ("limit", String(limit)),
@@ -25,7 +27,7 @@ enum RadioBrowserSource {
         ])
     }
 
-    static func search(_ query: String, limit: Int = 50) async -> [Station] {
+    static func search(_ query: String, limit: Int = 20) async -> [Station] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return [] }
         return await fetch(params: [
@@ -42,7 +44,8 @@ enum RadioBrowserSource {
         for host in mirrors {
             guard let url = endpoint(host: host, params: params) else { continue }
             var req = URLRequest(url: url)
-            req.timeoutInterval = 12
+            // 与 limit 压小后的实际耗时留足余量(目录通常 2~6 s;2026-11-22 实测 50 条要 31.8 s)
+            req.timeoutInterval = 20
             req.setValue("Reverb/1.0 (Apple podcast client)", forHTTPHeaderField: "User-Agent")
             do {
                 let (data, resp) = try await HTTP.session.data(for: req)

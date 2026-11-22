@@ -29,7 +29,10 @@ class RadioBrowserSource(private val client: OkHttpClient) {
      *         调用方用「空 + 有没有抛」区分不了失败与真没结果 —— 这里统一按空处理,
      *         界面文案是"没找到/连不上",不承诺是哪一种。
      */
-    suspend fun popular(limit: Int = 40): List<Station> = request { host ->
+    // limit 不是越大越好:目录的耗时随它**超线性**增长(2026-11-22 本机实测同一关键词:
+    // limit=50 要 31.8 s、20 只要 2.5 s;热门 40 要 9.4 s、30 只要 2.6 s)。50 会稳定撞上
+    // OkHttp 的 20 s 读超时,用户看到的是"目录连不上"。要更多结果只能加翻页,不能再加 limit。
+    suspend fun popular(limit: Int = 30): List<Station> = request { host ->
         endpoint(
             host,
             listOf(
@@ -42,7 +45,7 @@ class RadioBrowserSource(private val client: OkHttpClient) {
         )
     }
 
-    suspend fun search(query: String, limit: Int = 50): List<Station> = request { host ->
+    suspend fun search(query: String, limit: Int = 20): List<Station> = request { host ->
         endpoint(
             host,
             listOf(
