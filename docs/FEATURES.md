@@ -267,11 +267,11 @@ macOS 走 dmg 自行分发,不涉及应用商店,**没有渠道差异**;端与�
 
 | 端 | 实现 | 状态与判据 |
 |---|---|---|
-| Android | **自研 DLNA**,不接任何三方库。`SsdpDiscovery` 向 `239.255.255.250:1900` 发 `M-SEARCH`(ST `urn:schemas-upnp-org:device:MediaRenderer:1`),持 `MulticastLock` 收响应 → 取设备描述 XML → 找 AVTransport 的 `controlURL`;`DlnaClient` 发 SOAP 1.1 的 `SetAVTransportURI` / `Play` / `Pause` / `Stop` 四个动作,直播用 `audioBroadcast`、点播用 `musicTrack` 的 DIDL-Lite,`protocolInfo` 用通配以放行 HLS。投播成功**本机暂停**(队列与位置保留),换集或停止投放时同步停掉电视那一路。状态机在应用级 `CastController` 里,弹层关掉不影响投放 | **单测 8 条**(SSDP 报文、设备描述解析、SOAP 转义、DIDL 两种形状、UPnP 错误识别)。设备描述改用 DOM 解析:JVM 单测里 `XmlPullParserFactory` 是 android.jar 的 stub,会把解析静默打回 null。**未接真机、未接任何真实渲染设备**(本轮屏幕锁定,无法点按;仓库内没有可用的 DLNA 电视夹具)。Android 17 起首次扫描会由系统询问「本地网络」权限(ACCESS_LOCAL_NETWORK) |
+| Android | **自研 DLNA**,不接任何三方库。`SsdpDiscovery` 向 `239.255.255.250:1900` 发 `M-SEARCH`(ST `urn:schemas-upnp-org:device:MediaRenderer:1`),持 `MulticastLock` 收响应 → 取设备描述 XML → 找 AVTransport 的 `controlURL`;`DlnaClient` 发 SOAP 1.1 的 `SetAVTransportURI` / `Play` / `Pause` / `Stop` 四个动作,直播用 `audioBroadcast`、点播用 `musicTrack` 的 DIDL-Lite,`protocolInfo` 用通配以放行 HLS。投播成功**本机暂停**(队列与位置保留),换集或停止投放时同步停掉电视那一路。状态机在应用级 `CastController` 里,弹层关掉不影响投放 | **单测 8 条**(SSDP 报文、设备描述解析、SOAP 转义、DIDL 两种形状、UPnP 错误识别)。设备描述改用 DOM 解析:JVM 单测里 `XmlPullParserFactory` 是 android.jar 的 stub,会把解析静默打回 null。2026-11-22 **已在 Android 真机跑通整条链路**,接收端用本机 macOS 上的第三方 **Macast 0.7** 充当 DLNA 渲染器:SSDP `hits=1 renderers=1` → 描述 200 → `SetAVTransportURI` 200 → `Play` 200,接收端 `time-pos` 2.7 s→6.7 s,「停止投放」后回 idle;**未投到真实的电视 / 音箱硬件**(客厅设备留给维护者点)。Android 17 起首次扫描会由系统询问「本地网络」权限(ACCESS_LOCAL_NETWORK) |
 | HarmonyOS | 系统组件 `AVCastPicker`,挂在播放页标题栏;它复用本应用已有的音频 AVSession,由系统完成设备发现与传输。**本端不自己扫网、不加新权限、不接三方 SDK** | 已过 `assembleHap` 与 69 条单测;**未在真机点开、未接真实接收端** |
 | macOS / iOS | 系统 `AVRoutePickerView` 的 SwiftUI 包装(`RoutePickerView.swift`,两端各一份),挂在播放页;桌面端电台页工具栏也有一枚。路由由系统 AirPlay 负责,音频仍走本端 `AVPlayer` | 两端编译门已过、共享层单测全绿;**未在真机 / 模拟器上点开路由面板,未接真实 AirPlay 设备** |
 
-> ⚠️ 本轮投播的**验收边界**:Android 有纯逻辑单测与 release 编译,鸿蒙与 Apple 只到编译门;四端都**没有**在真实电视 / 音箱上跑过一条完整链路。这条要在下一次有屏幕、有设备时补(判据:设备出现在列表 → 点投放 → 电视出声 → 本机暂停 → 点停止 → 本机可续播)。
+> ⚠️ 投播的**验收边界**(2026-11-22):Android 侧已用软件渲染器(Macast)跑通发现 → 描述 → `SetAVTransportURI` → `Play` → `Stop` 整条链路,鸿蒙与 Apple 只到编译门 + 选择器拉起;**四端都还没有在真实的电视 / 音箱 / AirPlay 设备上跑过一条完整链路**。要在真实设备上补的判据:设备出现在列表 → 点投放 → 设备出声 → 本机暂停 → 点停止 → 本机可续播。
 
 ## 三、播放
 

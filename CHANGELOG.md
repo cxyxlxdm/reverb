@@ -8,10 +8,10 @@
 
 ---
 
-## 1.0.9 — 开发中(2026-11-22 起)
+## 1.0.9 — 2026-11-22
 
-> 本章记开发中的落地项与验收边界。**四端的 dist 产物尚未按 1.0.9 重打**,本轮只过编译门、单测与 l10n;
-> 对外版本说明 `docs/RELEASE-NOTES.md` 留到发版那一轮再写(避免对外声称一个还没出包的版本)。
+> 本章记落地项与验收边界。**四端 dist 产物已按 1.0.9 重打**(包体读数见「工程要点与验收边界」);
+> 对外版本说明已同步到 `docs/RELEASE-NOTES.md`。
 
 ### 直播电台:顶层「电台」页(四端)
 
@@ -66,8 +66,17 @@
 - **鸿蒙**:系统 `AVCastPicker`,复用已有音频 AVSession;不自己扫网、不加权限。
 - **macOS / iOS**:系统 `AVRoutePickerView` 的 SwiftUI 包装(`RoutePickerView.swift`),路由由系统 AirPlay 负责。
 - 关于「手机投到 Mac」:macOS 自带的「AirPlay 接收器」只接 Apple 设备的 AirPlay,
-  **不是 DLNA 渲染端**,Android 的自研 DLNA 找不到它;要在 Mac 上验收手机投播,
-  需要另装一个 DLNA 接收端(如 Macast),属于第三方未公证应用,本轮没有安装,因此这条链路未验。
+  **不是 DLNA 渲染端**,Android 的自研 DLNA 找不到它。2026-11-22 按维护者要求装了第三方
+  **Macast 0.7**(未公证)做接收端,手机 → Mac 的 DLNA 链路已实测走通:
+  SSDP 发现(`hits=1 renderers=1`)→ `GET /description.xml` 200 → `SetAVTransportURI` 200 → `Play` 200,
+  接收端 mpv 的 `time-pos` 从 2.7 s 走到 6.7 s,「停止投放」后接收端回到 idle。
+  三个坑记下来备查:
+  ① Macast 在一个 **TCC 弹窗阻塞下启动的实例**会「单播 M-SEARCH 应答正常、组播 M-SEARCH 不回」;
+    重启成单实例即恢复。两个实例可以同时绑 1900(`SO_REUSEPORT`),排查时先确认只有一个进程。
+  ② 接收端会继承启动方的 `HTTP(S)_PROXY`(`ps eww -p <pid>` 可查),mpv 拉流也随之走代理。
+  ③ 验收当天这台 Mac 的外网只有 ~1–2 KB/s(Cloudflare 测速直接超时),点播节目在接收端一直缓冲、
+    判不出「能不能出声」;最终用 `python3 -m http.server` 把 32 s 测试音频从 Mac 喂给手机,
+    再由手机投回 Mac,才拿到上面的 `time-pos` 读数。**换台外网正常的机器,点播投播应能直接复现。**
 
 ### 隐私政策版本 +1(Android / 鸿蒙 5→6;macOS / iOS 6→7)
 
@@ -87,7 +96,8 @@
     从目录加台(`StationStore add total=1`,同一路流在目录里随即变「已在列表里」)、编辑(分组改为「新闻」
     并写回)、手动添加入口、直播播放(BUFFERING→READY 且时长未知,播放页「直播中」、无进度条与倍速)。
     投播弹层显示 SSDP **扫到 3 台 renderer**(TCL / 极光 TV 等,友好名与型号来自设备描述解析);
-    **未真的投到电视上**——那会在客厅设备上出声,留给维护者点。
+    当天另装了 Macast 做接收端,选中它之后发现 → 描述 → `SetAVTransportURI` → `Play` 全通,
+    接收端真实出声(读数见「投播」一节);**未投到客厅的电视上**——那会在真实设备上出声,留给维护者点。
     未验:删除流、备份里 `stations` 段、以及整套界面的其余路径。
   - macOS(2026-11-22,本机 `swift build -c release` 出的 `.app` 直接运行,未打 dmg):
     同意页显示的是**补过探活说明的新正文**;电台页热门列表 `[RadioDir] ok n=29 probed=30`(30 条里藏掉 1 条);
@@ -95,8 +105,11 @@
     点行内播放键后 `AVPlayerItem readyToPlay`、播放页「直播中」、无进度条;
     工具栏与播放页的投播按钮均在,但**本机没有 AirPlay 接收端**,没有真实路由可选。
     未验:编辑 / 删除电台、macOS 的局域网同步、其余页面。
-- **未验**:`android/dist/reverb.apk` / `harmony/dist/reverb.app` / `macos/dist/*.dmg` / `ios/dist/*.ipa`
-  **均未按 1.0.9 重打**;iOS 界面没有跑过;投播全线没有接真实接收端。
+- **iOS 模拟器(2026-11-22,Xcode 27.2 / DeviceHub)**:同意页 → 五格导航(发现 / 电台 / 追更 / 音阁 / 设置);
+  电台页热门列表(探活后过滤)、手动添加一路直播(地址校验报错、探活失败被拒、成功加入并自动取 ICY 台名)、
+  无台标显示默认图标、直播播放(迷你播放条显示「● 直播中」,切 tab 仍在)、发现 / 音阁 / 设置页均打开过。
+  未验:AirPlay 路由面板(模拟器没有可用路由)、真机安装与 TestFlight。
+- **未验**:AirPlay 投到真实 Apple 设备;Android / 鸿蒙投到真实的第三台设备(电视 / 音箱)。
 - **装机时抓到的真问题**:radio-browser 的响应耗时随 `limit` **超线性**增长 —— 2026-11-22 实测
   同一关键词 `limit=50` 要 31.8 s、`20` 只要 2.5 s;热门 `40` 要 9.4 s、`30` 只要 2.6 s。
   原先 50 条稳定撞上三端 12~20 s 的读超时,用户看到的是「目录连不上」。已把两端默认值压到
@@ -104,10 +117,32 @@
 - 设备描述解析从 `XmlPullParser` 换成 **DOM**:JVM 单测里 `XmlPullParserFactory` 是 android.jar 的 stub,
   会把解析静默打回 null,单测会误判成"没有设备"。
 
-## 1.0.8 — 开发中(2026-11-11 起)
+### 四端 1.0.9 产物(2026-11-22 16:11–16:13 重打,`-newer` 全部 0 命中)
 
-> **本节只记已落地并验过的部分。** 1.0.8 的其余内容(局域网同步的真机 / 模拟器复验)仍在进行中,
-> 完成一项补一项;**发版前这一节要整段重写为对外口径**,并同步 `docs/RELEASE-NOTES.md`。
+- **Android** `android/dist/reverb.apk` 270,294,292 B @16:11:08,sha256 `d9d7642f…0871`;
+  `aapt2 dump badging` = versionCode **10** / versionName **1.0.9**;解包按硬规矩 1 五项为 **4 / 1 / 1 / 13 / 2**;
+  权限 14 项,关键三项(RECORD_AUDIO / REQUEST_INSTALL_PACKAGES / ACCESS_LOCAL_NETWORK)全在;
+  证书 DN 为 **CN=Yuyin Reverb**(`build-release.sh` 的调试证书闸通过)。
+  mapping 50,080,705 B 与包同批;在架 1.0.8 的 mapping(49,062,344 B,sha256 `69982b15…8015`)
+  已归档至 `dist/_backup-1.0.8-mapping-published-20261122/`。
+- **鸿蒙** `harmony/dist/reverb.app` 182,044,168 B + `reverb-symbol.zip` 14,968,920 B @16:11:34,
+  sha256 `fa3a6f29…6fda` / `c159a6c7…5619`;嵌套 `entry-default.hap` 解包 **2 / 3 / 1**、
+  `pack.info` = **1000009 / 1.0.9**;`debugKey` 断言无命中。
+- **macOS** `macos/dist/余音-Reverb-1.0.9-universal.dmg` 6,622,867 B @16:11:12,sha256 `d48502ad…505a`;
+  `package.sh` 验收段全过(架构集合 arm64 + x86_64、判据词、4 套 `.lproj`、`codesign --verify`)。
+- **iOS** `ios/dist/reverb-ios-1.0.9-3-unsigned.ipa` 3,152,950 B @16:13:13,sha256 `4d0a71ab…3379`;
+  `build-ios.sh` 编译门(不签名)全过(判据含版本、后台音频、本地化集合、内置物料、图标、arm64)。
+  ⚠️ 这份**未签名,不能安装**,只作归档;TestFlight 仍卡在免费 Personal Team 取不到分发描述文件
+  (见 `docs/IOS.md`),不是打包问题。
+- **mtime 判定**:`-newer` 对 Android `app/src` + `shared/`、鸿蒙 `entry/src` + `shared/`、
+  macOS `Sources/Localization/Info.plist/Package.swift` + `shared/`、
+  iOS `Reverb`/`Localization` + 共享 `Data/Playback` 逐个查,四端均 **0 条比包新**。
+- **未做**:商店提交 kit 与商店截图未按硬规矩 20 重拍重建;GitHub Releases 上传未执行(等维护者确认)。
+
+## 1.0.8 — 2026-11-18(已发布)
+
+> 已发布;对外口径见 `docs/RELEASE-NOTES.md` 的 1.0.8 一节。本节保留内部落地记录
+> (含当时未重打的端与遗留项,不再改动)。
 >
 > **版本号**:四端都已改到 1.0.8 —— Android `9` / 鸿蒙 `1000008` / macOS `1.0.8(5)` /
 > iOS `1.0.8(2)`。章节移植到鸿蒙与苹果两端时各自动了源码,版本号随之更新。
