@@ -10,7 +10,7 @@ import org.json.JSONObject
  * 或从 JSON 选择性导入。每一项都可单独选择是否备份/恢复。
  */
 object BackupManager {
-    enum class Section { SUBSCRIPTIONS, FAVORITES, STAMPS, NOTES, DOWNLOADS, HISTORY, LISTEN_STATS, SETTINGS }
+    enum class Section { SUBSCRIPTIONS, STATIONS, FAVORITES, STAMPS, NOTES, DOWNLOADS, HISTORY, LISTEN_STATS, SETTINGS }
 
     private const val TAG = "Backup"
 
@@ -22,6 +22,13 @@ object BackupManager {
             val arr = JSONArray()
             container.subscriptionStore.subscriptions.value.forEach { arr.put(PodcastJson.toJson(it)) }
             root.put("subscriptions", arr)
+        }
+        if (Section.STATIONS in include) {
+            // 直播电台是用户自己整理的一份快捷方式,换机必须跟得过去(与订阅同一档)。
+            // 键名 `stations` 与另三端对齐,字段口径见 `StationJson`。
+            val arr = JSONArray()
+            container.stationStore.stations.value.forEach { arr.put(StationJson.toJson(it)) }
+            root.put("stations", arr)
         }
         if (Section.FAVORITES in include) {
             val arr = JSONArray()
@@ -117,6 +124,7 @@ object BackupManager {
         com.yuyin.reverb.util.Logger.i(
             TAG,
             "export built subs=${root.optJSONArray("subscriptions")?.length() ?: 0} " +
+                "stations=${root.optJSONArray("stations")?.length() ?: 0} " +
                 "favs=${root.optJSONArray("favorites")?.length() ?: 0} " +
                 "stamps=${root.optJSONArray("stamps")?.length() ?: 0} " +
                 "notes=${root.optJSONArray("notes")?.length() ?: 0} " +
@@ -130,6 +138,7 @@ object BackupManager {
         val root = JSONObject(json)
         buildSet {
             if (root.has("subscriptions")) add(Section.SUBSCRIPTIONS)
+            if (root.has("stations")) add(Section.STATIONS)
             if (root.has("favorites")) add(Section.FAVORITES)
             if (root.has("stamps")) add(Section.STAMPS)
             if (root.has("notes")) add(Section.NOTES)
@@ -150,6 +159,12 @@ object BackupManager {
         if (Section.SUBSCRIPTIONS in include) root.optJSONArray("subscriptions")?.let { arr ->
             val list = (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let(PodcastJson::fromJson) }
             if (list.isNotEmpty()) container.subscriptionStore.addAll(list)
+        }
+        if (Section.STATIONS in include) root.optJSONArray("stations")?.let { arr ->
+            // 按 id 或 url 去重、本端已有优先(见 `StationStore.addAll`):重复恢复同一份
+            // 备份不会翻倍,也不会把用户改过的名字/分组盖回旧备份里的样子。
+            val list = (0 until arr.length()).mapNotNull { arr.optJSONObject(it)?.let(StationJson::fromJson) }
+            if (list.isNotEmpty()) container.stationStore.addAll(list)
         }
         if (Section.FAVORITES in include) root.optJSONArray("favorites")?.let { arr ->
             // 备份即「新在前」顺序;addAll 尾部追加,按原序并入即可保持该顺序

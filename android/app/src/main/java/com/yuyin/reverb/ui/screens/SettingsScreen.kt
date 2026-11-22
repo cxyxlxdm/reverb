@@ -896,6 +896,8 @@ private fun ConfirmDialog(
 
 private val SECTION_ROWS = listOf(
     BackupManager.Section.SUBSCRIPTIONS to R.string.backup_row_subscriptions,
+    // 电台与订阅同属「用户收集的收听入口」,放在订阅后面
+    BackupManager.Section.STATIONS to R.string.backup_row_stations,
     BackupManager.Section.FAVORITES to R.string.backup_row_favorites,
     BackupManager.Section.STAMPS to R.string.backup_row_stamps,
     // 批注紧跟印记:两者都是「用户自己写出来的字」,在勾选列表里也该挨在一起

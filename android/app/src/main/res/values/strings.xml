@@ -533,4 +533,39 @@
     <string name="feed_auth_save">保存并重试</string>
     <string name="feed_auth_cancel">取消</string>
     <string name="feed_auth_wrong">这对用户名和密码没有通过，再核对一下。</string>
+
+    <!-- 直播电台 -->
+    <string name="nav_radio">电台</string>
+    <string name="radio_subtitle">我的直播电台，随时开听</string>
+    <string name="radio_search_hint">搜索电台名称</string>
+    <string name="radio_my_stations">我的电台</string>
+    <string name="radio_hot_stations">热门电台</string>
+    <string name="radio_search_results">搜索结果</string>
+    <string name="radio_seed_stations">精选电台</string>
+    <string name="radio_add">添加电台</string>
+    <string name="radio_edit">编辑电台</string>
+    <string name="radio_delete">删除电台</string>
+    <string name="radio_delete_msg">确定删除「%1$s」吗？</string>
+    <string name="radio_name">名称</string>
+    <string name="radio_name_hint">留空则自动取名</string>
+    <string name="radio_url">流地址</string>
+    <string name="radio_logo_optional">台标地址（可选）</string>
+    <string name="radio_group">分组</string>
+    <string name="radio_group_none">未分组</string>
+    <string name="radio_group_news">新闻</string>
+    <string name="radio_group_music">音乐</string>
+    <string name="radio_group_talk">谈话</string>
+    <string name="radio_group_retro">怀旧</string>
+    <string name="radio_empty_my">还没有自己的电台。点右上角「+」手动添加，或从下面挑一个</string>
+    <string name="radio_empty_search">没找到这个电台，换个名字试试</string>
+    <string name="radio_load_failed">在线目录暂时连不上</string>
+    <string name="radio_retry">重试</string>
+    <string name="radio_invalid_url">地址要以 http:// 或 https:// 开头</string>
+    <string name="radio_not_stream">这个地址没有返回音频流，请检查后再试</string>
+    <string name="radio_duplicate">这个地址已经在列表里了</string>
+    <string name="radio_added">已加入我的电台</string>
+    <string name="radio_already_added">已在列表里</string>
+    <string name="radio_live_name">直播</string>
+    <string name="radio_checking">正在检查这个地址…</string>
+    <string name="backup_row_stations">直播电台</string>
 </resources>

@@ -514,4 +514,39 @@
     <string name="feed_auth_save">Save and retry</string>
     <string name="feed_auth_cancel">Cancel</string>
     <string name="feed_auth_wrong">That username and password were not accepted. Please check them and try again.</string>
+
+    <!-- Live radio -->
+    <string name="nav_radio">Radio</string>
+    <string name="radio_subtitle">Your live stations, ready when you are</string>
+    <string name="radio_search_hint">Search stations by name</string>
+    <string name="radio_my_stations">My stations</string>
+    <string name="radio_hot_stations">Popular stations</string>
+    <string name="radio_search_results">Results</string>
+    <string name="radio_seed_stations">Featured stations</string>
+    <string name="radio_add">Add station</string>
+    <string name="radio_edit">Edit station</string>
+    <string name="radio_delete">Delete station</string>
+    <string name="radio_delete_msg">Delete “%1$s”?</string>
+    <string name="radio_name">Name</string>
+    <string name="radio_name_hint">Leave blank for automatic naming</string>
+    <string name="radio_url">Stream URL</string>
+    <string name="radio_logo_optional">Logo URL (optional)</string>
+    <string name="radio_group">Group</string>
+    <string name="radio_group_none">None</string>
+    <string name="radio_group_news">News</string>
+    <string name="radio_group_music">Music</string>
+    <string name="radio_group_talk">Talk</string>
+    <string name="radio_group_retro">Retro</string>
+    <string name="radio_empty_my">No stations yet. Tap + to add one, or pick from below</string>
+    <string name="radio_empty_search">No station found. Try another name</string>
+    <string name="radio_load_failed">The online directory is unreachable right now</string>
+    <string name="radio_retry">Retry</string>
+    <string name="radio_invalid_url">The URL must start with http:// or https://</string>
+    <string name="radio_not_stream">That URL did not return an audio stream. Please check it</string>
+    <string name="radio_duplicate">That URL is already in your list</string>
+    <string name="radio_added">Added to my stations</string>
+    <string name="radio_already_added">Already in your list</string>
+    <string name="radio_live_name">Live</string>
+    <string name="radio_checking">Checking this URL…</string>
+    <string name="backup_row_stations">Live stations</string>
 </resources>
