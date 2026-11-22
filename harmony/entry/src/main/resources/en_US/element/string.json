@@ -13,6 +13,134 @@
       "value": "Updates"
     },
     {
+      "name": "nav_radio",
+      "value": "Radio"
+    },
+    {
+      "name": "radio_subtitle",
+      "value": "Your live stations, ready when you are"
+    },
+    {
+      "name": "radio_search_hint",
+      "value": "Search stations by name"
+    },
+    {
+      "name": "radio_my_stations",
+      "value": "My stations"
+    },
+    {
+      "name": "radio_hot_stations",
+      "value": "Popular stations"
+    },
+    {
+      "name": "radio_search_results",
+      "value": "Results"
+    },
+    {
+      "name": "radio_seed_stations",
+      "value": "Featured stations"
+    },
+    {
+      "name": "radio_add",
+      "value": "Add station"
+    },
+    {
+      "name": "radio_edit",
+      "value": "Edit station"
+    },
+    {
+      "name": "radio_delete",
+      "value": "Delete station"
+    },
+    {
+      "name": "radio_delete_msg",
+      "value": "Delete “%s”?"
+    },
+    {
+      "name": "radio_name",
+      "value": "Name"
+    },
+    {
+      "name": "radio_name_hint",
+      "value": "Leave blank for automatic naming"
+    },
+    {
+      "name": "radio_url",
+      "value": "Stream URL"
+    },
+    {
+      "name": "radio_logo_optional",
+      "value": "Logo URL (optional)"
+    },
+    {
+      "name": "radio_group",
+      "value": "Group"
+    },
+    {
+      "name": "radio_group_none",
+      "value": "None"
+    },
+    {
+      "name": "radio_group_news",
+      "value": "News"
+    },
+    {
+      "name": "radio_group_music",
+      "value": "Music"
+    },
+    {
+      "name": "radio_group_talk",
+      "value": "Talk"
+    },
+    {
+      "name": "radio_group_retro",
+      "value": "Retro"
+    },
+    {
+      "name": "radio_empty_my",
+      "value": "No stations yet. Tap + to add one, or pick from below"
+    },
+    {
+      "name": "radio_empty_search",
+      "value": "No station found. Try another name"
+    },
+    {
+      "name": "radio_load_failed",
+      "value": "The online directory is unreachable right now"
+    },
+    {
+      "name": "radio_retry",
+      "value": "Retry"
+    },
+    {
+      "name": "radio_invalid_url",
+      "value": "The URL must start with http:// or https://"
+    },
+    {
+      "name": "radio_not_stream",
+      "value": "That URL did not return an audio stream. Please check it"
+    },
+    {
+      "name": "radio_duplicate",
+      "value": "That URL is already in your list"
+    },
+    {
+      "name": "radio_added",
+      "value": "Added to my stations"
+    },
+    {
+      "name": "radio_already_added",
+      "value": "Already in your list"
+    },
+    {
+      "name": "radio_live_name",
+      "value": "Live"
+    },
+    {
+      "name": "radio_checking",
+      "value": "Checking this URL…"
+    },
+    {
       "name": "app_title",
       "value": "Reverb"
     },
@@ -699,6 +827,10 @@
     {
       "name": "backup_row_subscriptions",
       "value": "Subscriptions"
+    },
+    {
+      "name": "backup_row_stations",
+      "value": "Live stations"
     },
     {
       "name": "backup_row_favorites",

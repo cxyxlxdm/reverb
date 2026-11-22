@@ -2,6 +2,7 @@
   "allowToBackupRestore": true,
   "includes": [
     "/data/storage/el2/base/haps/entry/files/subscriptions.json",
+    "/data/storage/el2/base/haps/entry/files/stations.json",
     "/data/storage/el2/base/haps/entry/files/favorites.json",
     "/data/storage/el2/base/haps/entry/files/history.json",
     "/data/storage/el2/base/haps/entry/files/downloads.json",

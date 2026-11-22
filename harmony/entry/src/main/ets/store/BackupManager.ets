@@ -1,4 +1,6 @@
 import { Episode, Podcast, HistoryEntry, ChannelListen, emptyPodcast } from '../model/Models';
+import { Station } from '../model/Station';
+import { StationJson } from './StationStore';
 import { Codec } from './Codec';
 import { Stamp } from './StampStore';
 import { EpisodeNote } from './NoteStore';
@@ -11,7 +13,7 @@ import { stringifyPrettyConcurrent, parseObjectConcurrent } from './JsonTask';
 import { Log } from '../util/Logger';
 
 /**
- * 可备份的数据分区(与 Android / macOS 的 8 项一一对应)。
+ * 可备份的数据分区(与 Android / macOS 的 9 项一一对应)。
  *
  * ⚠️ **互通契约是键名,不是顺序** —— 三端都按键名读同一份 `reverb-backup.json`,
  * 而 Android 走 `org.json.JSONObject`(HashMap)本来就不保证写出顺序,所以"枚举值=文件里的
@@ -20,24 +22,25 @@ import { Log } from '../util/Logger';
  */
 export enum BackupSection {
   SUBSCRIPTIONS = 0,
-  FAVORITES = 1,
-  STAMPS = 2,
-  NOTES = 3,
-  DOWNLOADS = 4,
-  HISTORY = 5,
-  LISTEN_STATS = 6,
-  SETTINGS = 7
+  STATIONS = 1,
+  FAVORITES = 2,
+  STAMPS = 3,
+  NOTES = 4,
+  DOWNLOADS = 5,
+  HISTORY = 6,
+  LISTEN_STATS = 7,
+  SETTINGS = 8
 }
 
 export const ALL_SECTIONS: BackupSection[] = [
-  BackupSection.SUBSCRIPTIONS, BackupSection.FAVORITES, BackupSection.STAMPS,
-  BackupSection.NOTES, BackupSection.DOWNLOADS, BackupSection.HISTORY,
-  BackupSection.LISTEN_STATS, BackupSection.SETTINGS
+  BackupSection.SUBSCRIPTIONS, BackupSection.STATIONS, BackupSection.FAVORITES,
+  BackupSection.STAMPS, BackupSection.NOTES, BackupSection.DOWNLOADS,
+  BackupSection.HISTORY, BackupSection.LISTEN_STATS, BackupSection.SETTINGS
 ];
 
 const KEY: Record<number, string> = {
-  0: 'subscriptions', 1: 'favorites', 2: 'stamps', 3: 'notes',
-  4: 'downloads', 5: 'history', 6: 'listenStats', 7: 'settings'
+  0: 'subscriptions', 1: 'stations', 2: 'favorites', 3: 'stamps', 4: 'notes',
+  5: 'downloads', 6: 'history', 7: 'listenStats', 8: 'settings'
 };
 
 /**
@@ -52,8 +55,9 @@ const KEY: Record<number, string> = {
  * 顺序与上面 `KEY` 逐项对齐(枚举值 = 下标)。
  */
 const LABEL_KEY: Record<number, string> = {
-  0: 'backup_row_subscriptions', 1: 'backup_row_favorites', 2: 'backup_row_stamps', 3: 'backup_row_notes',
-  4: 'backup_row_downloads', 5: 'backup_row_history', 6: 'backup_row_listen_stats', 7: 'backup_row_settings'
+  0: 'backup_row_subscriptions', 1: 'backup_row_stations', 2: 'backup_row_favorites',
+  3: 'backup_row_stamps', 4: 'backup_row_notes', 5: 'backup_row_downloads',
+  6: 'backup_row_history', 7: 'backup_row_listen_stats', 8: 'backup_row_settings'
 };
 
 export function sectionLabelKey(s: BackupSection): string {
@@ -98,6 +102,14 @@ export class BackupManager {
       const list = app.subscriptions.subscriptions;
       for (let i = 0; i < list.length; i++) arr.push(Codec.podcastToJson(list[i]));
       root[KEY[BackupSection.SUBSCRIPTIONS]] = arr;
+    }
+    if (has(BackupSection.STATIONS)) {
+      // 电台是用户自己整理的快捷方式,与订阅同一档:换机必须跟得过去。
+      // 键名 `stations` 与另三端对齐,字段口径见 `StationJson`。
+      const arr: Object[] = [];
+      const list = app.stations.stations;
+      for (let i = 0; i < list.length; i++) arr.push(StationJson.toJson(list[i]));
+      root[KEY[BackupSection.STATIONS]] = arr;
     }
     if (has(BackupSection.FAVORITES)) {
       const arr: Object[] = [];
@@ -250,6 +262,20 @@ export class BackupManager {
       for (let i = 0; i < arr.length; i++) list.push(Codec.podcastFromJson(J.asObj(arr[i])));
       if (list.length > 0) app.subscriptions.addAll(list);
       Log.i('Backup', `恢复订阅 ${list.length} 条`);
+    }
+    if (has(BackupSection.STATIONS)) {
+      // 按 id 或 url 去重、本端已有优先(见 `StationStore.addAll`):重复恢复不会翻倍,
+      // 也不会把用户改过的名字/分组盖回旧备份里的样子。
+      const arr = J.arr(root, KEY[BackupSection.STATIONS]);
+      const list: Station[] = [];
+      for (let i = 0; i < arr.length; i++) {
+        const s = StationJson.fromJson(J.asObj(arr[i]));
+        if (s !== null) list.push(s);
+      }
+      if (list.length > 0) {
+        const added = app.stations.addAll(list);
+        Log.i('Backup', `恢复电台 新增 ${added} 条`);
+      }
     }
     if (has(BackupSection.FAVORITES)) {
       const arr = J.arr(root, KEY[BackupSection.FAVORITES]);

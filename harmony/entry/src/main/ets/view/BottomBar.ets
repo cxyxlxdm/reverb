@@ -211,13 +211,13 @@ export const BALL_DIAM: number = 52;
  * (`/tmp/r2_ball.png` vs `/tmp/r4_ball.png`)。所以这颗球的语义是
  * **"整条 tab 栏收在这里"**,而不是"回主页" —— 我们的动作也确实是把播放条展开、栏露回来。
  *
- * ⚠️ 顺序必须和 `pages/Index.ets` 里三个 `@Builder` 槽位一致(发现 0 / 追更 1 / 音阁 2),
+ * ⚠️ 顺序必须和 `pages/Index.ets` 里四个 `@Builder` 槽位一致(发现 0 / 电台 1 / 追更 2 / 音阁 3),
  * 且**取选中态那一枚**(实心变体)。没有实心变体的那一格仍用描边 + 加粗,与
  * [SystemTabItem.hasFill] 同一条规则。
  */
-export const BALL_ICONS: Resource[] = [Sym.discoverFill, Sym.feed, Sym.libraryFill];
+export const BALL_ICONS: Resource[] = [Sym.discoverFill, Sym.radio, Sym.feed, Sym.libraryFill];
 /// 与 [BALL_ICONS] 同序:该格有没有实心变体(没有的用字重区分选中态)
-export const BALL_ICONS_BOLD: boolean[] = [false, true, false];
+export const BALL_ICONS_BOLD: boolean[] = [false, true, true, false];
 
 /**
  * 悬浮栏到屏幕左右各收多少(参考片实测 `75px / 3.25 = 23.1vp`)。

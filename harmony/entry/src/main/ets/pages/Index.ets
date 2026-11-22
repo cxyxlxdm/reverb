@@ -1,6 +1,7 @@
 import { Theme, Scheme, TypeScale, Tracking, Metrics } from '../theme/Theme';
 import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
+import { StationStore } from '../store/StationStore';
 import { InboxStore } from '../store/InboxStore';
 import { DownloadStore } from '../store/DownloadStore';
 import { StampStore } from '../store/StampStore';
@@ -11,6 +12,7 @@ import { AppContainer } from '../AppContainer';
 import { ScreenHeader, EmptyHint, Glyph, Sym } from '../view/Widgets';
 import { DiscoverPage } from '../view/DiscoverPage';
 import { FeedPage } from '../view/FeedPage';
+import { RadioPage } from '../view/RadioPage';
 import { PodcastDetailPage } from '../view/PodcastDetailPage';
 import { NoteStore, EpisodeNote } from '../store/NoteStore';
 import { ChapterStore } from '../store/ChapterStore';
@@ -47,7 +49,7 @@ import { TapGuard } from '../util/TapGuard';
  */
 const TAB_DOUBLE_TAP_MS: number = 380;
 
-/// 顶层外壳:Navigation 承载全屏页(频道详情等),内页是「发现 / 追更 / 音阁」三 tab。
+/// 顶层外壳:Navigation 承载全屏页(频道详情等),内页是「发现 / 电台 / 追更 / 音阁」四 tab。
 /// 与 Android 一致的取舍:全屏页整体转场,底部栏不产生占位跳动。
 @Entry
 @Component
@@ -64,6 +66,8 @@ struct Index {
    */
   @State settings: SettingsStore = AppContainer.get().settings;
   @State subscriptions: SubscriptionStore = AppContainer.get().subscriptions;
+  /// 直播电台(顶层「电台」页的数据源)。与订阅同一档:@State 持有、@ObjectLink 下发。
+  @State stations: StationStore = AppContainer.get().stations;
   @State favorites: FavoriteStore = AppContainer.get().favorites;
   @State history: HistoryStore = AppContainer.get().history;
   @State inbox: InboxStore = AppContainer.get().inbox;
@@ -89,13 +93,14 @@ struct Index {
    */
   @StorageLink(MORPH_KEY) collapsed: boolean = false;
   /**
-   * 双击底部 tab 回顶(**三格各一颗**)。外层只负责数,滚动由各页自己的 `Scroller` 做 ——
-   * 从外壳把列表的滚动状态提上来需要改三页的 body,而这里只需要一个会变的数。
+   * 双击底部 tab 回顶(**四格各一颗**)。外层只负责数,滚动由各页自己的 `Scroller` 做 ——
+   * 从外壳把列表的滚动状态提上来需要改四页的 body,而这里只需要一个会变的数。
    *
-   * 为什么是三颗而不是"当前页一颗":用户可能双击的是**没显示的那一格**吗?不会 ——
-   * 但三格各自保住自己的"第几次双击"更简单,而且与 Android 侧 `MainShell` 的三颗同形。
+   * 为什么是四颗而不是"当前页一颗":用户可能双击的是**没显示的那一格**吗?不会 ——
+   * 但四格各自保住自己的"第几次双击"更简单,而且与 Android 侧 `MainShell` 的四颗同形。
    */
   @State discoverTopToken: number = 0;
+  @State radioTopToken: number = 0;
   @State feedTopToken: number = 0;
   @State libraryTopToken: number = 0;
   /**
@@ -835,7 +840,8 @@ struct Index {
       this.lastTabTapAt = -1;
       this.lastTabTapIdx = -1;
       if (i === 0) this.discoverTopToken++;
-      else if (i === 1) this.feedTopToken++;
+      else if (i === 1) this.radioTopToken++;
+      else if (i === 2) this.feedTopToken++;
       else this.libraryTopToken++;
     } else {
       this.lastTabTapAt = now;
@@ -935,9 +941,22 @@ struct Index {
   }
 
   @Builder
-  slotFeed() {
+  slotRadio() {
     SystemTabItem({
       index: 1,
+      label: $r('app.string.nav_radio'),
+      icon: Sym.radio,
+      iconFill: Sym.radio,
+      // `radio` 在 Symbol 表里没有 `_fill` 变体,选中态只换色 + 加粗(同追更那格)
+      hasFill: false,
+      settings: this.settings
+    })
+  }
+
+  @Builder
+  slotFeed() {
+    SystemTabItem({
+      index: 2,
       label: $r('app.string.nav_feed'),
       // 追更那枚在 symbol 表里**没有实心变体**(radiowaves 家族全量只有 `dot_radiowaves` /
       // `dot_radiowaves_message(_fill)` / `music_note_radiowaves_left_and_right` 等,
@@ -952,7 +971,7 @@ struct Index {
   @Builder
   slotLibrary() {
     SystemTabItem({
-      index: 2,
+      index: 3,
       label: $r('app.string.nav_library'),
       icon: Sym.library,
       iconFill: Sym.libraryFill,
@@ -991,6 +1010,19 @@ struct Index {
             })
           }
           .tabBar(this.slotDiscover())
+
+          TabContent() {
+            RadioPage({
+              scheme: this.scheme(),
+              fontScale: this.fontScale(),
+              player: this.player,
+              stations: this.stations,
+              bottomPad: this.underBarPad(),
+              onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
+              scrollTopToken: this.radioTopToken
+            })
+          }
+          .tabBar(this.slotRadio())
 
           TabContent() {
             FeedPage({
