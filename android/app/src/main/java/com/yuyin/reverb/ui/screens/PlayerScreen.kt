@@ -238,43 +238,52 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                 Icon(Icons.Rounded.KeyboardArrowDown, contentDescription = stringResource(R.string.a11y_collapse_player))
             }
             Row(
-                // 2dp:48dp 的 IconButton 本身含 12dp 内缩,盒子贴紧后字形间距仍有 ~26dp。
-                // 8dp 时顶栏一排放不下:实测 1080px(392.7dp)屏、两侧各 24dp 后只剩 948px,
-                // 而 收起+投播+待播+倍速+睡眠+收藏+更多 需要 ~1130px —— 多出来的 ⋮ 被挤出屏幕,
-                // 投播键也就贴到了收起键边上。见本轮"⋮ 移出顶栏"的改动。
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                // 顶栏这一排的间距按**可见边缘**算,不按布局盒算。
+                //
+                // 原先写的是 spacedBy(2.dp):图标按钮是 48dp 盒、24dp 字形自带 12dp 内缩,
+                // 而芯片与圆形收藏在布局上贴边 —— 结果可见间距变成 30 / 16 / 2 / 2dp 四种
+                // (1080px 真机实测),芯片几乎粘在一起,读起来像排布坏了。
+                // 现在:两颗图标按钮用 38dp 盒(见 `BarIconButton`,墨迹两侧合计约 7.4~9.6dp),
+                // 芯片与收藏外面补 8dp 透明边,相邻可见间距落在 16~17.8dp 这一档(真机实测)。
+                // 改数值时保持"墨迹/背景到布局边的空当之和相等"即可,
+                // 单改某一对的间距会马上退回四种形状。
+                horizontalArrangement = Arrangement.spacedBy(0.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = {
-                    val needPerm = Build.VERSION.SDK_INT >= 37 &&
-                        ContextCompat.checkSelfPermission(ctx.applicationContext, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
-                        PackageManager.PERMISSION_GRANTED
-                    if (needPerm) castPermLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
-                    else castOpen = true
-                }) {
-                    Icon(
-                        if (isCasting) Icons.Rounded.CastConnected else Icons.Rounded.Cast,
-                        contentDescription = stringResource(R.string.a11y_cast),
-                        tint = if (isCasting) MaterialTheme.colorScheme.primary
-                        else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                IconButton(onClick = onOpenQueue) {
-                    Icon(
-                        Icons.AutoMirrored.Rounded.QueueMusic,
-                        contentDescription = stringResource(R.string.a11y_queue),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+                BarIconButton(
+                    icon = if (isCasting) Icons.Rounded.CastConnected else Icons.Rounded.Cast,
+                    description = stringResource(R.string.a11y_cast),
+                    tint = if (isCasting) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    onClick = {
+                        val needPerm = Build.VERSION.SDK_INT >= 37 &&
+                            ContextCompat.checkSelfPermission(ctx.applicationContext, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
+                            PackageManager.PERMISSION_GRANTED
+                        if (needPerm) castPermLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+                        else castOpen = true
+                    }
+                )
+                BarIconButton(
+                    icon = Icons.AutoMirrored.Rounded.QueueMusic,
+                    description = stringResource(R.string.a11y_queue),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    onClick = onOpenQueue
+                )
                 // 直播不给倍速:它是线性源,倍速只会让声音脱离直播边缘;鸿蒙那边的
                 // AVPlayer 更是直接拒绝(`Operate Not Permit: not support rate`,见 H239),
                 // 三端一起藏掉,免得同一颗控件在一端能按、一端按了没反应。
-                if (!liveNoTimeline) SpeedChip(speed = speed)
-                SleepChip(remainingMs = sleepRemaining, endOfEpisode = sleepEnd)
-                FavoriteButton(
-                    favorited = isFavorite,
-                    onToggle = { container.favoriteStore.toggle(episode) }
-                )
+                if (!liveNoTimeline) {
+                    Box(Modifier.padding(horizontal = BarEdgeGap)) { SpeedChip(speed = speed) }
+                }
+                Box(Modifier.padding(horizontal = BarEdgeGap)) {
+                    SleepChip(remainingMs = sleepRemaining, endOfEpisode = sleepEnd)
+                }
+                Box(Modifier.padding(horizontal = BarEdgeGap)) {
+                    FavoriteButton(
+                        favorited = isFavorite,
+                        onToggle = { container.favoriteStore.toggle(episode) }
+                    )
+                }
             }
         }
 
@@ -727,6 +736,44 @@ private fun PagerDots(current: Int, count: Int) {
                     )
             )
         }
+    }
+}
+
+/**
+ * 顶栏里芯片与圆形收藏两侧的**透明边**,用来把「布局盒间距」换成「可见边缘间距」。
+ *
+ * 图标按钮是 38dp 盒 + 24dp 字形,字形两侧合计约 7.4~9.6dp(视图标墨迹宽窄);芯片与收藏的背景
+ * 贴着自己的布局边,补上这 8dp 之后,相邻可见边缘的距离落在 16~17.8dp 这一档(真机实测)。
+ * 调用处解释为什么不能用 `Arrangement.spacedBy` 来做这件事(会变成四种间距)。
+ */
+private val BarEdgeGap = 8.dp
+
+/**
+ * 顶栏图标键:38dp 命中盒 + 24dp 字形。
+ *
+ * 为什么是 38 而不是 48/40:芯片与收藏的背景贴着自己的布局边,图标字形的**墨迹**比 24dp 盒窄
+ * (实测投播 22.2dp、队列 18.9dp),墨迹两侧的空当加起来约 7.9+9.6dp。盒子取 38dp 时,
+ * 「投播→队列」的可见间距 ≈ 17.5dp,与「队列→芯片」的 17.6、「芯片→芯片」的 16.4 落在同一档;
+ * 取 48/40 时这一对会宽出 3~4dp,又是肉眼能看出的不齐。
+ *
+ * 为什么不用 `IconButton`:Material3 的 IconButton 内部套了 `minimumInteractiveComponentSize()`,
+ * 布局盒会被强制撑到 48dp,`Modifier.size(38.dp)` 压不下去 —— 间距会退回四种形状。
+ */
+@Composable
+private fun BarIconButton(
+    icon: ImageVector,
+    description: String,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .size(38.dp)
+            .clip(CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(icon, contentDescription = description, tint = tint, modifier = Modifier.size(24.dp))
     }
 }
 

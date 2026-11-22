@@ -113,6 +113,20 @@
 - **iOS / macOS 不需要改**:两端播放页顶栏本来只有三项(关闭 / 正在播放 / 投放),没有 ⋮;
   动作行本来就带文字排在播放键下方。iOS 本轮在模拟器上截图核对过顶栏,macOS 读代码核对(两端同形)。
 
+#### 补:顶栏六颗的可见间距拉齐(Android,2026-11-22)
+
+- 用户反馈:顶栏按钮间距不一样、不协调。**量的是墨迹边缘,不是布局盒** —— 上一版把
+  48dp 的 `IconButton`(24dp 字形,自带 12dp 内缩)和贴边芯片混在 `spacedBy(2.dp)` 里,
+  实测可见间距是 **30 / 16 / 2 / 2dp**:芯片那两对几乎粘死,与图标那对差出一个字宽。
+- 改法:图标按钮换成自绘 `BarIconButton`(38dp 命中盒 + 24dp 字形,墨迹两侧合计约 8~9.6dp),
+  芯片与圆形收藏外补 8dp 透明边,Row 间距归零 —— **让"墨迹/背景到布局边的空当"相等**,
+  可见间距就落在同一档。不能用 `IconButton` 改 `.size()`:它内部强制
+  `minimumInteractiveComponentSize()`,48dp 布局盒压不下去。
+- 真机读数(Pixel 3,1080px / 2.75 px·dp⁻¹):六颗内部四道可见间距 **17.8 / 16.7 / 16.0 / 16.0dp**
+  (此前 30 / 16 / 2 / 2),收起键与投播键之间仍是一整排的首尾留白(31.6dp),属分组间隔、不参与拉齐;
+  与鸿蒙同口径(鸿蒙 `Row({ space: 14 })` 实测 13.8~14.8vp)。debug 与 release 包各量一次,读数相同。
+  单测 **119 条 0 失败**、`compileReleaseKotlin` exit 0。
+
 ### 工程要点与验收边界
 
 - **已验**:Android `:app:testDebugUnitTest` **119 条 0 失败**(其中投播 8 条)、`:app:compileReleaseKotlin` exit 0;
@@ -147,18 +161,23 @@
 - 设备描述解析从 `XmlPullParser` 换成 **DOM**:JVM 单测里 `XmlPullParserFactory` 是 android.jar 的 stub,
   会把解析静默打回 null,单测会误判成"没有设备"。
 
-### 四端 1.0.9 产物(2026-11-22 16:11–17:16;Android 于 16:55、鸿蒙于 17:15 因顶栏改动重打,`-newer` 全部 0 命中)
+### 四端 1.0.9 产物(2026-11-22 16:11–17:29;Android 于 16:55 因顶栏改动、17:29 因间距拉齐(含注释同步)重打,鸿蒙于 17:15 因顶栏改动重打,`-newer` 全部 0 命中)
 
-- **Android** `android/dist/reverb.apk` 270,294,292 B @16:55:57,sha256 `90b5dd19…79d0`;
+- **Android** `android/dist/reverb.apk` 270,294,292 B @17:29:15,sha256 `e5ba9a07…0bec`;
   `aapt2 dump badging` = versionCode **10** / versionName **1.0.9**;解包按硬规矩 1 五项为 **4 / 1 / 1 / 13 / 2**;
   权限 14 项,关键三项(RECORD_AUDIO / REQUEST_INSTALL_PACKAGES / ACCESS_LOCAL_NETWORK)全在;
   证书 DN 为 **CN=Yuyin Reverb**(`build-release.sh` 的调试证书闸通过)。
-  mapping 50,031,543 B 与包同批(sha256 `3d894650…a0d`);顶栏改动前那份 vc10 包与 mapping
-  (270,294,292 B,sha256 `d9d7642f…0871` / `ed84f598…df2d`)已按 H204 归档至
-  `dist/_archive/reverb-1.0.9-vc10-20261122-1655-preTopBarFix.sha256`;在架 1.0.8 的 mapping
-  (49,062,344 B,sha256 `69982b15…8015`)已归档至 `dist/_backup-1.0.8-mapping-published-20261122/`。
+  mapping 50,015,204 B 与包同批(sha256 `54f141e9…e94e`;只改注释那次重打不改变 mapping,哈希与 17:26 相同);
+  17:26 那份(注释同步前)与 16:55 那份(间距拉齐前)按 H204 分别归档至
+  `dist/_archive/reverb-1.0.9-vc10-20261122-1726-preCommentSync.sha256`
+  (270,294,292 B,sha256 `e318623e…81af` / `54f141e9…e94e`)与
+  `…-1655-preSpacingFix.sha256`(270,294,292 B,sha256 `90b5dd19…79d0` / `3d894650…a0d`);
+  更早的顶栏改造前那份(sha256 `d9d7642f…0871` / `ed84f598…df2d`)归档在 `…-1655-preTopBarFix.sha256`;
+  在架 1.0.8 的 mapping(49,062,344 B,sha256 `69982b15…8015`)已归档至
+  `dist/_backup-1.0.8-mapping-published-20261122/`。
   新包资源里可检出 `action_clip` / `action_stamp` 两个新键 —— 这是它区别于 preTopBarFix 那份的判据
   (两者字节数恰好相同,R8 混淆后的 `PlayerAction` 符号名已不可 grep)。
+  真机覆盖安装后顶栏读数 17.8 / 16.7 / 16.0 / 16.0dp,与 debug 包一致。
 - **鸿蒙** `harmony/dist/reverb.app` 182,044,983 B + `reverb-symbol.zip` 14,969,124 B @17:15:57,
   sha256 `c9025023…fbd9` / `006051ee…6d36`;嵌套 `entry-default.hap` 解包 **2 / 3 / 1**、
   `pack.info` = **1000009 / 1.0.9**;`debugKey` 断言无命中。`resources.index` 里可检出 `action_stamp`
