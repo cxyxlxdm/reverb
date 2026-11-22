@@ -485,6 +485,14 @@
     <string name="update_action_install">Instalar ahora</string>
     <string name="update_action_later">Más tarde</string>
     <string name="update_action_retry">Reintentar</string>
+    <string name="update_action_background">Descargar en segundo plano</string>
+    <string name="update_action_cancel">Cancelar descarga</string>
+    <string name="update_notif_channel_name">Descarga de la actualización</string>
+    <string name="update_notif_channel_desc">Muestra el progreso mientras el paquete se descarga en segundo plano</string>
+    <string name="update_notif_downloading_title">Descargando la actualización</string>
+    <string name="update_notif_done_title">Actualización descargada</string>
+    <string name="update_notif_done_text">Pulsa para abrir Reverb e instalarla</string>
+    <string name="update_notif_failed_text">La descarga no terminó. Pulsa para ver los detalles.</string>
     <string name="update_checking">Comprobando…</string>
     <string name="update_is_latest">Ya tienes la versión %1$s</string>
     <string name="update_check_failed">No se pudo comprobar. Revisa la conexión y vuelve a intentarlo.</string>

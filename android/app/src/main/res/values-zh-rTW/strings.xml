@@ -485,6 +485,14 @@
     <string name="update_action_install">立即安裝</string>
     <string name="update_action_later">以後再說</string>
     <string name="update_action_retry">重試</string>
+    <string name="update_action_background">背景下載</string>
+    <string name="update_action_cancel">取消下載</string>
+    <string name="update_notif_channel_name">更新下載</string>
+    <string name="update_notif_channel_desc">應用內更新在背景下載安裝包時顯示進度</string>
+    <string name="update_notif_downloading_title">正在下載更新</string>
+    <string name="update_notif_done_title">更新已下載完成</string>
+    <string name="update_notif_done_text">點按開啟餘音並安裝新版本</string>
+    <string name="update_notif_failed_text">下載沒有成功，點按查看詳情</string>
     <string name="update_checking">正在檢查…</string>
     <string name="update_is_latest">已是最新版本 %1$s</string>
     <string name="update_check_failed">檢查失敗，看看網路之後再試一次</string>

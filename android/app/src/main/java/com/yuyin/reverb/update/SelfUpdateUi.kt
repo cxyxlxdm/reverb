@@ -1,5 +1,8 @@
 package com.yuyin.reverb.update
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -7,8 +10,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.yuyin.reverb.R
 import kotlin.math.roundToInt
@@ -20,10 +25,14 @@ import kotlin.math.roundToInt
  *
  * 形态选 `AlertDialog`(与设置页那几条二次确认同款),因为它是**一次决定**:
  * 下 / 不下、装 / 不装,不需要页面、也不需要常驻入口。
+ *
+ * ⚠️ 下载中那一个例外:它只是进度的可见入口,**不是**下载的容器 ——
+ * 点「后台下载」收起后下载继续(前台服务 + 通知栏进度),再在设置页那一行点一下可以重新打开。
  */
 @Composable
 fun SelfUpdateHost() {
     val state by SelfUpdate.state.collectAsStateWithLifecycle()
+    val dialogShown by SelfUpdate.dialogShown.collectAsStateWithLifecycle()
     val context = LocalContext.current
     when (val s = state) {
         // 这三条不是弹窗:它们是设置页「检查更新」那一行的读数(检查中 / 已最新 / 没问到)。
@@ -38,7 +47,7 @@ fun SelfUpdateHost() {
             title = { Text(updateTitle(s.rel)) },
             text = { Text(stringResource(R.string.update_ask_cellular, sizeText(s.rel.size))) },
             confirmButton = {
-                TextButton(onClick = { SelfUpdate.beginDownload(s.rel) }) {
+                TextButton(onClick = { SelfUpdate.beginDownload(context, s.rel) }) {
                     Text(stringResource(R.string.update_action_cellular))
                 }
             },
@@ -49,17 +58,29 @@ fun SelfUpdateHost() {
             }
         )
 
-        is SelfUpdate.UpdateState.Downloading -> AlertDialog(
-            // 下载中不给"点外部就取消":误触一次就白下几十 MB,只有明确按「以后再说」才停
-            onDismissRequest = { },
+        // 下载中:收起弹窗不等于停止下载(见 [SelfUpdate.dialogShown])。点外部也只收起、不取消 ——
+        // 下载在通知栏与服务里继续,想停只有「取消下载」那一个明确动作。
+        is SelfUpdate.UpdateState.Downloading -> if (dialogShown) AlertDialog(
+            onDismissRequest = { SelfUpdate.setDialogVisible(false) },
             title = { Text(updateTitle(s.rel)) },
             text = {
-                Text(stringResource(R.string.update_downloading, s.percent))
-                LinearProgressIndicator(progress = { s.percent / 100f })
+                // 文案与进度条之间留出间距:两行紧贴时读起来像同一句话的折行
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.update_downloading, s.percent))
+                    LinearProgressIndicator(
+                        progress = { s.percent / 100f },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = {
+                TextButton(onClick = { SelfUpdate.setDialogVisible(false) }) {
+                    Text(stringResource(R.string.update_action_background))
+                }
+            },
+            dismissButton = {
                 TextButton(onClick = { SelfUpdate.dismiss(s.rel) }) {
-                    Text(stringResource(R.string.update_action_later))
+                    Text(stringResource(R.string.update_action_cancel))
                 }
             }
         )
@@ -95,7 +116,7 @@ fun SelfUpdateHost() {
             title = { Text(stringResource(R.string.update_failed_title)) },
             text = { Text(stringResource(R.string.update_failed_text)) },
             confirmButton = {
-                TextButton(onClick = { SelfUpdate.beginDownload(s.rel) }) {
+                TextButton(onClick = { SelfUpdate.beginDownload(context, s.rel) }) {
                     Text(stringResource(R.string.update_action_retry))
                 }
             },

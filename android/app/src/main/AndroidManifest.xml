@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <!-- 应用内更新的安装包下载跑在前台服务里(200 MB 级,要跨界面与锁屏继续)。
+         Android 14+ 前台服务按类型授权,dataSync 必须单独声明这一条。 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <!-- 局域网同步的组播接收(普通权限,无运行时弹窗):2026-11-13 实测,Wi-Fi 驱动在没有
@@ -84,6 +87,13 @@
                 <action android:name="androidx.media3.session.MediaSessionService" />
             </intent-filter>
         </service>
+
+        <!-- 应用内更新的安装包下载(见 update/UpdateDownloadService.kt)。
+             不导出:唯一入口是本应用自己的 startForegroundService。 -->
+        <service
+            android:name=".update.UpdateDownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- 「继续收听」桌面小组件。导出给系统(APPWIDGET_UPDATE 由 launcher 广播),
              组件本身只读本地快照、不初始化网络组件(见 widget/WidgetState 的注释)。 -->

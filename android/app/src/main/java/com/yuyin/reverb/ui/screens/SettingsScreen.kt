@@ -433,7 +433,12 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 trailing = if (updateState is SelfUpdate.UpdateState.Checking) {
                     { CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(16.dp)) }
                 } else null,
-                onClick = { SelfUpdate.checkNow(context) }
+                onClick = {
+                    // 下载收进通知栏之后,这一行也是"把进度弹窗再叫出来"的入口:
+                    // 不然收起弹窗后又想取消,只剩通知栏那一条动作为可走的路
+                    if (updateState is SelfUpdate.UpdateState.Downloading) SelfUpdate.setDialogVisible(true)
+                    else SelfUpdate.checkNow(context)
+                }
             )
             Spacer(Modifier.height(24.dp))
         }

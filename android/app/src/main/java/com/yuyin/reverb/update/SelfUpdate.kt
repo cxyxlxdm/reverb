@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Build
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.util.Logger
@@ -103,9 +104,21 @@ object SelfUpdate {
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val state: StateFlow<UpdateState> = _state
 
+    /// 下载中间弹窗还该不该显示。下载本身由 [UpdateDownloadService] 在通知栏里跑,
+    /// 所以「用户在干别的事」与「下载在不在跑」是两件事 —— 只用一个 [UpdateState] 表达
+    /// 会把「收起弹窗」误当成「取消下载」。
+    private val _dialogShown = MutableStateFlow(true)
+    val dialogShown: StateFlow<Boolean> = _dialogShown
+
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val started = AtomicBoolean(false)
     private var downloadJob: Job? = null
+
+    /// 交给 [UpdateDownloadService] 的那一份发布信息(同一进程内的交接,不落盘)。
+    /// 服务被系统以 `START_NOT_STICKY` 拉起时读不到它就直接退出 —— 重来一次要走正常的检测路径。
+    @Volatile
+    internal var pendingRelease: Release? = null
+        private set
 
     private lateinit var appCtx: Context
     private lateinit var prefs: SharedPreferences
@@ -192,7 +205,7 @@ object SelfUpdate {
             _state.value = UpdateState.Ready(target, file)
             return
         }
-        if (metered()) _state.value = UpdateState.AskCellular(target) else beginDownload(target)
+        if (metered()) _state.value = UpdateState.AskCellular(target) else beginDownload(appCtx, target)
     }
 
     /**
@@ -277,13 +290,58 @@ object SelfUpdate {
         return cm?.isActiveNetworkMetered == true
     }
 
-    /** 用户点头(或直接就在 Wi-Fi)之后开下。已在下就忽略重复点击。 */
-    fun beginDownload(rel: Release) {
-        if (downloadJob?.isActive == true) return
+    /**
+     * 用户点头(或直接就在 Wi-Fi)之后开下。已在下就忽略重复点击。
+     *
+     * 下载跑在**前台服务**里而不是这个进程的协程里:安装包已经 200 MB 级,用户收起弹窗
+     * 按提示在通知栏看进度、继续听播客或锁屏,进程都必须活着 —— 普通协程会随进程一起被回收。
+     * 弹窗与下载因此解耦:[dialogShown] 管前者,[UpdateState.Downloading] 管后者。
+     */
+    fun beginDownload(context: Context, rel: Release) {
+        if (downloadJob?.isActive == true || _state.value is UpdateState.Downloading) return
+        pendingRelease = rel
+        _dialogShown.value = true
         _state.value = UpdateState.Downloading(rel, 0)
-        // 把这一轮的 scope 传下去:`download` 里全是阻塞式 IO,协程不会自己在那里检查取消,
-        // 必须显式拿 [ensureActive] 挡一道(否则点了「以后再说」之后它还会把 60 MB 下完)。
-        downloadJob = scope.launch { download(rel, this) }
+        // 自动那一轮(Wi-Fi + 有新版)是从冷启动的检测协程里进来的,而用户可能已经在那一刻
+        // 把应用切走了 —— Android 12 起从后台启动前台服务会被直接拒绝。被拒时退回进程内下载:
+        // 进程活着就照样下完,被回收就下次启动重来(这条路径在本轮改造前本来就是这么走的)。
+        val started = runCatching {
+            ContextCompat.startForegroundService(
+                context, Intent(context, UpdateDownloadService::class.java)
+            )
+        }.isSuccess
+        if (!started) {
+            Logger.w(TAG, "update foreground service rejected, fallback in-process")
+            downloadJob = scope.launch { download(rel, this) }
+        }
+    }
+
+    /**
+     * 服务那一侧真正开跑的地方。`download` 里全是阻塞式 IO,协程不会自己在那里检查取消,
+     * 必须显式拿 [ensureActive] 挡一道(否则点了「取消下载」之后它还会把整包下完) ——
+     * 所以把服务的 scope 传进去,取消由服务/用户动作落在协程上。
+     */
+    internal fun runServiceDownload(rel: Release, serviceScope: CoroutineScope): Job {
+        val job = serviceScope.launch { download(rel, this) }
+        downloadJob = job
+        return job
+    }
+
+    /**
+     * 服务被系统收回(前台服务超时之类)而下载还没收尾:留一个可重试的落点,
+     * 别把界面钉在 `Downloading` 上 —— 那会连设置页那一行也一直显示"正在下载"。
+     */
+    internal fun markInterrupted(rel: Release) {
+        if (_state.value is UpdateState.Downloading) {
+            Logger.w(TAG, "update download interrupted by service stop tag=${rel.tag}")
+            _dialogShown.value = true
+            _state.value = UpdateState.Failed(rel)
+        }
+    }
+
+    /** 收起 / 重新打开下载进度弹窗。下载本身不受影响。 */
+    fun setDialogVisible(visible: Boolean) {
+        _dialogShown.value = visible
     }
 
     /**
@@ -315,12 +373,16 @@ object SelfUpdate {
                 false
             }
             if (ok) {
+                // 收尾一定要把弹窗放出来:用户可能正收起着在干别的事,而"能装了"这件事
+                // 需要一个能点的落点(通知栏里那条只是提示,安装仍由弹窗交给系统安装器)。
+                _dialogShown.value = true
                 _state.value = UpdateState.Ready(rel, target)
                 return
             }
             runCatching { tmp.delete() }
         }
         Logger.w(TAG, "update download all candidates failed tag=${rel.tag}")
+        _dialogShown.value = true
         _state.value = UpdateState.Failed(rel)
     }
 
@@ -433,6 +495,8 @@ object SelfUpdate {
             }
             from.startActivity(intent)
             Logger.i(TAG, "update handoff to installer tag=${rel.tag}")
+            // 系统安装器已经接过这一棒,通知栏那条"下载完成"再留着只会多一个过期入口
+            UpdateNotifications.cancel(appCtx)
             InstallHandoff.Started
         } catch (e: Exception) {
             // 没有能处理 package-archive 的组件(极少见,但被裁剪过的 ROM 真有)
@@ -465,13 +529,20 @@ object SelfUpdate {
     fun dismiss(rel: Release) {
         downloadJob?.cancel()
         downloadJob = null
-        runCatching { File(File(appCtx.cacheDir, DIR), "${rel.fileName()}.part").delete() }
+        if (::appCtx.isInitialized) {
+            runCatching { appCtx.stopService(Intent(appCtx, UpdateDownloadService::class.java)) }
+            runCatching { File(File(appCtx.cacheDir, DIR), "${rel.fileName()}.part").delete() }
+        }
         prefs.edit().putString(KEY_SKIPPED, rel.muteKey()).apply()
+        if (::appCtx.isInitialized) UpdateNotifications.cancel(appCtx)
+        _dialogShown.value = true
         _state.value = UpdateState.Idle
     }
 
     /** 只是把弹窗收起来(没有新版本可跳时不记跳过)。 */
     fun reset() {
+        if (::appCtx.isInitialized) UpdateNotifications.cancel(appCtx)
+        _dialogShown.value = true
         _state.value = UpdateState.Idle
     }
 
