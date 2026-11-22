@@ -11,6 +11,8 @@ import Foundation
 ///  ③ 带 `icy-` 响应头 —— ICY 协议自己的身份,有的电台 Content-Type 写得很随意,这条兜住。
 /// `text/html` 一律拒绝:粘一个普通网页或一条失效的 RSS 地址,不该被当成直播播出去。
 ///
+/// `isPlayable` 与 `resolve` 共用同一套探测与判据,供在线目录在展示前筛掉连不上的台。
+///
 /// 返回的 `Episode` 是**合成出来的**,`isLive = true` 是它唯一的特殊之处 ——
 /// 播放侧据此关掉历史/缓存/收听时长/断点续播/播完续播(见 `PlayerController` 里以 isLive 为闸的几处)。
 enum LiveStream {
@@ -21,6 +23,8 @@ enum LiveStream {
         "audio/x-mpegurl"
     ]
 
+    private static let defaultTimeout: TimeInterval = 8
+
     /// 只用来给界面做"这可能是直播"的廉价预判(不发请求);真正的判据在 `resolve` 的探测。
     static func looksLikeStream(_ raw: String) -> Bool {
         guard let u = URL(string: raw.trimmingCharacters(in: .whitespacesAndNewlines)) else { return false }
@@ -28,46 +32,22 @@ enum LiveStream {
     }
 
     static func resolve(_ raw: String) async -> Episode? {
-        let url = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let u = URL(string: url),
-              let scheme = u.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
-        var req = URLRequest(url: u)
-        req.timeoutInterval = 8
-        req.setValue("Reverb/1.0 (macOS podcast client)", forHTTPHeaderField: "User-Agent")
-        // `bytes=0-0` 只要一个字节:能拿到响应头就够判断,不必把整路音频拖下来。
-        // `Icy-MetaData: 1` 让支持 ICY 的服务器把 `icy-*` 头带回来(尤其是 icy-name,拿它当标题)。
-        req.setValue("bytes=0-0", forHTTPHeaderField: "Range")
-        req.setValue("1", forHTTPHeaderField: "Icy-MetaData")
-
-        let cfg = URLSessionConfiguration.ephemeral
-        cfg.timeoutIntervalForRequest = 8
-        let probe = LiveHeadProbe()
-        let session = URLSession(configuration: cfg, delegate: probe, delegateQueue: nil)
-        defer { session.invalidateAndCancel() }
-        // ⚠️ 必须 `dataTask(with:)` 驱动(与 `HTTP.probeCode` 同一条 H225 教训):
-        // `session.data(for:)` 建的任务自带 completion handler,URLSession 就不再回调
-        // delegate 的 `didReceive response` —— 响应头永远拿不到,探测恒失败。
-        session.dataTask(with: req).resume()
-        let head = await probe.wait()
-
+        guard let (u, head) = await probeHead(raw, timeout: defaultTimeout) else { return nil }
         let type = head.contentType.lowercased()
-        let isHls = hlsTypes.contains(type) || u.path.lowercased().hasSuffix(".m3u8")
-        let isAudio = type.hasPrefix("audio/") || type == "application/ogg"
-        // 416 = 服务器认 Range 但一个字节也取不到(空流/地址尾正好在末尾),响应头仍然有效
-        let okStatus = (200...299).contains(head.code) || head.code == 416
-        guard okStatus, isHls || isAudio || head.hasIcy else {
+        guard isStreamLike(u, head) else {
             Log.i("Live", "不是直播流 code=\(head.code) type=\(type.isEmpty ? "-" : type) icy=\(head.hasIcy) host=\(u.host ?? "-")")
             return nil
         }
+        let isHls = hlsTypes.contains(type) || u.path.lowercased().hasSuffix(".m3u8")
         let name = head.icyName.trimmingCharacters(in: .whitespacesAndNewlines)
         let host = u.host ?? ""
         Log.i("Live", "直播流确认 type=\(type) icy=\(head.hasIcy) hls=\(isHls) host=\(host) name=\(name)")
         return Episode(
             // id 带上地址:同一路流的两次粘贴视为同一集,重复点不会在队列里堆两条
-            id: "live:\(url)",
+            id: "live:\(raw.trimmingCharacters(in: .whitespacesAndNewlines))",
             title: name.isEmpty ? host : name,
             description: "",
-            audioUrl: url,
+            audioUrl: raw.trimmingCharacters(in: .whitespacesAndNewlines),
             artworkUrl: "",
             // 有台名时把主机名放到副标题,不然两行写的是同一句话
             podcastTitle: name.isEmpty ? "" : host,
@@ -76,6 +56,51 @@ enum LiveStream {
             feedUrl: "",
             isLive: true
         )
+    }
+
+    /// 在线目录筛选用:判据与 `resolve` 完全一致,但不构造 Episode。
+    ///
+    /// 超时默认 5 s:一整页要探 20~30 条,用 `resolve` 的 8 s,只要有一条黑洞地址
+    /// (不回包也拒连)整页就多等一轮。2026-11-22 实测中国区热门 30 条里 7 条连不上,
+    /// 它们大多在几秒内失败,5 s 足够分开「慢但活着」与「根本连不上」。
+    static func isPlayable(_ raw: String, timeout: TimeInterval = 5) async -> Bool {
+        guard let (u, head) = await probeHead(raw, timeout: timeout) else { return false }
+        return isStreamLike(u, head)
+    }
+
+    private static func isStreamLike(_ u: URL, _ head: LiveHeadProbe.Head) -> Bool {
+        let type = head.contentType.lowercased()
+        let isHls = hlsTypes.contains(type) || u.path.lowercased().hasSuffix(".m3u8")
+        let isAudio = type.hasPrefix("audio/") || type == "application/ogg"
+        // 416 = 服务器认 Range 但一个字节也取不到(空流/地址尾正好在末尾),响应头仍然有效
+        let okStatus = (200...299).contains(head.code) || head.code == 416
+        return okStatus && (isHls || isAudio || head.hasIcy)
+    }
+
+    /// 只取响应头。超时同时设在 URLRequest 与 ephemeral session 上:
+    /// 目录探测把单次上限压到 5 s,共享的 `URLSession.shared` 给不了这个粒度。
+    private static func probeHead(_ raw: String, timeout: TimeInterval) async -> (URL, LiveHeadProbe.Head)? {
+        let url = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let u = URL(string: url),
+              let scheme = u.scheme?.lowercased(), scheme == "http" || scheme == "https" else { return nil }
+        var req = URLRequest(url: u)
+        req.timeoutInterval = timeout
+        req.setValue("Reverb/1.0 (macOS podcast client)", forHTTPHeaderField: "User-Agent")
+        // `bytes=0-0` 只要一个字节:能拿到响应头就够判断,不必把整路音频拖下来。
+        // `Icy-MetaData: 1` 让支持 ICY 的服务器把 `icy-*` 头带回来(尤其是 icy-name,拿它当标题)。
+        req.setValue("bytes=0-0", forHTTPHeaderField: "Range")
+        req.setValue("1", forHTTPHeaderField: "Icy-MetaData")
+
+        let cfg = URLSessionConfiguration.ephemeral
+        cfg.timeoutIntervalForRequest = timeout
+        let probe = LiveHeadProbe()
+        let session = URLSession(configuration: cfg, delegate: probe, delegateQueue: nil)
+        defer { session.invalidateAndCancel() }
+        // ⚠️ 必须 `dataTask(with:)` 驱动(与 `HTTP.probeCode` 同一条 H225 教训):
+        // `session.data(for:)` 建的任务自带 completion handler,URLSession 就不再回调
+        // delegate 的 `didReceive response` —— 响应头永远拿不到,探测恒失败。
+        session.dataTask(with: req).resume()
+        return (u, await probe.wait())
     }
 }
 

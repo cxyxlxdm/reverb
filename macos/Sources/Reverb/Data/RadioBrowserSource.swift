@@ -3,8 +3,11 @@ import Foundation
 /// 在线电台目录:radio-browser.info(公共社区数据库,数据 CC0,无需 Key)。
 ///
 /// 这一路只解决「找得到」:用户搜一个台名、或先看一屏热门,点「+」收藏进本机账本。
-/// 播放与收藏之后的地址校验仍走 `LiveStream.resolve` 的探针 —— 目录里的 `lastcheckok`
-/// 是别人最近一次的结果,不是此刻的保证。
+///
+/// **展示前逐条探活**:目录里的 `lastcheckok` 是别人最近一次的结果,不是此刻的保证 ——
+/// 2026-11-22 实测中国区热门 30 条里有 7 条根本连不上,列出来就是一个点了没反应的按钮。
+/// 所以这里对每条结果发一次只取响应头的请求(与粘贴直播流同一判据,见 `LiveStream.isPlayable`),
+/// 连不上或不是音频的不返回。5 s 上限、8 路并发;日志只记条数,不记这些第三方地址。
 ///
 /// 两个镜像按序尝试:`de1` 与 `de2`(2026-11-22 本机实测可达)。`at1`/`nl1` 当时不可达,
 /// 不放进表里 —— 放进去只会让每次失败多等一轮超时。
@@ -53,8 +56,9 @@ enum RadioBrowserSource {
                     Log.w("RadioDir", "mirror http \(http.statusCode) host=\(host)")
                     continue
                 }
-                let list = parse(data)
-                Log.i("RadioDir", "ok host=\(host) n=\(list.count)")
+                let parsed = parse(data)
+                let list = await filterPlayable(parsed)
+                Log.i("RadioDir", "ok host=\(host) n=\(list.count) probed=\(parsed.count)")
                 return list
             } catch {
                 Log.w("RadioDir", "mirror failed host=\(host) \(type(of: error))")
@@ -62,6 +66,35 @@ enum RadioBrowserSource {
         }
         return []
     }
+
+    /// 逐条探活,顺序按原列表保持。按批并发:对端是几十个互不相干的小站,一次全发没有收益。
+    /// `withTaskGroup` 的返回字典按批内下标取结果,批次顺序不会打乱列表。
+    private static func filterPlayable(_ list: [Station]) async -> [Station] {
+        guard !list.isEmpty else { return [] }
+        var kept: [Station] = []
+        var start = 0
+        while start < list.count {
+            let end = min(start + probeConcurrency, list.count)
+            let chunk = Array(list[start..<end])
+            let flags = await withTaskGroup(of: (Int, Bool).self) { group -> [Int: Bool] in
+                for (i, s) in chunk.enumerated() {
+                    group.addTask { (i, await LiveStream.isPlayable(s.url, timeout: probeTimeout)) }
+                }
+                var map: [Int: Bool] = [:]
+                for await (i, ok) in group { map[i] = ok }
+                return map
+            }
+            for (i, s) in chunk.enumerated() where flags[i] == true { kept.append(s) }
+            start = end
+        }
+        return kept
+    }
+
+    /// 一批同时探多少条。8 是「20 条两批、30 条四批」与对端礼节的折中。
+    private static let probeConcurrency = 8
+
+    /// 单条探活上限。活着的台实测不到 1 s;到这个数还没回头的基本就是黑洞地址。
+    private static let probeTimeout: TimeInterval = 5
 
     static func endpoint(host: String, params: [(String, String)]) -> URL? {
         var c = URLComponents()
