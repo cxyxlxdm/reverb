@@ -1,5 +1,3 @@
-import type common from '@ohos.app.ability.common';
-import util from '@ohos.util';
 import { Station, StationMeta } from '../model/Station';
 import { JsonFile } from './JsonFile';
 import { J } from '../net/Http';
@@ -50,22 +48,17 @@ export class StationJson {
  * 进 `SyncTombstones`,而那会把同步协议与面板一起扩一块;电台是"点选播放"的快捷方式,
  * 不像订阅那样两条设备各留一份会打架。这条边界是**有意**的,不是漏接。
  *
- * 删除即删除,不留墓碑:本地没有第二条路径会把它带回来(目录与精选是两个只读来源,
- * 只有用户点「加入」才会复制进本账本)。
+ * 删除即删除,不留墓碑:本地没有第二条路径会把它带回来 —— 随包精选与在线目录都是只读来源,
+ * 只有用户点「加入」才会复制进本账本。
+ *
+ * ⚠️ 2026-11-24 起鸿蒙端**不再有随包精选与「加入」入口**(提审口径:直播电台只保留搜索,
+ * 见 `view/RadioPage.ets` 头注),本账本只剩读写与备份并集三条路。类本身保留,是因为
+ * 备份/恢复的七键契约仍是四端互通的一部分。
  */
 @Observed
 export class StationStore {
   stations: Station[] = [];
   private static FILE = 'stations.json';
-  private static SEED_FILE = 'radio_stations.json';
-  private ctx: common.UIAbilityContext | null = null;
-  private seedLoaded: boolean = false;
-  private seeds: Station[] = [];
-
-  /// 随包精选要读 rawfile,所以 boot 里先记下上下文(不读文件,首次进电台页才装载)。
-  attach(ctx: common.UIAbilityContext): void {
-    this.ctx = ctx;
-  }
 
   load(): void {
     const arr = JsonFile.readArray(StationStore.FILE);
@@ -141,47 +134,5 @@ export class StationStore {
       this.persist();
     }
     return added;
-  }
-
-  /**
-   * 随包精选(**只读**,不进本账本)。首次调用时从 rawfile 读 `radio_stations.json`;
-   * 文件缺失或格式变化一律退化为空,不影响手动添加与在线目录。
-   *
-   * 合规口径:这份清单随包进商店时是"内置目录"的一种。若某个渠道要求包里不含目录内容,
-   * 按 `shared/radio/sync.sh` 头注把该端拷进去的那份删掉即可 —— 代码不会因此报错。
-   */
-  seedStations(): Station[] {
-    if (this.seedLoaded) return this.seeds;
-    this.seedLoaded = true;
-    const ctx = this.ctx;
-    if (ctx === null) return this.seeds;
-    try {
-      const bytes = ctx.resourceManager.getRawFileContentSync(StationStore.SEED_FILE);
-      const text = new util.TextDecoder('utf-8').decodeToString(bytes);
-      const root = JSON.parse(text) as Record<string, Object>;
-      const arr = J.arr(root, 'stations');
-      const out: Station[] = [];
-      for (let i = 0; i < arr.length; i++) {
-        const o = J.asObj(arr[i]);
-        if (o === null) continue;
-        const url = J.str(o, 'url').trim();
-        if (url.length === 0) continue;
-        const name = J.str(o, 'name').trim();
-        out.push({
-          id: `seed:${url}`,
-          name: name.length > 0 ? name : url,
-          url: url,
-          logo: J.str(o, 'logo'),
-          group: StationMeta.normalizeGroup(J.str(o, 'group')),
-          country: J.str(o, 'country'),
-          source: StationMeta.SOURCE_SEED
-        });
-      }
-      this.seeds = out;
-      Log.i('Store', `精选电台就绪 ${out.length} 条`);
-    } catch (e) {
-      Log.w('Store', `精选电台装载失败 ${(e as Error).message}`);
-    }
-    return this.seeds;
   }
 }

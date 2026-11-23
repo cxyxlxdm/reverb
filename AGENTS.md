@@ -61,6 +61,8 @@ TestFlight 还要求 **Apple Developer Program 会员** + App Store Connect 里�
 Xcode 又没有任何已登录账号,直接报 `No Accounts` / `No profiles for 'com.yuyin.reverb'` ——
 于是只出了编译门全过的**未签名** ipa(`ios/dist/reverb-ios-1.0.7-1-unsigned.ipa`,归档用,装不上真机)。
 逐条与现状表见 `docs/IOS.md`;别把"编译过了"当成"能传 TestFlight"。
+(**2026-11-23 复测**:账号已重新登录,签名 Debug 包能出、能装机、能拉起 —— 只要在命令行用空
+entitlements 覆盖 App Group 那一项;archive / export / upload 仍受免费 Personal Team 限制,未变。)
 
 ⚠️ **上面那条许可检查是 10-24 下午新加的,起因是一次看起来"仓库坏了"的假象。** 本人装完 Xcode 之后
 `/usr/bin/git` 开始只回许可提示,而它是这台机器**唯一的 git**(brew 没装 git)——
@@ -338,9 +340,11 @@ unzip -p dist/reverb.apk classes.dex | LC_ALL=C grep -ao 'radio-browser\.info' |
 # 那不是"包里没有",是"查错了容器"。先解一层,清单落文件再数(H272:`grep -q` 直连管道会假阴性)。
 T=$(mktemp -d); unzip -o -q dist/reverb.app '*.hap' -d "$T"
 unzip -l "$T/entry-default.hap" > "$T/hap.list"
+wc -l < "$T/hap.list"                                                         # 先看处理量:非 0 才谈下面的 0
 grep -cE 'rawfile/sensevoice/(model\.int8\.onnx|tokens\.txt)' "$T/hap.list"   # 非 0(2)
 grep -cE 'libs/arm64-v8a/lib(sherpa|onnxruntime)' "$T/hap.list"               # 非 0(3)
-grep -cE 'rawfile/radio_stations\.json' "$T/hap.list"                          # 非 0(1;1.0.9 起的电台精选)
+grep -cE 'rawfile/radio_stations\.json' "$T/hap.list"                          # **期望 0**(2026-11-24 起鸿蒙不带电台精选)
+grep -cE 'CNR-|CCTV-|qtfm|myalicdn' "$T/hap.list"                             # **期望 0**(台名/聚合 CDN 都不该在包里)
 rm -rf "$T"
 ```
 
@@ -626,7 +630,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 | `net/` | `Sources` / `PodcastRepository` / `RssParser` / `FeedTask`(`@Concurrent`)/ `Http` / `RadioBrowserSource` … |
 | `playback/` | `PlayerController` / `PlaybackClock`(高频时钟,硬规矩 7)/ 投播用系统 `AVCastPicker`(挂在 `view/PlayerPage.ets`) |
 | `update/` · `backup/` · `theme/` · `util/` · `model/` | 对应 Android 同名职责 |
-| `view/RadioPage.ets` + `store/StationStore.ets` | 直播电台 tab:账本 / 目录检索 / 随包精选(`rawfile/radio_stations.json`) |
+| `view/RadioPage.ets` + `store/StationStore.ets` | 直播电台 tab:**鸿蒙 2026-11-24 起只保留搜索**(无账本段 / 热门 / 精选 / 增删改;账本与备份契约保留);Android / macOS / iOS 仍是完整形态 |
 | `harmony/shelved/` | **移出编译树**的代码 —— ArkTS 没有 DCE,只能这么"真的没有"(硬规矩 2) |
 
 ### macOS(`macos/Sources/Reverb/`)
@@ -653,7 +657,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 |---|---|
 | `shared/guide/` | 引导音频 + 脚本(`make-guide.sh`),分发到各端 |
 | `shared/seed/` | 种子清单(规范副本;`sync.sh` 分发到 Android + macOS + iOS,**不含鸿蒙**,理由写在脚本头) |
-| `shared/radio/` | 内置精选电台 16 条(规范副本;`sync.sh` 分发到**四端**资源,`--check` 供提交前校验;合规口径与种子播客不同,见脚本头) |
+| `shared/radio/` | 内置精选电台 16 条(规范副本;`sync.sh` 分发到**三端**资源 —— Android / macOS / iOS,`--check` 供提交前校验;**鸿蒙 2026-11-24 起不分发**,原因与恢复口径见脚本头) |
 | `site/reverb/` | 官网 + 隐私页;`shots/` **不入库**,部署时手工上传 |
 | `marketing/<版本>/` | 宣传物料(宣传片 / 封面 / 配乐),流水线见 `marketing/README.md` |
 | `tools/check-l10n.py` | 五语种资源体检(硬规矩 5):键集相等、繁体用字、非中文含汉字;全绿 exit 0 |
@@ -662,12 +666,12 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 
 ### 版本号一共四处,没有单一来源
 
-| 端 | 文件 | 字段 | 当前值(2026-11-11,1.0.8 开发中) |
+| 端 | 文件 | 字段 | 当前值(2026-11-23,1.1.0 开发中) |
 |---|---|---|---|
-| Android | `android/app/build.gradle:38-39` | `versionCode` / `versionName` | `9` / `1.0.8` |
-| 鸿蒙 | `harmony/AppScope/app.json5:5-6` | `versionCode` / `versionName` | `1000008` / `1.0.8` |
-| macOS | `macos/Info.plist:29-32` | `CFBundleShortVersionString` / `CFBundleVersion` | `1.0.8` / `5` |
-| iOS | `ios/Reverb.xcodeproj/project.pbxproj` | `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` | `1.0.8` / `2` |
+| Android | `android/app/build.gradle:41-42` | `versionCode` / `versionName` | `11` / `1.1.0` |
+| 鸿蒙 | `harmony/AppScope/app.json5:5-6` | `versionCode` / `versionName` | `1000010` / `1.1.0` |
+| macOS | `macos/Info.plist:29-32` | `CFBundleShortVersionString` / `CFBundleVersion` | `1.1.0` / `7` |
+| iOS | `ios/Reverb.xcodeproj/project.pbxproj` | `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` | `1.1.0` / `4` |
 
 **四处必须手改,漏一处不会有任何东西报错。** 改完用这条核:
 
@@ -787,7 +791,7 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 | 新增 native 类型包 | 上面 + `ohpm install` | 漏了报 `arkts-no-any-unknown`(H61) |
 | macOS 任意 Swift | `swift test` 全绿 + **整模块 typecheck,改前改后都必须是 0 错误** | "改前改后都是同样 4 条"**证明不了**其余文件被检查过(H128) |
 | iOS 任意 Swift(含共享层) | `swift test`(共享层)+ `cd ios && ./build-ios.sh` exit 0(编译门不需要证书)+ 产物判据;同改 `macos/Sources/Reverb/{Data,Playback}` 时 macOS 侧也要过 | 只跑模拟器变体 / 只看编译通过 |
-| iOS 界面 / 播放 / 后台 | 上面 + **模拟器(或真机签名包)实跑**对应路径 | 只编译;本机 2026-11-02 只跑过模拟器,真机未跑 |
+| iOS 界面 / 播放 / 后台 | 上面 + **模拟器(或真机签名包)实跑**对应路径 | 只编译;真机签名包 2026-11-02 起可装可跑(免费 Team,App Group 需命令行空 entitlements 覆盖),但**点击注入仍缺**(WDA 装不上),点按类项目只能模拟器 / 代码路径 |
 | 文档 | 数字与条数用 `grep -c` 现算 | 凭印象写"18 条" |
 
 **三条附加规矩:**

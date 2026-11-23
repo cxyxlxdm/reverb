@@ -18,11 +18,15 @@
     },
     {
       "name": "radio_subtitle",
-      "value": "Vos radios en direct, toujours prêtes"
+      "value": "Rechercher des radios en ligne"
     },
     {
       "name": "radio_search_hint",
       "value": "Rechercher une radio"
+    },
+    {
+      "name": "radio_search_prompt",
+      "value": "Saisissez un mot-clé pour rechercher des radios en ligne. Touchez-en une pour l'écouter."
     },
     {
       "name": "radio_my_stations",
@@ -495,6 +499,22 @@
     {
       "name": "sec_appearance",
       "value": "Apparence"
+    },
+    {
+      "name": "sec_features",
+      "value": "Fonctionnalités"
+    },
+    {
+      "name": "set_features",
+      "value": "Interrupteurs de fonctions"
+    },
+    {
+      "name": "set_features_sub",
+      "value": "Désactivez les modules inutiles : transcription, radio, diffusion et synchronisation locale"
+    },
+    {
+      "name": "dlg_features_title",
+      "value": "Interrupteurs de fonctions"
     },
     {
       "name": "sec_content",
@@ -1362,7 +1382,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS\n· Liens vidéo : collez un lien vidéo Bilibili ou un identifiant BV pour l’écouter comme un épisode (sans compte ; les épisodes issus d’une vidéo ne peuvent pas être téléchargés)\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Radio en direct : gardez vos webradios, cherchez dans l’annuaire en ligne (radio-browser.info) ou ajoutez depuis la sélection incluse ; touchez pour écouter. Sur la page de lecture, vous pouvez diffuser le son vers un téléviseur ou une enceinte du même Wi-Fi (cette plateforme utilise le sélecteur système)\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : six rubriques — abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Lot et raccourcis : touchez la pochette d'un épisode pour ouvrir sa chaîne ; dans Nouveautés, Favoris, Téléchargements, Historique ou la page d'une émission, appuyez longuement puis choisissez « Sélectionner plusieurs » pour les ajouter en bloc à la file\n· Hors ligne : téléchargez des épisodes sur l'appareil, au besoin uniquement en Wi-Fi\n· Cache de lecture : les épisodes écoutés restent sur l'appareil et se relisent hors connexion ; listes et pochettes déjà chargées restent consultables sans réseau, à effacer dans Réglages\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : transcription sur l’appareil (chinois, anglais, japonais, coréen et cantonais), ou lisez celle de l’éditeur lorsqu’elle existe ; recherche plein texte, export en texte ou Markdown à partager\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Chapitres : pour les épisodes dont l’éditeur fournit une liste de chapitres, le chapitre en cours s’affiche au-dessus de la barre de progression ; touchez pour y aller. La liste est mise en cache et reste consultable hors connexion\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
+      "value": "· Découvrir : parcourez les classements quotidiens par région et catégorie, réorganisez-les et glissez de l'une à l'autre\n· Rechercher : trouvez émissions ou épisodes par mot-clé, ou collez une URL RSS ; les recherches récentes restent dans un historique local (supprimez une entrée ou tout effacer), touchez-en une pour la relancer ou le micro pour transformer une phrase dite en recherche\n· Liens vidéo : collez un lien vidéo Bilibili ou un identifiant BV pour l’écouter comme un épisode (sans compte ; les épisodes issus d’une vidéo ne peuvent pas être téléchargés)\n· Partager une émission : créez une image avec sa pochette, son titre, sa description et la marque Reverb\n· Radio : écoute aléatoire ou adaptée au moment de la journée\n· Radio en direct : gardez vos webradios, cherchez dans l’annuaire en ligne (radio-browser.info) ou ajoutez depuis la sélection incluse ; touchez pour écouter. Sur la page de lecture, vous pouvez diffuser le son vers un téléviseur ou une enceinte du même Wi-Fi (cette plateforme utilise le sélecteur système)\n· Nouveautés : tous les épisodes de vos émissions suivies, du plus récent au plus ancien, dans un onglet dédié\n· Bibliothèque : six rubriques — abonnements, à suivre, favoris, téléchargements, historique et annotations\n· Lot et raccourcis : touchez la pochette d'un épisode pour ouvrir sa chaîne ; dans Nouveautés, Favoris, Téléchargements, Historique ou la page d'une émission, appuyez longuement puis choisissez « Sélectionner plusieurs » pour les ajouter en bloc à la file\n· Hors ligne : téléchargez des épisodes sur l'appareil, au besoin uniquement en Wi-Fi\n· Cache de lecture : les épisodes écoutés restent sur l'appareil et se relisent hors connexion ; listes et pochettes déjà chargées restent consultables sans réseau, à effacer dans Réglages\n· Lecture : vitesse, saut, minuteur, modes de lecture (séquentiel / lecture en boucle / aléatoire), reprise, contrôles en arrière-plan et écran verrouillé\n· Transcription : transcription sur l’appareil (chinois, anglais, japonais, coréen et cantonais), ou lisez celle de l’éditeur lorsqu’elle existe ; recherche plein texte, export en texte ou Markdown à partager\n· Annotations : gardez la seconde où une phrase vous touche et écrivez un mot dessus ; la section Annotations en fait une frise que vous relancez d'un geste\n· Notes : glissez sur la page du lecteur\n· Chapitres : pour les épisodes dont l’éditeur fournit une liste de chapitres, le chapitre en cours s’affiche au-dessus de la barre de progression ; touchez pour y aller. La liste est mise en cache et reste consultable hors connexion\n· Rappels : notification à chaque nouvel épisode\n· Sauvegarde système : abonnements, favoris, historique, téléchargements (liens uniquement), sceaux, annotations, statistiques d'écoute et réglages sont sauvegardés par le système et migrent vers un nouvel appareil ; l'audio et les transcriptions ne sont pas inclus\n· Apparence : sombre/clair/système, taille du texte, couleur d'accent, plusieurs langues"
     },
     {
       "name": "about_h_philosophy",
@@ -1419,6 +1439,10 @@
     {
       "name": "privacy_consent_asr",
       "value": "Transcription vocale hors ligne. Cette version intègre la reconnaissance hors ligne (le moteur open source sherpa-onnx et le modèle SenseVoiceSmall). La conversion de l’audio d’un épisode en texte s’effectue entièrement sur votre appareil : l’audio n’est jamais envoyé, ne quitte jamais l’appareil et ne transite par aucun serveur. La transcription prend actuellement en charge le chinois, l’anglais, le japonais, le coréen et le cantonais. Vous pouvez désactiver cette fonction dans les réglages."
+    },
+    {
+      "name": "privacy_consent_voice",
+      "value": "Historique de recherche et recherche vocale (facultatif). Le champ de recherche mémorise vos recherches récentes (20 entrées au maximum, conservées uniquement sur cet appareil) ; vous pouvez supprimer une entrée ou tout effacer d’un geste. L’historique n’entre jamais dans les sauvegardes ni dans la synchronisation du réseau local, et n’est jamais envoyé à un serveur. Le bouton micro à droite du champ sert à la recherche vocale : appuyez pour commencer l’enregistrement, appuyez de nouveau pour l’arrêter, et vos paroles sont converties en texte sur l’appareil par le moteur de reconnaissance hors ligne puis placées dans le champ ; l’enregistrement ne reste qu’en mémoire le temps de la reconnaissance, puis il est immédiatement supprimé — jamais conservé ni envoyé. L’accès au micro n’est demandé que lorsque vous appuyez sur ce bouton."
     },
     {
       "name": "privacy_read_full",
@@ -1899,6 +1923,46 @@
     {
       "name": "privacy_consent_radio",
       "value": "Radios en direct et diffusion (facultatif). Dans l’onglet Radio, vous pouvez ajouter une adresse de station manuellement ou rechercher par mot-clé dans l’annuaire public de radios en ligne (radio-browser.info) : votre recherche n’est envoyée qu’à cet annuaire, sans compte ni identifiant utilisateur. Lorsque l’annuaire renvoie des résultats, l’application envoie une requête d’en-têtes uniquement à chaque adresse de station des résultats afin de masquer celles qui sont injoignables ; ces serveurs verront votre adresse IP et le User-Agent. Les noms et adresses que vous ajoutez restent sur cet appareil et ne voyagent que dans une sauvegarde complète que vous exportez. Sur le lecteur, Diffuser utilise le sélecteur de diffusion du système : celui-ci découvre les téléviseurs, enceintes et autres appareils du même Wi-Fi et transporte l’audio, l’application ne faisant que lui confier cette lecture. Les noms et adresses des appareils ne sont jamais envoyés au développeur ni écrits dans les journaux."
+    },
+    {
+      "name": "perm_microphone",
+      "value": "La recherche vocale a besoin du micro : votre voix est reconnue sur l'appareil et l'enregistrement est supprimé aussitôt. Il ne quitte jamais l'appareil."
+    },
+    {
+      "name": "search_history_title",
+      "value": "Recherches récentes"
+    },
+    {
+      "name": "search_history_clear_title",
+      "value": "Effacer l'historique de recherche ?"
+    },
+    {
+      "name": "search_history_clear_message",
+      "value": "Cette action est irréversible."
+    },
+    {
+      "name": "voice_search",
+      "value": "Recherche vocale"
+    },
+    {
+      "name": "voice_stop",
+      "value": "Arrêter l'enregistrement"
+    },
+    {
+      "name": "voice_permission_denied",
+      "value": "Pas d'accès au micro. Autorisez Reverb à utiliser le micro dans les réglages du système."
+    },
+    {
+      "name": "voice_unsupported",
+      "value": "La reconnaissance vocale sur l'appareil n'est pas disponible sur cet appareil."
+    },
+    {
+      "name": "voice_failed",
+      "value": "Impossible de démarrer l'enregistrement. Réessayez."
+    },
+    {
+      "name": "voice_empty",
+      "value": "Je n'ai pas compris. Réessayez."
     }
   ]
 }

@@ -18,11 +18,15 @@
     },
     {
       "name": "radio_subtitle",
-      "value": "Tus radios en directo, siempre a mano"
+      "value": "Busca emisoras en línea"
     },
     {
       "name": "radio_search_hint",
       "value": "Buscar emisoras por nombre"
+    },
+    {
+      "name": "radio_search_prompt",
+      "value": "Escribe una palabra clave para buscar emisoras en línea. Toca una para escucharla."
     },
     {
       "name": "radio_my_stations",
@@ -495,6 +499,22 @@
     {
       "name": "sec_appearance",
       "value": "Apariencia"
+    },
+    {
+      "name": "sec_features",
+      "value": "Funciones"
+    },
+    {
+      "name": "set_features",
+      "value": "Interruptores de funciones"
+    },
+    {
+      "name": "set_features_sub",
+      "value": "Desactiva los módulos que no necesites: transcripción, radio, emisión y sincronización local"
+    },
+    {
+      "name": "dlg_features_title",
+      "value": "Interruptores de funciones"
     },
     {
       "name": "sec_content",
@@ -1362,7 +1382,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Descubrir: explora listas diarias por región y categoría; reordénalas y desliza entre ellas\n· Buscar: encuentra programas o episodios por palabra clave, o pega una URL RSS\n· Enlaces de vídeo: pega un enlace de vídeo de Bilibili o un identificador BV y escúchalo como un episodio (sin cuenta; los episodios de vídeo no se pueden descargar)\n· Compartir programas: crea una imagen con portada, título, descripción y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Radio en directo: guarda tus emisoras de internet, busca en el directorio en línea (radio-browser.info) o añade desde la selección incluida; toca para escuchar. En la página de reproducción puedes enviar el sonido a un televisor o altavoz de la misma Wi-Fi (esta plataforma usa el selector del sistema)\n· Novedades: todos los episodios de tus programas seguidos, del más reciente al más antiguo, en su propia pestaña\n· Biblioteca: seis apartados — suscripciones, a continuación, favoritos, descargas, historial y anotaciones\n· Lote y atajos: toca la portada de un episodio para abrir su canal; en Novedades, Favoritos, Descargas, Historial o la página de un canal, mantén pulsado un episodio y elige «Seleccionar varios» para añadirlos en bloque a la cola\n· Sin conexión: descarga episodios en el dispositivo, opcionalmente solo con Wi-Fi\n· Caché de reproducción: los episodios escuchados se quedan en el dispositivo y se vuelven a oír sin conexión; listas y portadas ya cargadas siguen navegables sin red, y se borra desde Ajustes\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano y pantalla de bloqueo\n· Transcripción: transcripción en el dispositivo (chino, inglés, japonés, coreano y cantonés), o lee la del editor cuando la ofrece; búsqueda en todo el texto y exportación como texto o Markdown para compartir\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del programa: desliza en la página del reproductor\n· Capítulos: en los episodios cuyo editor incluye una lista de capítulos, el capítulo actual aparece sobre la barra de progreso; toca para saltar. La lista se guarda en caché, así que funciona sin conexión\n· Avisos de novedades: notificación cuando llega un episodio nuevo\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño de texto, color de acento, varios idiomas"
+      "value": "· Descubrir: explora listas diarias por región y categoría; reordénalas y desliza entre ellas\n· Buscar: encuentra programas o episodios por palabra clave, o pega una URL RSS; las búsquedas recientes quedan en un historial local (borra una o vacíalo entero), toca una para repetirla o el micrófono para convertir una frase hablada en búsqueda\n· Enlaces de vídeo: pega un enlace de vídeo de Bilibili o un identificador BV y escúchalo como un episodio (sin cuenta; los episodios de vídeo no se pueden descargar)\n· Compartir programas: crea una imagen con portada, título, descripción y marca Reverb\n· Radio: escucha al azar o según el momento del día\n· Radio en directo: guarda tus emisoras de internet, busca en el directorio en línea (radio-browser.info) o añade desde la selección incluida; toca para escuchar. En la página de reproducción puedes enviar el sonido a un televisor o altavoz de la misma Wi-Fi (esta plataforma usa el selector del sistema)\n· Novedades: todos los episodios de tus programas seguidos, del más reciente al más antiguo, en su propia pestaña\n· Biblioteca: seis apartados — suscripciones, a continuación, favoritos, descargas, historial y anotaciones\n· Lote y atajos: toca la portada de un episodio para abrir su canal; en Novedades, Favoritos, Descargas, Historial o la página de un canal, mantén pulsado un episodio y elige «Seleccionar varios» para añadirlos en bloque a la cola\n· Sin conexión: descarga episodios en el dispositivo, opcionalmente solo con Wi-Fi\n· Caché de reproducción: los episodios escuchados se quedan en el dispositivo y se vuelven a oír sin conexión; listas y portadas ya cargadas siguen navegables sin red, y se borra desde Ajustes\n· Reproducción: velocidad, saltos, temporizador, modos de reproducción (secuencial / repetir una / aleatoria), reanudar, controles en segundo plano y pantalla de bloqueo\n· Transcripción: transcripción en el dispositivo (chino, inglés, japonés, coreano y cantonés), o lee la del editor cuando la ofrece; búsqueda en todo el texto y exportación como texto o Markdown para compartir\n· Anotaciones: marca el segundo en que una frase te toca y escribe una línea; la sección Anotaciones las une en una línea de tiempo que puedes retomar\n· Notas del programa: desliza en la página del reproductor\n· Capítulos: en los episodios cuyo editor incluye una lista de capítulos, el capítulo actual aparece sobre la barra de progreso; toca para saltar. La lista se guarda en caché, así que funciona sin conexión\n· Avisos de novedades: notificación cuando llega un episodio nuevo\n· Copia de seguridad del sistema: suscripciones, favoritos, historial, descargas (solo enlaces), sellos, anotaciones, estadísticas de escucha y ajustes se respaldan con el sistema y migran al cambiar de dispositivo; el audio y las transcripciones no se incluyen\n· Apariencia: oscuro/claro/sistema, tamaño de texto, color de acento, varios idiomas"
     },
     {
       "name": "about_h_philosophy",
@@ -1419,6 +1439,10 @@
     {
       "name": "privacy_consent_asr",
       "value": "Transcripción de voz sin conexión. Esta versión incluye reconocimiento sin conexión (el motor de código abierto sherpa-onnx y el modelo SenseVoiceSmall). La conversión del audio de un episodio en texto se realiza por completo en tu dispositivo: el audio nunca se sube, nunca sale del dispositivo y nunca pasa por ningún servidor. La transcripción admite por ahora chino, inglés, japonés, coreano y cantonés. Puedes desactivar esta función en Ajustes."
+    },
+    {
+      "name": "privacy_consent_voice",
+      "value": "Historial de búsqueda y búsqueda por voz (opcional). El cuadro de búsqueda recuerda lo que has buscado recientemente (como máximo 20 entradas, guardadas solo en este dispositivo); puedes borrar entradas una a una o vaciarlas todas de golpe. El historial nunca entra en las copias de seguridad ni en la sincronización por red local, y nunca se envía a ningún servidor. El botón de micrófono junto al cuadro sirve para la búsqueda por voz: toca para empezar a grabar y toca otra vez para terminar; lo que dices se convierte en texto en el dispositivo con el reconocedor sin conexión y se coloca en el cuadro. La grabación solo se mantiene en memoria durante la transcripción y se descarta al instante: nunca se guarda ni se envía. El acceso al micrófono solo se solicita al tocar ese botón."
     },
     {
       "name": "privacy_read_full",
@@ -1899,6 +1923,46 @@
     {
       "name": "privacy_consent_radio",
       "value": "Radio en directo y emisión (opcional). En la pestaña Radio puedes añadir una emisora manualmente o buscar por palabra clave en el directorio público de radio en línea (radio-browser.info): el término de búsqueda solo se envía a ese directorio, sin inicio de sesión ni identificador de usuario. Cuando el directorio devuelve resultados, la aplicación envía una petición de solo cabeceras a cada dirección de emisora de los resultados para ocultar las que no se pueden alcanzar; esos servidores verán tu dirección IP y el User-Agent. Los nombres y las direcciones que añadas se quedan en este dispositivo y solo viajan en una copia de seguridad completa que exportes. En el reproductor, Emitir usa el selector de emisión del sistema: el sistema descubre televisores, altavoces y otros dispositivos de la misma Wi-Fi y transporta el audio, mientras la aplicación solo le entrega esta reproducción. Los nombres y las direcciones de los dispositivos nunca se envían al desarrollador ni se escriben en los registros."
+    },
+    {
+      "name": "perm_microphone",
+      "value": "La búsqueda por voz necesita el micrófono: tu voz se reconoce en este dispositivo y la grabación se elimina al terminar. Nunca sale de este dispositivo."
+    },
+    {
+      "name": "search_history_title",
+      "value": "Búsquedas recientes"
+    },
+    {
+      "name": "search_history_clear_title",
+      "value": "¿Borrar el historial de búsquedas?"
+    },
+    {
+      "name": "search_history_clear_message",
+      "value": "No se puede deshacer."
+    },
+    {
+      "name": "voice_search",
+      "value": "Búsqueda por voz"
+    },
+    {
+      "name": "voice_stop",
+      "value": "Detener grabación"
+    },
+    {
+      "name": "voice_permission_denied",
+      "value": "No hay permiso de micrófono. Permite que Reverb use el micrófono en los ajustes del sistema."
+    },
+    {
+      "name": "voice_unsupported",
+      "value": "El reconocimiento de voz en el dispositivo no está disponible en este dispositivo."
+    },
+    {
+      "name": "voice_failed",
+      "value": "No se pudo iniciar la grabación. Inténtalo de nuevo."
+    },
+    {
+      "name": "voice_empty",
+      "value": "No te he entendido. Inténtalo de nuevo."
     }
   ]
 }

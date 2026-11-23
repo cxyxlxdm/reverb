@@ -5,6 +5,7 @@ import { JsonFile } from './store/JsonFile';
 import { SettingsStore } from './store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore, PopularCacheStore } from './store/Stores';
 import { StationStore } from './store/StationStore';
+import { SearchHistoryStore } from './store/SearchHistoryStore';
 import { InboxStore } from './store/InboxStore';
 import { SeedCatalog } from './store/SeedCatalog';
 import { FeedCacheStore } from './store/FeedCacheStore';
@@ -22,6 +23,7 @@ import { ChapterStore } from './store/ChapterStore';
 import { WidgetUpdater } from './widget/WidgetUpdater';
 import { SpeechTranscriber } from './playback/SpeechTranscriber';
 import { SenseVoiceTranscriber } from './playback/asr/SenseVoiceTranscriber';
+import { VoiceSearch } from './playback/VoiceSearch';
 import { DownloadManager } from './playback/DownloadManager';
 import { AudioCacheManager } from './playback/AudioCacheManager';
 import { PodcastRepository } from './net/PodcastRepository';
@@ -43,6 +45,8 @@ export class AppContainer {
   readonly subscriptions: SubscriptionStore = new SubscriptionStore();
   /// 直播电台账本:**进手动备份,不进局域网同步**(边界写在 `StationStore` 类注释)
   readonly stations: StationStore = new StationStore();
+  /// 搜索历史:**只在本机留存**,不进备份、不进局域网同步(边界写在 `SearchHistoryStore` 类注释)
+  readonly searchHistory: SearchHistoryStore = new SearchHistoryStore();
   readonly favorites: FavoriteStore = new FavoriteStore();
   readonly history: HistoryStore = new HistoryStore();
   readonly inbox: InboxStore = new InboxStore();
@@ -96,9 +100,9 @@ export class AppContainer {
 
     this.settings.load();
     this.subscriptions.load();
-    // 电台:纯本地读 + 记下 rawfile 上下文(精选清单首次进电台页才装)
-    this.stations.attach(ctx);
+    // 电台:纯本地读(2026-11-24 起不再挂随包精选的 rawfile 上下文,见 StationStore 头注)
     this.stations.load();
+    this.searchHistory.load();
     this.favorites.load();
     this.history.load();
     this.inbox.load();
@@ -133,7 +137,11 @@ export class AppContainer {
     // 这里只**装配**一个外壳:模型到第一次转写才拷贝/加载,不占启动时间、不联网。
     // 旧实现 `SpeechTranscriber`(系统 Core Speech Kit)留着对照,不再装配。
     if (Features.LOCAL_ASR) {
-      this.transcripts.transcriber = new SenseVoiceTranscriber(ctx, this.settings);
+      const asr = new SenseVoiceTranscriber(ctx, this.settings);
+      this.transcripts.transcriber = asr;
+      // 语音搜索共用同一个引擎实例(模型拷贝与媒体能力都在它身上);它有自己的 Worker,
+      // 不会和整集转写排队。这里只记引用 —— 麦克风权限在用户第一次点麦克风时才申请。
+      VoiceSearch.get().attach(ctx, asr);
     }
     this.downloads.load();
     this.downloadManager.init(ctx.filesDir, this.downloads, this.settings);

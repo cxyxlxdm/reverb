@@ -1,7 +1,7 @@
 import { Theme, Scheme, TypeScale, Tracking, Metrics } from '../theme/Theme';
 import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
-import { StationStore } from '../store/StationStore';
+import { SearchHistoryStore } from '../store/SearchHistoryStore';
 import { InboxStore } from '../store/InboxStore';
 import { DownloadStore } from '../store/DownloadStore';
 import { StampStore } from '../store/StampStore';
@@ -19,7 +19,7 @@ import { ChapterStore } from '../store/ChapterStore';
 import { PlayerPage } from '../view/PlayerPage';
 import { MiniPlayerBar } from '../view/MiniPlayerBar';
 import {
-  SystemTabItem, barFloating, pickMaterialType, TAB_BAR_H, TAB_KEY, MORPH_KEY, MORPH_SLOPE,
+  SystemTabItem, barFloating, pickMaterialType, TAB_BAR_H, TAB_KEY, TAB_KIND_KEY, MORPH_KEY, MORPH_SLOPE,
   MINI_H, MINI_GAP, MINI_SIDE_MARGIN, morphSpring, barReserve, channelMiniBottom
 } from '../view/BottomBar';
 import { DissolveParticles, DissolveState } from '../view/DissolveParticles';
@@ -66,8 +66,8 @@ struct Index {
    */
   @State settings: SettingsStore = AppContainer.get().settings;
   @State subscriptions: SubscriptionStore = AppContainer.get().subscriptions;
-  /// 直播电台(顶层「电台」页的数据源)。与订阅同一档:@State 持有、@ObjectLink 下发。
-  @State stations: StationStore = AppContainer.get().stations;
+  /// 搜索历史:只在本机留存(不进备份 / 局域网同步),发现页以 @ObjectLink 观察
+  @State searchHistory: SearchHistoryStore = AppContainer.get().searchHistory;
   @State favorites: FavoriteStore = AppContainer.get().favorites;
   @State history: HistoryStore = AppContainer.get().history;
   @State inbox: InboxStore = AppContainer.get().inbox;
@@ -87,6 +87,14 @@ struct Index {
    * 提交只有两个来源:栏的点按(`.onChange` 回写)与系统回退等处的程序化改值,都写这一个键。
    */
   @StorageLink(TAB_KEY) tab: number = 0;
+  /**
+   * 当前 tab 的**稳定页号**(发现 0 / 电台 1 / 追更 2 / 音阁 3)。
+   *
+   * `tab` 是**可见下标** —— 设置里关掉直播电台后底栏少一格,下标会整体前移。
+   * 凡是要判断"用户在哪一页"(回退、双击回顶、小圆球图标)都读这一格;
+   * 只有 `SystemTabItem` 与 `HdsTabs` 才按可见下标工作。与 Android `selectedKind` 同解。
+   */
+  @StorageLink(TAB_KIND_KEY) tabKind: number = 0;
   /**
    * 播放条是否收束进底部栏。同样走 AppStorage(栏项要读),这里 @StorageLink 是**写的一侧**:
    * 滚动累计量到阈值就翻它,见 [feedScroll]。
@@ -227,6 +235,8 @@ struct Index {
     this.readInsets();
     this.applySystemBar();
     this.applyColorMode();
+    // 上次停机前可能停在「电台」,而这一版用户把它关了 —— 冷启动第一帧就要把两个键对齐。
+    this.syncTabToVisible();
     this.openPlayerIfRequested();
     Log.i('UI', `外壳就绪 systemDark=${this.systemDark}`);
   }
@@ -600,6 +610,8 @@ struct Index {
             this.applySystemBar();
             // 系统材质那一半也要翻(底部栏那块磨砂不读我们的 Scheme)
             this.applyColorMode();
+            // 聚合开关里可能刚撤掉/加回「电台」这一格;可见下标与页身份要重新对齐。
+            this.syncTabToVisible();
           },
           onOpenAbout: () => { this.stack.pushPathByName('about', null); },
           onOpenLicenses: () => { this.stack.pushPathByName('licenses', null); },
@@ -839,14 +851,42 @@ struct Index {
     if (this.lastTabTapIdx === i && now - this.lastTabTapAt <= TAB_DOUBLE_TAP_MS) {
       this.lastTabTapAt = -1;
       this.lastTabTapIdx = -1;
-      if (i === 0) this.discoverTopToken++;
-      else if (i === 1) this.radioTopToken++;
-      else if (i === 2) this.feedTopToken++;
+      // 栏给的是可见下标,回顶 token 按**页身份**分发(电台关掉后追更会前移到 1)。
+      const kind = this.kindAt(i);
+      if (kind === 0) this.discoverTopToken++;
+      else if (kind === 1) this.radioTopToken++;
+      else if (kind === 2) this.feedTopToken++;
       else this.libraryTopToken++;
     } else {
       this.lastTabTapAt = now;
       this.lastTabTapIdx = i;
     }
+  }
+
+  /// 底栏可见页的稳定页号序列。关掉直播电台时整格从列表里消失,不是灰掉。
+  private visibleKinds(): number[] {
+    return this.settings.radioEnabled ? [0, 1, 2, 3] : [0, 2, 3];
+  }
+
+  /// 稳定页号 → 可见下标;页不可见时落回 0(调用方只会在可见页上问)。
+  private visibleIndexOf(kind: number): number {
+    const i = this.visibleKinds().indexOf(kind);
+    return i < 0 ? 0 : i;
+  }
+
+  /// 可见下标 → 稳定页号。
+  private kindAt(i: number): number {
+    const kinds = this.visibleKinds();
+    return i >= 0 && i < kinds.length ? kinds[i] : kinds[0];
+  }
+
+  /// 把 `tab` 与 `tabKind` 对齐到当前可见序列。功能开关变化与冷启动都走这一处。
+  private syncTabToVisible(): void {
+    const kinds = this.visibleKinds();
+    let kind = this.tabKind;
+    if (kinds.indexOf(kind) < 0) kind = 0;
+    this.tabKind = kind;
+    this.tab = kinds.indexOf(kind);
   }
 
   /// 收束态左端那颗小圆球:只把播放条放回两行共存,不改当前 tab(盘上是当前那一格,点它不切页)。
@@ -930,9 +970,9 @@ struct Index {
   /// 三个 tab 项的栏内容。@Builder 只负责"挂上组件",**所有会变的量都由组件自己订阅**
   /// (见 `BottomBar.SystemTabItem` 的注释),这里不按值传选中态。
   @Builder
-  slotDiscover() {
+  slotDiscover(index: number) {
     SystemTabItem({
-      index: 0,
+      index: index,
       label: $r('app.string.nav_discover'),
       icon: Sym.discover,
       iconFill: Sym.discoverFill,
@@ -941,9 +981,9 @@ struct Index {
   }
 
   @Builder
-  slotRadio() {
+  slotRadio(index: number) {
     SystemTabItem({
-      index: 1,
+      index: index,
       label: $r('app.string.nav_radio'),
       icon: Sym.radio,
       iconFill: Sym.radio,
@@ -954,9 +994,9 @@ struct Index {
   }
 
   @Builder
-  slotFeed() {
+  slotFeed(index: number) {
     SystemTabItem({
-      index: 2,
+      index: index,
       label: $r('app.string.nav_feed'),
       // 追更那枚在 symbol 表里**没有实心变体**(radiowaves 家族全量只有 `dot_radiowaves` /
       // `dot_radiowaves_message(_fill)` / `music_note_radiowaves_left_and_right` 等,
@@ -969,9 +1009,9 @@ struct Index {
   }
 
   @Builder
-  slotLibrary() {
+  slotLibrary(index: number) {
     SystemTabItem({
-      index: 3,
+      index: index,
       label: $r('app.string.nav_library'),
       icon: Sym.library,
       iconFill: Sym.libraryFill,
@@ -986,7 +1026,7 @@ struct Index {
     // 压在页面内容之上,页面内容进不去 —— 只能盖在上面。
     Stack({ alignContent: Alignment.Bottom }) {
       Column() {
-        HdsTabs({ barPosition: BarPosition.End, index: this.tab }) {
+        HdsTabs({ barPosition: BarPosition.End, index: this.visibleIndexOf(this.tabKind) }) {
           TabContent() {
             DiscoverPage({
               scheme: this.scheme(),
@@ -994,6 +1034,7 @@ struct Index {
               settings: this.settings,
               history: this.history,
               subscriptions: this.subscriptions,
+              searchHistory: this.searchHistory,
               radio: this.radio,
               // `CATALOG=false` 的降级渠道下,有订阅的人首屏主体就是「最新」+ 播放态高亮(见 subscribeStarter)
               inbox: this.inbox,
@@ -1009,20 +1050,23 @@ struct Index {
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
           }
-          .tabBar(this.slotDiscover())
+          .tabBar(this.slotDiscover(this.visibleIndexOf(0)))
 
-          TabContent() {
-            RadioPage({
-              scheme: this.scheme(),
-              fontScale: this.fontScale(),
-              player: this.player,
-              stations: this.stations,
-              bottomPad: this.underBarPad(),
-              onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
-              scrollTopToken: this.radioTopToken
-            })
+          // 电台整格按设置在场:关掉时**不构建**这一页(TabContent 也不建),
+          // 后面「追更 / 音阁」的可见下标顺延 —— 见 [visibleKinds]。
+          if (this.settings.radioEnabled) {
+            TabContent() {
+              RadioPage({
+                scheme: this.scheme(),
+                fontScale: this.fontScale(),
+                player: this.player,
+                bottomPad: this.underBarPad(),
+                onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
+                scrollTopToken: this.radioTopToken
+              })
+            }
+            .tabBar(this.slotRadio(this.visibleIndexOf(1)))
           }
-          .tabBar(this.slotRadio())
 
           TabContent() {
             FeedPage({
@@ -1039,7 +1083,7 @@ struct Index {
               onPlayEpisode: (e: Episode, q: Episode[], tag: string) => this.playEpisode(e, q, tag)
             })
           }
-          .tabBar(this.slotFeed())
+          .tabBar(this.slotFeed(this.visibleIndexOf(2)))
 
           TabContent() {
             LibraryPage({
@@ -1064,7 +1108,7 @@ struct Index {
               onOpenListenStats: () => { this.stack.pushPathByName('listen_stats', null); }
             })
           }
-          .tabBar(this.slotLibrary())
+          .tabBar(this.slotLibrary(this.visibleIndexOf(3)))
 
         }
         /**
@@ -1101,6 +1145,8 @@ struct Index {
         .onTabBarClick((i: number) => { this.onTabBarClick(i); })
         .onChange((i: number) => {
           this.tab = i;
+          // 同时记下页身份:可见下标会随「电台」在场与否变化,后面所有"在哪一页"的判断读它。
+          this.tabKind = this.kindAt(i);
           // 换格就把双击窗口清掉:先点 A 切过去、紧接着补一下,不该被读成"双击 A"
           this.lastTabTapAt = -1;
           this.lastTabTapIdx = -1;

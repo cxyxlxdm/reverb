@@ -18,11 +18,15 @@
     },
     {
       "name": "radio_subtitle",
-      "value": "Your live stations, ready when you are"
+      "value": "Search online stations"
     },
     {
       "name": "radio_search_hint",
       "value": "Search stations by name"
+    },
+    {
+      "name": "radio_search_prompt",
+      "value": "Type a keyword to search online stations. Tap one to listen."
     },
     {
       "name": "radio_my_stations",
@@ -495,6 +499,22 @@
     {
       "name": "sec_appearance",
       "value": "Appearance"
+    },
+    {
+      "name": "sec_features",
+      "value": "Features"
+    },
+    {
+      "name": "set_features",
+      "value": "Feature switches"
+    },
+    {
+      "name": "set_features_sub",
+      "value": "Turn off modules you do not need: transcription, radio, casting and local sync"
+    },
+    {
+      "name": "dlg_features_title",
+      "value": "Feature switches"
     },
     {
       "name": "sec_content",
@@ -1362,7 +1382,7 @@
     },
     {
       "name": "about_p_features",
-      "value": "· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: find shows or episodes by keyword, or paste an RSS URL\n· Video links: paste a Bilibili video link or BV ID and listen to it as an episode (no sign-in; episodes from video links cannot be downloaded)\n· Share shows: create an image with the show artwork, title, description and Reverb branding\n· Radio: roam at random or follow time-of-day moods\n· Live radio: keep your favourite internet radio streams, search an online directory (radio-browser.info), or add from the built-in selection; tap to listen. On the player page you can cast the sound to a TV or speaker on the same Wi-Fi (this platform uses the system cast picker)\n· Updates: every episode from the shows you follow, newest first, on its own tab\n· Library: six shelves — subscriptions, up next, favorites, downloads, history and notes\n· Batch and shortcuts: tap an episode cover to open its channel; in Updates, Favorites, Downloads, History or a channel page, long-press a row and pick \"Select multiple\" to add the whole batch to Up next\n· Offline: download episodes to this device, optionally Wi-Fi only\n· Playback cache: episodes you play stay on this device and replay offline; loaded lists and artwork stay browsable without a connection, clearable in Settings\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background and lock screen controls\n· Transcript: on-device transcription (Chinese, English, Japanese, Korean and Cantonese), or read the publisher’s transcript when provided; full-text search and export as text or Markdown to share\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player page\n· Chapters: for episodes whose publisher ships a chapter list, the current chapter appears above the seek bar; tap to jump. The list is cached once fetched, so it works offline\n· Update reminders: get notified when a new episode lands\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
+      "value": "· Discover: browse daily charts by region and category; reorder and swipe between categories\n· Search: find shows or episodes by keyword, or paste an RSS URL; recent searches are kept in a local history (delete one or clear all), tap one to search again, or tap the microphone to turn a spoken sentence into a query\n· Video links: paste a Bilibili video link or BV ID and listen to it as an episode (no sign-in; episodes from video links cannot be downloaded)\n· Share shows: create an image with the show artwork, title, description and Reverb branding\n· Radio: roam at random or follow time-of-day moods\n· Live radio: keep your favourite internet radio streams, search an online directory (radio-browser.info), or add from the built-in selection; tap to listen. On the player page you can cast the sound to a TV or speaker on the same Wi-Fi (this platform uses the system cast picker)\n· Updates: every episode from the shows you follow, newest first, on its own tab\n· Library: six shelves — subscriptions, up next, favorites, downloads, history and notes\n· Batch and shortcuts: tap an episode cover to open its channel; in Updates, Favorites, Downloads, History or a channel page, long-press a row and pick \"Select multiple\" to add the whole batch to Up next\n· Offline: download episodes to this device, optionally Wi-Fi only\n· Playback cache: episodes you play stay on this device and replay offline; loaded lists and artwork stay browsable without a connection, clearable in Settings\n· Playback: speed, skip, sleep timer, play modes (sequential / repeat one / shuffle), resume, background and lock screen controls\n· Transcript: on-device transcription (Chinese, English, Japanese, Korean and Cantonese), or read the publisher’s transcript when provided; full-text search and export as text or Markdown to share\n· Notes: mark the second a line lands on you and write a word about it; the Notes shelf turns them into a timeline you can tap back into\n· Show notes: swipe on the player page\n· Chapters: for episodes whose publisher ships a chapter list, the current chapter appears above the seek bar; tap to jump. The list is cached once fetched, so it works offline\n· Update reminders: get notified when a new episode lands\n· System backup: subscriptions, favorites, history, download records (links only), stamps, notes, listening stats and settings are backed up by the OS and migrate with device changes; audio and transcripts are not included\n· Appearance: dark/light/system, text size, accent colour, multiple languages"
     },
     {
       "name": "about_h_philosophy",
@@ -1419,6 +1439,10 @@
     {
       "name": "privacy_consent_asr",
       "value": "Offline speech-to-text. This build bundles offline speech recognition (the open-source sherpa-onnx runtime with the SenseVoiceSmall model). Turning an episode’s audio into text happens entirely on your device — the audio is never uploaded, never leaves the device, and never passes through any server. Transcription currently supports Chinese, English, Japanese, Korean and Cantonese. You can turn this off in Settings."
+    },
+    {
+      "name": "privacy_consent_voice",
+      "value": "Search history and voice search (optional). The search box remembers what you recently searched for (up to 20 entries, stored only on this device); you can delete entries one by one or clear them all at once. Search history is never included in backups or LAN sync, and is never uploaded to any server. The microphone button next to the search box is for voice search: tap to start recording and tap again to stop, and what you said is turned into text on device by the offline recogniser and placed in the search box; the recording is held only briefly in memory and discarded immediately after recognition — it is never stored or sent anywhere. Microphone access is requested only when you tap that button."
     },
     {
       "name": "privacy_read_full",
@@ -1899,6 +1923,46 @@
     {
       "name": "privacy_consent_radio",
       "value": "Live radio and casting (optional). In the Radio tab you can add a station address manually, or search the public online radio directory (radio-browser.info) by keyword: your search term is sent only to that directory, with no login and no user identifier. After the directory returns results, the app sends one header-only request to each station address in the results so unreachable stations can be hidden; those servers will see your IP address and User-Agent. The station names and addresses you add stay on this device and travel only in a full backup you export. On the player, Cast uses the system cast picker: the system discovers TVs, speakers and other devices on the same Wi-Fi and carries the audio, while the app only hands over this playback. Device names and addresses are never uploaded to the developer and never written to logs."
+    },
+    {
+      "name": "perm_microphone",
+      "value": "Voice search needs the microphone: your speech is recognized on this device and the recording is deleted right after. It never leaves this device."
+    },
+    {
+      "name": "search_history_title",
+      "value": "Recent searches"
+    },
+    {
+      "name": "search_history_clear_title",
+      "value": "Clear search history?"
+    },
+    {
+      "name": "search_history_clear_message",
+      "value": "This can't be undone."
+    },
+    {
+      "name": "voice_search",
+      "value": "Voice search"
+    },
+    {
+      "name": "voice_stop",
+      "value": "Stop recording"
+    },
+    {
+      "name": "voice_permission_denied",
+      "value": "Microphone access is off. Allow Reverb to use the microphone in system settings."
+    },
+    {
+      "name": "voice_unsupported",
+      "value": "On-device voice recognition isn't available on this device."
+    },
+    {
+      "name": "voice_failed",
+      "value": "Couldn't start recording. Try again."
+    },
+    {
+      "name": "voice_empty",
+      "value": "Didn't catch that. Try again."
     }
   ]
 }
