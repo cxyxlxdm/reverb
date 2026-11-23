@@ -220,8 +220,10 @@ Android 走 OkHttp 的 `enqueue` + 回调,响应一到就 `call.cancel()`;macOS 
   文案在界面本地化)。地址是唯一键:添加与编辑都先查重,重复直接拒绝。
 - **在线目录** `radio-browser.info`:先 `de1`,失败再 `de2`;请求不登录、不带用户标识,
   日志只记条数与错误类(不记搜索词、不记完整地址)。目录结果是只读的,要保留必须复制进账本。
-- **随包精选** `shared/radio/stations.json`(16 条,只读)。`shared/radio/sync.sh` 分发到四端资源,
-  自带 `--check` 供提交前校验。它与种子播客的合规口径不同:这份按维护者决定四端都带。
+- **随包精选** `shared/radio/stations.json`(16 条,只读)。`shared/radio/sync.sh` 分发到三端资源
+  (Android / macOS / iOS),自带 `--check` 供提交前校验。**鸿蒙 2026-11-24 起不分发也不读**:
+  华为以「应用含有 CCTV 电台」拒审 1.0.9(见 `docs/FEATURES.md` 直播电台一节的说明),
+  rawfile 与 `StationStore.seedStations` 一并移除 —— ArkTS 没有 DCE,只藏界面删不掉包里内容。
 - **起播**不新造播放路径:现场合成 `isLive=true` 的 `Episode`(`id=live:<url>`),
   与粘贴地址那条同 id,所以同一路流不会在队列里出现两次。
 - **备份**:只进手动备份的 `stations` 段;**不参与局域网同步**。同步的删除传播靠墓碑账本,
@@ -608,6 +610,22 @@ Android 在 `SenseVoiceEngine.wordsFrom` 里做(1.0.8 前在 C++ 侧 `tidyWords`
 > 是语言限制:ArkUI 的 `@Builder` 里**不能声明局部变量**,拿不到 Android 那个
 > "顶层算一次下标再往下传"的形状,而存成字段就要管失效。**整表回溯仍然在,只是留给
 > `autoScroll` —— 它要的是下标本身。上面那条不变式依赖一字未变**(见 H137)。
+
+### 设计三:语音搜索复用逐字稿引擎,但鸿蒙必须另开一个 Worker
+
+搜索框的麦克风按钮走的是**同一条识别底座**:Android 新建一个 `SenseVoiceEngine` 实例,
+鸿蒙走 `SenseVoiceTranscriber.transcribeSamples`,macOS / iOS 走 `Transcriber`。
+输入从"整集文件"换成"一段 ≤30 秒的 Float32 采样",没有时间戳,也不需要写缓存。
+
+**鸿蒙为什么不能复用整集转写那个 Worker**:`AsrWorker` 的 `pump()` 是**串行**的 ——
+一个整集转写任务会占住识别器几十秒,排在它后面的一句语音查询要等整集跑完。
+所以语音搜索另起一个**长驻 Worker**(`ensureVoiceWorker`),只处理 `cmd='samples'` 的命令。
+代价:首次语音搜索时多加载一份 SenseVoice 模型(约 228 MB 常驻内存),用完不主动销毁 ——
+为"点了就快"付的内存代价;出错了才 `dropVoiceWorker` 让下次重建。
+
+录音侧的差异只在"录到哪里":Android / 鸿蒙把 PCM 累加在内存里,
+macOS / iOS 由 `AVAudioRecorder` 写进应用临时目录;两端都在识别结束(或取消)时
+把数据删干净。麦克风权限一律由界面在**用户点按按钮时**申请,不在同意门或启动时预申请。
 
 ### 章节表:与逐字稿同一种形状,但不进备份
 
