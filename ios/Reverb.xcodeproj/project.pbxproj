@@ -33,6 +33,8 @@
 		8A276D2CD87C7E55354F1142 /* RssParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2A5EC6CD5EBC9A5110506DB /* RssParser.swift */; };
 		DD2807C53AA6EACA38B80F5C /* SeedCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6BC876B7A662616B3EC7486 /* SeedCatalog.swift */; };
 		E4B424E7FCD3F5E779D79ED9 /* Stores.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6E7222B31E0A0E9523FBEE0 /* Stores.swift */; };
+		C1D2E3F4A5B60718293A00B1 /* SearchHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F4A5B60718293A00A1 /* SearchHistoryStore.swift */; };
+		C1D2E3F4A5B60718293A00B2 /* VoiceSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1D2E3F4A5B60718293A00A2 /* VoiceSearch.swift */; };
 		B1B2C3D4E5F60718293A00F1 /* Station.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00F1 /* Station.swift */; };
 		B1B2C3D4E5F60718293A00F2 /* StationStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00F2 /* StationStore.swift */; };
 		B1B2C3D4E5F60718293A00F3 /* RadioBrowserSource.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A00F3 /* RadioBrowserSource.swift */; };
@@ -126,6 +128,8 @@
 		E2A5EC6CD5EBC9A5110506DB /* RssParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RssParser.swift; path = "../macos/Sources/Reverb/Data/RssParser.swift"; sourceTree = "<group>"; };
 		B6BC876B7A662616B3EC7486 /* SeedCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SeedCatalog.swift; path = "../macos/Sources/Reverb/Data/SeedCatalog.swift"; sourceTree = "<group>"; };
 		F6E7222B31E0A0E9523FBEE0 /* Stores.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Stores.swift; path = "../macos/Sources/Reverb/Data/Stores.swift"; sourceTree = "<group>"; };
+		C1D2E3F4A5B60718293A00A1 /* SearchHistoryStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SearchHistoryStore.swift; path = "../macos/Sources/Reverb/Data/SearchHistoryStore.swift"; sourceTree = "<group>"; };
+		C1D2E3F4A5B60718293A00A2 /* VoiceSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VoiceSearch.swift; path = "../macos/Sources/Reverb/Data/VoiceSearch.swift"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A00F1 /* Station.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Station.swift; path = "../macos/Sources/Reverb/Data/Station.swift"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A00F2 /* StationStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StationStore.swift; path = "../macos/Sources/Reverb/Data/StationStore.swift"; sourceTree = "<group>"; };
 		A1B2C3D4E5F60718293A00F3 /* RadioBrowserSource.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RadioBrowserSource.swift; path = "../macos/Sources/Reverb/Data/RadioBrowserSource.swift"; sourceTree = "<group>"; };
@@ -258,6 +262,8 @@
 				E2A5EC6CD5EBC9A5110506DB /* RssParser.swift */,
 				B6BC876B7A662616B3EC7486 /* SeedCatalog.swift */,
 				F6E7222B31E0A0E9523FBEE0 /* Stores.swift */,
+				C1D2E3F4A5B60718293A00A1 /* SearchHistoryStore.swift */,
+				C1D2E3F4A5B60718293A00A2 /* VoiceSearch.swift */,
 				A1B2C3D4E5F60718293A00F1 /* Station.swift */,
 				A1B2C3D4E5F60718293A00F2 /* StationStore.swift */,
 				A3037D8516ABDD0937BBC044 /* Transcriber.swift */,
@@ -459,6 +465,8 @@
 				B1B2C3D4E5F60718293A00F1 /* Station.swift in Sources */,
 				B1B2C3D4E5F60718293A00F2 /* StationStore.swift in Sources */,
 				E4B424E7FCD3F5E779D79ED9 /* Stores.swift in Sources */,
+				C1D2E3F4A5B60718293A00B1 /* SearchHistoryStore.swift in Sources */,
+				C1D2E3F4A5B60718293A00B2 /* VoiceSearch.swift in Sources */,
 				595913D4AFC5B0A7682BC85B /* Transcriber.swift in Sources */,
 				3D7F606C8F32153A25EA151B /* TranscriptFetcher.swift in Sources */,
 				B7C1D2E3F4012345678ABC01 /* ChapterStore.swift in Sources */,
@@ -623,14 +631,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Reverb.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yuyin.reverb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -646,14 +654,14 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Reverb.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yuyin.reverb;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -668,13 +676,13 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = ReverbWidget/ReverbWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ReverbWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yuyin.reverb.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -690,13 +698,13 @@
 				APPLICATION_EXTENSION_API_ONLY = YES;
 				CODE_SIGN_ENTITLEMENTS = ReverbWidget/ReverbWidget.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 3;
+				CURRENT_PROJECT_VERSION = 4;
 				DEVELOPMENT_TEAM = "";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ReverbWidget/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks";
-				MARKETING_VERSION = 1.0.9;
+				MARKETING_VERSION = 1.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.yuyin.reverb.widget;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

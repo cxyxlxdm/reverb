@@ -87,6 +87,16 @@ object SelfUpdate {
     /// 一次完整下载再占 1 次)。对本功能这个量级完全够,但别把它挪到定时器上。
     private const val ASSET_API_URL = "https://api.github.com/repos/cxyxlxdm/revert-cast/releases/assets/"
 
+    /// Atom 发布流:检测主路的兜底。不需要 token,也不占 REST API 的每 IP 60 次限额。
+    /// 2026-11-23 起 macOS 已把它当主路;Android 仍先走 API(要 digest 判同版本重出包),
+    /// 限额用尽(403 / remaining=0)时再用它把「有新版本」这件事问出来。
+    private const val ATOM_URL = "https://github.com/cxyxlxdm/revert-cast/releases.atom"
+
+    /// 直链前缀。Atom 里只有 tag,资产直链按「tag + 固定文件名」自己拼。
+    private const val DOWNLOAD_BASE = "https://github.com/cxyxlxdm/revert-cast/releases/download/"
+
+    private val ATOM_ENTRY = Regex("<entry>.*?<title>([^<]+)</title>", RegexOption.DOT_MATCHES_ALL)
+
     /// 发布物的资产名(与 `android/build-release.sh` 落到 `dist/` 的文件名一致)。
     /// **不能取 `assets[0]`**:1.0.1 / 1.0.2 那两个 release 里同时挂着 macOS 的 `Reverb.dmg`,
     /// 而且它在数组里排在 `reverb.apk` 之后 —— 顺序不是契约,按名字挑才稳。
@@ -199,7 +209,7 @@ object SelfUpdate {
         }
         Logger.i(TAG, "update available remote=${rel.tag} local=$local size=${rel.size} republished=$republished manual=$manual")
         val file = apkFile(rel)
-        if (file.exists() && file.length() == rel.size) {
+        if (rel.size > 0L && file.exists() && file.length() == rel.size) {
             // 上次下完没装(或装完又启动了一次):不再走一遍网络,直接给安装。
             // 文件名里带摘要前缀,所以"同版本重出包"不会命中这一条而把旧字节再递一次(见 [fileName])。
             _state.value = UpdateState.Ready(target, file)
@@ -347,29 +357,58 @@ object SelfUpdate {
     /**
      * 按候选地址依次试,任一成功即收;全败才报失败(弹窗给「重试 / 以后再说」)。
      *
-     * 每条候选都是**整包重来**,不做断点续传:续传要求远端支持 Range 且 ETag 稳定,
-     * 而这里真正的失败形状是「这条链路连不上」,换一条链路重下比续传更对得上问题。
+     * **断点续传**:分片刻意留在缓存目录里,失败 / 服务被系统收回都不删 —— 下一次
+     * (同一进程重试或下次冷启动)带 `Range` + `If-Range` 接着下。只有用户明确取消/跳过才删。
+     * 远端不支持 Range(回 200)时自动退回整包重下;分片与远端对不上(416 / 总量不符)时也丢掉重来。
      */
     private fun download(rel: Release, jobScope: CoroutineScope) {
         val dir = File(appCtx.cacheDir, DIR).apply { mkdirs() }
-        // 目录里只该留着正在用的这一份:清掉旧版本的残留(60 MB 级,不能堆)
+        val partName = "${rel.fileName()}.part"
+        val metaName = "$partName.json"
+        // 目录里只该留着正在用的这一份:目标、分片、分片元数据。其余是旧版本残留(60 MB 级)。
         dir.listFiles()?.forEach { f ->
-            if (f.name != rel.fileName()) runCatching { f.delete() }
+            if (f.name != rel.fileName() && f.name != partName && f.name != metaName) {
+                runCatching { f.delete() }
+            }
         }
-        val tmp = File(dir, "${rel.fileName()}.part")
+        val part = File(dir, partName)
+        val meta = File(dir, metaName)
         val target = File(dir, rel.fileName())
+
+        // 上次已下完整、只差改名(进程在最后一步被杀):校验后直接收尾,不再走网络。
+        if (rel.size > 0L && part.isFile && part.length() == rel.size) {
+            if (rel.sha256 != null && sha256(part) != rel.sha256) {
+                Logger.w(TAG, "update part sha256 mismatch, discard tag=${rel.tag}")
+                runCatching { part.delete() }
+                runCatching { meta.delete() }
+            } else {
+                runCatching { target.delete() }
+                if (part.renameTo(target)) {
+                    runCatching { meta.delete() }
+                    _dialogShown.value = true
+                    _state.value = UpdateState.Ready(rel, target)
+                    return
+                }
+            }
+        }
+        if (rel.size > 0L && part.isFile && part.length() > rel.size) {
+            runCatching { part.delete() }
+            runCatching { meta.delete() }
+        }
+
         for (url in rel.apkUrls) {
             if (!jobScope.isActive) return   // 已 dismiss:state 是 Idle,这里不该再写它
             val ok = try {
-                attempt(rel, url, tmp, target, jobScope)
+                attempt(rel, url, part, meta, target, jobScope)
             } catch (e: CancellationException) {
-                // 用户点了「以后再说」:静默收场,不要弹一个"下载失败"
+                // 用户点了「以后再说」:静默收场;只有取消才删分片(下次要重下)。
                 Logger.i(TAG, "update download cancelled tag=${rel.tag}")
-                runCatching { tmp.delete() }
+                runCatching { part.delete() }
+                runCatching { meta.delete() }
                 return
             } catch (e: Exception) {
+                // 链路级失败**保留分片**:下一个候选或下一次启动可以续传。
                 Logger.e(TAG, "update download failed endpoint=${Logger.endpoint(url)} tag=${rel.tag}", e)
-                runCatching { tmp.delete() }
                 false
             }
             if (ok) {
@@ -379,34 +418,56 @@ object SelfUpdate {
                 _state.value = UpdateState.Ready(rel, target)
                 return
             }
-            runCatching { tmp.delete() }
         }
-        Logger.w(TAG, "update download all candidates failed tag=${rel.tag}")
+        Logger.w(TAG, "update download all candidates failed tag=${rel.tag} part=${part.length()}")
         _dialogShown.value = true
         _state.value = UpdateState.Failed(rel)
     }
 
     /**
-     * 用一条地址把整包下完并校验。返回 false = 「这一条不行,换下一条」;
-     * 抛异常 = 链路级失败,同样由调用方换候选。
+     * 用一条地址续传/下载并校验。返回 false = 这一条没完成(**分片保留**);
+     * 抛异常 = 链路级失败,同样由调用方换候选且保留分片。
      */
     private fun attempt(
         rel: Release,
         url: String,
-        tmp: File,
+        part: File,
+        metaFile: File,
         target: File,
         jobScope: CoroutineScope
     ): Boolean {
-        runCatching { tmp.delete() }
-        val req = Request.Builder()
+        var partBytes = if (part.isFile) part.length() else 0L
+        val meta = readResumeMeta(metaFile)
+        val canResume = partBytes > 0L && meta != null && meta.tag == rel.tag &&
+            (meta.total <= 0L || rel.size <= 0L || meta.total == rel.size) &&
+            (!meta.etag.isNullOrBlank() || !meta.lastModified.isNullOrBlank())
+        if (partBytes > 0L && !canResume) {
+            Logger.w(TAG, "update discard unusable part bytes=$partBytes tag=${rel.tag}")
+            runCatching { part.delete() }
+            runCatching { metaFile.delete() }
+            partBytes = 0L
+        }
+        val builder = Request.Builder()
             .url(url)
             .header("User-Agent", "Reverb/1.0 (Android podcast client)")
             // API 那个端点**必须**带这个头才会 302 到文件本体;不带就返回 JSON,
             // 而 JSON 存成 .apk 会一路走到系统安装器才失败。直链对这个头不敏感,
             // 所以两条候选共用一份请求头。
             .header("Accept", "application/octet-stream")
-            .build()
-        client.newCall(req).execute().use { resp ->
+        if (canResume) {
+            builder.header("Range", "bytes=$partBytes-")
+            (meta?.etag?.takeIf { it.isNotBlank() }
+                ?: meta?.lastModified?.takeIf { it.isNotBlank() })
+                ?.let { builder.header("If-Range", it) }
+        }
+        client.newCall(builder.build()).execute().use { resp ->
+            if (resp.code == 416) {
+                // 分片越过远端资源(或远端换了文件):丢掉,下一次从 0 开始。
+                Logger.w(TAG, "update resume range not satisfiable tag=${rel.tag} bytes=$partBytes")
+                runCatching { part.delete() }
+                runCatching { metaFile.delete() }
+                return false
+            }
             val body = resp.body
             if (!resp.isSuccessful || body == null) {
                 Logger.w(TAG, "update download http ${resp.code} endpoint=${Logger.endpoint(url)}")
@@ -418,20 +479,37 @@ object SelfUpdate {
                 Logger.w(TAG, "update download untrusted redirect endpoint=${Logger.endpoint(resp.request.url.toString())}")
                 return false
             }
-            val total = if (body.contentLength() > 0) body.contentLength() else rel.size
-            val md = runCatching { MessageDigest.getInstance("SHA-256") }.getOrNull()
+            val range = if (resp.code == 206) parseContentRange(resp.header("Content-Range")) else null
+            if (resp.code == 206 && (range == null || range.first != partBytes)) {
+                Logger.w(TAG, "update resume range mismatch got=${resp.header("Content-Range")} want=$partBytes")
+                runCatching { part.delete() }
+                runCatching { metaFile.delete() }
+                return false
+            }
+            val offset = if (resp.code == 206) range!!.first else 0L
+            val total = when {
+                resp.code == 206 && range != null && range.second > 0L -> range.second
+                body.contentLength() > 0L -> body.contentLength()
+                else -> rel.size
+            }
+            val etag = resp.header("ETag")
+            val lastModified = resp.header("Last-Modified")
+            if (etag != null || lastModified != null) {
+                writeResumeMeta(metaFile, ResumeMeta(rel.tag, etag, lastModified, total))
+            } else {
+                runCatching { metaFile.delete() }
+            }
             var read = 0L
             var shown = -1
             body.byteStream().use { input ->
-                tmp.outputStream().use { out ->
+                java.io.FileOutputStream(part, resp.code == 206).use { out ->
                     val buf = ByteArray(8192)
                     var n: Int
                     while (input.read(buf).also { n = it } != -1) {
                         out.write(buf, 0, n)
-                        md?.update(buf, 0, n)
                         read += n
-                        if (total > 0) {
-                            val pct = ((read.toFloat() / total) * 100).toInt().coerceIn(0, 100)
+                        if (total > 0L) {
+                            val pct = (((offset + read).toFloat() / total) * 100).toInt().coerceIn(0, 100)
                             // **只在整数百分比变化时写 StateFlow**:按块刷等于给下载加一条
                             // 高频重渲源(硬规矩 6/7 那一类),101 次才是这条进度该有的成本。
                             if (pct != shown) {
@@ -444,30 +522,84 @@ object SelfUpdate {
                     out.flush()
                 }
             }
-            // 字节数先对一道:这条抓的是**要装进系统的东西**,而"拿到 JSON 而不是 APK"这种
-            // 形状在 digest 缺失的老 release 上没有任何别的检查会拦住它
-            if (rel.size > 0L && read != rel.size) {
-                Logger.w(TAG, "update download size mismatch tag=${rel.tag} got=$read want=${rel.size}")
+            val downloaded = offset + read
+            val actualSize = part.length()
+            if (rel.size > 0L && actualSize != rel.size) {
+                // 短了 = 没下完,分片留着下次续;长了 = 远端给错了,丢掉重来。
+                Logger.w(TAG, "update download size mismatch tag=${rel.tag} got=$actualSize want=${rel.size} read=$downloaded")
+                if (actualSize > rel.size) {
+                    runCatching { part.delete() }
+                    runCatching { metaFile.delete() }
+                }
                 return false
             }
-            val actual = md?.digest()?.joinToString("") { "%02x".format(it) }
+            val actual = sha256(part)
             if (rel.sha256 != null) {
                 if (actual == null || actual != rel.sha256) {
                     Logger.w(TAG, "update sha256 mismatch tag=${rel.tag}")
+                    runCatching { part.delete() }
+                    runCatching { metaFile.delete() }
                     return false
                 }
                 Logger.i(TAG, "update sha256 verified tag=${rel.tag}")
             } else {
-                // release 的 digest 字段是较近才有的,老 release 没有:没有就只按字节数对得上
-                Logger.w(TAG, "update no digest published tag=${rel.tag} bytes=$read")
+                // release 的 digest 字段是较近才有的,Atom 兜底那条也没有:没有就只按字节数对得上
+                Logger.w(TAG, "update no digest published tag=${rel.tag} bytes=$actualSize")
             }
-            if (!tmp.renameTo(target)) {
+            runCatching { target.delete() }
+            if (!part.renameTo(target)) {
                 Logger.w(TAG, "update rename failed tag=${rel.tag}")
                 return false
             }
-            Logger.i(TAG, "update downloaded tag=${rel.tag} bytes=$read endpoint=${Logger.endpoint(url)}")
+            runCatching { metaFile.delete() }
+            Logger.i(TAG, "update downloaded tag=${rel.tag} bytes=$actualSize resumed=${offset > 0} endpoint=${Logger.endpoint(url)}")
             return true
         }
+    }
+
+    internal data class ResumeMeta(
+        val tag: String,
+        val etag: String?,
+        val lastModified: String?,
+        val total: Long
+    )
+
+    private fun readResumeMeta(file: File): ResumeMeta? = try {
+        if (!file.isFile) null else JSONObject(file.readText()).let { o ->
+            ResumeMeta(
+                tag = o.optString("tag"),
+                etag = o.optString("etag").takeIf { it.isNotBlank() },
+                lastModified = o.optString("lastModified").takeIf { it.isNotBlank() },
+                total = o.optLong("total", 0L)
+            )
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun writeResumeMeta(file: File, meta: ResumeMeta) {
+        runCatching {
+            file.writeText(JSONObject().apply {
+                put("tag", meta.tag)
+                put("etag", meta.etag ?: "")
+                put("lastModified", meta.lastModified ?: "")
+                put("total", meta.total)
+            }.toString())
+        }
+    }
+
+    /** 整文件哈希。下载时不再边写边算,因为续传要先读旧分片 —— 统一在收尾时算一次更不容易错。 */
+    private fun sha256(file: File): String? = try {
+        val md = MessageDigest.getInstance("SHA-256")
+        file.inputStream().use { input ->
+            val buf = ByteArray(8192)
+            var n: Int
+            while (input.read(buf).also { n = it } != -1) md.update(buf, 0, n)
+        }
+        md.digest().joinToString("") { "%02x".format(it) }
+    } catch (e: Exception) {
+        Logger.w(TAG, "update part hash failed: ${e.javaClass.simpleName}")
+        null
     }
 
     /**
@@ -532,6 +664,7 @@ object SelfUpdate {
         if (::appCtx.isInitialized) {
             runCatching { appCtx.stopService(Intent(appCtx, UpdateDownloadService::class.java)) }
             runCatching { File(File(appCtx.cacheDir, DIR), "${rel.fileName()}.part").delete() }
+            runCatching { File(File(appCtx.cacheDir, DIR), "${rel.fileName()}.part.json").delete() }
         }
         prefs.edit().putString(KEY_SKIPPED, rel.muteKey()).apply()
         if (::appCtx.isInitialized) UpdateNotifications.cancel(appCtx)
@@ -546,7 +679,14 @@ object SelfUpdate {
         _state.value = UpdateState.Idle
     }
 
-    private fun fetchLatest(): Release? = try {
+    private fun fetchLatest(): Release? {
+        apiLatest()?.let { return it }
+        return atomLatest()
+    }
+
+    /// REST 列表(主路):要 digest 判同版本重出包,API 一次就带回来了。
+    /// 限额用尽时它回 403 —— 那只是**降级信号**,不是检测失败,交给 [atomLatest]。
+    private fun apiLatest(): Release? = try {
         val req = Request.Builder()
             .url(RELEASES_URL)
             .header("User-Agent", "Reverb/1.0 (Android podcast client)")
@@ -561,6 +701,99 @@ object SelfUpdate {
     } catch (e: Exception) {
         Logger.e(TAG, "update check error endpoint=${Logger.endpoint(RELEASES_URL)}", e)
         null
+    }
+
+    /// Atom 兜底:只有 tag,没有大小与 digest,所以拿直链 HEAD 补大小。
+    /// 只认纯数字版本(可带 v),预发布 tag 不推给用户;没有任何比本机新的就返回一条空读数。
+    private fun atomLatest(): Release? = try {
+        val req = Request.Builder()
+            .url(ATOM_URL)
+            .header("User-Agent", "Reverb/1.0 (Android podcast client)")
+            .header("Accept", "application/atom+xml")
+            .build()
+        client.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                Logger.w(TAG, "update atom http ${resp.code} endpoint=${Logger.endpoint(ATOM_URL)}")
+                null
+            } else {
+                val tags = parseAtomTags(resp.body?.string().orEmpty())
+                val newest = tags.firstOrNull() ?: return null
+                if (!isNewer(newest, BuildConfig.VERSION_NAME)) {
+                    return Release(tag = newest, apkUrls = emptyList(), size = 0L, sha256 = null)
+                }
+                for (tag in tags.asSequence().filter { isNewer(it, BuildConfig.VERSION_NAME) }.take(5)) {
+                    val direct = DOWNLOAD_BASE + Uri.encode(tag) + "/" + APK_ASSET_NAME
+                    val size = probeApk(direct)
+                    if (size > 0L) {
+                        Logger.i(TAG, "update atom found tag=$tag size=$size")
+                        return Release(tag = tag, apkUrls = listOf(direct), size = size, sha256 = null)
+                    }
+                }
+                Logger.w(TAG, "update atom no reachable apk in ${tags.size} tags")
+                null
+            }
+        }
+    } catch (e: Exception) {
+        Logger.e(TAG, "update atom error endpoint=${Logger.endpoint(ATOM_URL)}", e)
+        null
+    }
+
+    /// 直链 HEAD 取字节数;404(那一版没挂 apk)与网络失败都回 0,由调用方换下一版。
+    private fun probeApk(url: String): Long {
+        return try {
+            val req = Request.Builder().url(url)
+                .header("User-Agent", "Reverb/1.0 (Android podcast client)")
+                .head()
+                .build()
+            client.newCall(req).execute().use { resp ->
+                if (!resp.isSuccessful) return 0L
+                if (resp.request.url.host !in TRUSTED_HOSTS) {
+                    Logger.w(TAG, "update atom untrusted host ${resp.request.url.host}")
+                    return 0L
+                }
+                resp.body?.contentLength()?.takeIf { it > 0L } ?: 0L
+            }
+        } catch (e: Exception) {
+            Logger.w(TAG, "update atom head failed: ${e.javaClass.simpleName}")
+            0L
+        }
+    }
+
+    /**
+     * Atom 流里的 `<title>` 就是 tag。只认纯数字版本(可带 v 前缀),去重后按版本降序。
+     * 单独拆出来是为了能单测 —— 解析错会把 beta 或旧版推给用户。
+     */
+    internal fun parseAtomTags(xml: String): List<String> {
+        val seen = LinkedHashSet<String>()
+        for (m in ATOM_ENTRY.findAll(xml)) {
+            val raw = m.groupValues[1].trim()
+            if (!isStableVersionTag(raw)) continue
+            seen.add(raw)
+        }
+        return seen.sortedWith { a, b ->
+            when {
+                isNewer(a, b) -> -1
+                isNewer(b, a) -> 1
+                else -> 0
+            }
+        }
+    }
+
+    internal fun isStableVersionTag(raw: String): Boolean {
+        val s = raw.trim().trimStart('v', 'V')
+        return s.isNotEmpty() && s.matches(Regex("\\d+(\\.\\d+)*"))
+    }
+
+    /** `Content-Range: bytes 1000-2023/6622867` → `(1000, 6622867)`;总量 `*` 记 0。 */
+    internal fun parseContentRange(raw: String?): Pair<Long, Long>? {
+        if (raw.isNullOrBlank()) return null
+        val parts = raw.trim().split(" ", limit = 2)
+        if (parts.size != 2 || parts[0] != "bytes") return null
+        val halves = parts[1].split("/", limit = 2)
+        if (halves.size != 2) return null
+        val start = halves[0].substringBefore('-').toLongOrNull() ?: return null
+        val total = if (halves[1] == "*") 0L else halves[1].toLongOrNull() ?: 0L
+        return start to total
     }
 
     /**

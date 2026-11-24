@@ -28,6 +28,11 @@ struct RootView: View {
     /// 播放条才刚刚因为 `prepare` 有了 current,那条 sheet 根本没被构建过。
     @State private var showPlayerFromURL = false
 
+    /// 分段里当前可见的页。顺序沿用 Section.allCases,只按设置裁剪。
+    private var visibleSections: [Section] {
+        settings.radioEnabled ? Section.allCases : Section.allCases.filter { $0 != .radio }
+    }
+
     var body: some View {
         ZStack {
         VStack(spacing: 0) {
@@ -35,7 +40,10 @@ struct RootView: View {
                 Group {
                     switch section {
                     case .discover: DiscoverView()
-                    case .radio: RadioView()
+                    // 电台在设置里被关掉时不进这一页 —— 分段已不显示它,
+                    // 但冷启动恢复的 section 可能还停在它上面。
+                    case .radio:
+                        if settings.radioEnabled { RadioView() } else { DiscoverView() }
                     case .inbox: InboxView()
                     case .library: LibraryView()
                     }
@@ -44,14 +52,15 @@ struct RootView: View {
                 .toolbar {
                     ToolbarItem(placement: .principal) {
                         Picker("", selection: $section) {
-                            ForEach(Section.allCases) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
+                            ForEach(visibleSections) { Text(LocalizedStringKey($0.rawValue)).tag($0) }
                         }
                         .pickerStyle(.segmented)
                         .labelsHidden()
                         // 四格是定宽:最长的一组是法语(Découvrir / Radio / Nouveautés / Bibliothèque)。
                         // 从三格加到四格时把 300 调到 400 —— 加格之后会不会截断标签,
                         // 仍只有把界面跑起来才看得见,别凭猜再动这个数(本轮屏幕被锁,没看过)。
-                        .frame(width: 400)
+                        // 三格时回到 300,四格 400;格子数随「电台」开关变。
+                        .frame(width: settings.radioEnabled ? 400 : 300)
                         // 换分段 = 换了一个根视图,NavigationStack 里已经推上去的详情页要一起清掉
                         // (见 REVIEW-2026-10-25 族 E)。原先只换根视图、`path` 不动,
                         // 于是栈顶停在某频道主页时点「追更」/「音阁」**没有任何可见效果** ——
@@ -60,6 +69,13 @@ struct RootView: View {
                         // 本包 `platforms: [.macOS(.v13)]`,与 `LibraryView` 里那条同段切换清状态的写法保持一致。
                         .onChange(of: section) { _ in
                             path = NavigationPath()
+                        }
+                        // 在同一张设置页里关掉电台:分段当场少一格,若正停在电台要切回发现。
+                        .onChange(of: settings.radioEnabled) { on in
+                            if !on && section == .radio {
+                                section = .discover
+                                path = NavigationPath()
+                            }
                         }
                     }
                     ToolbarItem(placement: .primaryAction) {

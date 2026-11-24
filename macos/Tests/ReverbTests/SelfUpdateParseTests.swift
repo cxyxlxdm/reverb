@@ -60,4 +60,34 @@ final class SelfUpdateParseTests: XCTestCase {
         XCTAssertFalse(SelfUpdate.isNewer("1.0.8", than: "1.0.8"))
         XCTAssertFalse(SelfUpdate.isNewer("1.0.9", than: "1.0.10"))
     }
+
+    // MARK: - Atom 发布流(2026-11-23 起检测主路)
+
+    func testAtomTagsAreNumericSortedAndFiltered() {
+        let xml = """
+        <feed>
+          <title>Release notes from revert-cast</title>
+          <entry><title>1.0.8</title></entry>
+          <entry><title>1.0.10</title></entry>
+          <entry><title>v1.0.9</title></entry>
+          <entry><title>1.1.0-beta</title></entry>
+          <entry><title>1.0.10</title></entry>
+        </feed>
+        """
+        XCTAssertEqual(SelfUpdate.parseAtomTags(Data(xml.utf8)), ["1.0.10", "v1.0.9", "1.0.8"])
+        XCTAssertFalse(SelfUpdate.isStableVersionTag("1.1.0-beta"))
+        XCTAssertFalse(SelfUpdate.isStableVersionTag("Release notes"))
+        XCTAssertTrue(SelfUpdate.isStableVersionTag("v1.0.9"))
+    }
+
+    func testAssetMapKeepsDigestAndPreferredURLOrder() {
+        let map = SelfUpdate.parseAssetMap(fixture())
+        XCTAssertEqual(map["1.0.8"]?.size, 444)
+        XCTAssertEqual(map["1.0.8"]?.sha256, "cc")
+        XCTAssertEqual(map["1.0.8"]?.urls.first,
+                       "https://api.github.com/repos/cxyxlxdm/revert-cast/releases/assets/4")
+        // prerelease 不进表;只有 apk 的 1.0.9 也不进。
+        XCTAssertNil(map["1.0.10-beta"])
+        XCTAssertNil(map["1.0.9"])
+    }
 }

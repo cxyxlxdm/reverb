@@ -71,7 +71,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
-private enum class Dlg { NONE, REGION, THEME, FONT, ACCENT, SPEED, SKIP_BACK, SKIP_FWD, LANGUAGE, RADIO }
+private enum class Dlg { NONE, REGION, THEME, FONT, ACCENT, SPEED, SKIP_BACK, SKIP_FWD, LANGUAGE, RADIO, FEATURES }
 
 // 字号的四档**倍率**不在这里了:它下移到了 `SettingsStore.FONT_SCALES`,因为备份读写
 // 也要在同一份表上做「倍率 ↔ 下标」换算(那是数据口径,不该依赖本文件)。下面这张标签表
@@ -103,6 +103,10 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     val language by settings.language.collectAsStateWithLifecycle()
     val spectrumEnabled by settings.spectrumEnabled.collectAsStateWithLifecycle()
     val transcriptionEnabled by settings.transcriptionEnabled.collectAsStateWithLifecycle()
+    val radioEnabled by settings.radioEnabled.collectAsStateWithLifecycle()
+    val radioFullEnabled by settings.radioFullEnabled.collectAsStateWithLifecycle()
+    val castEnabled by settings.castEnabled.collectAsStateWithLifecycle()
+    val lanSyncEnabled by settings.lanSyncEnabled.collectAsStateWithLifecycle()
     val wordHighlight by settings.wordHighlight.collectAsStateWithLifecycle()
     val contextualRadio by settings.contextualRadio.collectAsStateWithLifecycle()
     val regionOverride by regionStore.override.collectAsStateWithLifecycle()
@@ -283,7 +287,8 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
                 ) { dlg = Dlg.REGION }
             }
             SettingRow(stringResource(R.string.set_footprint), stringResource(R.string.set_footprint_sub)) { onOpenFootprint() }
-            // 电台本身就是「内容推荐」,它与 `CATALOG` 同进同出,设置项自然也跟着这个门
+            // 「电台模式」管的是首页右上角那个随机 / 情境电台,与底栏「电台」那格(直播流)
+            // 是两件东西 —— 所以功能开关里关掉「电台」时,**这一行不跟着藏**。
             if (BuildConfig.CATALOG) {
                 SettingRow(
                     stringResource(R.string.set_radio_mode),
@@ -376,14 +381,25 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
 
             // 局域网同步单独一段:它既不是"备份文件"也不是"日志",放在备份段里会被读成
             // "又一种导出格式";而它实际是**两台设备之间实时合并**(协议见 sync/ 目录)。
-            SectionLabel(stringResource(R.string.sec_lan))
-            SettingRow(stringResource(R.string.set_lan_sync), stringResource(R.string.set_lan_sync_sub)) {
-                val needLanPerm = Build.VERSION.SDK_INT >= 37 &&
-                    ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
-                    PackageManager.PERMISSION_GRANTED
-                if (needLanPerm) lanPermLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
-                else showLanSync = true
+            // 聚合开关关掉这一项时整段不出现 —— 不是灰行,是"这个功能不存在"。
+            if (lanSyncEnabled) {
+                SectionLabel(stringResource(R.string.sec_lan))
+                SettingRow(stringResource(R.string.set_lan_sync), stringResource(R.string.set_lan_sync_sub)) {
+                    val needLanPerm = Build.VERSION.SDK_INT >= 37 &&
+                        ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
+                        PackageManager.PERMISSION_GRANTED
+                    if (needLanPerm) lanPermLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+                    else showLanSync = true
+                }
             }
+
+            // 功能聚合开关放在维护区(日志之前),不进页首:它是"改应用形态"的元设置,
+            // 一进设置先看到它会把内容/外观这些高频项压到下面。五项逐项即时生效。
+            SectionLabel(stringResource(R.string.sec_features))
+            SettingRow(
+                stringResource(R.string.set_features),
+                subtitle = stringResource(R.string.set_features_sub)
+            ) { dlg = Dlg.FEATURES }
 
             SectionLabel(stringResource(R.string.set_logs))
             SettingRow(stringResource(R.string.set_share_log), stringResource(R.string.set_share_log_sub)) {
@@ -490,6 +506,31 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             onPick = { i ->
                 settings.setLanguage(LANG_TAGS[i]); dlg = Dlg.NONE; languageRecreate = true
             }, onDismiss = dismiss
+        )
+        Dlg.FEATURES -> FeatureSwitchDialog(
+            transcription = transcriptionEnabled,
+            radio = radioEnabled,
+            radioFull = radioFullEnabled,
+            cast = castEnabled,
+            lanSync = lanSyncEnabled,
+            onTranscription = { settings.setTranscriptionEnabled(it) },
+            onRadio = { on ->
+                settings.setRadioEnabled(on)
+                // 关电台要把正在播的那一路直播停掉:它没有"整段"边界,留在后台只会一直耗流量,
+                // 而用户已经明说不要这个功能了。普通播客/下载音频不动。
+                if (!on && PlayerController.current.value?.isLive == true) PlayerController.close()
+            },
+            onRadioFull = { settings.setRadioFullEnabled(it) },
+            onCast = { on ->
+                settings.setCastEnabled(on)
+                // 已连上的投播会话当场断开;否则界面没了入口、声音却还在那台设备上响。
+                if (!on) container.cast.stop()
+            },
+            onLanSync = { on ->
+                settings.setLanSyncEnabled(on)
+                if (!on) showLanSync = false
+            },
+            onDismiss = dismiss
         )
         Dlg.NONE -> Unit
     }
@@ -803,6 +844,64 @@ private fun SettingSwitch(title: String, subtitle: String?, checked: Boolean, on
         }
         Switch(checked = checked, onCheckedChange = onChange)
     }
+}
+
+/**
+ * 功能聚合开关:五项各一个复选框,**勾一下即生效**(没有确定/取消)。
+ *
+ * 为什么不做成"改完点确定":这些开关的效果都是"入口当场出现/消失"——
+ * 电台撤的是底栏一格、完整直播电台撤的是页内管理面、投播撤的是播放页一颗控件。
+ * 若先攒着等确定,用户勾完看不到变化,反而以为没反应;而"取消"还要把已经写进设置的值回滚一次。
+ */
+@Composable
+private fun FeatureSwitchDialog(
+    transcription: Boolean,
+    radio: Boolean,
+    radioFull: Boolean,
+    cast: Boolean,
+    lanSync: Boolean,
+    onTranscription: (Boolean) -> Unit,
+    onRadio: (Boolean) -> Unit,
+    onRadioFull: (Boolean) -> Unit,
+    onCast: (Boolean) -> Unit,
+    onLanSync: (Boolean) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val rows: List<Triple<String, Boolean, (Boolean) -> Unit>> = listOf(
+        Triple(stringResource(R.string.set_transcription), transcription, onTranscription),
+        Triple(stringResource(R.string.nav_radio), radio, onRadio),
+        Triple(stringResource(R.string.radio_full_title), radioFull, onRadioFull),
+        Triple(stringResource(R.string.a11y_cast), cast, onCast),
+        Triple(stringResource(R.string.set_lan_sync), lanSync, onLanSync)
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.dlg_features_title)) },
+        text = {
+            Column {
+                rows.forEach { (label, checked, onChange) ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { onChange(!checked) }
+                            .padding(vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = checked, onCheckedChange = onChange)
+                        Spacer(Modifier.width(8.dp))
+                        Text(label, style = MaterialTheme.typography.bodyLarge)
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    stringResource(R.string.radio_full_hint),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.action_done)) } }
+    )
 }
 
 @Composable

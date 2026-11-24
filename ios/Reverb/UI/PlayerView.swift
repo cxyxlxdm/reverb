@@ -8,6 +8,7 @@ import UIKit
 struct PlayerView: View {
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
+    @EnvironmentObject var settings: SettingsStore
     @Environment(\.dismiss) private var dismiss
 
     @State private var dragging = false
@@ -147,9 +148,12 @@ struct PlayerView: View {
             Spacer()
             Text("正在播放").font(.headline)
             Spacer()
-            AirPlayRouteButton(tint: UIColor(accent))
-                .frame(width: 44, height: 44)
-                .accessibilityLabel(Text("投放"))
+            // 设置里关掉投播后入口整条不出现(系统接收端面板本身仍在系统层,这里只管入口)。
+            if settings.castEnabled {
+                AirPlayRouteButton(tint: UIColor(accent))
+                    .frame(width: 44, height: 44)
+                    .accessibilityLabel(Text("投放"))
+            }
         }
         .padding(.horizontal, 4)
     }

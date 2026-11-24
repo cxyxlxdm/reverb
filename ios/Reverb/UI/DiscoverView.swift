@@ -82,6 +82,11 @@ struct DiscoverView: View {
     /// 「加入待播」的结果提示:入队落在待播页,当前页看不出任何变化,不提示等于没按上。
     @State private var toast: String?
     @State private var toastToken = 0
+    /// 搜索框焦点:只有聚焦且输入为空时展示历史记录。
+    @FocusState private var searchFocused: Bool
+    /// 语音搜索:录音 → 本机识别 → 回填查询词并直接搜(点一下开始、再点一下结束)。
+    @StateObject private var voice = VoiceSearchController()
+    @State private var confirmClearHistory = false
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
@@ -102,14 +107,16 @@ struct DiscoverView: View {
 
     private var page: some View {
         Group {
-            if isSearchActive { searchContent } else { popularContent }
+            if isSearchActive { searchContent }
+            else if showingHistory { historyContent }
+            else { popularContent }
         }
         .navigationTitle("余音")
         // 标题与右侧按钮同处工具栏一行,不再另起一行大标题(四个 tab 同口径)。
         .toolbarTitleDisplayMode(.inlineLarge)
-        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
-                    prompt: "搜索播客/视频或粘贴 RSS、直播流、视频链接")
-        .onSubmit(of: .search) { runSearch() }
+        // 自绘搜索条替代 `.searchable`:.searchable 的搜索框里放不进麦克风按钮,
+        // 也挂不出「最近搜索」面板。safeAreaInset 让它常驻在导航栏下方,行为与原来一致。
+        .safeAreaInset(edge: .top, spacing: 0) { searchBar }
         .onChange(of: searchText) { _, v in
             // `-search` 验收钩子设进去的查询词会被 `.searchable` 的初始绑定复位成空串;
             // 那一轮空串不能把已提交的查询也清掉(否则跑完搜索又退回榜单页)。
@@ -348,6 +355,145 @@ struct DiscoverView: View {
 
     // MARK: - 搜索
 
+    /// 搜索条:放大镜 + 输入框 + 清除 + 麦克风。
+    /// 历史记录只在「聚焦且输入为空」时顶替正文(见 `showingHistory`),不额外弹层 ——
+    /// 键盘弹起时再叠一层浮层会挡住前几条记录。
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("搜索播客/视频或粘贴 RSS、直播流、视频链接", text: $searchText)
+                .focused($searchFocused)
+                .submitLabel(.search)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onSubmit {
+                    searchFocused = false
+                    runSearch()
+                }
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    searchFocused = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(Text("清除"))
+            }
+            voiceButton
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .padding(.horizontal, Metrics.pagePadding)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    @ViewBuilder
+    private var voiceButton: some View {
+        if VoiceSearchController.isSupported {
+            Button(action: toggleVoice) {
+                switch voice.state {
+                case .idle:
+                    Image(systemName: "mic.fill")
+                case .recording:
+                    Image(systemName: "stop.circle.fill").foregroundStyle(.red)
+                case .transcribing:
+                    ProgressView().controlSize(.small)
+                }
+            }
+            .buttonStyle(.borderless)
+            .disabled(voice.state == .transcribing)
+            .accessibilityLabel(Text(voice.state == .recording ? "停止录音" : "语音搜索"))
+        }
+    }
+
+    private var showingHistory: Bool {
+        searchFocused
+            && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !env.searchHistory.items.isEmpty
+    }
+
+    private var historyContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("最近搜索").font(.headline)
+                    Spacer()
+                    Button("清空") { confirmClearHistory = true }
+                        .font(.callout)
+                }
+                .padding(.vertical, 10)
+                ForEach(env.searchHistory.items, id: \.self) { q in
+                    HStack(spacing: 12) {
+                        Button {
+                            searchText = q
+                            searchFocused = false
+                            runSearch(q)
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary)
+                                Text(q).lineLimit(1).foregroundStyle(.primary)
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            env.searchHistory.remove(q)
+                        } label: {
+                            Image(systemName: "xmark").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(Text("删除"))
+                    }
+                    .padding(.vertical, 10)
+                    Divider()
+                }
+            }
+            .padding(.horizontal, Metrics.pagePadding)
+            .padding(.top, 4)
+        }
+        .confirmationDialog("清空搜索历史？", isPresented: $confirmClearHistory, titleVisibility: .visible) {
+            Button("清空全部", role: .destructive) { env.searchHistory.clear() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("清空后无法恢复。")
+        }
+    }
+
+    private func toggleVoice() {
+        switch voice.state {
+        case .idle:
+            searchFocused = false
+            Task {
+                switch await voice.start() {
+                case .started:
+                    break
+                case .permissionDenied:
+                    showToast(NSLocalizedString("没有麦克风权限，请到系统设置里允许余音使用麦克风。", comment: "语音搜索权限提示"))
+                case .unsupported:
+                    showToast(NSLocalizedString("这台设备不支持本机语音识别。", comment: "语音搜索能力提示"))
+                case .failed:
+                    showToast(NSLocalizedString("无法开始录音，请重试。", comment: "语音搜索失败提示"))
+                }
+            }
+        case .recording:
+            Task {
+                let text = await voice.stopAndTranscribe(locale: TranscriptStore.locale(for: settings.language))
+                guard let text, !text.isEmpty else {
+                    showToast(NSLocalizedString("没听清，再试一次。", comment: "语音搜索空结果提示"))
+                    return
+                }
+                searchText = text
+                runSearch(text)
+            }
+        case .transcribing:
+            break
+        }
+    }
+
     private var searchContent: some View {
         ScrollViewReader { proxy in
             ScrollView { searchResults }
@@ -444,6 +590,8 @@ struct DiscoverView: View {
         let q = (raw ?? searchText).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         submittedQuery = q
+        // 只在真正发起检索时记历史(输入到一半、粘贴了却不提交都不记),与另三端同口径。
+        env.searchHistory.record(q)
         searching = true
         liveEpisode = nil
         searchPodcasts = []

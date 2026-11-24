@@ -299,15 +299,34 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
      * `InboxStore.refresh`)。叠层之后每页只在**第一次被选中**时建一次(`seen*` 那笔账见下面注释),
      * 之后切换只是翻一个整数。**加第三格时必须继续走这套**(见 H108),不能退回 NavHost。
      */
-    val tabs = listOf(
-        GlassTabSpec(stringResource(R.string.nav_discover), Icons.Rounded.Explore),
-        // 电台放在发现之后:两者都是"找东西听"的入口,而它是一份长期维护的账本,
-        // 不是音阁那种"自己的库存"。顺序一改,下面所有页号(0..3)都要跟着改。
-        GlassTabSpec(stringResource(R.string.nav_radio), Icons.Rounded.Radio),
-        GlassTabSpec(stringResource(R.string.nav_feed), Icons.Rounded.RssFeed),
-        GlassTabSpec(stringResource(R.string.nav_library), Icons.Rounded.LibraryMusic)
-    )
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    /**
+     * 底栏的格子按**稳定页号**维护,再按设置过滤出可见序列。
+     *
+     * 为什么不让 `selectedTab` 直接存可见下标:设了功能开关之后「电台」这一格会真的消失,
+     * 可见下标与页身份就脱钩了 —— 昨天存的 2 今天可能是另一页。这里 [selectedKind] 恒等于
+     * 页身份(发现 0 / 电台 1 / 追更 2 / 音阁 3),[selectedIndex] 才是栏与叠层用的下标。
+     * 与鸿蒙 `TAB_KIND_KEY` 是同一套解(那边 HdsTabs 也必须按可见序列重编号)。
+     */
+    val container = (LocalContext.current.applicationContext as ReverbApp).container
+    val radioEnabled by container.settingsStore.radioEnabled.collectAsStateWithLifecycle()
+    val radioFullEnabled by container.settingsStore.radioFullEnabled.collectAsStateWithLifecycle()
+    val kinds = remember(radioEnabled) {
+        if (radioEnabled) listOf(0, 1, 2, 3) else listOf(0, 2, 3)
+    }
+    val tabs = kinds.map { kind ->
+        when (kind) {
+            1 -> GlassTabSpec(stringResource(R.string.nav_radio), Icons.Rounded.Radio)
+            2 -> GlassTabSpec(stringResource(R.string.nav_feed), Icons.Rounded.RssFeed)
+            3 -> GlassTabSpec(stringResource(R.string.nav_library), Icons.Rounded.LibraryMusic)
+            else -> GlassTabSpec(stringResource(R.string.nav_discover), Icons.Rounded.Explore)
+        }
+    }
+    var selectedKind by rememberSaveable { mutableIntStateOf(0) }
+    val selectedIndex = kinds.indexOf(selectedKind).coerceAtLeast(0)
+    // 电台被关掉时若正停在那格,回发现页 —— 否则可见页与栏的选中格都会对不上。
+    LaunchedEffect(kinds) {
+        if (selectedKind !in kinds) selectedKind = 0
+    }
     /// 追更 / 音阁各建过没有。**懒**建它们的理由分两条:
     /// ① 冷启动不该为一个没打开的页面付 compose 的钱;
     /// ② **进了那一页才会发它自己的那笔请求** —— 追更一建就触发 `InboxBody` 的进页刷新
@@ -332,8 +351,11 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
     var feedTopToken by rememberSaveable { mutableIntStateOf(0) }
     var libraryTopToken by rememberSaveable { mutableIntStateOf(0) }
 
+    /** 可见下标 → 稳定页号。栏与手势给的都是可见下标。 */
+    fun kindAt(i: Int): Int = kinds.getOrElse(i) { kinds.first() }
+
     fun requestScrollTop(i: Int) {
-        when (i) {
+        when (kindAt(i)) {
             0 -> discoverTopToken++
             1 -> radioTopToken++
             2 -> feedTopToken++
@@ -342,15 +364,16 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
     }
 
     fun select(i: Int) {
-        if (i == 1) seenRadio = true
-        if (i == 2) seenFeed = true
-        if (i == 3) seenLibrary = true
-        selectedTab = i
+        val kind = kindAt(i)
+        if (kind == 1) seenRadio = true
+        if (kind == 2) seenFeed = true
+        if (kind == 3) seenLibrary = true
+        selectedKind = kind
     }
 
     // 系统返回的语义与内层 NavHost 时代一致:不在首页先回首页,已在首页才交给系统退出。
     // (以前这条路由内层回退栈天然提供,拆掉栈之后必须显式接回来。)
-    BackHandler(enabled = selectedTab != 0) { select(0) }
+    BackHandler(enabled = selectedKind != 0) { select(0) }
 
     /**
      * 底部悬浮玻璃栏(与鸿蒙 GlassTabBar 同款,装机验收基准)。原来是一块贴底的
@@ -469,30 +492,33 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
             Box(
                 Modifier
                     .fillMaxSize()
-                    .zIndex(if (selectedTab == 0) Z_VISIBLE else Z_HIDDEN)
-                    .tabKept(selectedTab != 0)
+                    .zIndex(if (selectedKind == 0) Z_VISIBLE else Z_HIDDEN)
+                    .tabKept(selectedKind != 0)
             ) {
                 DiscoverScreen(
                     onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
                     scrollTopToken = discoverTopToken
                 )
             }
-            if (seenRadio) {
+            if (seenRadio && radioEnabled) {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .zIndex(if (selectedTab == 1) Z_VISIBLE else Z_HIDDEN)
-                        .tabKept(selectedTab != 1)
+                        .zIndex(if (selectedKind == 1) Z_VISIBLE else Z_HIDDEN)
+                        .tabKept(selectedKind != 1)
                 ) {
-                    RadioScreen(scrollTopToken = radioTopToken)
+                    RadioScreen(
+                        scrollTopToken = radioTopToken,
+                        radioFullEnabled = radioFullEnabled
+                    )
                 }
             }
             if (seenFeed) {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .zIndex(if (selectedTab == 2) Z_VISIBLE else Z_HIDDEN)
-                        .tabKept(selectedTab != 2)
+                        .zIndex(if (selectedKind == 2) Z_VISIBLE else Z_HIDDEN)
+                        .tabKept(selectedKind != 2)
                 ) {
                     FeedScreen(scrollTopToken = feedTopToken)
                 }
@@ -501,8 +527,8 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .zIndex(if (selectedTab == 3) Z_VISIBLE else Z_HIDDEN)
-                        .tabKept(selectedTab != 3)
+                        .zIndex(if (selectedKind == 3) Z_VISIBLE else Z_HIDDEN)
+                        .tabKept(selectedKind != 3)
                 ) {
                     LibraryScreen(
                         onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
@@ -597,7 +623,7 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
                 // 这里还有"隐藏 tab"的状态(详情页第 87 行那条注释说的是另一件事)。
                 GlassNavBar(
                     tabs = tabs,
-                    selected = selectedTab,
+                    selected = selectedIndex,
                     onSelect = { i -> select(i) },
                     onDoubleTap = { i -> requestScrollTop(i) },
                     modifier = Modifier.align(Alignment.BottomCenter),
@@ -610,7 +636,7 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
                     collapsed = collapsed.value,
                     // 盘上是**当前那一格**的图标(与鸿蒙 [BALL_ICONS] 同一语义:这颗球读作
                     // "整条栏收在这里",不是"回首页"),所以取栏的 spec 而不是固定的房子。
-                    ballIcon = tabs.getOrNull(selectedTab)?.icon,
+                    ballIcon = tabs.getOrNull(selectedIndex)?.icon,
                     // 点球只展开、**不改当前 tab**(与鸿蒙 expandMini 同一条:不改页,清零累加器)
                     onRestore = {
                         morphAcc[0] = 0f

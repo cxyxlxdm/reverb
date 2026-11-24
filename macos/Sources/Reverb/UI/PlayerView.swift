@@ -4,6 +4,7 @@ import SwiftUI
 struct PlayerView: View {
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
+    @EnvironmentObject var settings: SettingsStore
     @Environment(\.dismiss) private var dismiss
     var onOpenChannel: (Podcast) -> Void = { _ in }
 
@@ -174,9 +175,12 @@ struct PlayerView: View {
             Spacer()
             Text("正在播放").font(.headline)
             Spacer()
-            AirPlayRouteButton(player: player.avPlayer)
-                .frame(width: 22, height: 22)
-                .help("投放")
+            // 设置里关掉投播后入口整条不出现(系统接收端面板本身仍在系统层,这里只管入口)。
+            if settings.castEnabled {
+                AirPlayRouteButton(player: player.avPlayer)
+                    .frame(width: 22, height: 22)
+                    .help("投放")
+            }
         }
         .padding(.horizontal, 18)
         .padding(.top, 16)

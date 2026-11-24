@@ -64,5 +64,13 @@ interface AsrEngine {
         onSegment: (TranscribedSegment) -> Unit
     ): Boolean
 
+    /**
+     * 识别一小段 16 kHz 单声道 PCM(浮点 `[-1, 1]`),给**语音搜索**用。
+     *
+     * 与 [transcribe] 共用同一份模型与语言判定,但不走文件、不切块:输入本来就是
+     * 几秒钟的一句话。返回整段文本,空串或失败返回 null。
+     */
+    suspend fun transcribeSamples(samples: FloatArray, localeId: String): String?
+
     fun close()
 }

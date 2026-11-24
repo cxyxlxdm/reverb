@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
@@ -72,6 +73,9 @@ import com.yuyin.reverb.ui.radioViewModel
 /**
  * 直播电台页:自己的电台账本(增 / 改 / 删)+ 在线目录检索 + 随包精选兜底。
  *
+ * [radioFullEnabled] 默认 false,与鸿蒙使用同一个偏好键:关闭时只保留搜索、结果与试听;
+ * 开启后恢复完整形态。代码、账本、备份与 `radio_stations.json` 始终保留。
+ *
  * 起播走 `RadioViewModel.play` → 合成 `isLive` 的 Episode,与"把流地址粘进搜索框"
  * 是同一条播放路径(历史 / 缓存 / 断点续播全部不参与)。
  *
@@ -79,13 +83,15 @@ import com.yuyin.reverb.ui.radioViewModel
  * 否则最后一条会被栏压住、滚不出来。
  */
 @Composable
-fun RadioScreen(scrollTopToken: Int = 0) {
+fun RadioScreen(scrollTopToken: Int = 0, radioFullEnabled: Boolean = false) {
     val vm = radioViewModel()
     val context = LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
     val stations by vm.stations.collectAsStateWithLifecycle()
     val current by PlayerController.current.collectAsStateWithLifecycle()
-    val seed = remember { vm.seedStations() }
+    val seed = remember(radioFullEnabled) {
+        if (radioFullEnabled) vm.seedStations() else emptyList()
+    }
     val listState = rememberLazyListState()
 
     var editorOpen by remember { mutableStateOf(false) }
@@ -96,7 +102,15 @@ fun RadioScreen(scrollTopToken: Int = 0) {
     val alreadyAdded = stringResource(R.string.radio_already_added)
     val savedToast = stringResource(R.string.radio_added)
 
-    LaunchedEffect(Unit) { vm.ensureDirectory() }
+    LaunchedEffect(radioFullEnabled) {
+        vm.ensureDirectory(radioFullEnabled)
+        if (!radioFullEnabled) {
+            editorOpen = false
+            editorFor = null
+            deleteFor = null
+            vm.resetSaveState()
+        }
+    }
     LaunchedEffect(scrollTopToken) {
         if (scrollTopToken > 0) listState.animateScrollToItem(0)
     }
@@ -104,14 +118,16 @@ fun RadioScreen(scrollTopToken: Int = 0) {
     Column(Modifier.fillMaxSize()) {
         ScreenHeader(
             title = stringResource(R.string.nav_radio),
-            subtitle = stringResource(R.string.radio_subtitle)
+            subtitle = stringResource(
+                if (radioFullEnabled) R.string.radio_subtitle else R.string.radio_search_subtitle
+            )
         )
         RadioSearchField(
             query = vm.query,
-            onQueryChange = vm::onQueryChange,
+            onQueryChange = { vm.onQueryChange(it, radioFullEnabled) },
             onSearch = {
                 keyboard?.hide()
-                vm.search()
+                vm.search(radioFullEnabled)
             }
         )
         LazyColumn(
@@ -122,54 +138,58 @@ fun RadioScreen(scrollTopToken: Int = 0) {
                 bottom = LocalGlassBottomPad.current + 24.dp
             )
         ) {
-            item(key = "my-header") {
-                SectionTitle(
-                    title = stringResource(R.string.radio_my_stations),
-                    action = {
-                        IconButton(onClick = {
-                            vm.resetSaveState()
-                            editorFor = null
-                            editorOpen = true
-                        }) {
-                            Icon(Icons.Rounded.Add, contentDescription = stringResource(R.string.radio_add))
-                        }
-                    }
-                )
-            }
-            if (stations.isEmpty()) {
-                item(key = "my-empty") { HintText(stringResource(R.string.radio_empty_my)) }
-            } else {
-                items(stations, key = { "my:${it.id}" }) { st ->
-                    StationRow(
-                        station = st,
-                        playing = current?.id == "live:${st.url}",
-                        subtitle = subtitleOf(st),
-                        onClick = { vm.play(st, liveLabel) },
-                        trailing = {
+            if (radioFullEnabled) {
+                item(key = "my-header") {
+                    SectionTitle(
+                        title = stringResource(R.string.radio_my_stations),
+                        action = {
                             IconButton(onClick = {
                                 vm.resetSaveState()
-                                editorFor = st
+                                editorFor = null
                                 editorOpen = true
                             }) {
-                                Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.radio_edit))
-                            }
-                            IconButton(onClick = { deleteFor = st }) {
-                                Icon(
-                                    Icons.Rounded.DeleteOutline,
-                                    contentDescription = stringResource(R.string.radio_delete)
-                                )
+                                Icon(Icons.Rounded.Add, contentDescription = stringResource(R.string.radio_add))
                             }
                         }
                     )
                 }
+                if (stations.isEmpty()) {
+                    item(key = "my-empty") { HintText(stringResource(R.string.radio_empty_my)) }
+                } else {
+                    items(stations, key = { "my:${it.id}" }) { st ->
+                        StationRow(
+                            station = st,
+                            playing = current?.id == "live:${st.url}",
+                            subtitle = subtitleOf(st),
+                            onClick = { vm.play(st, liveLabel) },
+                            trailing = {
+                                IconButton(onClick = {
+                                    vm.resetSaveState()
+                                    editorFor = st
+                                    editorOpen = true
+                                }) {
+                                    Icon(Icons.Rounded.Edit, contentDescription = stringResource(R.string.radio_edit))
+                                }
+                                IconButton(onClick = { deleteFor = st }) {
+                                    Icon(
+                                        Icons.Rounded.DeleteOutline,
+                                        contentDescription = stringResource(R.string.radio_delete)
+                                    )
+                                }
+                            }
+                        )
+                    }
+                }
             }
 
-            item(key = "dir-header") {
-                SectionTitle(
-                    title = stringResource(
-                        if (vm.query.isBlank()) R.string.radio_hot_stations else R.string.radio_search_results
+            if (radioFullEnabled || vm.query.isNotBlank()) {
+                item(key = "dir-header") {
+                    SectionTitle(
+                        title = stringResource(
+                            if (vm.query.isBlank()) R.string.radio_hot_stations else R.string.radio_search_results
+                        )
                     )
-                )
+                }
             }
             when (val s = vm.directoryState) {
                 is DirectoryState.Loading -> item(key = "dir-loading") {
@@ -198,7 +218,9 @@ fun RadioScreen(scrollTopToken: Int = 0) {
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.weight(1f)
                         )
-                        TextButton(onClick = vm::retry) { Text(stringResource(R.string.radio_retry)) }
+                        TextButton(onClick = { vm.retry(radioFullEnabled) }) {
+                            Text(stringResource(R.string.radio_retry))
+                        }
                     }
                 }
 
@@ -207,41 +229,51 @@ fun RadioScreen(scrollTopToken: Int = 0) {
                 }
 
                 is DirectoryState.Success -> items(s.stations, key = { "dir:${it.id}" }) { st ->
-                    val saved = vm.isSaved(st)
                     StationRow(
                         station = st,
                         playing = current?.id == "live:${st.url}",
                         subtitle = subtitleOf(st),
                         onClick = { vm.play(st, liveLabel) },
                         trailing = {
-                            IconButton(
-                                enabled = !saved,
-                                onClick = {
-                                    val added = vm.addCopy(st)
-                                    Toast.makeText(
-                                        context,
-                                        if (added) savedToast else alreadyAdded,
-                                        Toast.LENGTH_SHORT
-                                    ).show()
+                            if (radioFullEnabled) {
+                                val saved = vm.isSaved(st)
+                                IconButton(
+                                    enabled = !saved,
+                                    onClick = {
+                                        val added = vm.addCopy(st)
+                                        Toast.makeText(
+                                            context,
+                                            if (added) savedToast else alreadyAdded,
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                ) {
+                                    Icon(
+                                        if (saved) Icons.Rounded.CheckCircle else Icons.Rounded.AddCircleOutline,
+                                        contentDescription = stringResource(
+                                            if (saved) R.string.radio_already_added else R.string.radio_add
+                                        ),
+                                        tint = if (saved) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
-                            ) {
+                            } else {
                                 Icon(
-                                    if (saved) Icons.Rounded.CheckCircle else Icons.Rounded.AddCircleOutline,
-                                    contentDescription = stringResource(
-                                        if (saved) R.string.radio_already_added else R.string.radio_add
-                                    ),
-                                    tint = if (saved) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                    Icons.Rounded.PlayArrow,
+                                    contentDescription = stringResource(R.string.radio_live_name),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
                     )
                 }
 
-                DirectoryState.Idle -> Unit
+                DirectoryState.Idle -> if (!radioFullEnabled) {
+                    item(key = "search-idle") { HintText(stringResource(R.string.radio_search_subtitle)) }
+                } else Unit
             }
 
-            if (vm.query.isBlank() && seed.isNotEmpty()) {
+            if (radioFullEnabled && vm.query.isBlank() && seed.isNotEmpty()) {
                 item(key = "seed-header") {
                     SectionTitle(title = stringResource(R.string.radio_seed_stations))
                 }
@@ -280,7 +312,7 @@ fun RadioScreen(scrollTopToken: Int = 0) {
         }
     }
 
-    if (editorOpen) {
+    if (radioFullEnabled && editorOpen) {
         StationEditorDialog(
             station = editorFor,
             saving = vm.saving,
@@ -295,26 +327,28 @@ fun RadioScreen(scrollTopToken: Int = 0) {
         )
     }
 
-    deleteFor?.let { st ->
-        AlertDialog(
-            onDismissRequest = { deleteFor = null },
-            title = { Text(stringResource(R.string.radio_delete)) },
-            text = { Text(stringResource(R.string.radio_delete_msg, st.name)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.remove(st.id)
-                    deleteFor = null
-                }) {
-                    Text(
-                        stringResource(R.string.action_delete),
-                        color = MaterialTheme.colorScheme.error
-                    )
+    if (radioFullEnabled) {
+        deleteFor?.let { st ->
+            AlertDialog(
+                onDismissRequest = { deleteFor = null },
+                title = { Text(stringResource(R.string.radio_delete)) },
+                text = { Text(stringResource(R.string.radio_delete_msg, st.name)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        vm.remove(st.id)
+                        deleteFor = null
+                    }) {
+                        Text(
+                            stringResource(R.string.action_delete),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { deleteFor = null }) { Text(stringResource(R.string.action_cancel)) }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { deleteFor = null }) { Text(stringResource(R.string.action_cancel)) }
-            }
-        )
+            )
+        }
     }
 }
 

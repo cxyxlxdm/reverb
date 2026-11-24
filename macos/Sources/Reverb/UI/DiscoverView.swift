@@ -81,6 +81,13 @@ struct DiscoverView: View {
     @State private var liveEpisode: Episode?
     /// 私有订阅源的 401 挑战(见 `FeedAuthChallenge` / H253)。
     @State private var authPrompt: FeedAuthChallenge?
+    /// 搜索框焦点:只有聚焦且输入为空时展示历史记录。
+    @FocusState private var searchFocused: Bool
+    /// 语音搜索:录音 → 本机识别 → 回填查询词并直接搜(点一下开始、再点一下结束)。
+    @StateObject private var voice = VoiceSearchController()
+    @State private var confirmClearHistory = false
+    @State private var toast: String?
+    @State private var toastToken = 0
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
@@ -94,14 +101,16 @@ struct DiscoverView: View {
         Group {
             if isSearchActive {
                 searchContent
+            } else if showingHistory {
+                historyContent
             } else {
                 popularContent
             }
         }
         .navigationTitle("余音")
-        .searchable(text: $searchText, placement: .toolbar,
-                    prompt: "搜索播客/视频或粘贴 RSS、直播流、视频链接")
-        .onSubmit(of: .search) { runSearch() }
+        // 自绘搜索条替代 `.searchable`:.searchable 的搜索框里放不进麦克风按钮,
+        // 也挂不出「最近搜索」面板。safeAreaInset 让它常驻在工具栏下方,行为与原来一致。
+        .safeAreaInset(edge: .top, spacing: 0) { searchBar }
         .onChange(of: searchText) { v in
             if v.trimmingCharacters(in: .whitespaces).isEmpty {
                 submittedQuery = ""
@@ -111,6 +120,7 @@ struct DiscoverView: View {
                 liveEpisode = nil
             }
         }
+        .overlay(alignment: .top) { TopToast(text: toast) }
         .toolbar {
             ToolbarItem(placement: .primaryAction) { refreshButton }
             ToolbarItem(placement: .primaryAction) { radioButton }
@@ -309,6 +319,156 @@ struct DiscoverView: View {
 
     // MARK: - 搜索
 
+    /// 搜索条:放大镜 + 输入框 + 清除 + 麦克风。
+    /// 历史记录只在「聚焦且输入为空」时顶替正文(见 `showingHistory`)。
+    private var searchBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("搜索播客/视频或粘贴 RSS、直播流、视频链接", text: $searchText)
+                .textFieldStyle(.plain)
+                .focused($searchFocused)
+                .onSubmit {
+                    searchFocused = false
+                    runSearch()
+                }
+            if !searchText.isEmpty {
+                Button {
+                    searchText = ""
+                    searchFocused = false
+                } label: {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(Text("清除"))
+            }
+            voiceButton
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.secondary.opacity(0.25)))
+        .frame(maxWidth: 520)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, Metrics.pagePadding)
+        .padding(.vertical, 8)
+    }
+
+    @ViewBuilder
+    private var voiceButton: some View {
+        if VoiceSearchController.isSupported {
+            Button(action: toggleVoice) {
+                switch voice.state {
+                case .idle:
+                    Image(systemName: "mic.fill")
+                case .recording:
+                    Image(systemName: "stop.circle.fill").foregroundStyle(.red)
+                case .transcribing:
+                    ProgressView().controlSize(.small)
+                }
+            }
+            .buttonStyle(.borderless)
+            .disabled(voice.state == .transcribing)
+            .accessibilityLabel(Text(voice.state == .recording ? "停止录音" : "语音搜索"))
+        }
+    }
+
+    private var showingHistory: Bool {
+        searchFocused
+            && searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !env.searchHistory.items.isEmpty
+    }
+
+    private var historyContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack {
+                    Text("最近搜索").font(.title3).fontWeight(.semibold)
+                    Spacer()
+                    Button("清空") { confirmClearHistory = true }
+                        .font(.callout)
+                }
+                .padding(.vertical, 12)
+                ForEach(env.searchHistory.items, id: \.self) { q in
+                    HStack(spacing: 12) {
+                        Button {
+                            searchText = q
+                            searchFocused = false
+                            runSearch()
+                        } label: {
+                            HStack(spacing: 10) {
+                                Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary)
+                                Text(q).lineLimit(1).foregroundStyle(.primary)
+                                Spacer()
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        Button {
+                            env.searchHistory.remove(q)
+                        } label: {
+                            Image(systemName: "xmark").font(.caption).foregroundStyle(.secondary)
+                        }
+                        .buttonStyle(.borderless)
+                        .accessibilityLabel(Text("删除"))
+                    }
+                    .padding(.vertical, 10)
+                    Divider()
+                }
+            }
+            .frame(maxWidth: Metrics.contentMaxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, Metrics.pagePadding)
+            .padding(.top, 4)
+        }
+        .confirmationDialog("清空搜索历史？", isPresented: $confirmClearHistory, titleVisibility: .visible) {
+            Button("清空全部", role: .destructive) { env.searchHistory.clear() }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("清空后无法恢复。")
+        }
+    }
+
+    private func showToast(_ text: String) {
+        toastToken += 1
+        let token = toastToken
+        toast = text
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_200_000_000)
+            if toastToken == token { toast = nil }
+        }
+    }
+
+    private func toggleVoice() {
+        switch voice.state {
+        case .idle:
+            searchFocused = false
+            Task {
+                switch await voice.start() {
+                case .started:
+                    break
+                case .permissionDenied:
+                    showToast(NSLocalizedString("没有麦克风权限，请到系统设置里允许余音使用麦克风。", comment: "语音搜索权限提示"))
+                case .unsupported:
+                    showToast(NSLocalizedString("这台设备不支持本机语音识别。", comment: "语音搜索能力提示"))
+                case .failed:
+                    showToast(NSLocalizedString("无法开始录音，请重试。", comment: "语音搜索失败提示"))
+                }
+            }
+        case .recording:
+            Task {
+                let text = await voice.stopAndTranscribe(locale: TranscriptStore.locale(for: settings.language))
+                guard let text, !text.isEmpty else {
+                    showToast(NSLocalizedString("没听清，再试一次。", comment: "语音搜索空结果提示"))
+                    return
+                }
+                searchText = text
+                runSearch()
+            }
+        case .transcribing:
+            break
+        }
+    }
+
     private var searchContent: some View {
         ScrollView {
             if let live = liveEpisode, searchPodcasts.isEmpty && searchEpisodes.isEmpty {
@@ -403,6 +563,8 @@ struct DiscoverView: View {
         let q = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !q.isEmpty else { return }
         submittedQuery = q
+        // 只在真正发起检索时记历史(输入到一半、粘贴了却不提交都不记),与另三端同口径。
+        env.searchHistory.record(q)
         searching = true
         liveEpisode = nil
         // 上一轮的结果先清掉:下面直播那一支要拿「两个数组都空」当判据,

@@ -40,6 +40,8 @@ struct SettingsView: View {
     @State private var showFootprint = false
     /// 局域网同步面板。打开时才创建控制器,关闭即停止监听(与 Android `showLanSync` 同口径)。
     @State private var showLanSync = false
+    /// 功能聚合开关(1.1.0)。
+    @State private var showFeatures = false
     @State private var mailDraft = false
     @State private var mailBody = ""
     @State private var mailLogData = Data()
@@ -140,7 +142,7 @@ struct SettingsView: View {
                             .foregroundStyle(.secondary)
                     }
                 }
-                Toggle("语音转文字", isOn: $settings.transcriptionEnabled)
+                Toggle("逐字稿", isOn: $settings.transcriptionEnabled)
                 Text("在播放页查看逐字稿,完全离线转录当前单集(需 iOS 26,首次按语言下载模型)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -214,7 +216,12 @@ struct SettingsView: View {
                 }
             }
 
-            lanSection
+            if settings.lanSyncEnabled {
+                lanSection
+            }
+
+            // 功能开关放在维护区(日志之前),不进页首:它是"改应用形态"的元设置。
+            featureSection
 
             Section("日志") {
                 HStack {
@@ -332,6 +339,9 @@ struct SettingsView: View {
             .tint(accent)
         }
         .modifier(LanSyncSheetModifier(env: env, isPresented: $showLanSync, tint: accent))
+        .sheet(isPresented: $showFeatures) {
+            FeatureSwitchSheet(settings: settings, player: player)
+        }
         .sheet(isPresented: $showAbout) {
             AboutView().environmentObject(settings)
         }
@@ -393,6 +403,29 @@ struct SettingsView: View {
                 }
                 .contentShape(Rectangle())
             }
+        }
+    }
+
+    // MARK: - 功能聚合开关
+
+    /// 抽成属性与 `lanSection` 同一个理由:iOS 这个 Form 的 body 贴着类型检查时限,
+    /// 内联含 `Label { VStack { … } }` 的分区会直接编不过(2026-11-11 实测)。
+    private var featureSection: some View {
+        Section("功能") {
+            Button { showFeatures = true } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("功能开关")
+                        Text("关闭不需要的模块：逐字稿、电台、投放、局域网同步")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "switch.2")
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
@@ -645,6 +678,39 @@ private struct LanSyncSheetModifier: ViewModifier {
         content.sheet(isPresented: $isPresented) {
             LanSyncSheet(env: env)
                 .tint(tint)
+        }
+    }
+}
+/// 功能聚合开关(1.1.0):即改即存,打开着的视图(底部分格、播放页投播按钮)都观察
+/// 同一个 `SettingsStore`,所以不需要「确定」这一步。
+struct FeatureSwitchSheet: View {
+    @ObservedObject var settings: SettingsStore
+    @ObservedObject var player: PlayerController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Toggle("逐字稿", isOn: $settings.transcriptionEnabled)
+                    Toggle("电台", isOn: $settings.radioEnabled)
+                    Toggle("投放", isOn: $settings.castEnabled)
+                    Toggle("局域网同步", isOn: $settings.lanSyncEnabled)
+                } footer: {
+                    Text("关闭不需要的模块：逐字稿、电台、投放、局域网同步。正在播放的直播流会在关闭电台时停止。")
+                }
+            }
+            .navigationTitle("功能开关")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        // 直播流没有"整段"边界,关掉入口后留着只会持续耗流量;普通播客/下载音频不动。
+        .onChange(of: settings.radioEnabled) { on in
+            if !on && player.current?.isLive == true { player.close() }
         }
     }
 }

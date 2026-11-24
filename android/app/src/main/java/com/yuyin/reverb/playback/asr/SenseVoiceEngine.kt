@@ -151,6 +151,27 @@ class SenseVoiceEngine(context: Context) : AsrEngine {
         }
     }
 
+    override suspend fun transcribeSamples(samples: FloatArray, localeId: String): String? =
+        withContext(Dispatchers.Default) {
+            val lang = AsrFactory.engineLanguage(localeId) ?: return@withContext null
+            if (samples.isEmpty()) return@withContext null
+            val files = ensureModelFiles() ?: return@withContext null
+            val rec = ensureRecognizer(files, lang) ?: return@withContext null
+            try {
+                val stream = rec.createStream()
+                try {
+                    stream.acceptWaveform(samples, PcmDecoder.TARGET_RATE)
+                    rec.decode(stream)
+                    rec.getResult(stream).text.trim()
+                } finally {
+                    stream.release()
+                }
+            } catch (e: Throwable) {
+                com.yuyin.reverb.util.Logger.w(TAG, "短语音识别异常:${e.message}")
+                null
+            }
+        }
+
     override fun close() {
         recognizer?.release()
         recognizer = null

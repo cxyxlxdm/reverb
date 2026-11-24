@@ -389,6 +389,12 @@ enum AppSupport {
     @Published var playModeDefault: Int { didSet { d.set(playModeDefault, forKey: "play_mode") } }
     /// 语音转文字:开启后播放页出现"转录"轮播页。默认关(需 macOS 26 + 首次下载语言模型)。
     @Published var transcriptionEnabled: Bool { didSet { d.set(transcriptionEnabled, forKey: "transcription_enabled") } }
+    /// 功能聚合开关的三格(与 Android `radio_enabled` / `cast_enabled` / `lan_sync_enabled`
+    /// 同名同义、同默认 true)。**不进备份 settings 分区**:现有 `transcriptionEnabled` 同样不在,
+    /// 保持四端 14 键的跨端契约,不为三个布尔值动一次 schema。
+    @Published var radioEnabled: Bool { didSet { d.set(radioEnabled, forKey: "radio_enabled") } }
+    @Published var castEnabled: Bool { didSet { d.set(castEnabled, forKey: "cast_enabled") } }
+    @Published var lanSyncEnabled: Bool { didSet { d.set(lanSyncEnabled, forKey: "lan_sync_enabled") } }
     /// 是否已同意**当前版本**的隐私政策。
     ///
     /// 存的是「已同意的政策版本」而不是布尔:政策有实质变更时(新增网络访问点、新增权限、
@@ -411,13 +417,18 @@ enum AppSupport {
     /// **7 = 未发版(1.0.9 直播电台 + 投播)** —— 新增第三方目录地址 `radio-browser.info`
     /// (搜索词发给它),并在播放页接入系统 AirPlay 选路控件;后者由系统发现与传输,本应用
     /// 不自己扫网。同意页多一段「直播电台与投播」。四端同一轮 +1:Android / 鸿蒙 5 → 6。
+    /// **8 = 未发版(1.1.0 搜索历史 + 语音搜索)** —— 新增一类本机数据:搜索历史(最近搜过的词,
+    /// 最多 20 条,只存本机、不进备份、不走局域网同步、不上传,可单条删除或一键清空),
+    /// 并新增麦克风用途:语音搜索只在用户点按麦克风时录音,识别在本机离线完成,
+    /// 录音只活在内存里、用完即丢(NSMicrophoneUsageDescription 已同步改写)。
+    /// 同意页多一段「搜索历史与语音搜索」。同轮 Android / 鸿蒙 6 → 7。
     ///
     /// ⚠️ 4 是**唯一一次**桌面比手机先行:Android 自 1.0.5 起就在请求同一个接口,
     /// 它的同意页早就写过这件事,所以 Android / 鸿蒙的 `PRIVACY_VERSION` 当时停在 3 不动 ——
     /// 让手机用户为一件他们已经同意过的事再点一次同意,不是谨慎,是骚扰。
     /// **1.0.7 的直播流没有 +1**:它不引入任何有名有姓的第三方 —— 请求的就是用户自己
     /// 粘贴的那条流地址,与「粘 RSS」同一类,同意页正文早已写明「直接请求发布方或托管方」。
-    static let privacyVersion = 7
+    static let privacyVersion = 8
     @Published private(set) var privacyAccepted: Bool
     /// 界面语言。"" = 跟随系统;否则为语言代码(zh-Hans/zh-Hant/en/fr/es)。写入 AppleLanguages,重启后生效。
     @Published var language: String {
@@ -457,13 +468,25 @@ enum AppSupport {
         // 一台从没恢复过备份的 Mac 导出时写 true,等于替手机那侧的用户打开了宫格视图。
         subsGrid = d.object(forKey: "subs_grid") as? Bool ?? false
         categoryOrder = d.stringArray(forKey: "category_order") ?? []
-        transcriptionEnabled = d.object(forKey: "transcription_enabled") as? Bool ?? true
+        transcriptionEnabled = Self.featureFlag(d, "transcription_enabled")
+        radioEnabled = Self.featureFlag(d, "radio_enabled")
+        castEnabled = Self.featureFlag(d, "cast_enabled")
+        lanSyncEnabled = Self.featureFlag(d, "lan_sync_enabled")
         language = d.string(forKey: "app_language") ?? ""
         playModeByTag = (d.dictionary(forKey: "play_mode_map") as? [String: Int]) ?? [:]
         playModeDefault = d.object(forKey: "play_mode") as? Int ?? 0
         // 没存过 = 从没同意过(桌面端以前没有这一页,不存在 Android 那条
         // `privacy_accepted` 布尔的老格式要兼容)。
         privacyAccepted = (d.object(forKey: "privacy_version") as? Int ?? 0) >= Self.privacyVersion
+    }
+
+    /// 功能聚合开关的读取:持久化的是 Bool;而验收时用启动参数(`-radio_enabled NO`)
+    /// 写进 NSArgumentDomain 的是**字符串**,只认 `as? Bool` 会被 `?? true` 静默吃掉
+    /// (2026-11-23 真机验收时踩到:四项参数全给 NO,界面仍全开)。字符串也按 bool 语义读。
+    private static func featureFlag(_ d: UserDefaults, _ key: String) -> Bool {
+        if let b = d.object(forKey: key) as? Bool { return b }
+        if let s = d.object(forKey: key) as? String { return (s as NSString).boolValue }
+        return true
     }
 
     /// 同意当前版本的隐私政策。写入后主界面树才第一次构建。

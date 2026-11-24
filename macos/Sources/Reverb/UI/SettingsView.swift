@@ -72,6 +72,8 @@ private struct SettingsForm: View {
     @State private var showLicenses = false
     /// 局域网同步面板。打开时才创建控制器,关闭即停止监听(与 Android `showLanSync` 同口径)。
     @State private var showLanSync = false
+    /// 功能聚合开关(1.1.0)。
+    @State private var showFeatures = false
     /// 本视图所在窗口的激活态。**重算时机要挂在它上面,而不是只挂 `.onAppear`**:
     /// SwiftUI 的 `Settings` scene 关掉窗口是**隐藏、不销毁** ⇒ 一次运行里 `.onAppear` 只跑第一次,
     /// 第二次 ⌘, 打开时缓存与日志两个数还停在第一次那一刻(用户读到的是永不过期的假值,见 H215)。
@@ -135,56 +137,46 @@ private struct SettingsForm: View {
                 Picker("快进", selection: $settings.skipForwardSec) {
                     ForEach(skipForwardOptions, id: \.self) { Text("\($0) 秒").tag($0) }
                 }
-                Toggle("语音转文字", isOn: $settings.transcriptionEnabled)
+                Toggle("逐字稿", isOn: $settings.transcriptionEnabled)
                 Text("在播放页新增「转录」页,完全离线转录当前单集(需 macOS 26,首次按语言下载模型)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
             Section("足迹") {
-                Button {
-                    showFootprint = true
-                } label: {
-                    HStack {
-                        Label("听觉足迹", systemImage: "seal")
-                        Spacer()
-                        Text("\(env.stamps.stamps.count) 枚").foregroundStyle(.secondary)
-                    }
-                    .contentShape(Rectangle())
-                }
+                SettingsRowButton(
+                    title: "听觉足迹",
+                    systemImage: "seal",
+                    trailing: AnyView(Text("\(env.stamps.stamps.count) 枚").foregroundStyle(.secondary)),
+                    showsChevron: true
+                ) { showFootprint = true }
             }
 
             Section("备份") {
-                Button { showExportPicker = true } label: {
-                    Label("导出备份", systemImage: "square.and.arrow.up")
+                SettingsRowButton(title: "导出备份", systemImage: "square.and.arrow.up") {
+                    showExportPicker = true
                 }
-                Button { restoreBackup() } label: {
-                    Label("恢复备份", systemImage: "square.and.arrow.down")
+                SettingsRowButton(title: "恢复备份", systemImage: "square.and.arrow.down") {
+                    restoreBackup()
                 }
-                Button { exportOPML() } label: {
-                    Label("导出 OPML", systemImage: "list.bullet.rectangle")
+                SettingsRowButton(title: "导出 OPML", systemImage: "list.bullet.rectangle") {
+                    exportOPML()
                 }
-                Button { importOPML() } label: {
-                    Label("导入 OPML", systemImage: "tray.and.arrow.down")
+                SettingsRowButton(title: "导入 OPML", systemImage: "tray.and.arrow.down") {
+                    importOPML()
                 }
             }
 
             // 单独一段:它不是"备份文件"的又一种格式,而是两台设备之间的实时合并
-            // (Android 那段注释同样说明了为什么不并进「备份」)。
-            Section("局域网") {
-                Button { showLanSync = true } label: {
-                    Label {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("局域网同步")
-                            Text("在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度，正在听的一集可接着听")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .captionWrap()
-                        }
-                    } icon: {
-                        Image(systemName: "wifi.router")
-                    }
-                    .contentShape(Rectangle())
+            // (Android 那段注释同样说明了为什么不并进「备份」)。聚合开关关掉时整段不出现。
+            if settings.lanSyncEnabled {
+                Section("局域网") {
+                    SettingsRowButton(
+                        title: "局域网同步",
+                        subtitle: Text("在同一 Wi-Fi 下与另一台设备合并订阅、收藏、印记、批注与进度，正在听的一集可接着听"),
+                        systemImage: "wifi.router",
+                        showsChevron: true
+                    ) { showLanSync = true }
                 }
             }
 
@@ -192,62 +184,69 @@ private struct SettingsForm: View {
                 // 与 Android `SettingsScreen.kt` / 鸿蒙 `SettingsPage.ets` 同一个分区口径:
                 // 缓存(可再生的)一行、下载(用户点名要留的)一行,清空入口分开。
                 // 合成一个「清除缓存」会把下载一并删掉,而那正是用户最不该被顺手清掉的东西。
-                Button { confirmClearCache = true } label: {
-                    HStack {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("清除缓存")
-                                Text("榜单、频道、图片、逐字稿与已播音频缓存")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .captionWrap()
-                            }
-                        } icon: {
-                            Image(systemName: "trash.slash")
-                        }
-                        Spacer()
+                SettingsRowButton(
+                    title: "清除缓存",
+                    subtitle: Text("榜单、频道、图片、逐字稿与已播音频缓存"),
+                    systemImage: "trash.slash",
+                    trailing: AnyView(
                         Text(cacheBytes < 0 ? "计算中…" : cacheSizeText)
                             .foregroundStyle(.secondary)
                             .monospacedDigit()
-                    }
-                    .contentShape(Rectangle())
-                }
+                    )
+                ) { confirmClearCache = true }
                 .disabled(cacheBytes < 0)
-                HStack {
-                    Label("离线下载", systemImage: "internaldrive")
-                    Spacer()
-                    Text("\(downloadStore.downloads.count) 集 · \(usageText)")
-                        .foregroundStyle(.secondary)
-                }
+                // .plain 按钮不吃系统的 disabled 变灰,显式给一半透明度,和「计算中…」一致。
+                .opacity(cacheBytes < 0 ? 0.55 : 1)
+                SettingsRow(
+                    title: "离线下载",
+                    systemImage: "internaldrive",
+                    trailing: AnyView(
+                        Text("\(downloadStore.downloads.count) 集 · \(usageText)")
+                            .foregroundStyle(.secondary)
+                    )
+                )
                 if !downloadStore.downloads.isEmpty {
-                    Button(role: .destructive) { confirmClearDownloads = true } label: {
-                        Label("清空下载", systemImage: "trash")
+                    SettingsRowButton(title: "清空下载", systemImage: "trash", destructive: true) {
+                        confirmClearDownloads = true
                     }
                 }
             }
 
+            // 功能开关放在维护区(日志之前),不进页首:它是"改应用形态"的元设置。
+            Section("功能") {
+                SettingsRowButton(
+                    title: "功能开关",
+                    subtitle: Text("关闭不需要的模块：逐字稿、电台、投放、局域网同步"),
+                    systemImage: "switch.2",
+                    showsChevron: true
+                ) { showFeatures = true }
+            }
+
             Section("日志") {
-                HStack {
-                    Label("日志", systemImage: "doc.text")
-                    Spacer()
-                    Text(logSizeText).foregroundStyle(.secondary)
-                }
+                SettingsRow(
+                    title: "日志",
+                    systemImage: "doc.text",
+                    trailing: AnyView(Text(logSizeText).foregroundStyle(.secondary))
+                )
                 // 四行顺序与 Android `SettingsScreen.kt` / 鸿蒙 `SettingsPage.ets` 一致
                 // (分享 → 邮件 → 导出 → 清空,D6)。这不是审美问题:三端同一节设置,
                 // 用户按位置记按钮,顺序不同就会点错一次。
                 if let url = shareLogURL {
                     ShareLink(item: url) {
-                        Label("分享日志", systemImage: "square.and.arrow.up.on.square")
+                        SettingsRow(title: "分享日志",
+                                    systemImage: "square.and.arrow.up.on.square",
+                                    interactive: true)
                     }
+                    .buttonStyle(.plain)
                 }
-                Button { mailLog() } label: {
-                    Label("发送日志到开发者邮箱", systemImage: "envelope")
+                SettingsRowButton(title: "发送日志到开发者邮箱", systemImage: "envelope") {
+                    mailLog()
                 }
-                Button { exportLog() } label: {
-                    Label("导出日志…", systemImage: "square.and.arrow.up")
+                SettingsRowButton(title: "导出日志…", systemImage: "square.and.arrow.up") {
+                    exportLog()
                 }
-                Button(role: .destructive) { confirmClearLog = true } label: {
-                    Label("清空日志", systemImage: "trash")
+                SettingsRowButton(title: "清空日志", systemImage: "trash", destructive: true) {
+                    confirmClearLog = true
                 }
             }
 
@@ -255,63 +254,48 @@ private struct SettingsForm: View {
             // 读数写在行内副标题里,不弹「已是最新」那种只有「知道了」的窗 —— 主动查询的反馈
             // 放在原地比打断正在做的事更省事(Android 那一行同一条理由)。
             Section("更新") {
-                Button { update.checkNow() } label: {
-                    HStack {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("检查更新")
-                                Text(updateStatusText)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .captionWrap()
-                            }
-                        } icon: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                        }
-                        Spacer()
-                        // 检测与下载都只给一个转圈:进度百分比已经写在副标题里,
-                        // 再加一条不定长进度条只会让这一行看起来有两处在动。
-                        if update.busy { ProgressView().controlSize(.small) }
-                    }
-                    .contentShape(Rectangle())
-                }
+                SettingsRowButton(
+                    title: "检查更新",
+                    subtitle: Text(updateStatusText),
+                    systemImage: "arrow.triangle.2.circlepath",
+                    // 检测与下载都只给一个转圈:进度百分比已经写在副标题里,
+                    // 再加一条不定长进度条只会让这一行看起来有两处在动。
+                    trailing: update.busy ? AnyView(ProgressView().controlSize(.small)) : nil
+                ) { update.checkNow() }
                 .disabled(update.busy)
+                .opacity(update.busy ? 0.55 : 1)
             }
 
             // 四行的顺序与 Android `SettingsScreen.kt` 的同名分区逐项对应
             // (关于 → 隐私政策 → 开源许可 → 版本,M11)。隐私政策这一行**不能只在首启出现**:
             // 平台合规指引要求应用内随时可查,所以它在设置里常驻,指向官网那份完整政策。
             Section("关于") {
-                Button { showAbout = true } label: {
-                    Label("关于余音", systemImage: "info.circle")
+                SettingsRowButton(title: "关于余音", systemImage: "info.circle", showsChevron: true) {
+                    showAbout = true
                 }
-                Button { AppInfo.openPrivacyPolicy() } label: {
-                    HStack {
-                        Label {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("隐私政策")
-                                Text("我们如何处理你的数据")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .captionWrap()
-                            }
-                        } icon: {
-                            Image(systemName: "hand.raised")
-                        }
-                        Spacer()
+                SettingsRowButton(
+                    title: "隐私政策",
+                    subtitle: Text("我们如何处理你的数据"),
+                    systemImage: "hand.raised",
+                    trailing: AnyView(
                         Image(systemName: "arrow.up.forward.square")
                             .foregroundStyle(.tertiary)
-                    }
-                    .contentShape(Rectangle())
+                    )
+                ) { AppInfo.openPrivacyPolicy() }
+                SettingsRowButton(title: "开源许可",
+                                  systemImage: "doc.text.magnifyingglass",
+                                  showsChevron: true) {
+                    showLicenses = true
                 }
-                Button { showLicenses = true } label: {
-                    Label("开源许可", systemImage: "doc.text.magnifyingglass")
-                }
-                HStack {
-                    Label("版本", systemImage: "number")
-                    Spacer()
-                    Text(AppInfo.version).foregroundStyle(.secondary).monospacedDigit()
-                }
+                SettingsRow(
+                    title: "版本",
+                    systemImage: "number",
+                    trailing: AnyView(
+                        Text(AppInfo.version)
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    )
+                )
             }
         }
         .onAppear { refreshLogSize(); prepareShareLog(); refreshCacheSize() }
@@ -331,7 +315,12 @@ private struct SettingsForm: View {
             Button("取消", role: .cancel) {}
         }
         .formStyle(.grouped)
-        .frame(width: 460, height: 560)
+        // 只声明最小/理想尺寸,把上限留给窗口;原先写死的 `width:height:` 会把设置窗钉成不可缩放。
+        .frame(minWidth: 460, idealWidth: 520, maxWidth: .infinity,
+               minHeight: 560, idealHeight: 620, maxHeight: .infinity)
+        // `Settings` 场景本身不认 `.windowResizability`(2026-11-23 实测:`AXSize` 不可设置),
+        // 只能从底层 NSWindow 补 `.resizable`,见下面 `SettingsWindowConfigurator`。
+        .background(SettingsWindowConfigurator())
         .tint(Theme.accent(settings.accentIndex))
         .preferredColorScheme(Theme.colorScheme(settings.themeMode))
         .confirmationDialog("清除缓存?", isPresented: $confirmClearCache, titleVisibility: .visible) {
@@ -363,6 +352,11 @@ private struct SettingsForm: View {
         }
         .sheet(isPresented: $showLanSync) {
             LanSyncSheet(env: env)
+        }
+        .sheet(isPresented: $showFeatures) {
+            FeatureSwitchSheet(settings: settings, player: player)
+                .tint(Theme.accent(settings.accentIndex))
+                .themedSheet(settings)
         }
         .sheet(isPresented: $showLicenses) {
             LicensesView()
@@ -617,18 +611,79 @@ private struct SettingsForm: View {
     }
 }
 
-/// 按钮行里那句 caption 的换行口径。
+/// 设置行:静态行直接用,可点的行由 `SettingsRowButton` 包一层。
 ///
-/// macOS 的 Button 标签默认按**单行**排版,超宽就省略号 —— 放进 grouped Form 的行高里
-/// 连第二行都不会长出来。离屏渲染(460 宽)实测:中文「局域网同步」的说明被截成一行,
-/// 英 / 法 / 西三个语种那四条副标题**全部**被截。`.fixedSize(vertical:)` 让文字按理想高度
-/// 展开、行高跟着长,`multilineTextAlignment` 把 Button 默认的居中改回左对齐。
-/// 只给按钮标签里的 caption 用;普通行里的说明文字本来就会换行,加了反而多余。
-private extension View {
-    func captionWrap() -> some View {
-        lineLimit(nil)
+/// 两种行共用同一套图标宽度与文字排版,页面里不再有"一行像系统按钮、隔壁一行像纯文本"
+/// 的参差(用户点名的那组:足迹 / 备份 / 存储 / 离线下载 / 日志 / 更新 / 关于)。
+/// 可点行的图标用强调色、开新层级的行在右端补一个 chevron,提示可点但不加按钮底框。
+///
+/// 副标题必须让行高自己撑开:caption 曾经被表单行高裁掉下半截 ——
+/// 原因是 `Button` 默认样式会按控件单行高度排版标签。所以这里同时做两件事:
+/// 可点的行统一 `.buttonStyle(.plain)`(去掉控件自带的高度假设),
+/// 标题+副标题那个 `VStack` 挂 `.fixedSize(vertical:)`,让多行说明参与行高计算。
+private struct SettingsRow: View {
+    let title: LocalizedStringKey
+    var subtitle: Text? = nil
+    let systemImage: String
+    var trailing: AnyView? = nil
+    var showsChevron = false
+    var destructive = false
+    /// 由 `SettingsRowButton` 置 true;静态行走默认值。
+    var interactive = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .frame(width: 20)
+                .foregroundStyle(iconStyle)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .foregroundStyle(destructive ? Color.red : Color.primary)
+                if let subtitle {
+                    subtitle
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(nil)
+                        .multilineTextAlignment(.leading)
+                }
+            }
             .fixedSize(horizontal: false, vertical: true)
-            .multilineTextAlignment(.leading)
+            Spacer(minLength: 8)
+            if let trailing { trailing }
+            if showsChevron {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+    }
+
+    /// 可点行的图标跟设置窗口的 `.tint` 走(用户选的主题配色),静态行退到次色。
+    private var iconStyle: AnyShapeStyle {
+        if destructive { return AnyShapeStyle(Color.red) }
+        return interactive ? AnyShapeStyle(.tint) : AnyShapeStyle(.secondary)
+    }
+}
+
+/// 可点的设置行:整体点击区是 `SettingsRow` 那一行,去掉系统按钮的底框与固定行高。
+private struct SettingsRowButton: View {
+    let title: LocalizedStringKey
+    var subtitle: Text? = nil
+    let systemImage: String
+    var trailing: AnyView? = nil
+    var showsChevron = false
+    var destructive = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            SettingsRow(title: title, subtitle: subtitle, systemImage: systemImage,
+                        trailing: trailing, showsChevron: showsChevron,
+                        destructive: destructive, interactive: true)
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -746,5 +801,105 @@ private struct RestoreSheet: View {
             .padding(24)
         }
         .frame(width: 420, height: 500)
+    }
+}
+
+/// 功能聚合开关(1.1.0):四项各自即改即存 —— `SettingsStore` 的 `didSet` 写 UserDefaults,
+/// 打开的这些视图(顶部分段、播放页投播按钮)都观察同一个对象,不需要「确定」这一步。
+/// 用 checkbox 而不是开关列表:这与另三端的多选框形态一致,一眼能看出「勾 = 开着」。
+struct FeatureSwitchSheet: View {
+    @ObservedObject var settings: SettingsStore
+    @ObservedObject var player: PlayerController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("功能开关")
+                    .font(.headline)
+                Text("关闭不需要的模块：逐字稿、电台、投放、局域网同步。正在播放的直播流会在关闭电台时停止。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Toggle("逐字稿", isOn: $settings.transcriptionEnabled)
+                    .toggleStyle(.checkbox)
+                Toggle("电台", isOn: $settings.radioEnabled)
+                    .toggleStyle(.checkbox)
+                Toggle("投放", isOn: $settings.castEnabled)
+                    .toggleStyle(.checkbox)
+                Toggle("局域网同步", isOn: $settings.lanSyncEnabled)
+                    .toggleStyle(.checkbox)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(24)
+
+            Divider()
+            HStack {
+                Spacer()
+                Button("完成") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(20)
+        }
+        .frame(width: 400)
+        // 直播流没有"整段"边界,关掉入口后留着只会持续耗流量;普通播客/下载音频不动。
+        .onChange(of: settings.radioEnabled) { on in
+            if !on && player.current?.isLive == true { player.close() }
+        }
+    }
+}
+
+/// SwiftUI 的 `Settings` 场景在 macOS 上不理会 `.windowResizability(.contentMinSize)` ——
+/// 2026-11-23 实测窗口 styleMask 只有 32771(titled + closable + fullSizeContentView),`AXSize`
+/// 不可设置,设置窗拉不动。SwiftUI 没有公开钩子,只能拿到底层 NSWindow 后把 `.resizable`
+/// 补进 styleMask。
+///
+/// 但只补一次会被擦掉:每次 key/main 切换 SwiftUI 都会把 mask 写回 32771(实测点一下主窗口
+/// 再回来,补丁就没了)。所以还要盯着 `styleMask` 的 KVO —— 只要看到 `.resizable` 被摘掉就在
+/// 下一轮 runloop 再补。补完会触发一次 KVO(true),判据直接跳过,不会自激。
+private struct SettingsWindowConfigurator: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView { Probe() }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    private final class Probe: NSView {
+        private var observed: NSWindow?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let w = window {
+                if w !== observed {
+                    stopObserving()
+                    observed = w
+                    w.addObserver(self, forKeyPath: "styleMask", options: [.new], context: nil)
+                }
+            } else {
+                stopObserving()
+            }
+            apply()
+        }
+
+        override func observeValue(forKeyPath keyPath: String?, of object: Any?,
+                                   change: [NSKeyValueChangeKey: Any]?,
+                                   context: UnsafeMutableRawPointer?) {
+            guard window?.styleMask.contains(.resizable) == false else { return }
+            DispatchQueue.main.async { [weak self] in self?.apply() }
+        }
+
+        private func apply() {
+            guard let w = window, !w.styleMask.contains(.resizable) else { return }
+            w.styleMask.insert(.resizable)
+            // 最小尺寸给到整张表单可用的下限(内容区 460×560),上限交给屏幕。
+            w.contentMinSize = NSSize(width: 460, height: 560)
+            w.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude,
+                               height: CGFloat.greatestFiniteMagnitude)
+        }
+
+        private func stopObserving() {
+            observed?.removeObserver(self, forKeyPath: "styleMask")
+            observed = nil
+        }
+
+        deinit { stopObserving() }
     }
 }

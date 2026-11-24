@@ -63,6 +63,8 @@ struct ReverbApp: App {
         .windowToolbarStyle(.unified)
 
         // 标准 macOS 设置场景:⌘, 及 App 菜单打开,齿轮按钮亦指向此处。
+        // 设置窗按内容最小尺寸起约束、可继续拉大:原先 SettingsView 内写死 `.frame(width:height:)`,
+        // 窗口跟着被钉成固定尺寸,用户拉不动。`.contentMinSize` 只锁下限,上限交给窗口。
         Settings {
             SettingsView()
                 .environmentObject(env)
@@ -71,6 +73,7 @@ struct ReverbApp: App {
                 .environmentObject(env.downloads)
                 .environmentObject(env.downloadManager)
         }
+        .windowResizability(.contentMinSize)
     }
 }
 

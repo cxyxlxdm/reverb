@@ -323,7 +323,7 @@
 "余音是一款轻量的播客客户端：发现好节目、订阅收听、离线下载、随时续播，专注「听」本身。macOS 版只使用系统自带的框架，不引入任何第三方 SDK。" = "Reverb is a lightweight podcast client: discover shows, subscribe and listen, download for offline, and resume anytime — focused on listening itself. The macOS build uses only Apple's system frameworks and bundles no third-party SDKs.";
 "主要功能" = "Features";
 "· 发现：按地区与分类浏览每日热门" = "· Discover: browse daily charts by region and category";
-"· 搜索：按名字或直接粘贴 RSS 地址" = "· Search: by name or by pasting an RSS URL";
+"· 搜索：按名字或直接粘贴 RSS 地址；最近搜过的词留在历史里（可单条删除或一键清空），点一下即可再搜，也能点麦克风把一句话说成搜索词" = "· Search: by name or by pasting an RSS URL; recent searches are kept in a local history (delete one or clear all), tap one to search again, or tap the microphone to turn a spoken sentence into a query";
 "· 视频链接：粘贴 B 站视频链接或 BV 号，直接当单集听（不登录；视频来源的单集不提供下载）" = "· Video links: paste a Bilibili video link or BV ID and listen to it as an episode (no sign-in; episodes from video links cannot be downloaded)";
 "· 频道分享：生成含 Logo、频道名、简介与余音落款的图片" = "· Share shows: create an image with the logo, show name, description and a Reverb signature";
 "· 电台：随机漫游，或按时段与情境推荐" = "· Radio: roam at random, or get picks by time of day and context";
@@ -357,11 +357,12 @@
 "私有订阅（可选）：部分自建 RSS 源需要用户名和密码（HTTP Basic 认证）。对方要求时，本应用会询问一次，并且只把这对凭据送回该源自己的域名（含其子域），用于它的 RSS、音频、下载与官方逐字稿；不会发给与它无关的音频 CDN。凭据只保存在本机，不进入备份、OPML 导出或日志，退订该源时一并删除。明文 http:// 源会以未加密方式发送口令，建议优先使用 https://。" = "Private feeds (optional): some self-hosted RSS feeds require a username and password (HTTP Basic authentication). When such a feed asks, the app prompts once and sends those credentials back only to that feed’s own host (including its subdomains), for its RSS, audio, downloads and official transcripts — never to an unrelated audio CDN. Credentials are stored only on this device, are not included in backups, OPML exports or logs, and are deleted when you unsubscribe. A plain http:// feed sends the password unencrypted; prefer https://.";
 "视频链接（可选）：在搜索框粘贴一个视频页面链接或 BV 号，这一条视频会被当作单集来听——本应用向视频站公开接口（api.bilibili.com）请求标题、封面与音频地址，再从它的内容分发网络（*.bilivideo.com 等）直接流式播放，并像其他单集一样自动缓存到本机。请求不登录账号、不带任何用户标识；为取得音频地址，这类请求使用浏览器身份的 User-Agent 与视频站的来源页，对方因此会看到这些信息与你的 IP 地址。这类单集不提供「下载」。" = "Video links (optional): paste a video page link or a BV ID into the search field and that video is played as an episode. The app asks the video site’s public API (api.bilibili.com) for the title, cover and audio address, then streams from its content delivery network (*.bilivideo.com and similar) and caches the audio locally like any other episode. The requests do not sign in and carry no user identifiers; to obtain the audio address they are sent with a browser User-Agent and the video site’s referring page, so the site sees those and your IP address. Episodes from video links cannot be downloaded.";
 "离线语音转文字（可选）：用系统自带的 Speech 框架在本机完成，首次使用某种语言时由系统下载对应模型；音频不上传、不出设备，也不经过任何服务器。该功能可在设置里关闭。" = "Offline speech-to-text (optional). It runs on this Mac using Apple's Speech framework; the system downloads a model for each language the first time you use it. Audio is never uploaded, never leaves the device and never passes through any server. You can turn it off in Settings.";
+"搜索历史与语音搜索（可选）：搜索框会记住你最近搜过的词（最多 20 条，只保存在本机），可单条删除，也可以一键清空；搜索历史不进备份、不参与局域网同步、不上传给任何服务器。搜索框右侧的麦克风按钮用于语音搜索：点按开始录音、再点结束，你说的话交给本机离线识别引擎（与逐字稿同一套系统框架）转成文字并填入搜索框；录音只暂存在应用的临时目录，识别完立即删除，不保存、不外发。麦克风权限只在你点按这个按钮时才申请。" = "Search history and voice search (optional). The search box remembers what you recently searched for (up to 20 entries, stored only on this Mac); you can delete entries one by one or clear them all at once. Search history is never included in backups or LAN sync, and is never uploaded to any server. The microphone button next to the search box is for voice search: click to start recording and click again to stop, and what you said is turned into text on this Mac by the offline recogniser (the same system framework used for transcripts) and placed in the search box; the recording is kept only in the app's temporary folder and deleted right after recognition — it is never stored or sent anywhere. Microphone access is requested only when you click that button.";
 "点击「同意并继续」表示你已阅读并接受本政策。" = "Clicking “Agree and continue” means you have read and accept this policy.";
 "阅读完整隐私政策" = "Read the full privacy policy";
 "同意并继续" = "Agree and continue";
 "不同意并退出" = "Decline and exit";
-"应用内更新（可选）：本版本启动时会向 GitHub 的公开发布页接口（api.github.com）询问一次「最新版是哪个」；请求只包含本应用自己的公开仓库地址，不含账号、任何标识符、订阅列表或收听内容。你也可以在「设置 → 检查更新」里随时主动询问一次。只有那次回答里确实有更新版本时才会下载安装包，下载完由你自己打开磁盘映像安装，本应用不会自行安装。" = "In-app updates (optional): at launch, this version asks GitHub's public release API (api.github.com) once which version is the latest. The request contains only this app’s own public repository address, with no account, identifiers, subscription list or listening content. You can also ask at any time in Settings → Check for updates. Only when the reply actually names a newer version does the app download the installer; once downloaded, you open the disk image yourself to install, and the app never installs anything on its own.";
+"应用内更新（可选）：本版本启动时会向 GitHub 的公开发布页接口（api.github.com）询问一次「最新版是哪个」；请求只包含本应用自己的公开仓库地址，不含账号、任何标识符、订阅列表或收听内容。你也可以在「设置 → 检查更新」里随时主动询问一次。只有那次回答里确实有更新版本时才会下载安装包，下载完由你自己打开磁盘映像安装，本应用不会自行安装。" = "In-app updates (optional): at launch, this version asks GitHub's public release page (api.github.com, or the release feed on github.com as a fallback) once which version is the latest. The request contains only this app’s own public repository address, with no account, identifiers, subscription list or listening content. You can also ask at any time in Settings → Check for updates. Only when the reply actually names a newer version does the app download the installer; once downloaded, you open the disk image yourself to install, and the app never installs anything on its own.";
 
 /* In-app update */
 "更新" = "Update";
@@ -486,3 +487,20 @@
 "在线目录暂时连不上" = "The online directory is unreachable right now";
 "暂时没有可以推荐的电台" = "No stations to recommend right now";
 "确定删除「%@」吗？" = "Delete “%@”?";
+
+/* Feature switches (1.1.0) */
+"功能" = "Features";
+"功能开关" = "Feature switches";
+"关闭不需要的模块：逐字稿、电台、投放、局域网同步。正在播放的直播流会在关闭电台时停止。" = "Turn off modules you do not need: transcription, radio, casting and local sync. A live stream stops when radio is turned off.";
+
+/* Voice search & search history (1.1.0) */
+"最近搜索" = "Recent searches";
+"清空搜索历史？" = "Clear search history?";
+"清空全部" = "Clear all";
+"清空后无法恢复。" = "This cannot be undone.";
+"语音搜索" = "Voice search";
+"停止录音" = "Stop recording";
+"没有麦克风权限，请到系统设置里允许余音使用麦克风。" = "No microphone access. Allow Reverb to use the microphone in System Settings.";
+"这台设备不支持本机语音识别。" = "This device does not support on-device speech recognition.";
+"无法开始录音，请重试。" = "Could not start recording. Please try again.";
+"没听清，再试一次。" = "Did not catch that. Try again.";
