@@ -36,6 +36,8 @@ export class VoiceSearch {
   private ctx: common.UIAbilityContext | null = null;
   private transcriber: SenseVoiceTranscriber | null = null;
   private capturer: audio.AudioCapturer | null = null;
+  /// 与 capturer 分开:到 30 秒会释放采集器,但录音态仍保留,等用户再点一下识别。
+  private active: boolean = false;
   private chunks: ArrayBuffer[] = [];
   private bytes: number = 0;
   private capped: boolean = false;
@@ -60,7 +62,7 @@ export class VoiceSearch {
   }
 
   get recording(): boolean {
-    return this.capturer !== null;
+    return this.active;
   }
 
   /**
@@ -70,8 +72,11 @@ export class VoiceSearch {
   async start(): Promise<VoiceStart> {
     const ctx = this.ctx;
     if (ctx === null || this.transcriber === null) return VoiceStart.Unsupported;
-    if (this.capturer !== null) return VoiceStart.Started;
+    if (this.active) return VoiceStart.Started;
 
+    // 权限请求也要占住一个代次:用户在系统弹框期间离开页面,cancel() 会作废这次 start。
+    this.session += 1;
+    const session = this.session;
     let granted = false;
     try {
       const res = await abilityAccessCtrl.createAtManager()
@@ -82,11 +87,11 @@ export class VoiceSearch {
       return VoiceStart.Failed;
     }
     if (!granted) return VoiceStart.PermissionDenied;
+    if (session !== this.session) return VoiceStart.Failed;
 
     this.chunks = [];
     this.bytes = 0;
     this.capped = false;
-    this.session += 1;
     try {
       const options: audio.AudioCapturerOptions = {
         streamInfo: {
@@ -101,6 +106,10 @@ export class VoiceSearch {
         }
       };
       const c = await audio.createAudioCapturer(options);
+      if (session !== this.session) {
+        await c.release();
+        return VoiceStart.Failed;
+      }
       c.on('readData', (buf: ArrayBuffer) => {
         if (this.capped || this.capturer !== c) return;
         const room = VoiceSearch.MAX_BYTES - this.bytes;
@@ -112,15 +121,28 @@ export class VoiceSearch {
         // 截断时 slice 一份,别把整块(可能超过上限)留在数组里
         this.chunks.push(take === buf.byteLength ? buf : buf.slice(0, take));
         this.bytes += take;
-        if (this.bytes >= VoiceSearch.MAX_BYTES) this.capped = true;
+        if (this.bytes >= VoiceSearch.MAX_BYTES) {
+          this.capped = true;
+          // 只放采集器,不清缓冲、不翻 active:用户再点一下仍走识别分支。
+          this.releaseCapturer(c);
+        }
       });
-      await c.start();
       this.capturer = c;
+      await c.start();
+      if (session !== this.session) {
+        await this.releaseCapturer(c);
+        return VoiceStart.Failed;
+      }
+      this.active = true;
       Log.i(VoiceSearch.TAG, '开始录音(16k 单声道,30 秒上限)');
       return VoiceStart.Started;
     } catch (e) {
+      // 旧 start 的失败不能把用户已经新开的一次会话置为 inactive,也不能释放它的采集器。
+      if (session === this.session) {
+        this.active = false;
+        await this.releaseCapturer();
+      }
       Log.e(VoiceSearch.TAG, `开始录音失败:${(e as Error).message}`);
-      await this.releaseCapturer();
       return VoiceStart.Failed;
     }
   }
@@ -130,14 +152,16 @@ export class VoiceSearch {
    * 麦克风在识别**之前**就释放 —— 识别要几秒,没有理由继续占着它。
    */
   async stopAndTranscribe(localeId: string): Promise<string | null> {
-    if (this.capturer === null) return null;
+    if (!this.active) return null;
     const session = this.session;
-    await this.releaseCapturer();
-
+    // 先移交本会话缓冲再 await;否则 cancel()/新 start() 会在等待期间换掉 chunks。
     const total = this.bytes;
     const chunks = this.chunks;
     this.chunks = [];
     this.bytes = 0;
+    this.active = false;
+    await this.releaseCapturer();
+    if (session !== this.session) return null;
     if (total < VoiceSearch.MIN_BYTES) {
       Log.i(VoiceSearch.TAG, `录音太短,忽略 ${total} 字节`);
       return null;
@@ -160,15 +184,18 @@ export class VoiceSearch {
   /// 页面销毁 / 用户离开时收尾:停采集、丢缓冲、作废在途识别。
   cancel(): void {
     this.session += 1;
+    this.active = false;
     this.chunks = [];
     this.bytes = 0;
     this.releaseCapturer();
   }
 
-  private async releaseCapturer(): Promise<void> {
-    const c = this.capturer;
+  private async releaseCapturer(
+    expected: audio.AudioCapturer | null = null
+  ): Promise<void> {
+    const c = expected ?? this.capturer;
+    if (c === null || this.capturer !== c) return;
     this.capturer = null;
-    if (c === null) return;
     try {
       await c.stop();
     } catch (e) {

@@ -47,7 +47,10 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $tab) {
             TabRoot(path: $discoverPath, showPlayer: $showPlayer) {
-                DiscoverView(scrollTopToken: discoverTopToken)
+                DiscoverView(
+                    scrollTopToken: discoverTopToken,
+                    active: tab == .discover && discoverPath.isEmpty && !showPlayer
+                )
             }
                 .tabItem { Label("发现", systemImage: "sparkles") }
                 .tag(Tab.discover)

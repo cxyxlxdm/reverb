@@ -39,11 +39,13 @@ struct RootView: View {
             NavigationStack(path: $path) {
                 Group {
                     switch section {
-                    case .discover: DiscoverView()
+                    case .discover: DiscoverView(active: path.isEmpty && !showPlayerFromURL)
                     // 电台在设置里被关掉时不进这一页 —— 分段已不显示它,
                     // 但冷启动恢复的 section 可能还停在它上面。
                     case .radio:
-                        if settings.radioEnabled { RadioView() } else { DiscoverView() }
+                        if settings.radioEnabled { RadioView() } else {
+                            DiscoverView(active: path.isEmpty && !showPlayerFromURL)
+                        }
                     case .inbox: InboxView()
                     case .library: LibraryView()
                     }

@@ -34,6 +34,8 @@ const HOME_LATEST_MAX = 20;
 export struct DiscoverPage {
   @Prop scheme: Scheme;
   @Prop fontScale: number;
+  /// Tab 内容与详情页会盖住本页;不可见时立即放下麦克风并作废在途识别。
+  @Prop @Watch('onActive') active: boolean = true;
   /// 底部栏悬浮后,滚动内容需让出的底部空间(栏 + 手势区 + 播放条,Index 算好传入)。
   /// 只用于各 List 的 contentEndOffset —— 最后一项要能滚出栏底、取得到,内容又要
   /// 从栏下滚过才被糊出来(`barOverlap(true)`)。
@@ -174,6 +176,7 @@ export struct DiscoverPage {
   private app: AppContainer = AppContainer.get();
 
   aboutToAppear(): void {
+    if (!this.active) this.cancelVoice();
     this.cats = this.app.categoryStore.ordered();
     this.initSlots(this.cats.length);
     // 私有订阅源的 401 挑战只认**本页当前这次 URL 搜索**:详情页可能同时挂着,
@@ -205,6 +208,14 @@ export struct DiscoverPage {
       this.app.repository.authChallenge = this.previousChallenge;
     }
     // 录音 / 识别收尾:离开本页还占着麦克风说不过去,在途结果也一并作废。
+    this.cancelVoice();
+  }
+
+  private onActive(): void {
+    if (!this.active) this.cancelVoice();
+  }
+
+  private cancelVoice(): void {
     VoiceSearch.get().cancel();
     this.voiceRecording = false;
     this.voiceTranscribing = false;

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 /// 发现页分类。genreId 为 nil 表示综合推荐。
 struct DiscoverCategory: Identifiable, Hashable {
@@ -62,6 +63,9 @@ struct DiscoverView: View {
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
 
+    /// 详情页或播放页盖住发现页时,录音必须立即取消。
+    var active: Bool = true
+
     @State private var selected: DiscoverCategory = DiscoverCategory.all[0]
     @State private var showReorder = false
     @State private var popular: [Podcast] = []
@@ -91,6 +95,9 @@ struct DiscoverView: View {
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
+    private var voiceActive: Bool {
+        active && !showReorder && authPrompt == nil && !confirmClearHistory
+    }
     /// 用户排过序就按它,没排过就是原序(见 `DiscoverCategory.ordered(by:)`)。
     private var categories: [DiscoverCategory] { DiscoverCategory.ordered(by: settings.categoryOrder) }
 
@@ -120,6 +127,13 @@ struct DiscoverView: View {
                 liveEpisode = nil
             }
         }
+        .onChange(of: voiceActive) { visible in
+            if !visible { voice.cancel() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
+            voice.cancel()
+        }
+        .onDisappear { voice.cancel() }
         .overlay(alignment: .top) { TopToast(text: toast) }
         .toolbar {
             ToolbarItem(placement: .primaryAction) { refreshButton }

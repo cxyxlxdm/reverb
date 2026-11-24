@@ -415,6 +415,7 @@ class RadioViewModel(
     /** 热门那一屏的进程内缓存:清空搜索框回到热门时不必再等一次网络。 */
     private var popular: List<Station>? = null
     private var requestGen = 0
+    private var popularGen = 0
 
     fun seedStations(): List<Station> = store.seedStations()
 
@@ -423,12 +424,16 @@ class RadioViewModel(
         if (q.isBlank()) {
             requestGen++
             if (loadPopularOnBlank) showPopular() else directoryState = DirectoryState.Idle
+        } else if (directoryState is DirectoryState.Loading) {
+            // 隐藏完整电台时目录搜索仍可用;这里只作废热门,不能连搜索请求一起伤掉。
+            popularGen++
         }
     }
 
     /** 进页或完整电台开关变化时调一次;搜索模式不拉热门,已有搜索结果也不动。 */
     fun ensureDirectory(loadPopularOnBlank: Boolean) {
         if (!loadPopularOnBlank) {
+            popularGen++
             if (query.isBlank()) {
                 requestGen++
                 directoryState = DirectoryState.Idle
@@ -446,10 +451,11 @@ class RadioViewModel(
             return
         }
         val gen = ++requestGen
+        val hotGen = ++popularGen
         viewModelScope.launch {
             directoryState = DirectoryState.Loading
             val list = directory.popular()
-            if (gen != requestGen) return@launch
+            if (gen != requestGen || hotGen != popularGen) return@launch
             popular = list
             // 热门拉空与没连上分开报:前者大概率是镜像回了个空数组,后者是两条都超时
             directoryState = if (list.isEmpty()) DirectoryState.Error else DirectoryState.Success(list)
@@ -468,6 +474,7 @@ class RadioViewModel(
             return
         }
         val gen = ++requestGen
+        popularGen++
         viewModelScope.launch {
             directoryState = DirectoryState.Loading
             // 只记词数与结果数,不记原词(隐私政策第二节)
@@ -481,6 +488,7 @@ class RadioViewModel(
     fun retry(loadPopularOnBlank: Boolean) {
         if (query.isBlank()) {
             if (!loadPopularOnBlank) {
+                popularGen++
                 directoryState = DirectoryState.Idle
                 return
             }

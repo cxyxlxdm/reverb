@@ -497,7 +497,8 @@ private fun MainShell(rootNav: NavHostController, onOpenPlayer: () -> Unit) {
             ) {
                 DiscoverScreen(
                     onOpen = { p -> rootNav.navigate("podcast/${Uri.encode(p.feedUrl)}") },
-                    scrollTopToken = discoverTopToken
+                    scrollTopToken = discoverTopToken,
+                    visible = selectedKind == 0
                 )
             }
             if (seenRadio && radioEnabled) {

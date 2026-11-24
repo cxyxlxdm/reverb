@@ -143,7 +143,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
+fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0, visible: Boolean = true) {
     val vm = discoverViewModel()
     val keyboard = LocalSoftwareKeyboardController.current
     val scope = rememberCoroutineScope()
@@ -174,6 +174,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
     val voiceSupported = AsrFactory.HAS_ENGINE && AsrFactory.supports(voiceLocale)
 
     fun beginVoice() {
+        if (!visible) return
         when (voice.start()) {
             VoiceSearchController.StartResult.Started -> Unit
             VoiceSearchController.StartResult.PermissionDenied ->
@@ -187,7 +188,8 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
     val micPermLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { granted ->
-        if (granted) beginVoice()
+        if (visible && granted) beginVoice()
+        else if (granted) voice.cancel()
         else Toast.makeText(context, R.string.voice_permission_denied, Toast.LENGTH_SHORT).show()
     }
     val onMicTap: () -> Unit = {
@@ -213,6 +215,8 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
         }
     }
     // 离开发现页就放下麦克风;录到一半的数据不保留、也不识别。
+    // 发现页在 tab 外壳里是常驻组合,切 tab 不会走 onDispose,所以可见性也必须驱动取消。
+    LaunchedEffect(visible) { if (!visible) voice.cancel() }
     DisposableEffect(Unit) { onDispose { voice.cancel() } }
     val browsing = vm.state is DiscoverState.Idle
     val pagerState = rememberPagerState(pageCount = { categories.size })

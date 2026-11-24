@@ -51,7 +51,11 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 | **developer dir 的许可**(macOS 工具链**和 `/usr/bin/git`**都走它的 shim) | Xcode 27.1 已装(10-24),`xcode-select -p` 指向它;CLT 也还在 | `xcrun --show-sdk-path` 给得出路径才算通。**回一句 "You have not agreed to the Xcode license" 就是没通** —— 10-24 实测它 **exit 69**,这个退出码可以直接当脚本里的闸门;那时 `git` / `clang` / `swift` / `python3` 会一起失效,`command -v` 却仍然能找到它们(见 H208 教训 10)。**`macos/tools/selftest-verify.sh` 现在自带这条门**(取不到 SDK 就打印"这是环境门不是断言失败"并 exit 69);它的阳性对照不用等真坏 —— `DEVELOPER_DIR=/tmp/不存在 bash macos/tools/selftest-verify.sh` 必须给出那句话和 69 |
 | iOS 工具链 | Xcode 27.2 / iOS SDK 27.2(与上面同一个 Xcode) | `xcodebuild -project ios/Reverb.xcodeproj -scheme Reverb -showBuildSettings >/dev/null` exit 0 |
 
-⚠️ **iOS 的编译门不需要证书,TestFlight 需要**。2026-11-02 本机实测:`ios/build-ios.sh`
+⚠️ **iOS 的编译门不需要证书,TestFlight 需要**。2026-11-24 的 1.1.0 仍卡在免费 Personal Team:
+App Store `--export` 未跑通;本轮另用现有开发证书与描述文件签出
+`ios/dist/reverb-ios-1.1.0-4-development-signed.ipa`(仅登记设备可装,2026-11-30 到期),
+它是 Release 构建但**不是 TestFlight 包**,详见 `docs/IOS.md`。
+2026-11-02 本机实测:`ios/build-ios.sh`
 (不签名)exit 0、六条判据全过;当晚 Xcode 登录后建了开发证书
 (`Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`,Team `J4YCBW8ZG7`,**免费 Personal Team**),
 iPhone 16 Pro 已配对,Debug 与 Release 都装上并跑过(四个 tab / 播放页 / 后台音频)。
@@ -348,11 +352,11 @@ grep -cE 'CNR-|CCTV-|qtfm|myalicdn' "$T/hap.list"                             # 
 rm -rf "$T"
 ```
 
-2026-11-24 起鸿蒙的完整直播电台由 `radio_full_enabled` 控制,**默认关闭**:电台页只保留搜索与试听;
+2026-11-24 起 Android 与鸿蒙的完整直播电台由 `radio_full_enabled` 控制,**默认关闭**:电台页只保留搜索与试听;
 用户可在「设置 → 功能 → 完整直播电台」手动开启,恢复我的电台、热门、随包精选与添加 / 编辑 / 删除。
 这是**界面开关**,不是合规裁剪:完整代码、`stations.json` 账本、备份 `stations` 段与
 `radio_stations.json` 都保留,所以上面两条鸿蒙 grep 必须非 0,不能再宣称"包里没有台名"。
-另三端没有这个开关,形态不变。
+macOS / iOS 没有这个开关,仍是完整形态。
 
 合并前这一节写的是 store 渠道的「native / 模型 / 录音权限应为 0」,那组期望随 H205 一起翻转。
 所以更要跑的是**降级档那一侧**:把 `CATALOG` / `SPECTRUM` / `HAS_ENGINE` 降到 `false` 出的包,
@@ -622,7 +626,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 | `ui/components/` | 复用组件(`Components.kt` 1 444 行,已偏大) | 加通用控件 |
 | `ui/share/` | 剪藏与足迹海报 | 分享图 |
 | `cast/` | 自研 DLNA 投播:`CastController`(应用级状态机)· `SsdpDiscovery`(M-SEARCH + MulticastLock)· `DlnaClient`(SOAP AVTransport)· `CastDevice`;弹层在 `ui/screens/CastDialog.kt` | 投播链路;设备描述用 DOM 解析(JVM 单测里 XmlPullParser 是 stub) |
-| `ui/screens/RadioScreen.kt` + `data/local/StationStore.kt` + `data/remote/RadioBrowserSource.kt` | 直播电台 tab:我的电台账本 / 在线目录检索 / 随包精选(`assets/radio_stations.json`) | 电台字段与另三端同形;只进手动备份,不进局域网同步 |
+| `ui/screens/RadioScreen.kt` + `data/local/StationStore.kt` + `data/remote/RadioBrowserSource.kt` | 直播电台 tab:`radio_full_enabled` **默认关**,只显示搜索与试听;手动开启后恢复我的电台 / 热门 / 随包精选与增删改。账本、备份契约与随包清单始终保留;macOS / iOS 仍是完整形态 |
 | `update/` | WorkManager 订阅巡检 + 新集通知 + 应用内更新(`SelfUpdate`,合并后商店那份也带,见 H205) | 后台刷新、更新检查 |
 | ~~`app/src/{default,store}/`~~ | **已删除**(2026-10-18 合并 flavor,H205) | 渠道差异不再由 source set 承载;要降级改 `src/main` 里那三个常量 |
 | `android/tools/` | `build-asr.sh` · `glass-shot.sh` · `play-button-check.sh` | ASR 产物、截图、播放键几何 |
@@ -636,7 +640,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 | `net/` | `Sources` / `PodcastRepository` / `RssParser` / `FeedTask`(`@Concurrent`)/ `Http` / `RadioBrowserSource` … |
 | `playback/` | `PlayerController` / `PlaybackClock`(高频时钟,硬规矩 7)/ 投播用系统 `AVCastPicker`(挂在 `view/PlayerPage.ets`) |
 | `update/` · `backup/` · `theme/` · `util/` · `model/` | 对应 Android 同名职责 |
-| `view/RadioPage.ets` + `store/StationStore.ets` | 直播电台 tab:`radio_full_enabled` **默认关**,只显示搜索与试听;用户手动开启后恢复我的电台 / 热门 / 随包精选与增删改。账本、备份契约与随包清单始终保留;Android / macOS / iOS 仍是完整形态 |
+| `view/RadioPage.ets` + `store/StationStore.ets` | 直播电台 tab:`radio_full_enabled` **默认关**,只显示搜索与试听;用户手动开启后恢复我的电台 / 热门 / 随包精选与增删改。账本、备份契约与随包清单始终保留;Android 同口径,macOS / iOS 仍是完整形态 |
 | `harmony/shelved/` | **移出编译树**的代码 —— ArkTS 没有 DCE,只能这么"真的没有"(硬规矩 2) |
 
 ### macOS(`macos/Sources/Reverb/`)
@@ -663,7 +667,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 |---|---|
 | `shared/guide/` | 引导音频 + 脚本(`make-guide.sh`),分发到各端 |
 | `shared/seed/` | 种子清单(规范副本;`sync.sh` 分发到 Android + macOS + iOS,**不含鸿蒙**,理由写在脚本头) |
-| `shared/radio/` | 内置精选电台 16 条(规范副本;`sync.sh` 分发到**四端**资源 —— Android / HarmonyOS / macOS / iOS,`--check` 供提交前校验)。鸿蒙完整功能默认隐藏,但清单仍随包,用户开启「完整直播电台」后读取 |
+| `shared/radio/` | 内置精选电台 16 条(规范副本;`sync.sh` 分发到**四端**资源 —— Android / HarmonyOS / macOS / iOS,`--check` 供提交前校验)。Android / 鸿蒙完整功能默认隐藏,但清单仍随包,用户开启「完整直播电台」后读取 |
 | `site/reverb/` | 官网 + 隐私页;`shots/` **不入库**,部署时手工上传 |
 | `marketing/<版本>/` | 宣传物料(宣传片 / 封面 / 配乐),流水线见 `marketing/README.md` |
 | `tools/check-l10n.py` | 五语种资源体检(硬规矩 5):键集相等、繁体用字、非中文含汉字;全绿 exit 0 |
@@ -672,7 +676,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 
 ### 版本号一共四处,没有单一来源
 
-| 端 | 文件 | 字段 | 当前值(2026-11-23,1.1.0 开发中) |
+| 端 | 文件 | 字段 | 当前值(2026-11-24,1.1.0 发布批次) |
 |---|---|---|---|
 | Android | `android/app/build.gradle:41-42` | `versionCode` / `versionName` | `11` / `1.1.0` |
 | 鸿蒙 | `harmony/AppScope/app.json5:5-6` | `versionCode` / `versionName` | `1000010` / `1.1.0` |

@@ -16,6 +16,9 @@ import Foundation
     @Published private(set) var items: [String]
 
     init() {
+        let url = AppSupport.dir.appendingPathComponent("search_history.json")
+        // 旧版本写出的文件不会因为新代码的 save 参数自动补标记,启动时先修一次。
+        AppSupport.excludeFromBackup(url)
         items = AppSupport.load("search_history.json", as: [String].self) ?? []
         // 手工改坏文件时也别让界面带着超限/空白条目启动,读进来就按写入规则归一化一次。
         items = Self.normalized(items)
@@ -45,7 +48,7 @@ import Foundation
         persist()
     }
 
-    private func persist() { AppSupport.save("search_history.json", items) }
+    private func persist() { AppSupport.save("search_history.json", items, excludeFromBackup: true) }
 
     private static func clean(_ raw: String) -> String {
         let t = raw.trimmingCharacters(in: .whitespacesAndNewlines)
