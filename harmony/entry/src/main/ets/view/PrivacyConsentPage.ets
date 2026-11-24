@@ -68,7 +68,9 @@ export struct PrivacyConsentPage {
           // 没写删除墓碑随后补齐 —— 与 Android `privacy_consent_lan` 同一份文案。
           // 1.0.9 的直播电台 + 投播另起一段:电台目录是新的第三方地址,投播用的是
           // 系统接收端选择器(本端不自己扫网),所以那一段的措辞与 Android 不同。
-          Text(`${L.s('privacy_consent_body')}\n\n${L.s('privacy_consent_auth')}\n\n${L.s('privacy_consent_video')}\n\n${L.s('privacy_consent_asr')}\n\n${L.s('privacy_consent_lan')}\n\n${L.s('privacy_consent_radio')}`)
+          // 1.1.0 的搜索历史 + 语音搜索:本端此前不声明麦克风权限,这一段是新增权限的
+          // 首次告知;录音只进内存(不落盘),与 Android 的措辞一致。
+          Text(`${L.s('privacy_consent_body')}\n\n${L.s('privacy_consent_auth')}\n\n${L.s('privacy_consent_video')}\n\n${L.s('privacy_consent_asr')}\n\n${L.s('privacy_consent_voice')}\n\n${L.s('privacy_consent_lan')}\n\n${L.s('privacy_consent_radio')}`)
             .fontSize(TypeScale.bodyLarge * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
             .lineHeight(TypeScale.bodyLarge * this.fontScale * 1.7)

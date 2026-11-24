@@ -53,6 +53,17 @@ class PickerSpec {
 /// 本对象只描述「要勾什么」,**不保存勾选状态** —— 勾选状态归对话框自己的 `@State`。
 /// 理由见 `BackupSectionDialog` 的注释:@Builder 的值参数是一次性的,把可变状态放在
 /// 页面 `@State` 的 spec 里会让勾打上而界面不动。
+/// 功能聚合开关里的一行(只用于渲染,勾选状态直接读 `SettingsStore`)。
+class FeatureRow {
+  label: string = '';
+  on: boolean = false;
+
+  constructor(label: string, on: boolean) {
+    this.label = label;
+    this.on = on;
+  }
+}
+
 class BackupSpec {
   title: string = '';
   confirmText: string = '';
@@ -137,6 +148,8 @@ export struct SettingsPage {
   @State confirm: ConfirmSpec | null = null;
   /// 正在勾选分区的备份/恢复对话框;null = 无。
   @State backup: BackupSpec | null = null;
+  /// 功能聚合开关对话框。
+  @State features: boolean = false;
   /// 局域网同步面板是否打开。面板自己的状态在子组件里(理由见 LanSyncDialog 头注)。
   @State lanSync: boolean = false;
   /// 缓存/下载/日志占用。-1 表示还在算(与 Android 的 size_calculating 一致)。
@@ -165,7 +178,7 @@ export struct SettingsPage {
       })
       Scroll() {
         // 分区顺序与 Android `SettingsScreen.kt` 逐段一致:
-        // 内容 → 外观 → 播放 → 提醒 → 存储 → 备份 → 日志 → 关于。
+        // 内容 → 外观 → 播放 → 提醒 → 存储 → 备份 → 功能 → 日志 → 关于。
         // (原先是 外观 → 内容 → 播放 → 备份 → 其他,自成一套。)
         Column({ space: 0 }) {
           this.sectionLabel(L.s('sec_content'))
@@ -178,6 +191,8 @@ export struct SettingsPage {
           }
           // 听觉足迹:Android 也是放在这一段的一条,不在音阁页头
           this.actionRow(L.s('set_footprint'), () => L.s('set_footprint_sub'), () => this.onOpenFootprint())
+          // 电台模式管的是首页那个随机 / 情境电台,与底栏「电台」那格(直播流)无关,
+          // 所以功能开关里关掉「电台」时这一行照旧在。
           if (Features.CATALOG) {
             this.choiceRow(L.s('set_radio_mode'), () => '', [L.s('radio_random'), L.s('radio_contextual')],
               () => this.settings.contextualRadio ? 1 : 0,
@@ -257,7 +272,14 @@ export struct SettingsPage {
           this.actionRow(L.s('set_restore'), () => L.s('set_restore_sub'), () => this.startRestore())
           // 局域网同步与「从备份恢复」同一段:两者都是"与另一台设备对数据",差别只在介质
           // (同一 Wi-Fi 直连 vs. 一个备份文件)。Android 的设置页也放在同一分区。
-          this.actionRow(L.s('set_lan_sync'), () => L.s('set_lan_sync_sub'), () => { this.lanSync = true; })
+          // 聚合开关关掉时不出现这一行 —— 与 Android 隐藏整段同口径。
+          if (this.settings.lanSyncEnabled) {
+            this.actionRow(L.s('set_lan_sync'), () => L.s('set_lan_sync_sub'), () => { this.lanSync = true; })
+          }
+
+          // 功能聚合开关放在维护区(日志之前),不进页首:它是"改应用形态"的元设置。
+          this.sectionLabel(L.s('sec_features'))
+          this.actionRow(L.s('set_features'), () => L.s('set_features_sub'), () => { this.features = true; })
 
           this.sectionLabel(L.s('set_logs'))
           this.actionRow(L.s('set_share_log'), () => L.s('set_share_log_sub'), () => this.shareLog())
@@ -311,6 +333,16 @@ export struct SettingsPage {
           fontScale: this.fontScale,
           spec: this.backup,
           onDismiss: () => { this.backup = null; }
+        })
+      }
+      // 功能聚合开关:五项勾选直接写设置(没有"确定/取消"),故状态由它自己读 store。
+      if (this.features) {
+        FeatureSwitchDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          settings: this.settings,
+          onToggle: (idx: number, on: boolean) => { this.applyFeature(idx, on); },
+          onDismiss: () => { this.features = false; }
         })
       }
       // 局域网同步面板:打开即开始监听、关掉即停(生命周期在子组件里)
@@ -407,6 +439,32 @@ export struct SettingsPage {
       }
     }
     .width(20).height(20)
+  }
+
+  /**
+   * 聚合开关的一项被改。五项都是**当场生效**;其中电台/投播/同步还要收尾:
+   * - 关电台:正在播的直播流直接 `close()` —— 它没有"整段"边界,留着只会持续耗流量;
+   *   普通播客/下载音频不动。
+   * - 关投播:本端播放页的投播是系统 `AVCastPicker`,会话归系统管,关掉入口即不再发起;
+   *   已在投的那台由系统面板自己停(应用侧没有可调用的断开接口)。
+   * - 关同步:把已经打开的面板收起。
+   */
+  private applyFeature(idx: number, on: boolean): void {
+    if (idx === 0) {
+      this.settings.setTranscriptionEnabled(on);
+    } else if (idx === 1) {
+      this.settings.setRadioEnabled(on);
+      const cur = this.app.player.current;
+      if (!on && cur !== null && cur.isLive === true) this.app.player.close();
+    } else if (idx === 2) {
+      this.settings.setRadioFullEnabled(on);
+    } else if (idx === 3) {
+      this.settings.setCastEnabled(on);
+    } else {
+      this.settings.setLanSyncEnabled(on);
+      if (!on) this.lanSync = false;
+    }
+    this.onChanged();
   }
 
   private langIndex(): number {
@@ -943,6 +1001,95 @@ struct BackupSectionDialog {
         }
         .margin({ top: 8 })
         .alignSelf(ItemAlign.End)
+      }
+      .width('78%')
+      .padding({ left: 22, right: 22, top: 22, bottom: 16 })
+      .backgroundColor(this.scheme.surface)
+      .borderRadius(18)
+    }
+    .width('100%')
+    .height('100%')
+  }
+}
+
+/**
+ * 功能聚合开关(Android `FeatureSwitchDialog` 的同构体)。
+ *
+ * 与 BackupSectionDialog 的差别:**没有确认按钮**。五项都是勾上/取消即写设置、立即生效,
+ * 所以勾选状态的真值在 `SettingsStore` 里,本组件只读不存 —— `@ObjectLink` 保证
+ * store 任一字段被赋值时这棵子树重跑 build(H7 那条对象级观察此刻正好帮上忙,
+ * 因为这里关心的本来就是"五项里任意一项变了")。
+ *
+ * 仍是独立子组件而不是页面里的 `@Builder`:它要在打开期间连点多次并随 store 刷新,
+ * 而 `@Builder` 的值参数一次性(H6/H19/H27/H139),挂在页面上不会更新。
+ */
+@Component
+struct FeatureSwitchDialog {
+  @Prop scheme: Scheme;
+  @Prop fontScale: number;
+  @ObjectLink settings: SettingsStore;
+  onToggle: (idx: number, on: boolean) => void = () => {};
+  onDismiss: () => void = () => {};
+
+  /// 顺序即 idx,与页面的 applyFeature 一一对应。
+  private rows(): FeatureRow[] {
+    return [
+      new FeatureRow(L.s('set_transcription'), this.settings.transcriptionEnabled),
+      new FeatureRow(L.s('nav_radio'), this.settings.radioEnabled),
+      new FeatureRow(L.s('radio_full_title'), this.settings.radioFullEnabled),
+      new FeatureRow(L.s('a11y_cast'), this.settings.castEnabled),
+      new FeatureRow(L.s('set_lan_sync'), this.settings.lanSyncEnabled)
+    ];
+  }
+
+  build() {
+    Stack() {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(withAlpha('#000000', 0.45))
+        .onClick(() => { this.onDismiss(); })
+
+      Column() {
+        Text(L.s('dlg_features_title'))
+          .fontSize(TypeScale.titleMedium * this.fontScale)
+          .fontColor(this.scheme.onBackground)
+          .margin({ bottom: 8 })
+          .alignSelf(ItemAlign.Start)
+        Text(L.s('set_features_sub'))
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .margin({ bottom: 12 })
+          .alignSelf(ItemAlign.Start)
+
+        ForEach(this.rows(), (row: FeatureRow, idx: number) => {
+          Row({ space: 14 }) {
+            Toggle({ type: ToggleType.Checkbox, isOn: row.on })
+              .selectedColor(this.scheme.primary)
+              // 勾选只由整行 onClick 改(同 BackupSectionDialog)。
+              .hitTestBehavior(HitTestMode.None)
+            Text(row.label)
+              .fontSize(TypeScale.body * this.fontScale)
+              .fontColor(this.scheme.onBackground)
+              .layoutWeight(1)
+          }
+          .width('100%')
+          .padding({ top: 14, bottom: 14 })
+          .onClick(() => { this.onToggle(idx, !row.on); })
+        }, (row: FeatureRow, idx: number) => `${idx}-${row.on ? 1 : 0}`)
+
+        Text(L.s('radio_full_hint'))
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .margin({ top: 10 })
+          .alignSelf(ItemAlign.Start)
+
+        Text(L.s('action_done'))
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.scheme.primary)
+          .margin({ top: 8 })
+          .alignSelf(ItemAlign.End)
+          .onClick(() => { this.onDismiss(); })
       }
       .width('78%')
       .padding({ left: 22, right: 22, top: 22, bottom: 16 })

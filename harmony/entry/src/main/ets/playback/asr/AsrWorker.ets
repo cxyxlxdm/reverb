@@ -27,12 +27,16 @@ import { SenseVoiceText } from './SenseVoiceText';
  *
  * 与宿主的消息协议(见 `SenseVoiceTranscriber`):
  *   宿主 → 此: { cmd:'start', jobId, audio, model, tokens, lang }
+ *             { cmd:'samples', jobId, samples, model, tokens, lang }  语音搜索:直接喂一段 PCM
  *             { cmd:'cancel', jobId }
  *   此 → 宿主: { cmd:'segment', jobId, seg }  一条定稿的行
- *             { cmd:'done', jobId, ok }       整集结束(ok=false 表示取消/无产出/出错)
+ *             { cmd:'text', jobId, text }      samples 任务的一整段结果
+ *             { cmd:'done', jobId, ok }       任务结束(ok=false 表示取消/无产出/出错)
  *             { cmd:'error', jobId, message } 建引擎或读音频失败
  *
  * 参数里**只放路径与数字**,不放 ctx / 对象:跨线程消息要可序列化(与 FeedTask 同式)。
+ * `samples` 是 Float32Array(结构化克隆支持 TypedArray),30 秒 16k 单声道 ≈ 1.9 MB,
+ * 一次语音查询的量级,不值得为它再设计一套共享内存。
  */
 
 interface AsrCommand {
@@ -42,6 +46,8 @@ interface AsrCommand {
   model: string;
   tokens: string;
   lang: string;
+  /// 语音搜索(`cmd='samples'`)带的那段 PCM;其余命令是空数组
+  samples: Float32Array;
 }
 
 interface AsrMessage {
@@ -50,6 +56,7 @@ interface AsrMessage {
   ok: boolean;
   message: string;
   seg: TranscribedSegment | null;
+  text?: string;
 }
 
 const port: ThreadWorkerGlobalScope = worker.workerPort;
@@ -71,7 +78,7 @@ port.onmessage = (e: MessageEvents): void => {
     canceled = msg.jobId;
     return;
   }
-  if (msg.cmd !== 'start') return;
+  if (msg.cmd !== 'start' && msg.cmd !== 'samples') return;
   pending.push(msg);
   pump();
 };
@@ -99,6 +106,10 @@ async function pump(): Promise<void> {
 }
 
 async function runJob(msg: AsrCommand): Promise<void> {
+  if (msg.cmd === 'samples') {
+    runSamples(msg);
+    return;
+  }
   const t0 = Date.now();
   const rec = ensureRecognizer(msg);
   if (rec === null) {
@@ -168,6 +179,44 @@ async function runJob(msg: AsrCommand): Promise<void> {
     post(msg.jobId, 'done', ok, '', null);
   } finally {
     reader.close();
+  }
+}
+
+/**
+ * 语音搜索:一段现成的 PCM(16k 单声道 float)直接识别,不读文件。
+ *
+ * 与整集转写的差别只有两点:
+ *  - **不分块**:录音上限 30 秒,SenseVoice 一个窗就能吃完,不需要词级时间轴;
+ *  - **只回一组文本**:`text` 一条消息,宿主用 `SenseVoiceText.keep` 过滤空/标记结果。
+ *
+ * 同步阻塞的那一步照旧在这条 Worker 线程里跑(理由见文件头);宿主侧是独立的
+ * Worker 实例,因此不会排在整集转写的块之间。
+ */
+function runSamples(msg: AsrCommand): void {
+  const t0 = Date.now();
+  const samples = msg.samples;
+  if (samples.length === 0) {
+    post(msg.jobId, 'done', false, '', null);
+    return;
+  }
+  const rec = ensureRecognizer(msg);
+  if (rec === null) {
+    post(msg.jobId, 'error', false, '模型加载失败', null);
+    return;
+  }
+  try {
+    const stream = rec.createStream();
+    stream.acceptWaveform({ samples: samples, sampleRate: SenseVoiceText.SAMPLE_RATE });
+    rec.decode(stream);
+    const result: OfflineRecognizerResult = rec.getResult(stream);
+    const text = result.text.trim();
+    const out: AsrMessage = { cmd: 'text', jobId: msg.jobId, ok: true, message: '', seg: null, text: text };
+    port.postMessage(out);
+    Log.i(TAG, `语音查询识别 样本=${samples.length} 字=${text.length} 用时=${Date.now() - t0}ms`);
+    post(msg.jobId, 'done', true, '', null);
+  } catch (err) {
+    Log.e(TAG, `语音查询识别失败:${(err as Error).message}`);
+    post(msg.jobId, 'error', false, (err as Error).message, null);
   }
 }
 

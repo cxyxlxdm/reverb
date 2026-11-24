@@ -220,10 +220,11 @@ Android 走 OkHttp 的 `enqueue` + 回调,响应一到就 `call.cancel()`;macOS 
   文案在界面本地化)。地址是唯一键:添加与编辑都先查重,重复直接拒绝。
 - **在线目录** `radio-browser.info`:先 `de1`,失败再 `de2`;请求不登录、不带用户标识,
   日志只记条数与错误类(不记搜索词、不记完整地址)。目录结果是只读的,要保留必须复制进账本。
-- **随包精选** `shared/radio/stations.json`(16 条,只读)。`shared/radio/sync.sh` 分发到三端资源
-  (Android / macOS / iOS),自带 `--check` 供提交前校验。**鸿蒙 2026-11-24 起不分发也不读**:
-  华为以「应用含有 CCTV 电台」拒审 1.0.9(见 `docs/FEATURES.md` 直播电台一节的说明),
-  rawfile 与 `StationStore.seedStations` 一并移除 —— ArkTS 没有 DCE,只藏界面删不掉包里内容。
+- **随包精选** `shared/radio/stations.json`(16 条,只读)。`shared/radio/sync.sh` 分发到四端资源
+  (Android / HarmonyOS / macOS / iOS),自带 `--check` 供提交前校验。鸿蒙由
+  `SettingsStore.radioFullEnabled`(**默认 false**)控制完整界面:关闭时只显示搜索与试听,
+  开启后才加载并展示随包精选、我的电台、热门与增删改。代码、账本与资源始终保留;
+  因此鸿蒙包里仍有台名,解包验收应命中 `rawfile/radio_stations.json`,不能按"已删资源"报 0。
 - **起播**不新造播放路径:现场合成 `isLive=true` 的 `Episode`(`id=live:<url>`),
   与粘贴地址那条同 id,所以同一路流不会在队列里出现两次。
 - **备份**:只进手动备份的 `stations` 段;**不参与局域网同步**。同步的删除传播靠墓碑账本,

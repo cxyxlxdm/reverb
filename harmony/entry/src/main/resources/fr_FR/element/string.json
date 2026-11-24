@@ -18,15 +18,23 @@
     },
     {
       "name": "radio_subtitle",
-      "value": "Rechercher des radios en ligne"
+      "value": "Vos radios en direct, toujours prêtes"
     },
     {
       "name": "radio_search_hint",
       "value": "Rechercher une radio"
     },
     {
-      "name": "radio_search_prompt",
-      "value": "Saisissez un mot-clé pour rechercher des radios en ligne. Touchez-en une pour l'écouter."
+      "name": "radio_search_subtitle",
+      "value": "Rechercher et écouter un extrait de radios en ligne"
+    },
+    {
+      "name": "radio_full_title",
+      "value": "Radio en direct complète"
+    },
+    {
+      "name": "radio_full_hint",
+      "value": "Lorsque cette option est désactivée, seuls la recherche et l’écoute d’un extrait sont disponibles. Activez-la pour afficher Mes radios, les radios populaires, la sélection intégrée et la gestion."
     },
     {
       "name": "radio_my_stations",
@@ -510,7 +518,7 @@
     },
     {
       "name": "set_features_sub",
-      "value": "Désactivez les modules inutiles : transcription, radio, diffusion et synchronisation locale"
+      "value": "Désactivez les modules inutiles : transcription, radio, radio en direct complète, diffusion et synchronisation locale"
     },
     {
       "name": "dlg_features_title",

@@ -18,15 +18,23 @@
     },
     {
       "name": "radio_subtitle",
-      "value": "Busca emisoras en línea"
+      "value": "Tus radios en directo, siempre a mano"
     },
     {
       "name": "radio_search_hint",
       "value": "Buscar emisoras por nombre"
     },
     {
-      "name": "radio_search_prompt",
-      "value": "Escribe una palabra clave para buscar emisoras en línea. Toca una para escucharla."
+      "name": "radio_search_subtitle",
+      "value": "Buscar y probar emisoras en línea"
+    },
+    {
+      "name": "radio_full_title",
+      "value": "Radio en directo completa"
+    },
+    {
+      "name": "radio_full_hint",
+      "value": "Cuando está desactivada, solo se permiten la búsqueda y la escucha de prueba. Actívala para ver Mis emisoras, Emisoras populares, la selección incluida y las opciones de gestión."
     },
     {
       "name": "radio_my_stations",
@@ -510,7 +518,7 @@
     },
     {
       "name": "set_features_sub",
-      "value": "Desactiva los módulos que no necesites: transcripción, radio, emisión y sincronización local"
+      "value": "Desactiva los módulos que no necesitas: transcripción, radio, radio en directo completa, emisión y sincronización local"
     },
     {
       "name": "dlg_features_title",

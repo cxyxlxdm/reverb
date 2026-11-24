@@ -100,7 +100,8 @@ export class AppContainer {
 
     this.settings.load();
     this.subscriptions.load();
-    // 电台:纯本地读(2026-11-24 起不再挂随包精选的 rawfile 上下文,见 StationStore 头注)
+    // 电台:纯本地读 + 记下 rawfile 上下文(精选清单首次进入完整电台模式时才读)
+    this.stations.attach(ctx);
     this.stations.load();
     this.searchHistory.load();
     this.favorites.load();

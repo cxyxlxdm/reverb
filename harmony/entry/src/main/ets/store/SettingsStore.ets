@@ -37,10 +37,17 @@ export class SettingsStore {
    *       (搜索词发给它),并在播放页接入系统接收端选择器 —— 后者由系统负责发现与传输,
    *       本端不自己扫网;鸿蒙的「本地网络」也不是需要单独申请的运行时权限。
    *       同意页多一段「直播电台与投播」。同轮 Android 5 → 6、macOS / iOS 6 → 7。
+   *   7 = 未发版(1.1.0 搜索历史 + 语音搜索)。**新增一项运行时权限**:麦克风
+   *       (ohos.permission.MICROPHONE;此前本端不声明它 —— 播放页频谱用的是系统可视化,
+   *       与 Android 那条 RECORD_AUDIO 不是一回事)。新增一类本机数据:搜索历史
+   *       (最近搜过的词,最多 20 条,只存本机、不进备份、不上传,可单条删除或一键清空)。
+   *       语音搜索只在用户点按麦克风时录音,识别在本机离线完成(sherpa-onnx + SenseVoice),
+   *       录音只活在内存里、用完即丢。同意页多一段「搜索历史与语音搜索」。
+   *       同轮 Android 6 → 7、macOS / iOS 7 → 8。
    *
    * 改这个数之后**必须重新打包两端**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
    */
-  static readonly PRIVACY_VERSION: number = 6;
+  static readonly PRIVACY_VERSION: number = 7;
 
   /// 0 跟随系统 / 1 浅色(宣纸) / 2 深色(水墨) / 3 纯白
   /// **默认 2(水墨)**,与 Android `theme_mode` 的默认值一致 —— 品牌主观感是水墨,
@@ -103,6 +110,20 @@ export class SettingsStore {
    * 将来接上真正可用的引擎时一行都不用改(见 Features.LOCAL_ASR 的注释)。
    */
   transcriptionEnabled: boolean = true;
+  /// 直播电台(默认开)。关闭后底部不再出现「电台」格,正在播的直播流由设置页当场停掉。
+  radioEnabled: boolean = true;
+  /**
+   * 完整直播电台功能(鸿蒙独有,默认关)。关闭时「电台」页只保留搜索与试听;
+   * 开启后显示我的电台、热门、随包精选与添加/编辑/删除。账本与随包清单始终保留。
+   *
+   * 2026-11-23 华为以「应用含有 CCTV 电台等内容」拒审 1.0.9;维护者 2026-11-24
+   * 选择的是**默认隐藏、可由用户手动开启**,不是删代码或删资源。另三端没有这个开关。
+   */
+  radioFullEnabled: boolean = false;
+  /// 投播(默认开):播放页顶栏的系统接收端选择器。关闭即隐藏入口。
+  castEnabled: boolean = true;
+  /// 局域网同步(默认开):设置里的入口。关闭即隐藏入口并收起已打开的面板。
+  lanSyncEnabled: boolean = true;
   /**
    * 逐字高亮:跟读时**逐字点亮**,而不是整句一起亮。与 Android `wordHighlight` 对齐。
    *
@@ -143,6 +164,10 @@ export class SettingsStore {
     this.updatesEnabled = Prefs.getBool('updates_enabled', false);
     this.allowCellular = Prefs.getBool('allow_cellular', false);
     this.transcriptionEnabled = Prefs.getBool('transcription_enabled', true);
+    this.radioEnabled = Prefs.getBool('radio_enabled', true);
+    this.radioFullEnabled = Prefs.getBool('radio_full_enabled', false);
+    this.castEnabled = Prefs.getBool('cast_enabled', true);
+    this.lanSyncEnabled = Prefs.getBool('lan_sync_enabled', true);
     this.wordHighlight = Prefs.getBool('word_highlight', true);
     this.privacyAccepted = this.loadPrivacyAccepted();
     SettingsStore.applyLanguage(this.language);
@@ -286,6 +311,22 @@ export class SettingsStore {
   setTranscriptionEnabled(v: boolean): void {
     this.transcriptionEnabled = v;
     Prefs.put('transcription_enabled', v);
+  }
+  setRadioEnabled(v: boolean): void {
+    this.radioEnabled = v;
+    Prefs.put('radio_enabled', v);
+  }
+  setRadioFullEnabled(v: boolean): void {
+    this.radioFullEnabled = v;
+    Prefs.put('radio_full_enabled', v);
+  }
+  setCastEnabled(v: boolean): void {
+    this.castEnabled = v;
+    Prefs.put('cast_enabled', v);
+  }
+  setLanSyncEnabled(v: boolean): void {
+    this.lanSyncEnabled = v;
+    Prefs.put('lan_sync_enabled', v);
   }
   setWordHighlight(v: boolean): void {
     this.wordHighlight = v;
