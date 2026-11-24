@@ -98,7 +98,8 @@ val REGION_OPTIONS = listOf(
 /** 地区选项。code 为 null 表示「自动跟随设备」。 */
 class DiscoverViewModel(
     private val repo: PodcastRepository,
-    private val categoryStore: CategoryStore
+    private val categoryStore: CategoryStore,
+    private val searchHistory: com.yuyin.reverb.data.local.SearchHistoryStore
 ) : ViewModel() {
 
     var query by mutableStateOf("")
@@ -214,6 +215,8 @@ class DiscoverViewModel(
             state = DiscoverState.Idle
             return
         }
+        // 只在真正发起检索时记历史(输入到一半、粘贴了却不提交都不记),与另三端同口径。
+        searchHistory.record(q)
         val gen = ++searchGen
         viewModelScope.launch {
             state = DiscoverState.Loading
@@ -357,7 +360,7 @@ fun discoverViewModel(): DiscoverViewModel = viewModel(
     factory = viewModelFactory {
         initializer {
             val app = this[APPLICATION_KEY] as ReverbApp
-            DiscoverViewModel(app.container.repository, app.container.categoryStore)
+            DiscoverViewModel(app.container.repository, app.container.categoryStore, app.container.searchHistoryStore)
         }
     }
 )
@@ -415,16 +418,23 @@ class RadioViewModel(
 
     fun seedStations(): List<Station> = store.seedStations()
 
-    fun onQueryChange(q: String) {
+    fun onQueryChange(q: String, loadPopularOnBlank: Boolean) {
         query = q
         if (q.isBlank()) {
             requestGen++
-            showPopular()
+            if (loadPopularOnBlank) showPopular() else directoryState = DirectoryState.Idle
         }
     }
 
-    /** 进页时调一次;已有内容(热门或搜索结果)就不动,免得每次切回 tab 都重发。 */
-    fun ensureDirectory() {
+    /** 进页或完整电台开关变化时调一次;搜索模式不拉热门,已有搜索结果也不动。 */
+    fun ensureDirectory(loadPopularOnBlank: Boolean) {
+        if (!loadPopularOnBlank) {
+            if (query.isBlank()) {
+                requestGen++
+                directoryState = DirectoryState.Idle
+            }
+            return
+        }
         if (directoryState !is DirectoryState.Idle) return
         showPopular()
     }
@@ -446,10 +456,15 @@ class RadioViewModel(
         }
     }
 
-    fun search() {
+    fun search(loadPopularOnBlank: Boolean) {
         val q = query.trim()
         if (q.isBlank()) {
-            showPopular()
+            if (loadPopularOnBlank) {
+                showPopular()
+            } else {
+                requestGen++
+                directoryState = DirectoryState.Idle
+            }
             return
         }
         val gen = ++requestGen
@@ -463,12 +478,16 @@ class RadioViewModel(
         }
     }
 
-    fun retry() {
+    fun retry(loadPopularOnBlank: Boolean) {
         if (query.isBlank()) {
+            if (!loadPopularOnBlank) {
+                directoryState = DirectoryState.Idle
+                return
+            }
             popular = null
             showPopular()
         } else {
-            search()
+            search(true)
         }
     }
 

@@ -1,6 +1,10 @@
 package com.yuyin.reverb.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,6 +40,9 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.DragHandle
 import androidx.compose.material.icons.rounded.Public
 import androidx.compose.material.icons.rounded.DarkMode
@@ -64,6 +71,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -78,6 +86,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -86,6 +95,7 @@ import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -94,6 +104,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlin.math.roundToInt
 import com.yuyin.reverb.R
@@ -113,6 +124,8 @@ import com.yuyin.reverb.ui.DiscoverState
 import com.yuyin.reverb.ui.DiscoverViewModel
 import com.yuyin.reverb.ui.REGION_OPTIONS
 import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.playback.asr.AsrFactory
+import com.yuyin.reverb.playback.asr.VoiceSearchController
 import com.yuyin.reverb.playback.RadioStation
 import com.yuyin.reverb.ui.components.EpisodeListItem
 import com.yuyin.reverb.ui.components.FeedAuthDialog
@@ -147,7 +160,60 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
     val radioKind by RadioStation.mode.collectAsStateWithLifecycle()
     val contextualRadio by container.settingsStore.contextualRadio.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val focusManager = LocalFocusManager.current
     var showReorder by remember { mutableStateOf(false) }
+
+    // 搜索历史与语音搜索(1.1.0)
+    var searchFocused by remember { mutableStateOf(false) }
+    val searchHistory by container.searchHistoryStore.items.collectAsStateWithLifecycle()
+    var showClearSearchHistory by remember { mutableStateOf(false) }
+    val voice = remember { VoiceSearchController(context) }
+    val voiceState by voice.state.collectAsStateWithLifecycle()
+    // 应用内语言(空=跟随系统)已经过 LocaleUtil.wrap,Default 就是生效语言。
+    val voiceLocale = Locale.getDefault().toLanguageTag()
+    val voiceSupported = AsrFactory.HAS_ENGINE && AsrFactory.supports(voiceLocale)
+
+    fun beginVoice() {
+        when (voice.start()) {
+            VoiceSearchController.StartResult.Started -> Unit
+            VoiceSearchController.StartResult.PermissionDenied ->
+                Toast.makeText(context, R.string.voice_permission_denied, Toast.LENGTH_SHORT).show()
+            VoiceSearchController.StartResult.Unsupported ->
+                Toast.makeText(context, R.string.voice_unsupported, Toast.LENGTH_SHORT).show()
+            VoiceSearchController.StartResult.Failed ->
+                Toast.makeText(context, R.string.voice_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+    val micPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) beginVoice()
+        else Toast.makeText(context, R.string.voice_permission_denied, Toast.LENGTH_SHORT).show()
+    }
+    val onMicTap: () -> Unit = {
+        when (voiceState) {
+            is VoiceSearchController.State.Idle -> {
+                keyboard?.hide()
+                focusManager.clearFocus()
+                if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED
+                ) beginVoice()
+                else micPermLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            }
+            is VoiceSearchController.State.Recording -> scope.launch {
+                val text = voice.stopAndTranscribe(voiceLocale)
+                if (text.isNullOrBlank()) {
+                    Toast.makeText(context, R.string.voice_empty, Toast.LENGTH_SHORT).show()
+                } else {
+                    vm.onQueryChange(text)
+                    vm.search(region)
+                }
+            }
+            is VoiceSearchController.State.Transcribing -> Unit
+        }
+    }
+    // 离开发现页就放下麦克风;录到一半的数据不保留、也不识别。
+    DisposableEffect(Unit) { onDispose { voice.cancel() } }
     val browsing = vm.state is DiscoverState.Idle
     val pagerState = rememberPagerState(pageCount = { categories.size })
 
@@ -210,7 +276,8 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
             onValueChange = vm::onQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .onFocusChanged { searchFocused = it.isFocused },
             placeholder = {
                 // `singleLine = true` 只管输入内容,管不到 placeholder —— 它是一个独立的 Text,
                 // 长了会自己折行,把 decoration box 撑成两行高,于是光标看着像"两行居中"。
@@ -225,12 +292,29 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
             },
             leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
             trailingIcon = {
-                if (vm.query.isNotEmpty()) {
-                    IconButton(onClick = {
-                        vm.clearQuery()
-                        keyboard?.hide()
-                    }) {
-                        Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.action_clear))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (vm.query.isNotEmpty()) {
+                        IconButton(onClick = {
+                            vm.clearQuery()
+                            keyboard?.hide()
+                        }) {
+                            Icon(Icons.Rounded.Close, contentDescription = stringResource(R.string.action_clear))
+                        }
+                    }
+                    // 语音搜索:点一下开始、再点一下结束(第二下后自动识别并发起检索)。
+                    if (voiceSupported) {
+                        IconButton(onClick = onMicTap,
+                            enabled = voiceState !is VoiceSearchController.State.Transcribing) {
+                            when (voiceState) {
+                                is VoiceSearchController.State.Idle ->
+                                    Icon(Icons.Rounded.Mic, contentDescription = stringResource(R.string.voice_search))
+                                is VoiceSearchController.State.Recording ->
+                                    Icon(Icons.Rounded.Stop, contentDescription = stringResource(R.string.voice_stop),
+                                        tint = MaterialTheme.colorScheme.error)
+                                is VoiceSearchController.State.Transcribing ->
+                                    CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            }
+                        }
                     }
                 }
             },
@@ -259,7 +343,20 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
             )
         )
 
-        if (browsing && !BuildConfig.CATALOG) {
+        val showHistory = browsing && searchFocused && vm.query.isBlank() && searchHistory.isNotEmpty()
+        if (showHistory) {
+            SearchHistoryPanel(
+                items = searchHistory,
+                onPick = { q ->
+                    focusManager.clearFocus()
+                    keyboard?.hide()
+                    vm.onQueryChange(q)
+                    vm.search(region)
+                },
+                onDelete = { container.searchHistoryStore.remove(it) },
+                onClearAll = { showClearSearchHistory = true }
+            )
+        } else if (browsing && !BuildConfig.CATALOG) {
             // `CATALOG=false` 那一档:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
             // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
             SubscribeStarter(
@@ -314,6 +411,25 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0) {
                 DiscoverState.Idle -> Unit
             }
         }
+    }
+
+    if (showClearSearchHistory) {
+        AlertDialog(
+            onDismissRequest = { showClearSearchHistory = false },
+            title = { Text(stringResource(R.string.search_history_clear_title)) },
+            text = { Text(stringResource(R.string.search_history_clear_message)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    container.searchHistoryStore.clear()
+                    showClearSearchHistory = false
+                }) { Text(stringResource(R.string.action_clear_confirm)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearSearchHistory = false }) {
+                    Text(stringResource(R.string.action_cancel))
+                }
+            }
+        )
     }
 
     if (showReorder) {
@@ -1145,6 +1261,60 @@ private fun PodcastResultList(
         }
         items(podcasts) { p ->
             PodcastListItem(p) { onOpen(p) }
+        }
+    }
+}
+
+/** 「最近搜索」面板:点一条直接检索,右侧 × 单条删除,顶部「清空」走确认对话框。 */
+@Composable
+private fun SearchHistoryPanel(
+    items: List<String>,
+    onPick: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onClearAll: () -> Unit
+) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+        Row(
+            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                stringResource(R.string.search_history_title),
+                style = MaterialTheme.typography.titleSmall,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = onClearAll) {
+                Text(stringResource(R.string.action_clear_confirm))
+            }
+        }
+        LazyColumn(Modifier.fillMaxSize()) {
+            items(items, key = { it }) { q ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPick(q) }.padding(vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.History, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        q, style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { onDelete(q) }) {
+                        Icon(
+                            Icons.Rounded.Close,
+                            contentDescription = stringResource(R.string.action_delete),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+                HorizontalDivider()
+            }
         }
     }
 }

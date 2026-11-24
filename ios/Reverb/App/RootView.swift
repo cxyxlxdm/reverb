@@ -52,11 +52,15 @@ struct RootView: View {
                 .tabItem { Label("发现", systemImage: "sparkles") }
                 .tag(Tab.discover)
 
-            TabRoot(path: $radioPath, showPlayer: $showPlayer) {
-                RadioView()
-            }
+            // 「电台」在设置里被关掉时整格不出现。与 macOS 的分段同口径:
+            // 冷启动时 `tab` 若还停在电台(DEBUG 启动参数 / 状态恢复),下面 onChange 会切回发现。
+            if settings.radioEnabled {
+                TabRoot(path: $radioPath, showPlayer: $showPlayer) {
+                    RadioView()
+                }
                 .tabItem { Label("电台", systemImage: "radio") }
                 .tag(Tab.radio)
+            }
 
             TabRoot(path: $inboxPath, showPlayer: $showPlayer) {
                 InboxView(scrollTopToken: inboxTopToken)
@@ -78,7 +82,10 @@ struct RootView: View {
         // 作用只是在 UITabBar 上装一个两击手势(为什么必须走这一层见 `TabBarDoubleTapProbe`)。
         .background {
             TabBarDoubleTapProbe { idx in
-                switch idx {
+                // 电台格消失时后面三格整体前移一位。按**当前**可见序列算,
+                // 不能写死 2/3 —— 那会让「关掉电台后双击追更」落到音阁上。
+                let shift = settings.radioEnabled ? 0 : 1
+                switch idx + shift {
                 case 0: discoverTopToken += 1
                 case 2: inboxTopToken += 1
                 case 3: libraryTopToken += 1
@@ -88,6 +95,10 @@ struct RootView: View {
         }
         .tint(Theme.accent(settings.accentIndex))
         .preferredColorScheme(Theme.colorScheme(settings.themeMode))
+        // 在同一张设置页里关掉电台:如果正停在那一格,切回发现。
+        .onChange(of: settings.radioEnabled) { on in
+            if !on && tab == .radio { tab = .discover }
+        }
         // 字号:手机端沿用 Android / 鸿蒙那四档(0.85 / 1.0 / 1.15 / 1.3)。
         // SwiftUI 没有任意倍率的全局字号,只能映射到最接近的 `DynamicTypeSize`;
         // 「标准」不施加约束 ⇒ 跟随系统辅助功能字号,这是 iOS 用户预期内的行为。

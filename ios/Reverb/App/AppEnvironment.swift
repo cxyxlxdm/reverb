@@ -10,6 +10,8 @@ final class AppEnvironment: ObservableObject {
     let subscriptions = SubscriptionStore()
     /// 直播电台账本(只进备份,不进局域网同步,见 `StationStore` 顶部注释)。
     let stations = StationStore()
+    /// 搜索历史(只在本机留存,不进备份也不进局域网同步,见 `SearchHistoryStore` 顶部注释)。
+    let searchHistory = SearchHistoryStore()
     let favorites = FavoriteStore()
     let history = HistoryStore()
     let stamps = StampStore()
@@ -116,7 +118,8 @@ final class AppEnvironment: ObservableObject {
         }
         #endif
 
-        for pub in [subscriptions.objectWillChange, stations.objectWillChange, favorites.objectWillChange,
+        for pub in [subscriptions.objectWillChange, stations.objectWillChange, searchHistory.objectWillChange,
+                    favorites.objectWillChange,
                     history.objectWillChange, stamps.objectWillChange, notes.objectWillChange,
                     inbox.objectWillChange,
                     chapters.objectWillChange,

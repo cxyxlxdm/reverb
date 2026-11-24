@@ -75,6 +75,10 @@ class AppContainer(app: Application) {
      * 随包精选由它从 assets 读,启动时不解析(第一次进电台页才读那 3 KB)。
      */
     val stationStore = com.yuyin.reverb.data.local.StationStore(app)
+    /**
+     * 搜索历史。**只在本机留存**,不进备份、不进局域网同步(理由见 `SearchHistoryStore` 类注释)。
+     */
+    val searchHistoryStore = com.yuyin.reverb.data.local.SearchHistoryStore(app)
     /** 在线电台目录(radio-browser)。与仓库共用同一个 OkHttpClient,不另建连接池。 */
     val radioBrowser = com.yuyin.reverb.data.remote.RadioBrowserSource(httpClient)
     /**

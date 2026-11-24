@@ -43,7 +43,9 @@ struct LanSyncView: View {
         }
         .padding(20)
         #if os(macOS)
-        .frame(width: 460)
+        // 只给宽度时 sheet 会缩到内容"理想高度":2026-11-23 实测只有 460×170,
+        // 地址、附近设备、手动输入都要在内部滚一遍才能看见。给固定高度,内容多时内部仍可滚。
+        .frame(width: 460, height: 560)
         #endif
         .onAppear { controller.start() }
         .onDisappear { controller.stop() }

@@ -114,6 +114,10 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                          * 用户自己配对的另一台设备**,不是新的第三方地址;文案里写清加密、配对码
                          * 与「删除不传播」,并把不含的东西(音频、口令、设置、队列)逐项列出。
                          * **鸿蒙版没有这个功能,所以那一端的同意页不加这一段** —— 不描述没有发生的传输。
+                         *
+                         * 「搜索历史与语音搜索」是 1.1.0 追加的段落:搜索历史是**新的本机数据**,
+                         * 语音搜索给既有的 RECORD_AUDIO 添了第二个使用者(频谱那一段保持原样,
+                         * 只讲它自己的用途)。按「改变数据的收集或用途」的口径 +1。
                          */
                         listOf(
                             stringResource(R.string.privacy_consent_body),
@@ -123,6 +127,7 @@ fun PrivacyConsentScreen(onAccept: () -> Unit, onDecline: () -> Unit) {
                             stringResource(R.string.privacy_consent_update),
                             stringResource(R.string.privacy_consent_asr),
                             stringResource(R.string.privacy_consent_mic),
+                            stringResource(R.string.privacy_consent_voice),
                             stringResource(R.string.privacy_consent_lan),
                             stringResource(R.string.privacy_consent_radio)
                         ).filter { it.isNotBlank() }.joinToString("\n\n"),

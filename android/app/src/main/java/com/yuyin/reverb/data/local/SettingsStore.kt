@@ -32,6 +32,26 @@ class SettingsStore(context: Context) {
      */
     val transcriptionEnabled = MutableStateFlow(prefs.getBoolean("transcription_enabled", true))
     /**
+     * 直播电台(默认**开**)。关掉之后底部不再出现「电台」这一格 —— 不是灰掉,是**真的没有**;
+     * 正在播的直播流由设置页当场停掉(见 `SettingsScreen` 的 `applyFeatureSwitches`)。
+     *
+     * 为什么和 [transcriptionEnabled] 分开存:那一个是播放页里的第三页,这一个是一级入口,
+     * 聚合对话框把四件事放在一处,但持久化的键各管各的 —— 用户只关其中一项时不用跟着改别处。
+     */
+    val radioEnabled = MutableStateFlow(prefs.getBoolean("radio_enabled", true))
+    /**
+     * 完整直播电台(默认**关**)。关闭后「电台」页只保留搜索与试听;
+     * 开启后恢复我的电台、热门、随包精选与添加/编辑/删除。代码、账本、备份与资源都保留。
+     *
+     * 与 [radioEnabled] 分开:后者管整个电台入口,前者只管入口里面的完整形态。
+     * 鸿蒙使用同一个 `radio_full_enabled` 键与默认值,Android / 鸿蒙之外不新增这个开关。
+     */
+    val radioFullEnabled = MutableStateFlow(prefs.getBoolean("radio_full_enabled", false))
+    /** 投播(默认**开**):播放页顶栏那颗接收端选择器。关掉即隐藏入口,已连上的会话当场断开。 */
+    val castEnabled = MutableStateFlow(prefs.getBoolean("cast_enabled", true))
+    /** 局域网同步(默认**开**):设置里的「局域网同步」入口。关掉即隐藏入口并收起已打开的面板。 */
+    val lanSyncEnabled = MutableStateFlow(prefs.getBoolean("lan_sync_enabled", true))
+    /**
      * 逐字高亮(默认开)。它管两件事:
      * - 界面:当前句是**逐字**上色,还是整句一个颜色;
      * - 本机识别:whisper 要不要额外算 DTW 词级时间戳 —— 那会**多花约 70% 时间**
@@ -137,6 +157,10 @@ class SettingsStore(context: Context) {
     fun setLanguage(tag: String) { prefs.edit().putString("language", tag).apply(); language.value = tag }
     fun setSpectrumEnabled(v: Boolean) { prefs.edit().putBoolean("spectrum_enabled", v).apply(); spectrumEnabled.value = v }
     fun setTranscriptionEnabled(v: Boolean) { prefs.edit().putBoolean("transcription_enabled", v).apply(); transcriptionEnabled.value = v }
+    fun setRadioEnabled(v: Boolean) { prefs.edit().putBoolean("radio_enabled", v).apply(); radioEnabled.value = v }
+    fun setRadioFullEnabled(v: Boolean) { prefs.edit().putBoolean("radio_full_enabled", v).apply(); radioFullEnabled.value = v }
+    fun setCastEnabled(v: Boolean) { prefs.edit().putBoolean("cast_enabled", v).apply(); castEnabled.value = v }
+    fun setLanSyncEnabled(v: Boolean) { prefs.edit().putBoolean("lan_sync_enabled", v).apply(); lanSyncEnabled.value = v }
     fun setWordHighlight(v: Boolean) { prefs.edit().putBoolean("word_highlight", v).apply(); wordHighlight.value = v }
     fun setContextualRadio(v: Boolean) { prefs.edit().putBoolean("contextual_radio", v).apply(); contextualRadio.value = v }
     fun setSubsGrid(v: Boolean) { prefs.edit().putBoolean("subs_grid", v).apply(); subsGrid.value = v }
@@ -222,9 +246,16 @@ class SettingsStore(context: Context) {
          *       Android 17 上首次查找时请求「本地网络」权限(那条权限 1.0.8 已为局域网同步声明,
          *       这一轮多了一个使用者)。同意页多一段「直播电台与投播」。
          *       同轮 macOS/iOS 6 → 7、鸿蒙 5 → 6。
+         *   7 = 未发版(1.1.0 搜索历史 + 语音搜索)。**既有权限多了一个使用者**:麦克风
+         *       (RECORD_AUDIO 此前只为播放页「真实频谱」声明,这一轮语音搜索也用它),
+         *       同意页「真实频谱」那一段不动,另起一段「搜索历史与语音搜索」写清两者:
+         *       搜索历史(最近搜过的词,最多 20 条)只存本机、不进备份、不进局域网同步、
+         *       不上传,可单条删除或一键清空;语音搜索只在用户点按麦克风时录音,
+         *       识别在本机离线完成,录音只活在内存里、用完即丢。
+         *       同轮鸿蒙 6 → 7、macOS/iOS 7 → 8。
          *
          * 改这个数之后**必须重新打包**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
          */
-        const val PRIVACY_VERSION = 6
+        const val PRIVACY_VERSION = 7
     }
 }

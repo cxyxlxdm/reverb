@@ -149,7 +149,11 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
      */
     val castState by container.cast.state.collectAsStateWithLifecycle()
     val isCasting = castState is CastController.State.Casting
+    // 聚合开关里的「投放」。关掉时入口整颗不出现(不是灰掉),已打开的弹层也当场收起;
+    // 已连上的会话由设置页那边断开,这里不用再停一次。
+    val castEnabled by container.settingsStore.castEnabled.collectAsStateWithLifecycle()
     var castOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(castEnabled) { if (!castEnabled) castOpen = false }
     val castPermMessage = stringResource(R.string.cast_need_network)
     // Android 17 起「本地网络」是运行时权限(与局域网同步同一条):不申请不会崩,
     // 但组播会被丢、设备一个都发现不到 —— 比报错更难查(见 manifest 那段注释)。
@@ -250,19 +254,21 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                 horizontalArrangement = Arrangement.spacedBy(0.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                BarIconButton(
-                    icon = if (isCasting) Icons.Rounded.CastConnected else Icons.Rounded.Cast,
-                    description = stringResource(R.string.a11y_cast),
-                    tint = if (isCasting) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
-                    onClick = {
-                        val needPerm = Build.VERSION.SDK_INT >= 37 &&
-                            ContextCompat.checkSelfPermission(ctx.applicationContext, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
-                            PackageManager.PERMISSION_GRANTED
-                        if (needPerm) castPermLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
-                        else castOpen = true
-                    }
-                )
+                if (castEnabled) {
+                    BarIconButton(
+                        icon = if (isCasting) Icons.Rounded.CastConnected else Icons.Rounded.Cast,
+                        description = stringResource(R.string.a11y_cast),
+                        tint = if (isCasting) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        onClick = {
+                            val needPerm = Build.VERSION.SDK_INT >= 37 &&
+                                ContextCompat.checkSelfPermission(ctx.applicationContext, Manifest.permission.ACCESS_LOCAL_NETWORK) !=
+                                PackageManager.PERMISSION_GRANTED
+                            if (needPerm) castPermLauncher.launch(Manifest.permission.ACCESS_LOCAL_NETWORK)
+                            else castOpen = true
+                        }
+                    )
+                }
                 BarIconButton(
                     icon = Icons.AutoMirrored.Rounded.QueueMusic,
                     description = stringResource(R.string.a11y_queue),
@@ -604,7 +610,7 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
         )
     }
 
-    if (castOpen) {
+    if (castOpen && castEnabled) {
         CastDialog(cast = container.cast, episode = episode, onDismiss = { castOpen = false })
     }
 }
