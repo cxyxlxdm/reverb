@@ -429,7 +429,7 @@ privacy_version -int <当前版本>` 走的是 cfprefsd,2026-11-09 实测可用(
 | `./build-ios.sh` 编译门 | ✅ exit 0,八条判据全过(处理量由脚本自己打印;2026-11-15 加第 2b 条 `NSSupportsLiveActivities=true` 后复跑仍全过) |
 | 签名身份 | ✅ 已建 `Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`;Team = `J4YCBW8ZG7`(**免费 Personal Team**);`DEVELOPMENT_TEAM` 仍不写进工程,只走命令行 |
 | archive / export / upload | ❌ 仍未跑通。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员。**2026-11-24 复测 1.1.0**:`--export` 与手工 development 导出分别撞到 `No Accounts` / App Group 描述文件不匹配,以及 Xcode managed profile 不能按 manual profile 导出;TestFlight 前置条件未变 |
-| 1.1.0 开发签名 IPA | ◐ `ios/dist/reverb-ios-1.1.0-4-development-signed.ipa`,3,291,567 B / 10:08:40,sha256 `983344f1cde568e8e3c758ff0a71797d52b037155a0734cbaaed1cd019f86105`。主 app 与 widget 都嵌入开发描述文件,`codesign --verify --deep --strict` 通过;只登记 1 台设备,描述文件 2026-11-30 到期。它是 Release 构建,但**不是 App Store / TestFlight 包**,按本轮维护者要求可作为明确标注的 GitHub 资产 |
+| 1.1.0 开发签名 IPA | ◐ `ios/dist/reverb-ios-1.1.0-4-development-signed.ipa`,3,291,567 B / 10:08:40,sha256 `983344f1cde568e8e3c758ff0a71797d52b037155a0734cbaaed1cd019f86105`。主 app 与 widget 都嵌入开发描述文件,`codesign --verify --deep --strict` 通过;只登记 1 台设备,描述文件 2026-11-30 到期。它是 Release 构建,但**不是 App Store / TestFlight 包**,按本轮维护者要求作为明确标注的 GitHub 资产发布;[1.1.0 Release](https://github.com/cxyxlxdm/reverb-cast/releases/tag/1.1.0) 的资产 size / digest 已与本地逐项核对 |
 | iOS 模拟器运行时 | ✅ 已装 iOS 27.2;iPhone 17 模拟器上跑过(见上节) |
 | 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动。**2026-11-09**:1.0.7(1) 在机上,截图与 App 日志都取得到;但重新拉起被 `FBSOpenApplicationErrorDomain error 3` 拒(当时锁屏;免费 7 天描述文件 11-02 装、可能到期),WDA runner 仍 `host_command_failed` ⇒ 点击类验收仍缺 |
 | 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊;同日**真机**复跑:设置三段 / 追更与音阁空态 / 英文界面 / 权限说明本地化 / 后台音频 / 冷启动暂停态时长(H247);**11-08 真机**补验音阁历史多选浮条;**11-09 模拟器**补验 B 站过滤读数、直播流结果行与播放页直播态(无进度条 / 无倍速 / 上下集置灰)、直播不记历史;**2026-11-15 模拟器**内置引导音频与远程 mp3 都能 `readyToPlay` 并出声(此前那轮 `-12746` 是模拟器媒体服务卡死,重启设备即恢复) |
@@ -473,7 +473,9 @@ sha256 `983344f1cde568e8e3c758ff0a71797d52b037155a0734cbaaed1cd019f86105`)。
 `codesign --verify --deep --strict` 通过,两个 `embedded.mobileprovision` 都在;
 主 app / widget 描述文件分别于 2026-11-30 12:10:04 / 12:10:07 到期,只登记 1 台设备。
 **它能装到已登记测试机,但不是 App Store / TestFlight 包**;本轮按维护者要求作为明确标注的
-GitHub 资产,不能据此宣布 TestFlight 已打通。
+GitHub 资产,不能据此宣布 TestFlight 已打通。2026-11-24 已随四端发布物进入
+[`reverb-cast` 1.1.0 Release](https://github.com/cxyxlxdm/reverb-cast/releases/tag/1.1.0),
+API digest 与本地 SHA-256 一致,匿名 Range 下载返回 206。
 
 ---
 

@@ -179,7 +179,14 @@
     `cabbb625fd2254aedad003f0cda2a1367cf8bd1dc646f54e85be5464dedd1740`),
     解压后只有原始 `reverb.app`(182,064,631 B);正式包与符号包本身不变。
   - 重打前的旧发布物已归档到四端 `dist/_backup-pre-1.1.0-20261124-090835/`,各带 `SHA256.txt`。
-  - GitHub `revert-cast` 的 1.1.0 资产上传与 digest 核对将在本轮发布动作后回填。
+  - GitHub `reverb-cast` 1.1.0 已正式发布(Release ID `456272074`,`published_at`
+    `2026-11-24T11:05:37Z`),`releases/latest` 与真实 tag `1.1.0` 均指向该版本;五份正式资产的
+    name / size / GitHub digest 与本地 SHA-256 逐项一致,匿名页面与五份资产 Range 下载分别返回
+    200 / 206。APK 直传反复被边缘连接重置,最终拆成 17 段上传,由一次性 Actions
+    [run 45380590392](https://github.com/cxyxlxdm/reverb-cast/actions/runs/45380590392)
+    验哈希拼回并上传,成功后分段与工作流均已删除。公开仓已从 `revert-cast` 更正为
+    `reverb-cast`,旧 Release 地址匿名访问仍返回 200 并落到新仓。误传的重复件
+    `-Reverb-1.1.0-universal.dmg` 仍在(维护者曾中断删除,本轮未动);正式下载名是 `Reverb.dmg`。
 - 「局域网面板开着时关开关」无法构造:面板与功能开关都是模态弹层,打开面板后点不到开关;
   代码里 `if (!on) showLanSync = false` 只是防御。
 

@@ -54,7 +54,7 @@ GitHub Releases 自分发。原先靠 flavor 做的功能差异,现在只剩三�
 ⚠️ **iOS 的编译门不需要证书,TestFlight 需要**。2026-11-24 的 1.1.0 仍卡在免费 Personal Team:
 App Store `--export` 未跑通;本轮另用现有开发证书与描述文件签出
 `ios/dist/reverb-ios-1.1.0-4-development-signed.ipa`(仅登记设备可装,2026-11-30 到期),
-它是 Release 构建但**不是 TestFlight 包**,详见 `docs/IOS.md`。
+它是 Release 构建但**不是 TestFlight 包**;1.1.0 已按维护者要求上传公开分发仓,详见 `docs/IOS.md`。
 2026-11-02 本机实测:`ios/build-ios.sh`
 (不签名)exit 0、六条判据全过;当晚 Xcode 登录后建了开发证书
 (`Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`,Team `J4YCBW8ZG7`,**免费 Personal Team**),
@@ -713,10 +713,10 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
    (TestFlight 还要 `--upload`);
 3. 按硬规矩 20 做**解包验收 + mtime/SHA 判据**,不是看构建日志;
 4. 界面动过 → 截图整套重拍 → 商店图与官网 `shots/` 是**同源两条出口,两侧都要换**;
-5. 部署官网 → 上传商店 / GitHub Releases(**Releases 传的是公开分发仓 `revert-cast`,不是本机 git remote
+5. 部署官网 → 上传商店 / GitHub Releases(**Releases 传的是公开分发仓 `reverb-cast`,不是本机 git remote
    那个私有 `reverb`** —— 传错边,应用内更新就查不到新包,见「仓库的对外边界」与 H203)。
    资产名沿用 `reverb.apk` 与 `Reverb.dmg`(两端都按名字挑,不是取 `assets[0]`;漏传 dmg 的后果见上一节 ⚠️);
-   **传完必查两条**:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq .tag_name` 要等于新版本号
+   **传完必查两条**:`gh api repos/cxyxlxdm/reverb-cast/releases/latest --jq .tag_name` 要等于新版本号
    (指针真的移过来了),`--jq '.assets[0].digest'` 要等于本地 `shasum -a 256` 那份(上传没换字节)。
    多端同发时逐项核:`--jq '.assets[] | "\(.name) \(.size) \(.digest)"'` 的条目数 = 本轮上传件数,别只看第一条。
 
@@ -729,7 +729,7 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 
 - **Android(合并后只有那一份 apk)**:自分发那一侧的上一版包本身就在公开分发仓的 release 上,资产自带 sha256,
   所以"留着"的正确形态是**能取到 + 能证明它是那一版**,不是在 `dist/` 多存一份 65 MB 的旧 apk。核对:
-  `gh api repos/cxyxlxdm/revert-cast/releases/tags/<上一版> --jq '.assets[]|"\(.name) \(.size) \(.digest)"'`
+  `gh api repos/cxyxlxdm/reverb-cast/releases/tags/<上一版> --jq '.assets[]|"\(.name) \(.size) \(.digest)"'`
   与本地那份 `shasum -a 256` 比 —— **digest 相等才叫"外面有一份一样的",字节数相等不算**(同日实测有两个包同为
   64 958 828 B 而 sha256 不同,见 `docs/TROUBLESHOOTING.md` H154 那轮)。
   ⚠️ **但大陆商店那一侧的上一版只能回市场侧取** —— 公开仓上那个 apk 是**自分发口径**构建的,
@@ -875,20 +875,25 @@ default 包做资源差分(必须同版本才可比,判据见 H205)。**这份 `
 | 仓库 | 可见性 | 装什么 |
 |---|---|---|
 | `github.com/cxyxlxdm/reverb` = **本机 git remote** | **私有**(匿名 API 404) | 全部源码与文档 —— 就是你在读的这个仓库 |
-| `github.com/cxyxlxdm/revert-cast` | **公开** | 只有 `README.md` + **Releases**(Android `reverb.apk` 与 macOS `Reverb.dmg` 的分发处;1.0.1 / 1.0.2 放过 dmg,1.0.3~1.0.5 断过三版,1.0.6 起恢复每版都带 dmg —— 见下一段的后果)。Android 应用内更新查的就是它的 `releases/latest` —— **latest 是哪版别抄文档,现算**:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq .tag_name` |
+| `github.com/cxyxlxdm/reverb-cast` | **公开** | 只有 `README.md` + **Releases**(Android `reverb.apk` 与 macOS `Reverb.dmg` 的分发处;1.0.1 / 1.0.2 放过 dmg,1.0.3~1.0.5 断过三版,1.0.6 起恢复每版都带 dmg;1.1.0 起按维护者要求同时放四端包与鸿蒙符号包 —— 见下一段的后果)。Android 应用内更新查的就是它的 `releases/latest` —— **latest 是哪版别抄文档,现算**:`gh api repos/cxyxlxdm/reverb-cast/releases/latest --jq .tag_name` |
+
+**2026-11-24 仓名更正**:维护者确认公开分发仓应为 `reverb-cast`,不是早期文档里的 `revert-cast`。
+现行命令与对外链接统一用新名;历史记录保留旧名。GitHub 的旧仓重定向继续兼容已发布包内的旧更新地址,
+本轮不为此重打四端包;下一版再统一源码 URL。
 
 ⚠️ **macOS 那份 dmg 不是附带物,是 macOS 应用内更新的唯一来源**(2026-11-13 核对:1.0.3 起的「只传 apk」写法已过时,
 按它出包会让 macOS 端从此查不到新版本,而且**没有任何报错** —— `SelfUpdate.swift` 在 release 列表里找
 `name == "Reverb.dmg"` 的资产,找不到就跳过整条 release,用户侧表现是「已是最新」)。
-自检:`gh api repos/cxyxlxdm/revert-cast/releases/latest --jq '.assets[].name'` 里必须同时有
+自检:`gh api repos/cxyxlxdm/reverb-cast/releases/latest --jq '.assets[].name'` 里必须同时有
 `reverb.apk` 与 `Reverb.dmg`。1.0.6 起两端都恢复上传;1.0.3~1.0.5 那三版缺 dmg 是事实,别回头补传 ——
 它们对应的 macOS 包本来就没发出去。
 
-**iOS 的出口是 TestFlight,不是这两个仓库**:iOS 包不作为安装来源出现在 GitHub Releases 或 `site/` 下载页;
-`ios/dist/*.ipa` 的正常去处是上传 App Store Connect。**1.0.7 有一处已发生的例外**:
-该版把未签名归档件 `reverb-ios-1.0.7-1-unsigned.ipa` 也挂上了 release(理由与读数见 `CHANGELOG.md` 1.0.7 发版记录)——
+**iOS 的正常出口是 TestFlight**:`ios/dist/*.ipa` 默认上传 App Store Connect,
+GitHub Release 不作为常规 iOS 安装入口。**已有两处明确例外**:
+1.0.7 把未签名归档件 `reverb-ios-1.0.7-1-unsigned.ipa` 挂上了 release(理由与读数见 `CHANGELOG.md` 1.0.7 发版记录)——
 它是**归档,不是安装路径**(未签名,`codesign` 直接判 unsigned,侧载也装不上),别在官网/README 里当下载项引用。
-往后再挂不挂由维护者拍,不按「上次挂过」自动类推。
+1.1.0 按维护者要求把 development-signed IPA 一并放入四端发布批次;它只登记设备可装、2026-11-30 到期,
+**仍不是 TestFlight 包**。往后再挂不挂由维护者拍,不按「上次挂过」自动类推。
 TestFlight 链接本身也不是公开下载地址,由维护者在 App Store Connect 里邀请测试员。
 
 **两个都没有 `LICENSE` 文件。** 所以缺口的正确表述不是"公开仓库没证书",而是:

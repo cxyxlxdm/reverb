@@ -14701,3 +14701,60 @@ scenePhase,macOS 同时监听 didResignActiveNotification,页面消失也取消�
 **教训 / 可复用的规律**。
 ① 分发平台的文件名限制是发布契约的一部分;容器改名可以,包体内容与哈希不能因此失真。
 ② 上传失败要先查平台校验,不要为了通过校验把正式包重新签名或改用 debug 包。
+
+### H301. GitHub Release 大资产上传会因边缘路由与协议不同差一个数量级 —— 先探路再传整包
+
+**现象**(2026-11-24)。270 MB 的 Android APK 多次上传不是立刻报错,就是先快后慢:本地代理 HTTP/1.1
+返回 `400 invalid request`,HTTP/2 在数 MB 后重置或长时间无响应;直连 TLS 1.2 能传,但只有约
+60–120 KB/s。换到另一个 GitHub 前端后,1 MB 探针能到 350–535 KB/s,长连接又在数十 MB 后降速。
+
+**根因**。Release 资产接口是**单次二进制 POST**,不支持断点续传;`Content-Range` 会被忽略,失败后
+已传字节不能拼回下一轮。上传入口的 DNS 只有一个 A 记录,但同一 SNI 可由多个 GitHub 前端承接;
+不同前端、HTTP/1.1 与 HTTP/2、直连与本地代理经过的链路质量并不相同。把一次长连接的正常降速误读成
+"挂死",反复重试反而丢掉更多进度。
+
+**修法**。先用 1 MB 临时资产探路,再用 32 MiB 临时资产做持续上传;1 MB 成功不能证明长连接稳定。
+保留 SNI `uploads.github.com` 与证书校验,只把连接地址换到候选 GitHub 前端。正式上传显式带 `?name=`,
+用 HTTP/1.1 + TLS 1.2,清掉自动 `Expect: 100-continue`,开启 `TCP_NODELAY`,再以 `--limit-rate 131072`
+从起点平稳发送;`--upload-file` 会带正确的 `Content-Length`。不要改成分块流:Node fetch 的 chunked
+请求会被 GitHub 回 `400 Bad Content-Length`。每次收到 201 后立即用 API 核对 name / size / digest,不把
+draft 里有条目当成上传完成。测试资产只删自己刚生成的那些,不碰既有发布资产。系统 curl 的
+`--speed-limit` 不接受 `32k` 后缀,要写 `32768`;进度输出接 `tr` 时必须开 `pipefail`,否则 curl 的失败会被
+管道最后一棒的 0 吞掉。
+
+**验收**。探针阶段实测多个前端都落在 `japaneast`,换 IP 没有拉开质量;HTTP/2 长传会超时,
+`Content-Range` 不恢复,Node 固定长度上传也被重置。最终稳定的 HTTP/1.1 paced 配置把 32 MiB 探针
+完整传到 201(496.375 s,平均 67,598 B/s);同一配置传正式 APK 仍在约 10% 处被边缘连接重置,
+API 确认没有留下半成品资产。于是把 APK 拆成 17 个不超过 16 MiB 的独立 Release 资产,逐段核对
+GitHub digest,再由一次性 GitHub Actions 在 runner 上下载验哈希、按序拼回、核对总大小与总 SHA-256,
+上传正式 `reverb.apk` 后删除分段。runner 首次在下载含 `ESC` 字节的分段时被 `gh api` 的终端转义
+保护拦下,加 `--allow-escape-sequences` 后重跑成功;[run 45380590392](https://github.com/cxyxlxdm/reverb-cast/actions/runs/45380590392)
+41 秒完成,`reverb.apk` 为 270,327,060 B / `7c18e84c…da73`,分段与临时工作流均删除。
+1.1.0 已发布,五份正式资产 digest、latest 指针与真实 tag 的最终读数回填到 `CHANGELOG.md`。
+
+**教训 / 可复用的规律**。
+① 大文件发布先测 1 MB 路由,再用 32 MiB 验证持续吞吐;不要用正式包做协议试验,一次失败就整包重传时尤其如此。
+② "没有新增进度日志"不等于"没有传":看进程与连接字节数,区分降速、停滞和协议重置。
+③ 官方接口不支持分片续传时,不要用 `Content-Range` 猜补;平台忽略它不是功能支持。
+④ 长连接反复重置时,把文件拆成多个可独立验收的平台资产,再用受控计算端拼接;每一段与最终文件
+都必须验哈希,不能把"分段都传完"当成"整包已经正确"。
+⑤ `gh api` 下载二进制资产会拦截终端转义序列;APK 天然可能含 `ESC`,这不是文件损坏,按提示加
+`--allow-escape-sequences` 后仍以 size 与 SHA-256 验收。
+
+### H302. 公开分发仓仓名手误: `revert-cast` → `reverb-cast`,旧地址靠重定向续用
+
+**现象**(2026-11-24)。维护者确认公开分发仓应为 `reverb-cast`,此前文档、Release 链接与应用内
+更新地址都写成 `revert-cast`。直接改源码里的地址会让已经发出去的包仍访问旧仓,只改文档又会留下
+两套名字。
+
+**根因**。仓名是发布契约的一部分,不只是显示文字。GitHub 为重命名后的旧仓提供 HTTP 重定向,
+所以不必为了一个拼写纠正重打四端包;但新发布的文档与新构建必须统一使用正确仓名。
+
+**修法**。用 GitHub API 重命名公开仓,保留仓库 ID、Release、tag 与资产;现行命令和对外链接统一
+改成 `reverb-cast`,历史记录保留旧名并注明更正。重命名后分别验证新仓 API、旧仓 API 与旧网页地址,
+确认旧地址最终仍落到 `reverb-cast`。仓描述里残留的 `revert-android` 也一并改成四端分发说明。
+
+**验收**。2026-11-24 实测:新仓 `cxyxlxdm/reverb-cast` 为 public;旧 API 返回的 `full_name` 已是
+新仓;匿名访问旧仓网页与旧 Release 地址均返回 200 并落到新仓。Release ID `456272074` 已发布,
+`releases/latest`、真实 tag `1.1.0` 与五份正式资产均可匿名访问。已发布包源码里的旧更新地址本轮
+不重打,继续依赖 GitHub 重定向。
