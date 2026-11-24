@@ -50,7 +50,7 @@
 
 | 端 | 现役发布物 | 上一版取处 | 校验 |
 |---|---|---|---|
-| Android(GitHub 自分发) | `android/dist/reverb.apk`(上传到公开仓 `revert-cast`) | 公开仓对应的 tag:`gh api repos/cxyxlxdm/revert-cast/releases/tags/<tag> --jq '.assets[]\|"\(.name) \(.size) \(.digest)"'`,再 `gh release download <tag> -R cxyxlxdm/revert-cast -p reverb.apk -D <目录>` | 下载后 `shasum -a 256` 与资产 `digest` 逐字相同(字节数相等不算)。⚠️ **别按本地备份目录名认"那一版"**:同版本重出包会让两个目录都叫 `1.0.7` 而字节不同(实测见 §八) |
+| Android(GitHub 自分发) | `android/dist/reverb.apk`(上传到公开仓 `reverb-cast`) | 公开仓对应的 tag:`gh api repos/cxyxlxdm/reverb-cast/releases/tags/<tag> --jq '.assets[]\|"\(.name) \(.size) \(.digest)"'`,再 `gh release download <tag> -R cxyxlxdm/reverb-cast -p reverb.apk -D <目录>` | 下载后 `shasum -a 256` 与资产 `digest` 逐字相同(字节数相等不算)。⚠️ **别按本地备份目录名认"那一版"**:同版本重出包会让两个目录都叫 `1.0.7` 而字节不同(实测见 §八) |
 | Android(大陆商店) | 同一份 apk 的商店侧副本 | **只能从商店后台取**,公开仓那份与商店那份不是同一个文件(合并 flavor 后是同一份代码,但分发各存一份历史) | 商店后台的包体摘要;本地 mapping 另见下一行 |
 | Android 的 mapping | `android/dist/` 里只留最后一次构建 | `android/dist/_archive/`(每次重打前按日期归档,见 §五) | 文件名带版本 / versionCode / 时间戳;与那次构建同批 |
 | 鸿蒙 | `harmony/dist/reverb.app` + `reverb-symbol.zip` | **市场后台**;本地归档可能在 kit zip 里:`harmony/dist/_backup-*kit*/*.zip`(`unzip -l` 数得见 `reverb.app` 与 `reverb-symbol.zip` 两个条目) | 以上架后台的摘要为准;kit zip 不是"素材",按发布物待遇核(H204) |
@@ -73,7 +73,7 @@
    把 `dist/mapping.txt` 与在架包摘要复制进 `dist/_archive/`,文件名带版本、versionCode、时间戳。
 4. `./build-release.sh` → 解包验收(`aapt2 dump permissions` 现算条数、`unzip -l` 四类条目、
    `apksigner` 证书 DN 不是调试证书)。
-5. 打一个**更高的 tag**(如 `1.0.10`)传到 `cxyxlxdm/revert-cast`,资产名仍是 `reverb.apk`
+5. 打一个**更高的 tag**(如 `1.0.10`)传到 `cxyxlxdm/reverb-cast`,资产名仍是 `reverb.apk`
    (应用侧按名字挑,不是取 `assets[0]`)。
 6. 传完两条必查:`releases/latest` 等于新 tag;资产 `digest` 等于本地 `shasum -a 256`。
 7. 用一台装着坏版本的设备实跑一次:冷启动 → 应用内更新提示 → 下载 → 安装器覆盖安装成功。
