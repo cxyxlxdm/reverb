@@ -50,9 +50,12 @@ struct DiscoverView: View {
     @EnvironmentObject var env: AppEnvironment
     @EnvironmentObject var player: PlayerController
     @EnvironmentObject var settings: SettingsStore
+    @Environment(\.scenePhase) private var scenePhase
 
     /// 双击底部「发现」时外壳递增这个数(见 RootView)。默认 0,除根视图外没有别的调用点。
     var scrollTopToken: Int = 0
+    /// tab、详情页或全屏播放页盖住发现页时,录音必须立即取消。
+    var active: Bool = true
     /// 榜单与搜索结果两个 `ScrollView` 共用这一个锚点 id:它们互斥(屏上永远只有一个),
     /// 所以 `scrollTo` 不会指到屏外那个容器上。
     private static let topAnchor = "discover-top"
@@ -90,6 +93,9 @@ struct DiscoverView: View {
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
     private var isSearchActive: Bool { !submittedQuery.isEmpty }
+    private var voiceActive: Bool {
+        active && !showReorder && authPrompt == nil && !confirmClearHistory
+    }
     private var categories: [DiscoverCategory] { DiscoverCategory.ordered(by: settings.categoryOrder) }
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 220), spacing: 14)]
@@ -128,6 +134,13 @@ struct DiscoverView: View {
                 liveEpisode = nil
             }
         }
+        .onChange(of: voiceActive) { visible in
+            if !visible { voice.cancel() }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active || !voiceActive { voice.cancel() }
+        }
+        .onDisappear { voice.cancel() }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) { refreshButton }
             ToolbarItem(placement: .topBarTrailing) { radioButton }

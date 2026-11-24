@@ -17,6 +17,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * 语音搜索:录一小段麦克风 → 交给本机 `SenseVoice` 识别 → 回给调用方填进搜索框。
@@ -44,7 +45,9 @@ class VoiceSearchController(context: Context) {
 
     private val appContext = context.applicationContext
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val generation = AtomicInteger(0)
     private var recordJob: Job? = null
+    @Volatile
     private var record: AudioRecord? = null
     /** 已录到的样本,按块累加;2 万样本/秒,几秒钟的量级不用担心装箱。 */
     private var chunks = ArrayList<ShortArray>()
@@ -81,14 +84,17 @@ class VoiceSearchController(context: Context) {
             ar.release()
             return StartResult.Failed
         }
-        chunks.clear()
+        val session = generation.incrementAndGet()
+        recordJob?.cancel()
+        recordJob = null
+        val sessionChunks = ArrayList<ShortArray>()
+        chunks = sessionChunks
         record = ar
         try {
             ar.startRecording()
         } catch (e: Exception) {
             Logger.w("Voice", "startRecording 失败:${e.message}")
-            ar.release()
-            record = null
+            releaseRecord(ar)
             return StartResult.Failed
         }
         _state.value = State.Recording
@@ -97,22 +103,25 @@ class VoiceSearchController(context: Context) {
             val buf = ShortArray(PcmDecoder.TARGET_RATE / 5)   // 200ms
             var total = 0
             val cap = PcmDecoder.TARGET_RATE * MAX_SECONDS
-            while (isActive && total < cap) {
-                val n = try {
-                    ar.read(buf, 0, buf.size)
-                } catch (e: Exception) {
-                    Logger.w("Voice", "read 失败:${e.message}")
-                    -1
+            try {
+                while (isActive && generation.get() == session && total < cap) {
+                    val n = try {
+                        ar.read(buf, 0, buf.size)
+                    } catch (e: Exception) {
+                        Logger.w("Voice", "read 失败:${e.message}")
+                        -1
+                    }
+                    if (n <= 0 || generation.get() != session || record !== ar) break
+                    sessionChunks.add(buf.copyOf(n))
+                    total += n
                 }
-                if (n <= 0) break
-                chunks.add(buf.copyOf(n))
-                total += n
-            }
-            // 到时长上限就放下麦克风,但状态仍算「录音中」—— 用户再点一下才进入识别,
-            // 与"按钮上显示什么"保持一致(红方块直到用户自己结束)。
-            if (total >= cap) {
-                Logger.i("Voice", "到达 ${MAX_SECONDS}s 上限,麦克风已释放")
-                releaseRecord()
+            } finally {
+                // 异常、取消与正常到顶都走这里;只释放这一次会话的采集器,
+                // 免得旧协程的 finally 误关用户已经新开的一次录音。
+                releaseRecord(ar)
+                if (generation.get() == session && total >= cap) {
+                    Logger.i("Voice", "到达 ${MAX_SECONDS}s 上限,麦克风已释放")
+                }
             }
         }
         return StartResult.Started
@@ -121,10 +130,14 @@ class VoiceSearchController(context: Context) {
     /** 停止并识别。返回识别文本;nil 表示没录到内容、语言不支持或识别失败。 */
     suspend fun stopAndTranscribe(localeId: String): String? {
         if (_state.value != State.Recording) return null
-        releaseRecord()
-        recordJob?.cancelAndJoin()
-        recordJob = null
+        val session = generation.get()
+        val job = recordJob
+        // 先锁住状态再等待采集协程;否则用户第二下会重入,旧调用恢复后还会清掉新会话的 Job。
         _state.value = State.Transcribing
+        releaseRecord()
+        job?.cancelAndJoin()
+        if (session != generation.get()) return null
+        if (recordJob === job) recordJob = null
         val captured = chunks
         chunks = ArrayList()
         try {
@@ -133,6 +146,7 @@ class VoiceSearchController(context: Context) {
             val engine = AsrFactory.create(appContext) ?: return null
             try {
                 val text = engine.transcribeSamples(samples, localeId)?.trim()
+                if (session != generation.get()) return null
                 Logger.i("Voice", "识别完成 字=${text?.length ?: 0}")
                 return text?.ifEmpty { null }
             } finally {
@@ -142,12 +156,16 @@ class VoiceSearchController(context: Context) {
             Logger.w("Voice", "识别失败:${e.message}")
             return null
         } finally {
-            _state.value = State.Idle
+            if (session == generation.get()) {
+                if (recordJob === job) recordJob = null
+                _state.value = State.Idle
+            }
         }
     }
 
     /** 放弃这次录音(离开页面 / 视图销毁)。不识别、不留数据。 */
     fun cancel() {
+        generation.incrementAndGet()
         releaseRecord()
         recordJob?.cancel()
         recordJob = null
@@ -155,14 +173,19 @@ class VoiceSearchController(context: Context) {
         _state.value = State.Idle
     }
 
-    private fun releaseRecord() {
-        val ar = record ?: return
+    private fun releaseRecord(expected: AudioRecord? = null) {
+        val ar = expected ?: record ?: return
+        if (record !== ar) return
         record = null
         try {
             ar.stop()
         } catch (_: Exception) {
         }
-        ar.release()
+        try {
+            ar.release()
+        } catch (e: Exception) {
+            Logger.w("Voice", "release 失败:${e.message}")
+        }
     }
 
     private fun toFloatSamples(list: List<ShortArray>): FloatArray {

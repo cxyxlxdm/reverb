@@ -421,14 +421,15 @@ privacy_version -int <当前版本>` 走的是 cfprefsd,2026-11-09 实测可用(
 
 ---
 
-## 本机现状(2026-11-02,别当成"已验证")
+## 本机现状(2026-11-24,历史读数保留日期)
 
 | 项 | 状态 |
 |---|---|
 | Debug / Release 编译 | ✅ 均 exit 0 |
 | `./build-ios.sh` 编译门 | ✅ exit 0,八条判据全过(处理量由脚本自己打印;2026-11-15 加第 2b 条 `NSSupportsLiveActivities=true` 后复跑仍全过) |
 | 签名身份 | ✅ 已建 `Apple Development: ailurus@foxmail.com (ACYBTV5UFW)`;Team = `J4YCBW8ZG7`(**免费 Personal Team**);`DEVELOPMENT_TEAM` 仍不写进工程,只走命令行 |
-| archive / export / upload | ❌ 仍未跑通。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员。**2026-11-10 试了 `--archive`**:报 `No Accounts: Add a new account in Accounts settings.` 与 `No profiles for 'com.yuyin.reverb'` —— 11-02 那份开发描述文件已于 **2026-11-09 14:57:39 UTC 到期**,而 Xcode 现在没有任何已登录账号,重签要维护者先登录(见下) |
+| archive / export / upload | ❌ 仍未跑通。**免费 Personal Team 拿不到分发描述文件**,`--export` / `--upload` 要 Apple Developer Program 会员。**2026-11-24 复测 1.1.0**:`--export` 与手工 development 导出分别撞到 `No Accounts` / App Group 描述文件不匹配,以及 Xcode managed profile 不能按 manual profile 导出;TestFlight 前置条件未变 |
+| 1.1.0 开发签名 IPA | ◐ `ios/dist/reverb-ios-1.1.0-4-development-signed.ipa`,3,291,567 B / 10:08:40,sha256 `983344f1cde568e8e3c758ff0a71797d52b037155a0734cbaaed1cd019f86105`。主 app 与 widget 都嵌入开发描述文件,`codesign --verify --deep --strict` 通过;只登记 1 台设备,描述文件 2026-11-30 到期。它是 Release 构建,但**不是 App Store / TestFlight 包**,按本轮维护者要求可作为明确标注的 GitHub 资产 |
 | iOS 模拟器运行时 | ✅ 已装 iOS 27.2;iPhone 17 模拟器上跑过(见上节) |
 | 真机 | ✅ iPhone 16 Pro(`00008140-000425693A7B001C`)`pairingState=paired`;Debug 与 Release 都装过、都能启动。**2026-11-09**:1.0.7(1) 在机上,截图与 App 日志都取得到;但重新拉起被 `FBSOpenApplicationErrorDomain error 3` 拒(当时锁屏;免费 7 天描述文件 11-02 装、可能到期),WDA runner 仍 `host_command_failed` ⇒ 点击类验收仍缺 |
 | 界面与播放实跑 | ✅ 真机:首启隐私门 / 四个 tab 标题行 / 首页网络榜单 / 播放页 / 迷你播放条 / 后台音频(进度持续推进);**2026-11-04 功能对齐后**在模拟器复跑:追更真实列表 / 音阁订阅列表 / 设置四行新控件 / 播放页下载胶囊;同日**真机**复跑:设置三段 / 追更与音阁空态 / 英文界面 / 权限说明本地化 / 后台音频 / 冷启动暂停态时长(H247);**11-08 真机**补验音阁历史多选浮条;**11-09 模拟器**补验 B 站过滤读数、直播流结果行与播放页直播态(无进度条 / 无倍速 / 上下集置灰)、直播不记历史;**2026-11-15 模拟器**内置引导音频与远程 mp3 都能 `readyToPlay` 并出声(此前那轮 `-12746` 是模拟器媒体服务卡死,重启设备即恢复) |
@@ -437,8 +438,8 @@ privacy_version -int <当前版本>` 走的是 cfprefsd,2026-11-09 实测可用(
 | 局域网同步 | ◐ 三端编译门与共享层单测通过(KAT、回环握手);**2026-11-11 用探针补了跨端协议互通** —— Android 真机与 Apple 共享层双向各一次,SAS 一致、订阅导入与去重成立;当晚又用**真实 Wi-Fi** 由 Mac 直连手机(手动地址、无端口转发)跑了两轮,配对码一致、订阅导入、二次同步去重成立;**2026-11-12 补了删除墓碑**(共享层 `Sync/LanSyncTombstones.swift`,随快照传 `tombstones` 段),iOS 编译门 7 条全过、`swift test` 61 条 0 失败;**iOS 面板、mDNS 发现仍未跑**(模拟器无点击注入、真机 WDA 装不上),Apple 侧跑的是探针而不是 App 面板 |
 | 仍未验 | ◐ 订阅刷新(定时)、逐字稿(需 iOS 26 语音模型)、下载、备份导出、锁屏与控制中心信息(真机没看)、**2026-11-04 新增能力的运行侧**:后台巡检与本地通知(BGTask 需真机跨 6 小时)、通知权限拒绝分支、相册保存、邮件草稿、蜂窝闸门(要在真机上切 Wi-Fi / 蜂窝);**2026-11-09 补记**:401 弹框、朋友圈海报生成、双击回顶、追更自动回顶、继续收听卡片点开,在 iOS 上**仍没有任何运行时读数**(模拟器无点击注入、真机 WDA 装不上);直播流的 UI 已由模拟器补上,**出声**仍只有真机可证(11-09 那轮模拟器连内置引导音频都加载失败,11-15 重启模拟器后已能出声,见上一行) |
 
-**所以 TestFlight 链接目前还不可用**:缺的是 **Apple Developer Program 会员**(现在登录的是免费
-Personal Team,7 天有效的开发描述文件只够装自己的机器),不是代码。付费后按上节四条命令走。
+**所以 TestFlight 链接目前还不可用**:缺的是 **Apple Developer Program 会员**。现有免费
+Personal Team 的开发描述文件只够装登记的机器,不是分发描述文件;付费后按上节四条命令走。
 
 **2026-11-10 的归档包**:`./build-ios.sh` 的编译门仍然 exit 0(七条判据全过),但归档走不通,
 于是把编译产物直接打成 `ios/dist/reverb-ios-1.0.7-1-unsigned.ipa`(2,623,640 B,
@@ -461,6 +462,18 @@ release 正文与公开仓 README 都写明了「不能直接安装」。
 修复后重打(21:34:40,四端同批)是 **2,911,408 B / `388cbc34…`**,现存 `dist/` 里是后者。
 构建号没变(2),所以**认文件请认 sha256,别认名字**;要传给 TestFlight 的话构建号还得再往上加。
 **要换成能装的**,步骤同上(先让 Xcode 登录账号)。
+
+**2026-11-24 的 1.1.0 开发签名包**:`./build-ios.sh --verify` 的产物判据全过,但标准
+`--export` 仍因免费团队没有分发描述文件而失败;手工 development 导出也遇到
+`Provisioning profile ... is Xcode managed, but signing settings require a manually managed profile.`。
+最终没有改工程签名材料,而是从已验证的 Release app 复制 bundle,嵌入现有主 app 与 widget
+开发描述文件,按描述文件 Entitlements 先签 widget 再签主 app,输出
+`ios/dist/reverb-ios-1.1.0-4-development-signed.ipa`(3,291,567 B / 10:08:40,
+sha256 `983344f1cde568e8e3c758ff0a71797d52b037155a0734cbaaed1cd019f86105`)。
+`codesign --verify --deep --strict` 通过,两个 `embedded.mobileprovision` 都在;
+主 app / widget 描述文件分别于 2026-11-30 12:10:04 / 12:10:07 到期,只登记 1 台设备。
+**它能装到已登记测试机,但不是 App Store / TestFlight 包**;本轮按维护者要求作为明确标注的
+GitHub 资产,不能据此宣布 TestFlight 已打通。
 
 ---
 

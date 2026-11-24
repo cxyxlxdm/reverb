@@ -1034,6 +1034,7 @@ struct Index {
             DiscoverPage({
               scheme: this.scheme(),
               fontScale: this.fontScale(),
+              active: this.tabKind === 0 && this.stack.size() === 0,
               settings: this.settings,
               history: this.history,
               subscriptions: this.subscriptions,

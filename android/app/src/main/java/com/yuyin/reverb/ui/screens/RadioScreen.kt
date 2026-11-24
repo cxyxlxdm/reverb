@@ -191,8 +191,9 @@ fun RadioScreen(scrollTopToken: Int = 0, radioFullEnabled: Boolean = false) {
                     )
                 }
             }
-            when (val s = vm.directoryState) {
-                is DirectoryState.Loading -> item(key = "dir-loading") {
+            if (radioFullEnabled || vm.query.isNotBlank()) {
+                when (val s = vm.directoryState) {
+                    is DirectoryState.Loading -> item(key = "dir-loading") {
                     Row(
                         Modifier
                             .fillMaxWidth()
@@ -271,6 +272,9 @@ fun RadioScreen(scrollTopToken: Int = 0, radioFullEnabled: Boolean = false) {
                 DirectoryState.Idle -> if (!radioFullEnabled) {
                     item(key = "search-idle") { HintText(stringResource(R.string.radio_search_subtitle)) }
                 } else Unit
+                }
+            } else {
+                item(key = "search-idle") { HintText(stringResource(R.string.radio_search_subtitle)) }
             }
 
             if (radioFullEnabled && vm.query.isBlank() && seed.isNotEmpty()) {

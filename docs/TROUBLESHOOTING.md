@@ -14253,6 +14253,25 @@ Text 于是按单行截断(fixedSize 单独加在 Text 上也没用,按钮样式
 ③ 截屏全黑、AX 0 扇窗时先查 `ioreg -n Root -d1 -a | grep CGSSessionScreenIsLocked` ——
    那是环境阻塞(要本人输密码解锁),不是应用起不来;别在这一步去改代码。
 
+**2026-11-23 复核:上一版修法不够,同一批说明文字在真窗口里仍被裁掉下半截。**
+- **现象**:用户报按钮说明「全都被遮挡了下半部分」;同时设置窗**不能放大缩小**,
+  且「足迹 / 备份 / 存储 / 离线下载 / 日志 / 更新 / 关于」里有的行像系统按钮、有的行像纯文本。
+- **根因**:11-19 只把 `.captionWrap()` 挂在**内层 Text** 上,可 `Button` 的默认样式仍按控件单行高度
+  排版标签,行高没有真的跟着长(离屏渲染看得见字,真窗口里仍被压)。另外两个问题是同一处代码的产物:
+  `SettingsView` 里写死 `.frame(width: 460, height: 560)` ⇒ 窗口跟着固定;行有的用 `Button`、
+  有的用裸 `HStack` ⇒ 两套视觉。
+- **修法**(`macos/Sources/Reverb/UI/SettingsView.swift` + `ReverbApp.swift`):
+  ① 抽出 `SettingsRow` / `SettingsRowButton`,所有可点行统一 `.buttonStyle(.plain)`,去掉系统按钮底框;
+  ② `fixedSize(vertical:)` 改挂在**标题+副标题的 VStack**上,让整行参与行高计算;
+  ③ 固定 frame 改成 `minWidth/minHeight/idealWidth/idealHeight + maxWidth/maxHeight .infinity`,
+  并在 Settings scene 上挂 `.windowResizability(.contentMinSize)` —— 只锁下限、上限交给窗口;
+  ④ 静态行也走 `SettingsRow`,图标宽度、副标题字号与可点行同形;开新层级的行用 chevron,
+  不用按钮底框提示可点。
+- **取证**:会话仍锁屏(`screencapture` 全黑、`System Events` 数不到窗口),
+  用 `NSHostingView` 离屏渲染真实 `SettingsView`,在 460 / 720 两个宽度各出一张图:
+  副标题完整、行高随两行说明变高、加宽后内容跟随铺满。`swift build -c release` 与
+  `swift test`(104 tests)通过。⚠️ **仍是离屏取证**:解锁后要在真窗口里再拖一次尺寸、看一眼底部两节。
+
 ---
 
 ### H287. macOS「检查更新」报失败 —— 先把 403 限额、TLS 瞬时失败与"根本没跑到"分开
@@ -14314,6 +14333,177 @@ Text 于是按单行截断(fixedSize 单独加在 Text 上也没用,按钮样式
    混用的失败形态是**空白且无日志**,没有类型检查能兜住。
 ② 图标"不显示"时先查组件、再查资源名 —— 两者都静默,顺序反了会白改一轮。
 ③ 装机验收必须**看图形**:这一轮四个文字标签齐全、四个图标全空,只扫文字很容易误判通过。
+
+---
+
+### H289. macOS「检查更新」总是失败 —— 把「检测」从有配额的 REST 接口挪到 Atom 流,并给两端补断点续传与后台下载
+
+**现象**(2026-11-23,用户报「macOS 的应用内更新也是无效的,检测更新总是失败」,
+同一条需求里还要求 Android / macOS 支持后台更新与断点续传)。
+
+**取证**(全部来自本机同参数探针,不是推断)。
+- `https://api.github.com/repos/cxyxlxdm/revert-cast/releases?per_page=20` 返回 **403**,
+  `x-ratelimit-remaining: 0`。这是未带 token 的**每 IP 每小时 60 次**用尽,不是仓库或代码问题。
+  而 H287 那轮修的是「瞬时 403 / TLS 重试一次」—— 对配额用尽无效,重试只会再烧一次额度。
+- 同一时刻 `https://github.com/cxyxlxdm/revert-cast/releases.atom` 返回 **200**,能列出全部 tag;
+  直链 `.../releases/download/<tag>/Reverb.dmg` 的 **HEAD** 返回 200 与
+  `Content-Length: 6622867`(1.0.9 那份,实测值;新版本同形)。
+- 对同一直链发 `Range: bytes=1000-`,经 302 到 `release-assets.githubusercontent.com` 后返回
+  **206**,`Content-Range: bytes 1000-2023/6622867`,并带 `ETag` —— 续传在三段重定向之后仍然成立。
+- Swift 侧独立探针确认 HEAD 的**落地主机**是 `release-assets.githubusercontent.com`,
+  与下载请求的最终主机一致。
+
+**根因**。
+1. 检测只有 REST 列表一条路。配额一满就 403,用户看不到「限额」,只看到「检查失败」;
+   自动检测与手动点击共用这条死路,所以「总是失败」。
+2. 下载只有整包重来:网络一断、应用一退出,已下的几十 MB 全丢;
+   macOS 那条下载任务虽然不会因为关闭设置页而立刻取消,但没有 App Nap / 空闲睡眠的驻留保证,
+   进程退出后也不留任何可续的东西。
+3. Android 的下载虽然跑在前台服务里,但同样是整包重来;链路抖一次就把进度清零。
+
+**修法**。
+- **检测主路换 Atom**(`macos/Sources/Reverb/Update/SelfUpdate.swift`):
+  `fetchViaAtom` 先读 `releases.atom`,解析 `<entry><title>` 里的稳定版本 tag,按数字逐段降序;
+  没有新版就直接返回,一次资产探测都不发。有新版才:
+  ① 可选地查一次 REST 列表(`fetchAtomMetadata`)拿 sha256 与 API 资产端点,403 / 超时都当**正常降级**;
+  ② 拿不到元数据就对直链发 HEAD(`headSize`)取字节数,落地主机仍过 `trustedHosts` 白名单;
+  ③ Atom 整条失败才退回原 REST 列表(`fetchViaAPI`)。
+  `directDMGURL` 负责拼直链;预发布 / 带后缀的 tag 由 `isStableVersionTag` 挡掉。
+- **续传**(两端同一套判据):
+  - 分片 `${fileName}.part` + 元数据 `${fileName}.part.json`(`tag / etag / lastModified / total`);
+  - 只有「分片 > 0、tag 相同、总量兼容、至少有一个校验器」才带 `Range` + `If-Range`;
+  - 206 必须校验 `Content-Range` 的起点**等于当前分片长度**才追加;200 视为远端忽略 Range,
+    截断重写;416 丢掉分片与元数据,下次从 0 开始;
+  - 失败 / 进程退出**保留**分片;用户明确取消 / 跳过、字节数或 sha256 不符才删;
+  - 最后一包校验通过才改名成交付文件,并删掉元数据。
+  macOS 用 `URLSessionDataDelegate` 自己管 Range 与重定向;Android 用 OkHttp 的 `Range` 请求头,
+  收尾统一算一次整文件 sha256(续传要先读旧分片,边写边算反而更容易错)。
+- **后台**:
+  - Android 沿用既有前台服务 `UpdateDownloadService` + partial wake lock,下载与进度都不依赖设置页存活;
+  - macOS 让会话属于 `SelfUpdate` 的应用级任务,并用
+    `ProcessInfo.beginActivity([.userInitiated, .idleSystemSleepDisabled])` 抑制 App Nap 与空闲睡眠;
+    `waitsForConnectivity = true` 让链路短暂断开时等待而不是立刻失败。**没有**改用 background
+    `URLSession`:它的 downloadTask 与自管 Range 是两套恢复机制,叠在一起无法判断哪份字节算数。
+
+**验收**。
+- 纯逻辑:macOS 新增 `UpdateResumeTests`(校验器缺失 / tag 不符 / 总量冲突 / 206 起点 / 416 与 `*` 总量),
+  加上 Atom 解析与资产表两条,`swift test` **112 条全过**;Android 新增 Atom 排序、Content-Range
+  与版本比较单测,`testDebugUnitTest` **122 条全过**;两端编译门均 exit 0。
+- **macOS 集成测试**(`UpdateDownloaderResumeTests`,3 条):用本地 `NWListener` 起一个 Range 服务器,
+  驱动真实的 `UpdateDownloader` —— ① 第一次回 200 只发 600000 B 后 FIN,断言 `.part` / `.part.json`
+  留下;第二次请求断言 `Range: bytes=600000-` + `If-Range: "resume-test-etag"`,206 接完 1500000 B;
+  ② 服务器忽略 Range 回 200,断言分片被截断重写而不是接在旧字节后面;③ 服务器回 416,断言分片与
+  元数据都被删掉。三条均过。
+- **Android 真机验收**(2026-11-23,Pixel 3 / API 31,debug 包 + 本地 Python Range 服务器 +
+  `adb reverse tcp:8765`):第一次响应只发 600000 B 后 `shutdown(SHUT_WR)`,分片 600000 B 与
+  `{"tag":"9.9.9-test","etag":"\"resume-test-v1\"",…,"total":1500000}` 落盘;force-stop 重启后
+  第二次请求带 `Range: bytes=600000-` 与 `If-Range: "resume-test-v1"`,服务器回 206,
+  收尾文件 1500000 B,拉回本机 `shasum -a 256` 与源文件**逐字相同**。另一轮服务器故意忽略 Range
+  回 200,最终 sha256 同样相同(截断重写路径)。临时测试入口与 `127.0.0.1` 白名单已全部撤掉。
+- 网络形状:上面的 403 / Atom 200 / HEAD 200 / Range 206 都是本机实测,不是文档互证。
+- **未做**:没有在真实 GitHub 链路上跑完整 200 MB 级安装包的中断续传;macOS 的 UI 运行验收仍受锁屏限制;
+  `dist/` 未重打。
+
+**教训 / 可复用的规律**。
+① **有配额的接口不能当唯一检测路**。配额用尽与「仓库没发布」「网络不通」在用户侧是同一句话;
+   换一条不占配额、且走另一条网络链路的读法(Atom),比加 token、加重试都更贴近「零后端」的约束。
+② **续传的正确性不在「接上了」,在「接的是同一段」**。没有 ETag/Last-Modified 就不续;
+   206 必须校验起点;200 / 416 必须能退回整包。少任何一条,坏包会一路走到安装器。
+③ 「后台下载」在两端不是同一个东西:Android 是前台服务 + wake lock;macOS 是进程级会话 + 抑制 App Nap。
+   桌面进程被退出后没有后台继续,只能下次启动续传 —— 这条边界要写进对外说明,别让用户以为是断点续传的替代。
+④ 两套恢复机制不要叠用(background URLSession + 自管 Range),否则失败现场连「哪份字节算数」都判断不了。
+
+### H290. macOS 设置窗拉不动、局域网同步面板默认高度只有 170 —— SwiftUI 的 Scene 级尺寸偏好不是唯一写入者
+
+**现象**(2026-11-23,用户报「macOS 设置窗口还是无法拉伸,局域网同步默认高度太低,需要滚动条上下滚动才能显示」)。
+1.1.0 的设置页改过 `.frame(minWidth:idealWidth:maxWidth:)` 并给 `Settings` 场景加了
+`.windowResizability(.contentMinSize)`,自述里也写了「设置窗口可以自由放大缩小」——
+但用户实测仍然拉不动;局域网同步 Sheet 打开后要在一个几十点高的滚动框里翻找地址与手动输入。
+
+**取证**(AX 读窗口与本机实跑,不是看代码推断)。
+- 设置窗:`AXSize` **不可设置**(`sizeSettable=false`),900×588;`styleMask.rawValue = 32771`
+  = `titled + closable + fullSizeContentView`,**没有 `.resizable`**。`.windowResizability(.contentMinSize)`
+  已经挂在 `Settings` 场景上(`ReverbApp.swift`),被 macOS 27 的 SwiftUI 直接忽略。
+- 局域网 Sheet:`AXSheet` 460×**170**,内部唯一的 `AXScrollArea` 420×**30** —— 那 30pt
+  就是用户说的"要滚动"的全部高度。
+- 探针(SwiftUI 视图挂窗时补 `styleMask.insert(.resizable)`)第一次补上后日志显示
+  mask 32771 → 32779 → **又被写回 32771**;点一下主窗口再回设置窗,补丁消失、`sizeSettable` 回到 false。
+
+**根因**。
+1. `Settings` 场景的窗口配置不受 Scene 级偏好控制:SwiftUI 在**每次 key/main 切换**时都会把
+   `styleMask` 重写成 32771。只在视图挂上窗口那一刻补一次 `.resizable`,会被下一次点击擦掉 ——
+   "改过参数"不等于"窗口听你的"。
+2. Sheet 只给了宽度没给高度:SwiftUI 的 sheet 按内容"理想高度"压缩,而 LAN 面板是
+   `ScrollView + 固定 footer` 的形态,没有高度参照,于是被压到 170,滚动区只剩 30pt。
+
+**修法**。
+- `macos/Sources/Reverb/UI/SettingsView.swift` 新增 `SettingsWindowConfigurator`(`NSViewRepresentable`):
+  挂窗时补 `.resizable` 并设 `contentMinSize = 460×560`、`maxSize` 交给屏幕;同时对该窗口的
+  `styleMask` 加 KVO —— 看到 `.resizable` 被摘掉就在**下一轮 runloop** 再补。补上会触发一次
+  KVO(true),判据直接跳过,不会自激。视图摘窗 / deinit 时移除观察。
+- `macos/Sources/Reverb/UI/LanSyncView.swift` 的 macOS 分支由 `.frame(width: 460)` 改为
+  `.frame(width: 460, height: 560)`:内容多时内部仍可滚,但首屏的地址、附近设备、手动输入、
+  底注与「关闭」都在可见区内。
+
+**验收**(临时 .app:`swift build -c release` + ad-hoc 签名,不动 `dist/`;自动化先 `activate`
+把 app 置前,否则第一次点击只做激活)。
+- 设置窗:`AXSize` `sizeSettable=true`;真拖右角 460×588 → 572×692 → 692×782;
+  继续缩小钳在 **460×588 帧**(= 内容 460×560 + 标题栏);切换 key 到主窗口再回来仍能拖;
+  ⌘W 关掉再 ⌘, 重开(帧自动恢复)后仍能拖。
+- 局域网 Sheet:`AXSheet` 实测 **460×560**,内部滚动区 **420×406**(原 420×30);
+  截图里标题、本机名与地址、附近设备、手动输入框、「关闭」全部首屏可见。
+- `swift test` **112 条全过**;`swift build -c release` exit 0。**四端 `dist/` 未重打。**
+
+**教训 / 可复用的规律**。
+① **Scene 级偏好不是唯一写入者**。`windowResizability` / `defaultSize` 这类修饰符对 `Settings`
+   场景不生效,而且 SwiftUI 会在 key/main 切换时重写 `styleMask`。补底层样式必须带
+   "复位即补"的监视,只在生命周期回调里补一次等于没补。
+② **sheet 的尺寸要看两层证据**:sheet 自身的 size 与**内部滚动区**的 size。只报"sheet 很小"
+   说不清内容是被压还是被藏;460×170 / 滚动区 30pt 这一对读数才定位到根因。
+③ **"能拉伸"必须真拖一次**。`AXSize` settable、`styleMask` 含 `.resizable`、实际拖动三件事
+   都可能分叉;自动化拖拽前先把 app 置前,否则第一次鼠标按下只会激活窗口。
+
+### H291. 用启动参数验收功能开关,四项全给 NO 界面却全开 —— NSArgumentDomain 存的是字符串,`as? Bool` 静默落回默认
+
+**现象**。2026-11-23 iPhone 16 Pro 真机验收 1.1.0 聚合开关(逐字稿 / 电台 / 投放 / 局域网同步)。
+Debug 包按 `-transcription_enabled NO -cast_enabled NO -radio_enabled NO -lan_sync_enabled NO`
+启动,界面却与默认态一模一样:底栏仍是 5 格(电台在)、播放页仍有 AirPlay 按钮与「逐字稿」。
+同一组参数在模拟器上也一样「没反应」。
+
+**取证**。先在 Mac 上写了个 20 行探针(`swift` 直接跑),读 `UserDefaults.standard`:
+`-transcription_enabled NO` 落进去后 `object(forKey:)` 是 `Optional(NO)`、类型是 **String**,
+`as? Bool` 返回 nil;而 `bool(forKey:)` 返回 false。iOS 侧代码读的恰好是
+`d.object(forKey: key) as? Bool ?? true` —— 转换失败被 `?? true` 吞掉,四个开关恒真。
+
+**根因**。命令行启动参数进入的是 **NSArgumentDomain**,该域的值一律按**字符串**存;
+`UserDefaults` 只有 `bool(forKey:)` / `integer(forKey:)` 这类方法会做字符串→数值的转换,
+手写 `object(forKey:) as? Bool` 不会。`?? true` 又把"类型不匹配"伪装成"用户没设过",
+所以参数看起来被接受、实际一行没生效 —— 与 H156 的"命令没跑成,读数却是 0"是同一类静默兜底。
+
+**修法**。共享层 `macos/Sources/Reverb/Data/Stores.swift` 增加 `featureFlag(_:_:)`:
+先 `as? Bool`(正常持久化路径),再 `as? String` 走 `(s as NSString).boolValue`(启动参数路径),
+两者都没有才回默认 `true`。四个开关的读取全部走它。macOS 与 iOS 共用这份代码,
+所以两端验收参数同时恢复。
+
+**验收**(iPhone 16 Pro,Debug 包经 `devicectl` 安装;`CODE_SIGN_ENTITLEMENTS` 指向空 entitlements,
+只为绕开免费 Personal Team 签不了 App Group,**仓库签名材料未改**)。
+- 默认启动:底栏 5 格,播放页 AirPlay 与「逐字稿」入口在。
+- 四项全 NO 启动:底栏 **4 格**(电台消失),播放页 AirPlay 与「逐字稿」均不在,
+  只剩 简介 / 待播 / 剪藏 / 下载。
+- 去掉参数重启:回到 5 格(参数不落盘,不污染持久化状态)。
+- iOS 编译门 `build-ios.sh` 全绿;macOS `swift build -c release` exit 0、`swift test` 112/0。
+- **未能上真机验的**:功能开关 sheet 内点按切换、切电台后直播流即时停止、杀进程后开关持久化
+  —— 这些要点击注入,本机 WDA 安装反复失败(2026-11-09 起 `host_command_failed`),
+  只到模拟器 / 代码路径。局域网行隐藏同理:它在设置列表深处,截图到不了,判据是
+  `SettingsView.swift` 的 `if settings.lanSyncEnabled { lanSection }`。
+
+**教训 / 可复用的规律**。
+① **NSArgumentDomain 是字符串域**。任何 `as? Bool` / `as? Int` 的形状在启动参数上都恒失败,
+   要兼容验收钩子就得显式转换,或统一按 `bool(forKey:)` 的语义读。
+② **`?? 默认值` 会把类型不匹配伪装成"没设过"**。凡是靠参数翻面的行为,必须有读数证明参数
+   真的生效 —— 本次是同一台真机上"5 格 vs 4 格、有 pill vs 无 pill"的成对截图。
+③ 阳性对照:先确认参数**能给界面带来变化**(4 格确实出现了),再谈"关闭后某入口没有"。
+   否则"全 NO 没变化"和"参数根本没被读"这两种解释无法区分。
 
 ### H292. 从旧版恢复资源时删掉已有麦克风用途文案,资源编译先炸 —— `$string:perm_microphone` undefined
 
@@ -14385,7 +14575,8 @@ HEAD 的 `AppContainer` / `Index` 也已有创建、加载与传参;误删接线
 
 **修法**。从 `84cd47f^` 恢复完整电台代码与随包清单,保留既有账本和备份路径;新增鸿蒙独有
 `radio_full_enabled`,默认 `false`,由 `@Prop @Watch` 立即驱动 `RadioPage`。关闭时隐藏全部管理面,
-只留搜索与试听;开启时恢复完整 1.0.9 形态。另三端不加开关。用**新提交**纠正,不改写已推送历史。
+只留搜索与试听;开启时恢复完整 1.0.9 形态。当时另三端不加开关(Android 的同口径实现见 H296)。
+用**新提交**纠正,不改写已推送历史。
 
 **验收**。Pura 80 Pro 真机走通默认关闭(只有搜索提示、无标题栏加号)→ 开启(我的 / 热门 / 精选、
 CNR/CCTV 条目、添加 / 编辑器 / 删除确认恢复)→ 再次关闭(回到仅搜索);搜索 `jazz` 能返回目录结果。
@@ -14398,3 +14589,115 @@ CNR/CCTV 条目、添加 / 编辑器 / 删除确认恢复)→ 再次关闭(回�
    才动代码与资源。
 ② 纠正已提交的错误实现时,先恢复被误删的能力,再加正确的控制点;不要用回滚整条提交的方式
    把同文件里的无关 1.1.0 工作一起丢掉(H292 / H293 就是这次整份回退带出的回归)。
+
+### H296. Android 只隐藏电台区块仍会后台拉热门 —— 界面门控必须同时管住 ViewModel 副作用
+
+**现象**(2026-11-24)。Android 按鸿蒙口径加上默认关闭的「完整直播电台」后,如果只把列表区块包进
+`if (radioFullEnabled)`,关闭时页面看似只剩搜索,进页、清空输入、空词搜索与失败重试仍会调用
+`RadioBrowserSource.popular()`;随包精选也仍会读取。用户没有要求热门,网络请求却已经发生。
+
+**根因**。`RadioViewModel` 原来把"输入为空"永远解释为"回到热门",这个语义只写在 UI 调用约定里,
+方法本身不知道当前是完整电台还是仅搜索。给 Compose 区块加门控不会改变 ViewModel 的执行路径。
+
+**修法**。`onQueryChange` / `ensureDirectory` / `search` / `retry` 显式接收
+`loadPopularOnBlank`,由 `radioFullEnabled` 决定;仅搜索模式遇空词先递增 `requestGen` 作废在途请求,
+再落到 `DirectoryState.Idle`,不读热门缓存也不发请求。`seedStations()` 只在开启时调用;
+关闭开关同时清掉编辑器与删除目标、重置保存态,编辑器与删除确认也各自加门控。
+完整模式仍沿用原来的热门、精选与添加 / 编辑 / 删除逻辑。
+
+**验收**。Android `testDebugUnitTest` 122 条、`compileReleaseKotlin` 与五语种体检通过。API 37 模拟器
+实测默认关闭只有搜索框与提示;开启后我的电台、热门、精选、添加 / 编辑器 / 删除确认恢复;
+再次关闭后全部管理面消失。关闭态搜索 `CNR` 返回结果且行尾只有试听标记,点第一条出现直播迷你条;
+清空后回到提示,`shared_prefs` 的 `radio_full_enabled=false`,此前加入的 `stations.json` 仍有 1 条。
+本轮没有实体 Android 手机,运行判据到模拟器为止。
+
+**教训 / 可复用的规律**。
+① **隐藏功能不能只包渲染节点**:初始化、空态、重试、缓存读取与在途请求都要按同一个开关分流。
+② 空输入在完整模式是"热门",在仅搜索模式是"无操作";把模式作为参数传进状态层,比让 UI 先猜再绕过更稳。
+③ 关闭时除了隐藏结果,还要让旧请求代次失效,否则慢响应会把用户已经收起的内容重新填回来。
+
+### H297. 把上游预编译库里的 `/home/runner/` 当成本机路径 —— 审计词必须能指回构建来源
+
+**现象**(2026-11-24)。Android 1.1.0 解包审计时,`/Users/` 已为 0,但两个 native 库里仍有大量
+`/home/runner/` 命中,一度被读成"构建机绝对路径没有清零"。
+
+**根因**。本次语音库不是本机编译,而是 `android/tools/build-asr.sh` 下载固定 sha256 的
+sherpa-onnx / onnxruntime 预编译 AAR 后解出。`/home/runner/` 是上游 GitHub Actions 的构建路径,
+在下载时就存在于二进制里;`/home/` 只能说明"某个 Unix 构建环境",不能说明"本机"。把本机痕迹
+判据写成 `/Users/|/home/` 会把上游 CI 与维护者设备混为一谈。
+
+**修法**。本机路径判据只保留 `/Users/`;另列 `/home/runner/` 为上游来源信息,不参与"泄露/未泄露"
+判定。核对 AAR sha256 仍等于脚本固定值
+`a8d09d1d32f3eb8520482c6d3d43fae674681c5b050385967c70a3c2c9bf0ee7`,不为消除字符串篡改二进制。
+同步订正 `docs/LOCAL-ASSETS.md`;本次审计不再沿用 Skill 的 `/Users/|/home/` 旧口径。
+
+**验收**。1.1.0 APK 的 `libonnxruntime.so` 与 `libsherpa-onnx-jni.so` 对 `/Users/` 均为 0;
+`/home/runner/` 有命中但能逐串指回上游 sherpa / onnxruntime 路径。功能资源与权限审计仍全部通过。
+
+**教训 / 可复用的规律**。
+① 隐私审计词不是越宽越安全;"路径来自哪台机器"要先查构建来源,再看字符串。
+② 第三方预编译产物自带的上游构建路径与本机编译嵌入的路径,要分开登记、分开判。
+
+### H298. Skill 返回正文中的审计脚本被调用参数替换 —— 标称"逐字执行"的脚本已经失真
+
+**现象**(2026-11-24)。调用 Android 发布包审计 Skill 后,返回正文里的 `audit_apk.sh` 多处变量、
+分支与正则被替换成本次中文参数串;Skill 目录又没有独立的 `scripts/audit_apk.sh` 可读。
+若照返回正文执行,脚本会在参数解析阶段失败,得到的不是包审计结果。
+
+**根因**。故障发生在脚本进入 shell 之前:返回内容本身已被参数替换污染,`bash -n` 也救不了一个
+语义上已经替换错的脚本。把它归因于 APK 或审计断言,会把工具层故障误判成产物问题。
+
+**修法**。停用被污染的返回正文,按原审计判据在 `/tmp/reverb_audit_110.py` 写独立脚本;先检查语法与
+输入路径,再对 1.1.0 APK 跑正向审计,并把 native 期望反转为 zero 跑阴性对照。两者分别得到
+exit 0 与 exit 1,才采用这轮读数。
+
+**验收**。正向读到版本 1.1.0(11)、目录 URL、native/model、种子、电台精选、`radio_full_enabled`
+与三项权限;阴性对照明确报 native 不符合预期并 exit 1。另核 `/Users/` 为 0、发布证书 DN 正确。
+
+**教训 / 可复用的规律**。
+① Skill 要求"逐字复制"时,仍要先检查返回代码是否含调用参数串或异常占位符;不能把" Skill 说原样"
+当成脚本完整性的证明。
+② 审计工具的失败要与产物失败分开报告;先证明扫描器跑过,再解释它报出的 0 或非 0。
+
+### H299. 语音搜索离开页面、弹层覆盖或应用失活后仍在录音 —— 生命周期信号要独立于 UI 重建
+
+**现象**(2026-11-24 审查)。Android / 鸿蒙切走搜索页后麦克风状态没有稳定取消;Apple 端打开排序、
+授权或清空历史弹层后仍可能继续录音。Android 连续点停止还会重入,旧调用恢复后清掉新会话的 Job;
+鸿蒙旧 stop 在等待释放采集器期间可能清空新 start 写入的缓冲。
+
+**根因**。录音生命周期被绑在页面组件或单次按钮回调上,而 ArkUI 的 TabContent 常驻、SwiftUI 弹层与
+Android 协程取消都不等于"当前可见搜索页可以继续持有会话"。停止流程里先 await 再移交/锁定状态,
+又给新会话留下了被旧异步调用改写的窗口。
+
+**修法**。Android 在第一次 await 前把状态锁为 Transcribing,释放录音器并 join 旧 Job,再按 generation
+核对会话;鸿蒙先移交本会话缓冲与字节数,releaseCapturer 增加 expected 身份校验,start/readData/catch
+都按 session 代次守卫。Apple 用 active + 弹层状态计算 voiceActive,变化即 cancel;iOS 同时监听
+scenePhase,macOS 同时监听 didResignActiveNotification,页面消失也取消。鸿蒙根页面把当前 tab 与
+导航栈深度合成 active,通过 @Prop @Watch 驱动 DiscoverPage 取消。
+
+**验收**。Android 122 条、鸿蒙 69 条、Apple 112 条单测为 0 失败;四端编译门通过。真机/模拟器侧
+离开页面、弹层覆盖与连续停止的点击复测尚未完整重跑,因此不宣称这些交互已在设备上全部验证。
+
+**教训 / 可复用的规律**。
+① "组件还在"不等于"页面可见";可见性要由 tab、导航、模态弹层和应用生命周期共同决定。
+② 异步停止流程的锁与缓冲移交必须发生在第一次 await 之前,旧调用收尾只能影响自己那一代会话。
+
+### H300. GitHub Releases 拒绝 `.app` 扩展名 —— 发布容器格式不能照搬本地文件名
+
+**现象**(2026-11-24)。向 `revert-cast` 的 1.1.0 草稿上传鸿蒙 `reverb.app` 时,GitHub 返回
+`HTTP 422: name has a file extension that is not allowed`;同一批次里的其它资产没有因此上传成功。
+
+**根因**。HarmonyOS 的 `.app` 本身是含 HAP 的 ZIP 容器,但 GitHub Release 资产名有独立扩展名白名单,
+不接受 `.app`。本地发布物文件名正确,不代表公开仓可以直接原样接收。
+
+**修法**。不改变正式包内容,用 ZIP 再包一层为 `reverb-harmony-1.1.0.app.zip`,归档内只保留
+`reverb.app`;符号包仍单独上传。发布说明明确"解压后得到原始 reverb.app",并同时记录外层与内层 SHA-256。
+
+**验收**。外层归档 181,877,498 B,sha256
+`cabbb625fd2254aedad003f0cda2a1367cf8bd1dc646f54e85be5464dedd1740`;
+内层 `reverb.app` 仍为 182,064,631 B,sha256
+`3debba3cb9691f683caddec7ec49fb0a4f4d2897147690ae2cf38cf657e41cbc`。
+
+**教训 / 可复用的规律**。
+① 分发平台的文件名限制是发布契约的一部分;容器改名可以,包体内容与哈希不能因此失真。
+② 上传失败要先查平台校验,不要为了通过校验把正式包重新签名或改用 debug 包。
