@@ -10,7 +10,7 @@ import { FeedProbeState } from '../net/PodcastRepository';
 import { BilibiliSource } from '../net/BilibiliSource';
 import { LiveStream } from '../net/LiveStream';
 import { ScreenHeader, EmptyHint, LoadingBox, SquareArtwork, Glyph, GlyphImage, Sym } from './Widgets';
-import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, LIST_MENU_LONG_PRESS_MS, FeedAuthDialog, FeedAuthSpec } from './Components';
+import { PodcastListItem, EpisodeListItem, ChipsRow, CHIPS_RESERVE_H, ChipsSwipeSync, LIST_MENU_LONG_PRESS_MS, FeedAuthDialog, FeedAuthSpec, ConfirmDialog, ConfirmSpec } from './Components';
 import { RadioStation, RadioMode } from '../playback/RadioStation';
 import { PlayerController } from '../playback/PlayerController';
 import { SettingsStore } from '../store/SettingsStore';
@@ -18,6 +18,9 @@ import { SubscriptionStore, HistoryStore } from '../store/Stores';
 import { InboxStore } from '../store/InboxStore';
 import { TapGuard } from '../util/TapGuard';
 import { Log } from '../util/Logger';
+import { SearchHistoryStore } from '../store/SearchHistoryStore';
+import { VoiceSearch, VoiceStart } from '../playback/VoiceSearch';
+import i18n from '@ohos.i18n';
 
 /**
  * 首屏「最新更新」这一节的条数上限(与 Android `DiscoverScreen.kt` 的 `HOME_LATEST_MAX` 同值)。
@@ -75,6 +78,8 @@ export struct DiscoverPage {
   @ObjectLink inbox: InboxStore;
   /// 单集行要显示"正在播放"高亮,故需观察播放态(只做渲染;playNext/enqueue 那种纯写走 app.player)
   @ObjectLink player: PlayerController;
+  /// 搜索历史(只在本机留存)。**必须是 @ObjectLink**:删一条 / 清空之后面板要当场少一行。
+  @ObjectLink searchHistory: SearchHistoryStore;
   onOpenPodcast: (p: Podcast) => void = () => {};
   /**
    * 单集行**点封面**进频道页(与上面那颗不同:那颗拿的是已经有的 Podcast,这一颗只拿
@@ -152,6 +157,19 @@ export struct DiscoverPage {
   private installedChallenge: ((feedUrl: string, failed: boolean) => void) | null = null;
   // 网络返回顺序不可控;只允许最后一次提交的结果落到界面。
   private searchGeneration: number = 0;
+  // ── 搜索历史与语音(1.1.0)──
+  /**
+   * 历史面板显隐。**不看焦点**决定显隐:ArkUI 里点面板会让输入框失焦,
+   * 若按焦点判,手指按下那一帧面板就被拆掉,点击落空。
+   * 规则:输入框获得焦点时打开(且查询为空、有历史才显示);点行/点取消/提交时关闭。
+   * 退出方式是最上面那行「取消」——查询为空时搜索框里那颗取消不出现,面板自己必须留一个。
+   */
+  @State historyVisible: boolean = false;
+  /// 麦克风录音中(点第二下结束)→ 红色方块;识别中 → 转圈;两者互斥
+  @State voiceRecording: boolean = false;
+  @State voiceTranscribing: boolean = false;
+  /// 清空历史的二次确认(与设置页同一种 ConfirmSpec 形态)
+  @State clearHistorySpec: ConfirmSpec | null = null;
 
   private app: AppContainer = AppContainer.get();
 
@@ -186,6 +204,10 @@ export struct DiscoverPage {
     if (this.app.repository.authChallenge === this.installedChallenge) {
       this.app.repository.authChallenge = this.previousChallenge;
     }
+    // 录音 / 识别收尾:离开本页还占着麦克风说不过去,在途结果也一并作废。
+    VoiceSearch.get().cancel();
+    this.voiceRecording = false;
+    this.voiceTranscribing = false;
   }
 
   /// 三份按位置并行的数组(榜单 / 加载态 / 内置标记)按分类数开槽。
@@ -428,6 +450,10 @@ export struct DiscoverPage {
     }
 
     this.importHint = '';
+    // 只在**真正发起检索**时记历史(输入到一半、粘贴了却不提交都不记),与另三端同口径。
+    // 放在降级闸之后:那一支没有真正去搜,记下来会变成"点了却没搜过"的假历史。
+    this.searchHistory.record(q);
+    this.historyVisible = false;
     this.searched = true;
     this.searchingPodcasts = true;
     this.searchingEpisodes = true;
@@ -578,6 +604,77 @@ export struct DiscoverPage {
     this.liveEpisode = null;
   }
 
+  /**
+   * 语音识别用的语言:用户显式选的语言优先;「跟随系统」时取系统**当前生效**的应用语言
+   * (`SettingsStore.applyLanguage` 启动时已把它解析成具体标签,不会停在 'default')。
+   */
+  private voiceSupported(): boolean {
+    return VoiceSearch.get().supports(this.voiceLocale());
+  }
+
+  private voiceLocale(): string {
+    const chosen = this.app.settings.language;
+    if (chosen.length > 0) return chosen;
+    try {
+      return i18n.System.getAppPreferredLanguage();
+    } catch (e) {
+      return '';
+    }
+  }
+
+  private toast(msg: string): void {
+    this.getUIContext().getPromptAction().showToast({ message: msg });
+  }
+
+  /// 从历史里点一条:填进搜索框并按它检索(与 Android 历史面板同一条)
+  private pickHistory(q: string): void {
+    this.clearSearchResults();
+    this.query = q;
+    this.historyVisible = false;
+    this.runSearch();
+  }
+
+  /**
+   * 麦克风按钮:点一下开录、再点一下结束并识别,结果直接填进搜索框并检索。
+   * 与另三端同一个交互(用户拍板「点按开始 / 再点结束」)。
+   *
+   * 识别中禁用重复点击;录音中再点 = 结束(红色方块是唯一的"结束"入口)。
+   */
+  private async toggleVoice(): Promise<void> {
+    if (this.voiceTranscribing) return;
+    const vs = VoiceSearch.get();
+    const locale = this.voiceLocale();
+    if (vs.recording) {
+      // 先换 UI 状态再 await:识别要几秒,按钮要立刻变成转圈
+      this.voiceRecording = false;
+      this.voiceTranscribing = true;
+      const text = await vs.stopAndTranscribe(locale);
+      this.voiceTranscribing = false;
+      if (text !== null && text.length > 0) {
+        this.clearSearchResults();
+        this.query = text;
+        this.runSearch();
+      } else {
+        this.toast(L.s('voice_empty'));
+      }
+      return;
+    }
+    if (!vs.supports(locale)) {
+      this.toast(L.s('voice_unsupported'));
+      return;
+    }
+    const r = await vs.start();
+    if (r === VoiceStart.Started) {
+      this.voiceRecording = true;
+    } else if (r === VoiceStart.PermissionDenied) {
+      this.toast(L.s('voice_permission_denied'));
+    } else if (r === VoiceStart.Unsupported) {
+      this.toast(L.s('voice_unsupported'));
+    } else {
+      this.toast(L.s('voice_failed'));
+    }
+  }
+
   build() {
     Stack() {
       Column() {
@@ -596,6 +693,10 @@ export struct DiscoverPage {
 
         if (this.searched) {
           this.searchResults()
+        } else if (this.historyVisible && this.query.trim().length === 0
+          && this.searchHistory.items.length > 0) {
+          // 搜索历史:输入框获得焦点且查询为空时铺开(规则见 historyVisible 注释)
+          this.searchHistoryPanel()
         } else if (!Features.CATALOG) {
           // 无内容目录:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
           // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
@@ -676,6 +777,17 @@ export struct DiscoverPage {
       // 分类排序框(与 Android 的发现页 endAction 同义):草稿态在页内,保存才落盘。
       if (this.reorderShown) {
         this.reorderDialog()
+      }
+
+      // 清空搜索历史的二次确认(破坏性操作统一走 ConfirmDialog)。
+      // 只在 null → 非 null 那一次新建,spec 走普通成员即可(与设置页同式)。
+      if (this.clearHistorySpec !== null) {
+        ConfirmDialog({
+          scheme: this.scheme,
+          fontScale: this.fontScale,
+          spec: this.clearHistorySpec,
+          onDismiss: () => { this.clearHistorySpec = null; }
+        })
       }
 
       // 私有订阅源的登录框(见 `authPrompt`)。挂在根 Stack 最后 ⇒ 遮罩盖住整页。
@@ -1110,7 +1222,29 @@ export struct DiscoverPage {
           if (v !== this.query && this.searched) this.clearSearchResults();
           this.query = v;
         })
-        .onSubmit(() => { this.runSearch(); })
+        // 获得焦点且查询为空 → 铺开搜索历史(规则见 historyVisible 注释)
+        .onFocus(() => { this.historyVisible = true; })
+        .onSubmit(() => {
+          this.historyVisible = false;
+          this.runSearch();
+        })
+      // 语音搜索:点一下开录、再点一下结束并识别。引擎缺席时整颗不出现(与 Android 同判据)。
+      if (this.voiceSupported()) {
+        Row() {
+          if (this.voiceTranscribing) {
+            LoadingProgress().width(18).height(18).color(this.scheme.primary)
+          } else if (this.voiceRecording) {
+            // 「停止」用红色方块:系统 Symbol 字体里没有 stop 的等价形状
+            Row().width(13).height(13).borderRadius(3).backgroundColor(this.scheme.error)
+          } else {
+            Glyph({ symbol: $r('sys.symbol.mic'), dim: 19, color: this.scheme.onSurfaceVariant })
+          }
+        }
+        .width(28).height(28)
+        .justifyContent(FlexAlign.Center)
+        .accessibilityText(this.voiceRecording ? L.s('voice_stop') : L.s('voice_search'))
+        .onClick(() => { this.toggleVoice(); })
+      }
       if (this.query.length > 0) {
         Text(L.s('action_cancel'))
           .fontSize(TypeScale.label * this.fontScale)
@@ -1118,6 +1252,7 @@ export struct DiscoverPage {
           .onClick(() => {
             this.clearSearchResults();
             this.query = '';
+            this.historyVisible = false;
           })
       }
     }
@@ -1130,6 +1265,71 @@ export struct DiscoverPage {
     .width('100%')
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding })
     .margin({ bottom: 8 })
+  }
+
+  /**
+   * 搜索历史面板(查询为空、输入框聚焦时铺开)。
+   *
+   * 只在本机留存,不进备份、不进局域网同步(见 `SearchHistoryStore` 头注)。
+   * 三处删除:单条(行尾 ×)、清空(表头,走二次确认)、以及换词/提交后自然离开。
+   * 表头那颗「取消」是**唯一的退出方式** —— 查询为空时搜索框里那颗取消不出现,
+   * 面板必须自带一个,否则用户进了搜索态就出不去。
+   */
+  @Builder
+  searchHistoryPanel() {
+    Column() {
+      Row({ space: 16 }) {
+        Text(L.s('search_history_title'))
+          .fontSize(TypeScale.labelLarge * this.fontScale)
+          .fontColor(this.scheme.onSurfaceVariant)
+          .layoutWeight(1)
+        Text(L.s('action_clear'))
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.scheme.primary)
+          .onClick(() => {
+            this.clearHistorySpec = new ConfirmSpec(
+              L.s('search_history_clear_title'),
+              L.s('search_history_clear_message'),
+              L.s('action_clear'),
+              () => { this.searchHistory.clear(); });
+          })
+        Text(L.s('action_cancel'))
+          .fontSize(TypeScale.label * this.fontScale)
+          .fontColor(this.scheme.primary)
+          .onClick(() => { this.historyVisible = false; })
+      }
+      .width('100%')
+      .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 6, bottom: 6 })
+
+      List() {
+        ForEach(this.searchHistory.items, (q: string) => {
+          ListItem() {
+            Row({ space: 12 }) {
+              Glyph({ symbol: Sym.search, dim: 16, color: this.scheme.onSurfaceVariant })
+              Text(q)
+                .fontSize(TypeScale.bodyLarge * this.fontScale)
+                .fontColor(this.scheme.onBackground)
+                .maxLines(1)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .layoutWeight(1)
+              // 单条删除:行尾 × 才是那个点击目标,整行点击是"按这条搜"
+              Glyph({ symbol: Sym.close, dim: 16, color: this.scheme.onSurfaceVariant })
+                .padding(6)
+                .accessibilityText(L.s('action_delete'))
+                .onClick(() => { this.searchHistory.remove(q); })
+            }
+            .width('100%')
+            .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 12, bottom: 12 })
+            .onClick(() => { this.pickHistory(q); })
+          }
+        }, (q: string) => q)
+      }
+      .width('100%')
+      .scrollBar(BarState.Off)
+      .layoutWeight(1)
+    }
+    .width('100%')
+    .layoutWeight(1)
   }
 
   /// 分类页:下拉刷新 + **单列列表**(与 Android 一致,非宫格),

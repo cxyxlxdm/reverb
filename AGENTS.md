@@ -343,10 +343,16 @@ unzip -l "$T/entry-default.hap" > "$T/hap.list"
 wc -l < "$T/hap.list"                                                         # 先看处理量:非 0 才谈下面的 0
 grep -cE 'rawfile/sensevoice/(model\.int8\.onnx|tokens\.txt)' "$T/hap.list"   # 非 0(2)
 grep -cE 'libs/arm64-v8a/lib(sherpa|onnxruntime)' "$T/hap.list"               # 非 0(3)
-grep -cE 'rawfile/radio_stations\.json' "$T/hap.list"                          # **期望 0**(2026-11-24 起鸿蒙不带电台精选)
-grep -cE 'CNR-|CCTV-|qtfm|myalicdn' "$T/hap.list"                             # **期望 0**(台名/聚合 CDN 都不该在包里)
+grep -cE 'rawfile/radio_stations\.json' "$T/hap.list"                          # 非 0(1;完整功能默认隐藏,但清单仍随包)
+grep -cE 'CNR-|CCTV-|qtfm|myalicdn' "$T/hap.list"                             # 非 0(台名仍在;开关只藏界面,不删资源)
 rm -rf "$T"
 ```
+
+2026-11-24 起鸿蒙的完整直播电台由 `radio_full_enabled` 控制,**默认关闭**:电台页只保留搜索与试听;
+用户可在「设置 → 功能 → 完整直播电台」手动开启,恢复我的电台、热门、随包精选与添加 / 编辑 / 删除。
+这是**界面开关**,不是合规裁剪:完整代码、`stations.json` 账本、备份 `stations` 段与
+`radio_stations.json` 都保留,所以上面两条鸿蒙 grep 必须非 0,不能再宣称"包里没有台名"。
+另三端没有这个开关,形态不变。
 
 合并前这一节写的是 store 渠道的「native / 模型 / 录音权限应为 0」,那组期望随 H205 一起翻转。
 所以更要跑的是**降级档那一侧**:把 `CATALOG` / `SPECTRUM` / `HAS_ENGINE` 降到 `false` 出的包,
@@ -630,7 +636,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 | `net/` | `Sources` / `PodcastRepository` / `RssParser` / `FeedTask`(`@Concurrent`)/ `Http` / `RadioBrowserSource` … |
 | `playback/` | `PlayerController` / `PlaybackClock`(高频时钟,硬规矩 7)/ 投播用系统 `AVCastPicker`(挂在 `view/PlayerPage.ets`) |
 | `update/` · `backup/` · `theme/` · `util/` · `model/` | 对应 Android 同名职责 |
-| `view/RadioPage.ets` + `store/StationStore.ets` | 直播电台 tab:**鸿蒙 2026-11-24 起只保留搜索**(无账本段 / 热门 / 精选 / 增删改;账本与备份契约保留);Android / macOS / iOS 仍是完整形态 |
+| `view/RadioPage.ets` + `store/StationStore.ets` | 直播电台 tab:`radio_full_enabled` **默认关**,只显示搜索与试听;用户手动开启后恢复我的电台 / 热门 / 随包精选与增删改。账本、备份契约与随包清单始终保留;Android / macOS / iOS 仍是完整形态 |
 | `harmony/shelved/` | **移出编译树**的代码 —— ArkTS 没有 DCE,只能这么"真的没有"(硬规矩 2) |
 
 ### macOS(`macos/Sources/Reverb/`)
@@ -657,7 +663,7 @@ iOS 的源码面是 `ios/Reverb` **加上**共享的 `macos/Sources/Reverb/{Data
 |---|---|
 | `shared/guide/` | 引导音频 + 脚本(`make-guide.sh`),分发到各端 |
 | `shared/seed/` | 种子清单(规范副本;`sync.sh` 分发到 Android + macOS + iOS,**不含鸿蒙**,理由写在脚本头) |
-| `shared/radio/` | 内置精选电台 16 条(规范副本;`sync.sh` 分发到**三端**资源 —— Android / macOS / iOS,`--check` 供提交前校验;**鸿蒙 2026-11-24 起不分发**,原因与恢复口径见脚本头) |
+| `shared/radio/` | 内置精选电台 16 条(规范副本;`sync.sh` 分发到**四端**资源 —— Android / HarmonyOS / macOS / iOS,`--check` 供提交前校验)。鸿蒙完整功能默认隐藏,但清单仍随包,用户开启「完整直播电台」后读取 |
 | `site/reverb/` | 官网 + 隐私页;`shots/` **不入库**,部署时手工上传 |
 | `marketing/<版本>/` | 宣传物料(宣传片 / 封面 / 配乐),流水线见 `marketing/README.md` |
 | `tools/check-l10n.py` | 五语种资源体检(硬规矩 5):键集相等、繁体用字、非中文含汉字;全绿 exit 0 |

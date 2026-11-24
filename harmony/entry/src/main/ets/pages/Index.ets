@@ -2,6 +2,7 @@ import { Theme, Scheme, TypeScale, Tracking, Metrics } from '../theme/Theme';
 import { SettingsStore } from '../store/SettingsStore';
 import { SubscriptionStore, FavoriteStore, HistoryStore } from '../store/Stores';
 import { SearchHistoryStore } from '../store/SearchHistoryStore';
+import { StationStore } from '../store/StationStore';
 import { InboxStore } from '../store/InboxStore';
 import { DownloadStore } from '../store/DownloadStore';
 import { StampStore } from '../store/StampStore';
@@ -66,6 +67,8 @@ struct Index {
    */
   @State settings: SettingsStore = AppContainer.get().settings;
   @State subscriptions: SubscriptionStore = AppContainer.get().subscriptions;
+  /// 直播电台(顶层「电台」页的数据源)。与订阅同一档:@State 持有、@ObjectLink 下发。
+  @State stations: StationStore = AppContainer.get().stations;
   /// 搜索历史:只在本机留存(不进备份 / 局域网同步),发现页以 @ObjectLink 观察
   @State searchHistory: SearchHistoryStore = AppContainer.get().searchHistory;
   @State favorites: FavoriteStore = AppContainer.get().favorites;
@@ -1060,6 +1063,8 @@ struct Index {
                 scheme: this.scheme(),
                 fontScale: this.fontScale(),
                 player: this.player,
+                stations: this.stations,
+                full: this.settings.radioFullEnabled,
                 bottomPad: this.underBarPad(),
                 onScrollDy: (dy: number, st: ScrollState) => this.feedScroll(dy, st),
                 scrollTopToken: this.radioTopToken

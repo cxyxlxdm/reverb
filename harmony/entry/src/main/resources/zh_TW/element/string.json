@@ -18,15 +18,23 @@
     },
     {
       "name": "radio_subtitle",
-      "value": "搜尋線上電台"
+      "value": "我的直播電台，隨時開聽"
     },
     {
       "name": "radio_search_hint",
       "value": "搜尋電台名稱"
     },
     {
-      "name": "radio_search_prompt",
-      "value": "輸入關鍵字，搜尋線上電台；點一則即可收聽。"
+      "name": "radio_search_subtitle",
+      "value": "搜尋並試聽線上電台"
+    },
+    {
+      "name": "radio_full_title",
+      "value": "完整直播電台"
+    },
+    {
+      "name": "radio_full_hint",
+      "value": "關閉時只保留搜尋與試聽；開啟後顯示我的電台、熱門、隨包精選及管理操作。"
     },
     {
       "name": "radio_my_stations",
@@ -510,7 +518,7 @@
     },
     {
       "name": "set_features_sub",
-      "value": "關閉不需要的模組：逐字稿、電台、投放、區域網路同步"
+      "value": "關閉不需要的模組：逐字稿、電台、完整直播電台、投放、區域網路同步"
     },
     {
       "name": "dlg_features_title",

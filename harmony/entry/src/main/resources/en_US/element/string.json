@@ -18,15 +18,23 @@
     },
     {
       "name": "radio_subtitle",
-      "value": "Search online stations"
+      "value": "Your live stations, ready when you are"
     },
     {
       "name": "radio_search_hint",
       "value": "Search stations by name"
     },
     {
-      "name": "radio_search_prompt",
-      "value": "Type a keyword to search online stations. Tap one to listen."
+      "name": "radio_search_subtitle",
+      "value": "Search and preview online stations"
+    },
+    {
+      "name": "radio_full_title",
+      "value": "Full live radio"
+    },
+    {
+      "name": "radio_full_hint",
+      "value": "When off, only search and preview are available. Turn on for My Stations, Popular, bundled picks, and management."
     },
     {
       "name": "radio_my_stations",
@@ -510,7 +518,7 @@
     },
     {
       "name": "set_features_sub",
-      "value": "Turn off modules you do not need: transcription, radio, casting and local sync"
+      "value": "Turn off modules you do not need: transcription, radio, full live radio, casting and local sync"
     },
     {
       "name": "dlg_features_title",

@@ -18,15 +18,23 @@
     },
     {
       "name": "radio_subtitle",
-      "value": "搜索在线电台"
+      "value": "我的直播电台，随时开听"
     },
     {
       "name": "radio_search_hint",
       "value": "搜索电台名称"
     },
     {
-      "name": "radio_search_prompt",
-      "value": "输入关键词，搜索在线电台；点一条即可收听。"
+      "name": "radio_search_subtitle",
+      "value": "搜索并试听在线电台"
+    },
+    {
+      "name": "radio_full_title",
+      "value": "完整直播电台"
+    },
+    {
+      "name": "radio_full_hint",
+      "value": "关闭时只保留搜索与试听；开启后显示我的电台、热门、随包精选及管理操作。"
     },
     {
       "name": "radio_my_stations",
@@ -510,7 +518,7 @@
     },
     {
       "name": "set_features_sub",
-      "value": "关闭不需要的模块：逐字稿、电台、投放、局域网同步"
+      "value": "关闭不需要的模块：逐字稿、电台、完整直播电台、投播、局域网同步"
     },
     {
       "name": "dlg_features_title",

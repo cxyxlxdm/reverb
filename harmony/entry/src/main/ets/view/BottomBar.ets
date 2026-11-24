@@ -285,6 +285,14 @@ export const MORPH_DAMP: number = 0.86;
  * 所以这里不必退成字面量。
  */
 export const TAB_KEY: string = 'curTab';
+/**
+ * 当前 tab 的**稳定页号**在 AppStorage 里的键(发现 0 / 电台 1 / 追更 2 / 音阁 3)。
+ *
+ * `TAB_KEY` 存的是**可见下标** —— 设置里关掉直播电台之后底栏少一格,同一个下标会指向另一页。
+ * 所以两者分开:栏项(按可见序列编号)读 `TAB_KEY`,收束态小圆球读这一格(图标表按页身份排)。
+ * 与 Android `MainShell` 的 `selectedKind` / `selectedIndex` 是同一套解。
+ */
+export const TAB_KIND_KEY: string = 'curTabKind';
 /** 播放条是否收束进 tab 栏。同一个 AppStorage 通道,理由见 [TAB_KEY]。 */
 export const MORPH_KEY: string = 'miniCollapsed';
 
@@ -510,8 +518,8 @@ export struct SystemTabItem {
 export struct HomeSlot {
   @Prop scheme: Scheme;
   @Prop collapsed: boolean;
-  /** 当前 tab:盘上图标跟着它换。自己订阅,理由与 [SystemTabItem.curTab] 同一条。 */
-  @StorageProp(TAB_KEY) curTab: number = 0;
+  /** 当前页的**稳定页号**:盘上图标跟着它换。自己订阅,理由与 [SystemTabItem.curTab] 同一条。 */
+  @StorageProp(TAB_KIND_KEY) curKind: number = 0;
   onTap: () => void = () => {};
 
   build() {
@@ -526,10 +534,10 @@ export struct HomeSlot {
       Row() {
         Row() {
           Glyph({
-            symbol: BALL_ICONS[this.curTab],
+            symbol: BALL_ICONS[this.curKind],
             dim: HOME_SYMBOL,
             color: this.scheme.primary,
-            bold: BALL_ICONS_BOLD[this.curTab]
+            bold: BALL_ICONS_BOLD[this.curKind]
           })
         }
         .width(BALL_DIAM)

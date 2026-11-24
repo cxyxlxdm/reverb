@@ -24,6 +24,8 @@ interface AsrCommand {
   model: string;
   tokens: string;
   lang: string;
+  /// 语音搜索(`cmd='samples'`)带的那段 PCM;其余命令传空数组
+  samples: Float32Array;
 }
 
 interface AsrMessage {
@@ -32,6 +34,8 @@ interface AsrMessage {
   ok: boolean;
   message: string;
   seg: TranscribedSegment | null;
+  /// 仅 `samples` 任务(语音搜索)的 `text` 消息带它
+  text?: string;
 }
 
 /**
@@ -72,6 +76,16 @@ export class SenseVoiceTranscriber implements SpeechTranscriberLike {
   private wk: worker.ThreadWorker | null = null;
   private jobSeq: number = 0;
   private currentJob: number = -1;
+  /**
+   * 语音搜索专用的 Worker。
+   *
+   * 为什么不复用整集转写那个:worker 里的任务**串行排队**(见 AsrWorker 的 pump),
+   * 一整集转写会把它占上几十秒,用户点一下麦克风要等整集跑完才出字。
+   * 代价是模型在这条线程里再加载一份(首次数秒、常驻内存) —— 与"点一下就能说话"
+   * 相比值得;它只在用户第一次用语音搜索之后才存在。
+   */
+  private voiceWk: worker.ThreadWorker | null = null;
+  private voiceJobSeq: number = 0;
   /// 当前这次调用的收尾函数。取消时直接结算,不让调用方等 worker 跑完这一块
   private settle: ((ok: boolean) => void) | null = null;
   /// 在途的音频下载。取消时顺手断掉 —— 否则切集之后那几十 MB 还会继续下完才停
@@ -109,7 +123,10 @@ export class SenseVoiceTranscriber implements SpeechTranscriberLike {
     }
     if (this.wk !== null && this.currentJob >= 0) {
       try {
-        this.wk.postMessage({ cmd: 'cancel', jobId: this.currentJob } as AsrCommand);
+        this.wk.postMessage({
+          cmd: 'cancel', jobId: this.currentJob, audio: '',
+          model: '', tokens: '', lang: '', samples: new Float32Array(0)
+        } as AsrCommand);
       } catch (e) {
         // 忽略:worker 已经没了,下一次起任务会重建
       }
@@ -213,7 +230,7 @@ export class SenseVoiceTranscriber implements SpeechTranscriberLike {
       try {
         w.postMessage({
           cmd: 'start', jobId: jobId, audio: audio,
-          model: files.model, tokens: files.tokens, lang: lang
+          model: files.model, tokens: files.tokens, lang: lang, samples: new Float32Array(0)
         } as AsrCommand);
       } catch (e) {
         Log.e(SenseVoiceTranscriber.TAG, `派发转写任务失败:${(e as Error).message}`);
@@ -224,6 +241,88 @@ export class SenseVoiceTranscriber implements SpeechTranscriberLike {
   }
 
   // ── 内部 ──
+
+  /**
+   * 语音搜索:识别一段已经录好的 16k 单声道 PCM。
+   *
+   * 与 `transcribe` 共用模型拷贝与引擎配置,但不读文件、不分块、不要时间轴 ——
+   * 录音上限 30 秒,SenseVoice 一窗吃完;结果原样返回给界面填进搜索框。
+   * 返回 null 表示没识别出内容、模型不可用或出错(三种都由界面统一提示"没听清")。
+   *
+   * 只认 `engineLanguage` 支持的语言(zh/en/ja/ko/yue),法语西语界面在点麦克风之前
+   * 就由 `supports` 拦下,这里再兜一次。
+   */
+  async transcribeSamples(samples: Float32Array, localeId: string): Promise<string | null> {
+    const lang = SenseVoiceText.engineLanguage(localeId);
+    if (lang.length === 0 || samples.length === 0) return null;
+    const files = await this.ensureModelFiles();
+    if (files === null) return null;
+    const w = this.ensureVoiceWorker();
+    if (w === null) return null;
+    const jobId = this.voiceJobSeq + 1;
+    this.voiceJobSeq = jobId;
+
+    return await new Promise<string | null>((resolve) => {
+      let settled = false;
+      const finish = (text: string | null): void => {
+        if (settled) return;
+        settled = true;
+        resolve(text);
+      };
+      w.onmessage = (e: MessageEvents): void => {
+        const m = e.data as AsrMessage;
+        if (m.jobId !== jobId) return;
+        if (m.cmd === 'text') {
+          const text = m.text === undefined ? '' : m.text;
+          // 纯标记([音乐] / (掌声))与空串都按"没听清"处理,不把括号塞进搜索框
+          finish(SenseVoiceText.keep(text, '') ? text : null);
+        } else if (m.cmd === 'done') {
+          finish(null);
+        } else if (m.cmd === 'error') {
+          Log.e(SenseVoiceTranscriber.TAG, `语音查询识别失败:${m.message}`);
+          this.dropVoiceWorker();
+          finish(null);
+        }
+      };
+      w.onerror = (err: ErrorEvent): void => {
+        Log.e(SenseVoiceTranscriber.TAG, `语音查询线程出错:${err.message}`);
+        this.dropVoiceWorker();
+        finish(null);
+      };
+      try {
+        w.postMessage({
+          cmd: 'samples', jobId: jobId, audio: '',
+          model: files.model, tokens: files.tokens, lang: lang, samples: samples
+        } as AsrCommand);
+      } catch (e) {
+        Log.e(SenseVoiceTranscriber.TAG, `派发语音查询失败:${(e as Error).message}`);
+        this.dropVoiceWorker();
+        finish(null);
+      }
+    });
+  }
+
+  private ensureVoiceWorker(): worker.ThreadWorker | null {
+    if (this.voiceWk !== null) return this.voiceWk;
+    try {
+      this.voiceWk = new worker.ThreadWorker(SenseVoiceTranscriber.WORKER_URL);
+      return this.voiceWk;
+    } catch (e) {
+      Log.e(SenseVoiceTranscriber.TAG, `创建语音查询线程失败:${(e as Error).message}`);
+      return null;
+    }
+  }
+
+  private dropVoiceWorker(): void {
+    const w = this.voiceWk;
+    this.voiceWk = null;
+    if (w === null) return;
+    try {
+      w.terminate();
+    } catch (e) {
+      // 忽略
+    }
+  }
 
   private ensureWorker(): worker.ThreadWorker | null {
     if (this.wk !== null) return this.wk;
