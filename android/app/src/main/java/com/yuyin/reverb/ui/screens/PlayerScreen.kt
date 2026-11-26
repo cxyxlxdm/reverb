@@ -386,11 +386,15 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
         if (err != null) {
             Spacer(Modifier.height(10.dp))
             Text(
-                text = if (err.retrying) {
-                    // retriesUsed 是"第几次重投正在进行",上限 MAX_ERROR_RETRIES 是私有的,不显示分母
-                    stringResource(R.string.player_err_retrying, err.retriesUsed)
-                } else {
-                    stringResource(R.string.player_err_failed)
+                text = when {
+                    // 直播断流:重连中也给计数,耗尽后换成「点击重连」的明确动作。
+                    err.liveInterrupted && err.retrying ->
+                        stringResource(R.string.player_err_live_reconnecting, err.retriesUsed)
+                    err.liveInterrupted -> stringResource(R.string.player_err_live_interrupted)
+                    err.retrying ->
+                        // retriesUsed 是"第几次重投正在进行",上限 MAX_ERROR_RETRIES 是私有的,不显示分母
+                        stringResource(R.string.player_err_retrying, err.retriesUsed)
+                    else -> stringResource(R.string.player_err_failed)
                 },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
@@ -402,9 +406,12 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    // 自动重投进行中**不给点**:retryNow() 会清计数并重新走一遍选源,
-                    // 和 handler 上已排的那次退避撞车;重投成功时 STATE_READY 自己会清掉这条。
-                    .then(if (err.retrying) Modifier else Modifier.clickable { PlayerController.retryNow() })
+                    // 自动重投/重连进行中**不给点**:会清计数并和 handler 上已排的退避撞车;
+                    // 成功时 STATE_READY 自己会清掉这条。耗尽后这一行就是按钮:
+                    // 直播走 reconnectLive(回到直播边缘),点播走 retryNow(按历史位置重选源)。
+                    .then(if (err.retrying) Modifier else Modifier.clickable {
+                        if (err.liveInterrupted) PlayerController.reconnectLive() else PlayerController.retryNow()
+                    })
             )
         }
 

@@ -293,6 +293,10 @@
       "value": "EN DIRECTO"
     },
     {
+      "name": "live_interrupted",
+      "value": "Emisión interrumpida, toca para reconectar"
+    },
+    {
       "name": "search_probe_checking",
       "value": "Comprobando…"
     },
@@ -375,6 +379,10 @@
     {
       "name": "detail_network_unreachable",
       "value": "Este canal no es accesible en la red actual"
+    },
+    {
+      "name": "feed_source_unavailable",
+      "value": "Fuente no disponible temporalmente, quizá restringida por la red actual"
     },
     {
       "name": "refresh_failed",

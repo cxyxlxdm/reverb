@@ -49,6 +49,28 @@ enum HTTP {
         }
     }
 
+    /// 带请求头的 GET,额外把响应头与**跟随跳转后的最终 URL**交回。
+    ///
+    /// 只有 RSS 抓取用得上(1.1.1 平台拦截识别):小宇宙把 feed 302 到一张静态 HTML
+    /// 拦截页,URLSession 默认跟随跳转后返回 200 + text/html。只看状态码会把它当正常
+    /// feed 交给 XMLParser,报 111 号解析错误、频道页空白(见 TROUBLESHOOTING H308)。
+    /// 不改动 `fetch(_:)`:自更新那几处仍用原接口。
+    static func fetchMeta(_ urlString: String, headers: [String: String] = [:],
+                          timeout: TimeInterval = 20) async -> (data: Data, code: Int,
+                                                                 mime: String, finalUrl: String)? {
+        guard let req = request(urlString, headers: headers, timeout: timeout) else { return nil }
+        do {
+            let (data, response) = try await session.data(for: req)
+            let http = response as? HTTPURLResponse
+            return (data, http?.statusCode ?? 0,
+                    http?.value(forHTTPHeaderField: "Content-Type") ?? "",
+                    http?.url?.absoluteString ?? urlString)
+        } catch {
+            Log.e("HTTP", "传输失败 \(urlString)", error: error)
+            return nil
+        }
+    }
+
     /// 拉取并解析为 JSON 字典。失败返回 nil。
     static func json(_ urlString: String) async -> [String: Any]? {
         guard let data = await data(urlString) else { return nil }

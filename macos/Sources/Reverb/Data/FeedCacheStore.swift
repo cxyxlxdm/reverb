@@ -20,7 +20,10 @@ final class FeedCacheStore {
     }
 
     private static let maxFeeds = 30
-    private static let maxEpisodes = 60
+    /// 1.1.1:从 60 放到 120。小宇宙一个频道实测能抓到 87 集,原先只留 60 ——
+    /// 平台拦截后本地快照也跟着缺了 27 集,用户以为「历史单集丢了」。120 足够覆盖
+    /// 当前订阅里最大的源,整份缓存仍在 2 MB 量级。
+    private static let maxEpisodes = 120
 
     private let fileURL: URL
     private static let fileName = "feed_cache.json"

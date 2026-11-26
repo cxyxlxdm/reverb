@@ -75,6 +75,9 @@ final class PlayerController: ObservableObject {
     @Published private(set) var sleepRemainingMs: Int = 0
     @Published private(set) var sleepEndOfEpisode = false
     @Published private(set) var playbackError: String?   // 加载失败提示(nil=正常)
+    /// 直播误判结束后的重连状态。UI 用它区分「已经断流,正在重连」与「彻底中断」(见 H309)。
+    @Published private(set) var liveReconnecting = false
+    @Published private(set) var liveInterrupted = false
     /**
      一次性「这一集暂时播不了」提示,由 `RootView` 顶部的 `TopToast` 显示(桌面没有 Toast)。
 
@@ -88,6 +91,11 @@ final class PlayerController: ObservableObject {
 
     let speedSteps: [Double] = [0.8, 1.0, 1.25, 1.5, 1.75, 2.0]
 
+    /// 直播永远是 1×:1.25× 下 CoreMedia 会提前把直播 HLS 判成播完并发出
+    /// DidPlayToTheEnd,应用再按「直播结束」停掉 —— 用户看到的是「起播几秒就停」
+    /// (见 H309)。用户的默认倍速设置本身不改写,点播继续按它走。
+    private var effectiveRate: Float { current?.isLive == true ? 1.0 : Float(speed) }
+
     private let player = AVPlayer()
     /// AirPlay 选路控件必须拿到实际出声的 player,否则按钮能点、路由却不跟它走。
     var avPlayer: AVPlayer { player }
@@ -99,6 +107,8 @@ final class PlayerController: ObservableObject {
     /// (为什么需要它见 `refreshRemoteCommandIntervals`,REVIEW-2026-10-25 族 E)。
     private var skipIntervalObserver: AnyCancellable?
     private var loadRetries = 0
+    /// 直播 DidPlayToEnd 误判的连续重连次数,最多 3 次,退避 1s / 2s / 4s。
+    private var liveRetries = 0
     private var lastIsRadio = false
     /// 上一次装载是「起播」还是「预载」。自动重试要沿用它:
     /// 冷启动恢复的那一次若加载失败,重试完就自己出声 —— 那正是「恢复现场不恢复意图」要防的事。
@@ -769,8 +779,24 @@ final class PlayerController: ObservableObject {
                 guard let self else { return }
                 switch status {
                 case .readyToPlay:
-                    Log.i("Player", "AVPlayerItem readyToPlay id=\(episode.id)")
+                    let wasReconnect = self.liveRetries > 0
+                    Log.i("Player", "AVPlayerItem readyToPlay id=\(episode.id) "
+                        + "rate=\(self.effectiveRate) live=\(episode.isLive) reconnect=\(wasReconnect)")
                     self.loadRetries = 0
+                    if episode.isLive {
+                        // 重连后贴直播边缘(留 3 秒缓冲),避免又落到刚判完的旧分片上。
+                        if wasReconnect,
+                           let range = item.seekableTimeRanges.last?.timeRangeValue,
+                           range.end.seconds.isFinite, range.end.seconds > 3 {
+                            let target = range.end.seconds - 3
+                            self.player.seek(to: CMTime(seconds: target, preferredTimescale: 1000))
+                            Log.i("Player", "直播重连回到边缘 id=\(episode.id) seek=\(target)s "
+                                + "range=\(range.start.seconds)~\(range.end.seconds)")
+                        }
+                        self.liveRetries = 0
+                        self.liveReconnecting = false
+                        self.liveInterrupted = false
+                    }
                     self.playbackError = nil
                 case .failed:
                     Log.e("Player", "AVPlayerItem failed id=\(episode.id)", error: item.error)
@@ -800,7 +826,10 @@ final class PlayerController: ObservableObject {
         if autoplay {
             player.volume = 0
             player.play()
-            player.rate = Float(speed)
+            player.rate = effectiveRate
+            if episode.isLive {
+                Log.i("Player", "直播强制 1× id=\(episode.id) 用户默认倍速=\(speed)")
+            }
             fadeVolume(to: 1.0, durationMs: 900)
         } else {
             // 预载:音量直接给 1(下一首按下播放时不该又淡入一次),且**不能**靠 ticker 画进度 ——
@@ -830,9 +859,46 @@ final class PlayerController: ObservableObject {
         }
     }
 
-    /// 手动重试当前集(供 UI 的「重试」用)。
+    /// 直播误判结束后的重连(H309):重建 item 回到直播边缘,最多 3 次,退避 1/2/4s。
+    /// 不写历史、不记已播、不接下一集 —— 用户要的是这个台,静音几秒比被换成别的内容好。
+    private func reconnectLive() {
+        guard let ep = current, ep.isLive else { return }
+        if liveRetries >= 3 {
+            liveRetries = 0
+            liveReconnecting = false
+            liveInterrupted = true
+            playbackError = String(localized: "直播中断，点击重连")
+            Log.e("Player", "直播重连 3 次耗尽,提示手动重连 id=\(ep.id)")
+            listenStats?.flush()
+            return
+        }
+        liveRetries += 1
+        liveReconnecting = true
+        liveInterrupted = false
+        let attempt = liveRetries
+        let delaySec = [1, 2, 4][attempt - 1]
+        Log.w("Player", "直播重连 \(attempt)/3 id=\(ep.id) 退避=\(delaySec)s "
+            + "rate=\(player.rate) time=\(player.currentTime().seconds)")
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+            guard let self, self.current?.id == ep.id, self.current?.isLive == true else { return }
+            // playEpisode → commitAndPlay → attach 会换一个全新的 AVPlayerItem,
+            // HLS 从新的直播边缘起播;readyToPlay 里再显式 seek 到 end-3s。
+            self.playEpisode(ep, isRadio: self.lastIsRadio, autoplay: true)
+        }
+    }
+
+    /// 手动重试当前集(供 UI 的「重试」用)。直播中断态走重连,不走普通加载失败重试。
     func retry() {
         guard let ep = current else { return }
+        if ep.isLive {
+            Log.i("Player", "直播手动重连 id=\(ep.id)")
+            liveRetries = 0
+            liveInterrupted = false
+            playbackError = nil
+            reconnectLive()
+            return
+        }
         Log.i("Player", "手动重试 id=\(ep.id)")
         loadRetries = 0
         playEpisode(ep, isRadio: lastIsRadio)
@@ -1051,7 +1117,7 @@ final class PlayerController: ObservableObject {
 
     func togglePlayPause() {
         Log.d("Player", "togglePlayPause 当前 isPlaying=\(isPlaying)")
-        if isPlaying { player.pause() } else { player.play(); player.rate = Float(speed) }
+        if isPlaying { player.pause() } else { player.play(); player.rate = effectiveRate }
     }
 
     /// 跨设备交接用:**暂停并返回暂停那一刻的位置**。
@@ -1089,7 +1155,8 @@ final class PlayerController: ObservableObject {
     func setSpeed(_ s: Double) {
         Log.d("Player", "setSpeed \(s)×")
         speed = s
-        if isPlaying { player.rate = Float(s) }
+        // 直播入口本已隐藏;即使从系统控制或其他路径调进来也不改变直播的 1×。
+        if isPlaying { player.rate = effectiveRate }
     }
 
     // MARK: - 睡眠定时
@@ -1176,14 +1243,22 @@ final class PlayerController: ObservableObject {
         ) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
+                // 换集/重连时旧 item 也会补一条 DidPlayToEnd,不能让它把新一集停掉。
+                guard item === self.player.currentItem else {
+                    Log.d("Player", "忽略旧条目的播放结束 id=\(self.current?.id ?? "-")")
+                    return
+                }
                 let stopAfter = self.sleepEndOfEpisode
                 self.sleepEndOfEpisode = false
                 Log.i("Player", "播放结束 id=\(self.current?.id ?? "-") radio=\(self.radioMode) userQueue=\(self.userQueue.count) 本集结束停止=\(stopAfter)")
                 // 直播流的"结束"只意味着这一路断了或停播了:**不记已播、不接下一集**。
                 // 否则用户本来在听电台,流一断就被换成队列里另一集,听感上像被偷换了台。
                 if self.current?.isLive == true {
-                    Log.i("Player", "直播结束,不续播 id=\(self.current?.id ?? "-")")
-                    self.listenStats?.flush()
+                    // H309:直播 HLS 在 1.25× 下会被 CoreMedia 提前判完;强制 1× 后
+                    // 仍可能误报。这里不再当作「结束」停掉,而是重建 item 重连。
+                    Log.w("Player", "直播收到 DidPlayToEnd,进入重连 id=\(self.current?.id ?? "-") "
+                        + "rate=\(self.player.rate) time=\(self.player.currentTime().seconds)")
+                    self.reconnectLive()
                     return
                 }
                 if let ep = self.current, !GuideEpisode.isGuide(ep.id) {

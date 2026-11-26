@@ -16,6 +16,16 @@ import { Log } from '../util/Logger';
 /// 播放请求的 User-Agent。与 Http.ets 的 UA 同一形态 —— 不少播客 CDN 会按 UA 拒绝请求。
 const PLAYER_UA = 'Reverb/1.0 (HarmonyOS podcast client)';
 
+/// 直播断流后自动重连的退避:1/2/4 秒,最多三次(见 H239 与本次「直播 completed 误判」修复)。
+const LIVE_RECONNECT_DELAYS_MS: number[] = [1000, 2000, 4000];
+
+/// 直播 seekableRange 的读数:日志文本 + 可拿来 seek 的「边缘前 3 秒」位置。
+/// -1 表示拿不到 range,交给播放器自己落到直播边缘。
+interface LiveRangeInfo {
+  text: string;
+  edgeMs: number;
+}
+
 /**
  * 列表播放模式。与 Android `PlayerController.PlayMode` **同名同序**。
  *
@@ -120,6 +130,12 @@ export class PlayerController {
   loading: boolean = false;
   buffering: boolean = false;
   speed: number = 1.0;
+  /**
+   * **实际交给播放器的速率**。直播恒为 1.0,不能依赖 AVPlayer 默认值 ——
+   * 既给日志一个确定的读数,也给界面一个可观察的事实(H239:
+   * 直播调 setPlaybackRate 会走 error 事件,这里只记 1.0、绝不调用它)。
+   */
+  playbackRate: number = 1.0;
   hasNext: boolean = false;
   hasPrev: boolean = false;
   userQueue: Episode[] = [];
@@ -272,6 +288,12 @@ export class PlayerController {
   private pendingSeekExplicit = false;
   private tickTimer = -1;
   private loadRetries = 0;
+  /// 直播断流的自动重连次数(成功出声或换集即清零),以及待执行的重连定时器。
+  private liveReconnectAttempts = 0;
+  private liveReconnectTimer = -1;
+  /// 三次重连耗尽后置位:界面把 playbackError 显示成「直播中断,点击重连」。
+  /// 公开可读,供界面/日志区分「还没连上」与「已放弃、等用户点」。
+  liveInterrupted: boolean = false;
   private loadGeneration = 0;
   private sourceGeneration = 0;
   private failedGeneration = -1;
@@ -617,6 +639,15 @@ export class PlayerController {
     const isGuide = GuideEpisode.isGuide(e.id);
     // 直播流不进历史:它没有"上次听到哪儿"这个概念,留下一条也只会是永远 0 的僵尸记录。
     const isLive = e.isLive === true;
+    if (isLive) {
+      // 换到直播 / 重连成功都算新的一轮:清掉上一轮的中断态与定时器。
+      this.resetLiveReconnect();
+      // 速率显式锁 1×:不依赖 AVPlayer 默认值。**不改写 speed 偏好** ——
+      // 用户切回点播时仍用之前选的倍速(与另三端同一口径)。界面在直播里隐藏倍速入口,
+      // 实际生效值单独记在 playbackRate,日志里两者都看得见。
+      this.playbackRate = 1.0;
+      Log.i('Player', `直播起播锁速 id=${e.id} rate=1.0 用户倍速偏好=${this.speed} generation=${generation}`);
+    }
     if (!isGuide && !isLive && this.history !== null) this.history.record(e, Date.now());
     // 两种来源,一条判别:调用方**明确指定的那一秒**优先于「上次听到哪儿」。
     // 与 Android 同口径 —— `startMsOverride >= 0` 就吃掉它并置 explicit,否则走续播。
@@ -1009,6 +1040,12 @@ export class PlayerController {
       this.buffering = false;
       this.playbackError = '';
       this.cancelLoadRetry();
+      // 真的出声了才算重连成功:清零次数,否则下一次断流会接着上一轮的计数提前放弃。
+      const cur = this.current;
+      if (cur !== null && cur.isLive === true) {
+        this.liveReconnectAttempts = 0;
+        this.liveInterrupted = false;
+      }
       this.isPlaying = true;
       // **本端"真的出声过"的事件点**。历史进度的回写以它为闸(见 `playbackStarted`),
       // 所以冷启动预载那一集不会把用户上次听到的位置抹成 0。
@@ -1033,17 +1070,16 @@ export class PlayerController {
       this.isPlaying = false;
       this.stopTicker();
       const cur = this.current;
-      // **直播流到此为止**:断流时 AVPlayer 一样会报 completed,而这一刻最不该做的事
-      // 就是"自动接下一集"——用户要的是这个台,换到别的内容比静音更费解。
-      // 也不写历史(它压根没进历史,updatePosition 会把那一条重新造出来)。
+      // **直播断流**:AVPlayer 一样会报 completed,但直播没有"自然播完"这回事 ——
+      // 这一刻既不能写历史(它会把压根没进历史的直播重新造出来),也不能接下一集。
+      // 改成自愈重连:reset + seek 到直播边缘,最多三次 1/2/4 秒退避。
       if (cur !== null && cur.isLive === true) {
-        Log.i('Player', `直播流结束 id=${cur.id}`);
-        if (this.onListenFlush !== null) this.onListenFlush();
-        this.playbackDesiredPlaying = false;
-        this.deactivateAudioSession();
-        this.notify();
+        void this.handleLiveInterrupt(p, cur, generation);
         return;
       }
+      // 点播的「结束」与直播的「中断」分开记,日志里能一眼分辨(见 handleLiveInterrupt)。
+      Log.i('Player', `播放结束 kind=结束 源=completed id=${cur === null ? '' : cur.id} `
+        + `rate=${this.playbackRate} currentTime=${p.currentTime} dur=${this.durationMs}`);
       if (cur !== null && this.history !== null && !GuideEpisode.isGuide(cur.id)) {
         this.history.updatePosition(cur.id, 0, this.durationMs);
         this.history.markPlayed(cur.id, true);
@@ -1074,6 +1110,92 @@ export class PlayerController {
       }
       this.notify();
     }
+  }
+
+  /**
+   * 直播流收到 `completed` 的处理:**一律按中断算,不按结束算**。
+   *
+   * 直播没有片尾,AVPlayer 的 completed 只可能是断流(网络抖动 / 源侧切片断档)。
+   * 保留 `playbackDesiredPlaying` 与 AudioSession —— 若在这里把它置假,重连那一两秒
+   * 的空窗会被系统当成"用户不听了"收回长时任务(同 H125 的交接问题)。
+   */
+  private async handleLiveInterrupt(p: media.AVPlayer, e: Episode, generation: number): Promise<void> {
+    this.stopTicker();
+    this.isPlaying = false;
+    const range = await this.liveRanges(p);
+    // 结束/中断分开记,且把 rate / currentTime / seekableRange / id 一次打全 ——
+    // 只有 `直播流结束` 五个字时,根本分不清是正常播完还是断流重试耗尽。
+    Log.w('Player', `直播中断 kind=中断 源=completed id=${e.id} rate=${this.playbackRate} `
+      + `currentTime=${p.currentTime} seekable=${range.text} `
+      + `attempt=${this.liveReconnectAttempts}/${LIVE_RECONNECT_DELAYS_MS.length}`);
+    // 取 range 是异步的:期间用户可能按了暂停,那就别再自作主张把他拉回直播。
+    if (generation !== this.loadGeneration || this.current === null || this.current.id !== e.id
+      || !this.playbackDesiredPlaying || this.released) return;
+    if (this.onListenFlush !== null) this.onListenFlush();
+
+    if (this.liveReconnectAttempts >= LIVE_RECONNECT_DELAYS_MS.length) {
+      this.liveInterrupted = true;
+      this.loading = false;
+      this.playbackDesiredPlaying = false;
+      this.playbackError = L.s('live_interrupted');
+      this.deactivateAudioSession();
+      Log.e('Player', `直播重连耗尽 id=${e.id} rate=${this.playbackRate} 等待用户点击重连`);
+      this.notify();
+      return;
+    }
+
+    const attempt = ++this.liveReconnectAttempts;
+    const delay = LIVE_RECONNECT_DELAYS_MS[attempt - 1];
+    this.loading = true;
+    this.notify();
+    this.liveReconnectTimer = setTimeout((): void => {
+      this.liveReconnectTimer = -1;
+      if (generation !== this.loadGeneration || this.released || !this.playbackDesiredPlaying
+        || this.current === null || this.current.id !== e.id) return;
+      this.playbackError = '';
+      this.startMsOverride = range.edgeMs;   // -1 = 不覆盖,播放器自己落到边缘
+      Log.i('Player', `直播自动重连 ${attempt}/3 id=${e.id} delay=${delay}ms edge=${range.edgeMs}`);
+      this.startEpisode(e, false);
+    }, delay);
+  }
+
+  /// 取 seekableRange,给日志和「回到边缘前 3 秒」用。拿不到就回 -1,不强依赖该 API。
+  private async liveRanges(p: media.AVPlayer): Promise<LiveRangeInfo> {
+    try {
+      const ranges: media.Range[] = await p.getSeekableTimeRanges();
+      if (ranges.length === 0) return { text: '空', edgeMs: -1 };
+      let last = ranges[0];
+      for (let i = 1; i < ranges.length; i++) if (ranges[i].max > last.max) last = ranges[i];
+      // 直播边缘回退 3 秒,避免刚好卡在最后一个切片的断口上又立刻 completed。
+      const edge = Math.max(last.min, last.max - 3000);
+      return { text: `[${last.min},${last.max}]`, edgeMs: edge };
+    } catch (e) {
+      // 该 API 自 API 26 起提供,低版本系统上调用会抛 —— 按"拿不到"降级即可。
+      Log.w('Player', `直播 seekableRange 不可用 ${(e as Error).message}`);
+      return { text: '不可用', edgeMs: -1 };
+    }
+  }
+
+  /// 清掉一轮直播的中断态与待执行重连(换集 / 手动重连 / stop 时都要走)。
+  private resetLiveReconnect(): void {
+    if (this.liveReconnectTimer >= 0) {
+      clearTimeout(this.liveReconnectTimer);
+      this.liveReconnectTimer = -1;
+    }
+    this.liveReconnectAttempts = 0;
+    this.liveInterrupted = false;
+  }
+
+  /// 手动点「重连」:起一轮新的重置 + 回到边缘,次数重新从 0 算。
+  private async startLiveReconnect(e: Episode): Promise<void> {
+    this.resetLiveReconnect();
+    this.playbackError = '';
+    const p = this.player;
+    let range: LiveRangeInfo = { text: '无播放器', edgeMs: -1 };
+    if (p !== null) range = await this.liveRanges(p);
+    this.startMsOverride = range.edgeMs;
+    Log.i('Player', `直播手动重连 id=${e.id} seekable=${range.text} edge=${range.edgeMs}`);
+    this.startEpisode(e, true);
   }
 
   /// AudioSession 失败不是媒体源失败,不能为此重置音源并重新下载三次。
@@ -1129,6 +1251,11 @@ export class PlayerController {
   retry(): void {
     const e = this.current;
     if (e === null) return;
+    // 直播的「重试」就是手动重连:次数重新计,并回到直播边缘(能拿到 range 就退 3 秒)。
+    if (e.isLive === true) {
+      void this.startLiveReconnect(e);
+      return;
+    }
     this.startEpisode(e, true);
   }
 
@@ -1286,6 +1413,13 @@ export class PlayerController {
   }
 
   setSpeed(s: number): void {
+    const cur = this.current;
+    // 直播入口也要拦:即使从系统控制调进来,也只忽略请求、不改写用户倍速偏好。
+    // 实际生效值仍是 playbackRate=1.0(起播时已锁),点播切回来继续用原来的偏好。
+    if (cur !== null && cur.isLive === true) {
+      Log.i('Player', `直播忽略倍速请求 id=${cur.id} 请求=${s} 实际=1.0`);
+      return;
+    }
     this.speed = s;
     const p = this.player;
     if (p !== null && this.isPlaying) this.applyRate(p, s);
@@ -1294,14 +1428,20 @@ export class PlayerController {
 
   /// 设置倍速。AVPlayer 只有播放态允许 setPlaybackRate,状态切换中不发无效操作。
   private applyRate(p: media.AVPlayer, rate: number): void {
-    // 直播流一律不发:AVPlayer 对直播回 `Operate Not Permit: The stream is live stream,
-    // not support rate`,而那是走 `error` 事件的 —— try/catch 拦不住,会让 handleLoadFailure
+    // 直播流一律**不发** setPlaybackRate:AVPlayer 对直播回 `Operate Not Permit: The stream is live
+    // stream, not support rate`,而那是走 `error` 事件的 —— try/catch 拦不住,会让 handleLoadFailure
     // 把一路本来播得好好的流当成装载失败、每 0.8 秒重建一次(实测 HLS 电台连打六代)。见 H239。
+    // 但速率不能"靠 AVPlayer 默认值":显式把状态字段锁成 1.0,日志里也读得出真实值。
     const cur = this.current;
-    if (cur !== null && cur.isLive === true && this.durationMs <= 0) return;
+    if (cur !== null && cur.isLive === true) {
+      this.playbackRate = 1.0;
+      Log.i('Player', `直播倍速锁定 id=${cur.id} rate=1.0 currentTime=${p.currentTime}`);
+      return;
+    }
     if (p.state !== 'playing') return;
     try {
       p.setPlaybackRate(rate);
+      this.playbackRate = rate;
     } catch (e) {
       Log.w('Player', `设置倍速失败 ${(e as Error).message}`);
     }
@@ -1909,6 +2049,7 @@ export class PlayerController {
     this.sourceGeneration = 0;
     this.failedGeneration = -1;
     this.cancelLoadRetry();
+    this.resetLiveReconnect();
     this.stopTicker();
     this.clearFade();
     this.clearSleepTicker();

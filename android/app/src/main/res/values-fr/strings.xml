@@ -75,6 +75,8 @@
     <string name="discover_empty_category">Rien dans « %s » — essayez une autre catégorie</string>
     <string name="empty_discover">Cherchez un podcast, Reverb le trouvera</string>
     <string name="load_failed">Aucun résultat — essayez un autre mot ou plus tard</string>
+    <string name="feed_unavailable">Source temporairement indisponible, réessayez plus tard</string>
+    <string name="feed_empty">Aucun épisode pour cette émission</string>
     <string name="offline_cached_at">Copie hors ligne · mise à jour %s</string>
     <string name="guide_title">Premiers pas avec Reverb</string>
     <string name="guide_desc">Introduction de 30 secondes intégrée à l’app. Lecture sans connexion.</string>
@@ -199,6 +201,8 @@
     <string name="player_not_playing">Aucune lecture</string>
     <string name="player_err_retrying">Lecture interrompue. Nouvelle tentative automatique (essai %1$d)</string>
     <string name="player_err_failed">Lecture impossible. Touchez pour réessayer</string>
+    <string name="player_err_live_reconnecting">Reconnexion au flux en direct (essai %1$d)</string>
+    <string name="player_err_live_interrupted">Flux en direct interrompu. Touchez pour vous reconnecter</string>
     <string name="player_err_unplayable">Cet épisode ne peut pas être lu pour le moment</string>
     <string name="shownotes">Notes de l\'épisode</string>
     <string name="shownotes_empty">Aucune note</string>

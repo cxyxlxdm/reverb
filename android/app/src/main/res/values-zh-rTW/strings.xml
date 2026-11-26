@@ -75,6 +75,8 @@
     <string name="discover_empty_category">「%s」暫無內容，換個分類看看</string>
     <string name="empty_discover">搜尋你想聽的播客，餘音為你循聲而來</string>
     <string name="load_failed">沒能取到聲音，換個詞或稍後再試</string>
+    <string name="feed_unavailable">資料來源暫時不可用，稍後再試</string>
+    <string name="feed_empty">這一檔節目暫無內容</string>
     <string name="offline_cached_at">離線內容 · 上次更新 %s</string>
     <string name="guide_title">餘音使用引導</string>
     <string name="guide_desc">隨應用內建的 30 秒引導音訊，無需連網即可播放。</string>
@@ -199,6 +201,8 @@
     <string name="player_not_playing">未在播放</string>
     <string name="player_err_retrying">播放中斷，正在自動重試（第 %1$d 次）</string>
     <string name="player_err_failed">播放失敗，點按重試</string>
+    <string name="player_err_live_reconnecting">正在重新連線直播（第 %1$d 次）</string>
+    <string name="player_err_live_interrupted">直播中斷，點按重新連線</string>
     <string name="player_err_unplayable">這一集暫時播不了</string>
     <string name="shownotes">節目筆記</string>
     <string name="shownotes_empty">暫無節目筆記</string>

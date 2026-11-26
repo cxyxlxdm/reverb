@@ -1,5 +1,6 @@
 import dateParseTest from './DateParse.test';
 import htmlTextTest from './HtmlText.test';
+import feedGuardTest from './FeedGuard.test';
 import liveStreamTest from './LiveStream.test';
 import transcriptLinesTest from './TranscriptLines.test';
 import chaptersTest from './Chapters.test';
@@ -20,6 +21,7 @@ import contentGateTest from './ContentGate.test';
 export default function testsuite(): void {
   dateParseTest();
   htmlTextTest();
+  feedGuardTest();
   liveStreamTest();
   transcriptLinesTest();
   chaptersTest();

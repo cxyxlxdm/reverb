@@ -5,7 +5,9 @@ import com.yuyin.reverb.data.model.FeedCredential
 import com.yuyin.reverb.data.model.FeedResult
 import com.yuyin.reverb.data.model.Podcast
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 源获取的编排层：全链路 **零配置、无需任何 Key、无需登录**，打开即用。
@@ -48,6 +50,97 @@ class PodcastRepository(
 
     private val log = com.yuyin.reverb.util.Logger
     private val TAG = "Repo"
+
+    /**
+     * 一次 feed 抓取的失败分类,给界面区分「数据源暂不可用」与「这一档确实没内容」。
+     *
+     * 用一次性取走的 map 而不是改 [feed] 的返回值:调用方有详情页、粘贴链接、后台巡检好几路,
+     * 把 `FeedResult?` 改成 sealed 会让这条只在界面上需要的信号扩散到所有层(与 401 那条同理)。
+     * 按 url 记账,后台巡检先失败也不会盖掉详情页正在看的那一次。
+     */
+    data class FeedFailure(
+        val kind: Kind,
+        val host: String = "",
+        val code: Int = 0,
+        val contentType: String = ""
+    ) {
+        enum class Kind { PLATFORM_BLOCKED, HTTP_ERROR, NETWORK, PARSE, UNAUTHENTICATED }
+    }
+
+    private val feedFailures = ConcurrentHashMap<String, FeedFailure>()
+
+    /** 取走即清,避免上一次的失败被挂到这一次成功的页面上。 */
+    fun consumeFeedFailure(feedUrl: String): FeedFailure? = feedFailures.remove(cleanUrl(feedUrl))
+
+    /**
+     * 平台级拦截的短期熔断。已识别成拦截的域 60 秒内不再连发请求 —— 同一域连试 1/2/4 秒
+     * 只会得到同样的拦页面,还把用户流量和对方日志都刷一遍(见 TROUBLESHOOTING 的 RSS 拦截条)。
+     */
+    private val blockedHosts = ConcurrentHashMap<String, Long>()
+
+    /**
+     * feed 抓取 + 指数退避。首枪失败后 1s / 2s / 4s 各补一次,四次都拿不到才返回 null。
+     *
+     * 为什么不是无限重试:RSS 动辄几百 KB,真被拦或真断网时重试一百次也不会好,而瞬时抖动
+     * (切基站、Wi-Fi 掉一拍)基本落在第一枪之后的 1 秒内。401(要用户输凭据)与平台拦截
+     * (短期熔断)都直接跳出,这两类重试没有意义。
+     */
+    private suspend fun fetchWithRetry(
+        url: String,
+        auth: FeedCredential?,
+        onUnauthorized: () -> Unit
+    ): FeedResult? {
+        val host = hostOf(url)
+        feedFailures.remove(url)
+        val now = System.currentTimeMillis()
+        val until = blockedHosts[host] ?: 0L
+        if (now < until) {
+            rss.recordBlocked(url, host, 0, "")
+            feedFailures[url] = FeedFailure(FeedFailure.Kind.PLATFORM_BLOCKED, host)
+            log.w(TAG, "feed 熔断中 host=$host 剩余=${until - now}ms url=$url")
+            return null
+        }
+        val delays = longArrayOf(0L, 1_000L, 2_000L, 4_000L)
+        var attempt = 0
+        while (attempt < delays.size) {
+            if (attempt > 0) delay(delays[attempt])
+            attempt++
+            val result = rss.fetch(url, auth, onUnauthorized)
+            if (result != null) return result
+            val failure = rss.consumeFailure(url)?.let { translate(it, host) }
+                ?: FeedFailure(FeedFailure.Kind.NETWORK, host)
+            feedFailures[url] = failure
+            when (failure.kind) {
+                FeedFailure.Kind.PLATFORM_BLOCKED -> {
+                    blockedHosts[host] = System.currentTimeMillis() + BLOCK_WINDOW_MS
+                    log.w(
+                        TAG,
+                        "feed 平台拦截,熔断 host=$host ${BLOCK_WINDOW_MS}ms status=${failure.code} " +
+                            "contentType='${failure.contentType}' url=$url"
+                    )
+                    break
+                }
+                FeedFailure.Kind.UNAUTHENTICATED -> break // 要用户补凭据,重试没有意义
+                else -> log.w(TAG, "feed 第 $attempt/${delays.size} 次失败 kind=${failure.kind} status=${failure.code} url=$url")
+            }
+        }
+        return null
+    }
+
+    private fun translate(f: RssParser.Failure, host: String): FeedFailure = when (f) {
+        is RssParser.Failure.Blocked -> FeedFailure(
+            FeedFailure.Kind.PLATFORM_BLOCKED, f.host.ifBlank { host }, f.code, f.contentType
+        )
+        is RssParser.Failure.HttpError -> FeedFailure(FeedFailure.Kind.HTTP_ERROR, host, f.code)
+        RssParser.Failure.NetworkError -> FeedFailure(FeedFailure.Kind.NETWORK, host)
+        RssParser.Failure.ParseError -> FeedFailure(FeedFailure.Kind.PARSE, host)
+        RssParser.Failure.Unauthorized -> FeedFailure(FeedFailure.Kind.UNAUTHENTICATED, host, 401)
+    }
+
+    private fun hostOf(url: String): String = runCatching {
+        java.net.URI(url).host
+    }.getOrNull()?.ifBlank { null }
+        ?: url.substringAfter("://").substringBefore('/').ifBlank { url }
 
     @Volatile
     private var directoryGeneration = 0L
@@ -209,8 +302,13 @@ class PodcastRepository(
         // 缓存键与实际请求都用**去掉凭据**的那一份 —— 否则同一个源会因为"带没带口令"
         // 变成两份缓存,而带口令的那份键会跟着导出备份走。
         val (url, inline) = FeedCredential.splitUrl(feedUrl)
-        val result = if (BilibiliSource.isPseudo(url)) bilibili.feedOf(url)
-        else rss.fetch(url, inline ?: authStore.get(url)) { _authRequired.tryEmit(url) }
+        val result = if (BilibiliSource.isPseudo(url)) {
+            bilibili.feedOf(url).also {
+                if (it == null) feedFailures[url] = FeedFailure(FeedFailure.Kind.PARSE, hostOf(url))
+            }
+        } else {
+            fetchWithRetry(url, inline ?: authStore.get(url)) { _authRequired.tryEmit(url) }
+        }
         if (result != null && inline != null) authStore.save(url, inline)
         if (result == null) log.w(TAG, "feed empty/failed url=$url")
         else {
@@ -308,6 +406,9 @@ class PodcastRepository(
         com.yuyin.reverb.BuildConfig.CATALOG && thirdPartyContentEnabled()
 
     companion object {
+        /** 平台级拦截的熔断窗口:60 秒足够跨过一次限流,又不至于让用户永远看不到重试。 */
+        private const val BLOCK_WINDOW_MS = 60_000L
+
         /**
          * 三方目录的有效地区。关闭时保留原来的设备 / 覆盖值供关键词搜索使用;
          * 开启后默认美国,只有明确选择 cn 才保留中文地区,hk/tw/mo 及其它未明确项回落 us。

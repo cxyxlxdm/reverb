@@ -75,6 +75,8 @@
     <string name="discover_empty_category">Nothing in “%s” yet — try another category</string>
     <string name="empty_discover">Search for a podcast and Reverb will find it</string>
     <string name="load_failed">Couldn\'t fetch anything — try another term or later</string>
+    <string name="feed_unavailable">Source temporarily unavailable, try again later</string>
+    <string name="feed_empty">No episodes in this show yet</string>
     <string name="offline_cached_at">Offline copy · updated %s</string>
     <string name="guide_title">Getting started with Reverb</string>
     <string name="guide_desc">A 30-second bundled intro. Plays without a network connection.</string>
@@ -199,6 +201,8 @@
     <string name="player_not_playing">Nothing playing</string>
     <string name="player_err_retrying">Playback interrupted. Retrying automatically (attempt %1$d)</string>
     <string name="player_err_failed">Playback failed. Tap to retry</string>
+    <string name="player_err_live_reconnecting">Reconnecting to live stream (attempt %1$d)</string>
+    <string name="player_err_live_interrupted">Live stream interrupted. Tap to reconnect</string>
     <string name="player_err_unplayable">This episode can\'t be played right now</string>
     <string name="shownotes">Show notes</string>
     <string name="shownotes_empty">No show notes</string>

@@ -265,7 +265,15 @@ class DiscoverViewModel(
 
 sealed interface PodcastState {
     data object Loading : PodcastState
-    data object Error : PodcastState
+
+    /**
+     * 数据源暂时不可用:抓取失败且本机没有缓存。
+     *
+     * 与 `PodcastState.Loaded(episodes = emptyList())` 严格分开 —— 后者是"这一档确实没有单集",
+     * 前者是"没拿到,别当成空频道"。原先两者都落到通用「加载失败」,用户分不出该换网络还是
+     * 该换节目;平台拦截页(302 → HTML)被当 XML 失败后正好落进这一档。
+     */
+    data object Unavailable : PodcastState
 
     /**
      * @param staleAt 非 0 表示这是**缓存内容**（联网刷新还没成功），值为缓存落盘时刻；
@@ -335,12 +343,22 @@ class PodcastViewModel(private val repo: PodcastRepository) : ViewModel() {
             val result = repo.feed(feedUrl)
             // 期间用户可能已经翻到别的频道，别把结果盖到当前页上
             if (loadedFeed != feedUrl) return@launch
+            // 失败分类是一次性的，取走即清；UI 只需要知道"不可用"，细分留给日志定位。
+            val failure = repo.consumeFeedFailure(feedUrl)
             state = when {
                 result != null -> PodcastState.Loaded(result.podcast, result.episodes)
+                // 失败但有缓存:继续展示旧内容并标陈旧，界面那条「离线内容 · 上次更新」就是标记。
                 cached != null -> PodcastState.Loaded(cached.podcast, cached.episodes, repo.feedCachedAt(feedUrl))
-                else -> PodcastState.Error
+                else -> PodcastState.Unavailable
             }
             if (result != null) authAttempted = false
+            if (failure != null) {
+                com.yuyin.reverb.util.Logger.w(
+                    "PodcastVM",
+                    "feed 不可用 kind=${failure.kind} host=${failure.host} status=${failure.code} " +
+                        "contentType='${failure.contentType}' cached=${cached != null}"
+                )
+            }
         }
     }
 
@@ -349,7 +367,18 @@ class PodcastViewModel(private val repo: PodcastRepository) : ViewModel() {
     suspend fun refresh(feedUrl: String) {
         val result = repo.feed(feedUrl)
         if (loadedFeed != feedUrl) return
-        if (result != null) state = PodcastState.Loaded(result.podcast, result.episodes)
+        repo.consumeFeedFailure(feedUrl) // 取走，别让这次失败挂到下一次刷新上
+        if (result != null) {
+            state = PodcastState.Loaded(result.podcast, result.episodes)
+        } else {
+            // 刷新失败时缓存可能比页面上那份更新(后台巡检写过),把它标成陈旧,
+            // 而不是让用户对着一份"看起来是刚刚刷新的"旧列表继续往下翻。
+            val cachedAt = repo.feedCachedAt(feedUrl)
+            val current = state
+            if (cachedAt != 0L && current is PodcastState.Loaded) {
+                state = current.copy(staleAt = cachedAt)
+            }
+        }
     }
 }
 

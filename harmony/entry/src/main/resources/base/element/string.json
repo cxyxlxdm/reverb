@@ -293,6 +293,10 @@
       "value": "直播中"
     },
     {
+      "name": "live_interrupted",
+      "value": "直播中断，点击重连"
+    },
+    {
       "name": "search_probe_checking",
       "value": "检测中"
     },
@@ -375,6 +379,10 @@
     {
       "name": "detail_network_unreachable",
       "value": "当前网络无法访问该频道"
+    },
+    {
+      "name": "feed_source_unavailable",
+      "value": "数据源暂不可用，可能受当前网络限制"
     },
     {
       "name": "refresh_failed",

@@ -39,13 +39,16 @@ class StoredFeed {
 ///  2. **秒开**:详情页原本每次都从 LoadingBox 开始(RSS 动辄几百 KB)。
 ///
 /// 容量有意收紧(RSS 是这个 App 里最大的数据):最多 MAX_FEEDS 个频道、每频道 MAX_EPISODES 集,
-/// 超出按最近写入时间淘汰。整体 ~600KB 量级,计入设置页缓存大小。
+/// 超出按最近写入时间淘汰。放宽到 120 集后整体约 1.4MB 量级,计入设置页缓存大小。
 export class FeedCacheStore {
   private static FILE = 'feed_cache.json';
   // 容量比另两端更紧:鸿蒙这份是**单文件整份写回**,每次落盘都要 JSON.stringify 全量,
-  // 序列化仍在 UI 线程(只有写盘异步了)。20 × 50 约 600KB 量级,stringify 十几毫秒可接受。
+  // 序列化仍在 UI 线程(只有写盘异步了)。20 × 50 → 20 × 120 约 600KB → 1.4MB,
+  // stringify 从十几毫秒涨到几十毫秒 —— 这是放宽容量换来的代价,已并入去抖写盘(H64)。
+  // 本次只改上限、不改磁盘结构:旧缓存里只有 50 集,下次刷新成功自然补到 120,
+  // 所以不需要动版本号(硬规矩 11 针对的是口径变化导致旧数据必须作废的情形)。
   private static MAX_FEEDS = 20;
-  private static MAX_EPISODES = 50;
+  private static MAX_EPISODES = 120;
 
   private mem: Record<string, FeedCacheEntry> = {};
 
@@ -141,7 +144,7 @@ export class FeedCacheStore {
 
   /**
    * 落盘走**惰性**去抖:一次「最新」刷新会 put 15 次(每源一次),而每次 put 都要把整份缓存
-   * (20 频道 × 50 集,约 600KB)重建成 JSON 对象再 stringify。原先那 15 遍全落在 UI 线程上,
+   * (20 频道 × 120 集,约 1.4MB)重建成 JSON 对象再 stringify。原先那 15 遍全落在 UI 线程上,
    * 下拉刷新的转圈就卡在这儿。改成登记"怎么取值",到期只做一次(见 H64 与
    * `JsonFile.writeJsonDebouncedLazy`)。
    */

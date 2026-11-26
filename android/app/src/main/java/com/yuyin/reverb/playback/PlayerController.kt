@@ -62,6 +62,17 @@ object PlayerController {
     private const val MAX_ERROR_RETRIES = 2
     private const val RETRY_BASE_MS = 500L
 
+    /**
+     * 直播断流的重连上限与退避(1s / 2s / 4s)。
+     *
+     * 直播的 STATE_ENDED 不是"这一集听完了",而是这一路流断了或停了。旧代码在这里只记一句
+     * log 就 return,于是用户挂在无声的播放页上,只能杀 App。3 次是给瞬时抖动留的余量,
+     * 再多只会反复拉同一条已经断掉的流;耗尽后把"直播中断,点击重连"摆到界面上,
+     * 由用户决定什么时候再试(看门狗本轮不做)。
+     */
+    private const val MAX_LIVE_RECONNECTS = 3
+    private val LIVE_RECONNECT_DELAYS = longArrayOf(1_000L, 2_000L, 4_000L)
+
     private var controller: MediaController? = null
     private val handler = Handler(Looper.getMainLooper())
     /**
@@ -396,7 +407,12 @@ object PlayerController {
         val code: Int,
         val codeName: String,
         val retrying: Boolean,
-        val retriesUsed: Int
+        val retriesUsed: Int,
+        /**
+         * 这一条是直播断流(不是普通点播失败)。界面据此换成「直播中断,点击重连」文案,
+         * 点击走 [reconnectLive] 而不是 [retryNow] —— 后者会按历史进度 seek,直播没有那个位置。
+         */
+        val liveInterrupted: Boolean = false
     )
 
     private val _playbackError = MutableStateFlow<PlaybackError?>(null)
@@ -433,6 +449,108 @@ object PlayerController {
             if (resumeAt > 0) c.seekTo(resumeAt)
             c.prepare()
         }.onFailure { log.e(TAG, "自动重投失败 id=${ep.id}", it) }
+    }
+
+    // ---- 直播断流重连 ----
+    /** 按 episode id 归集,换集即清零 —— 与 errorRetries 同一条口径(见 commitAndPlay)。 */
+    private var liveReconnects = 0
+    private var liveReconnectEpisodeId = ""
+    /** 同一个断流可能先报 onPlayerError 再报 STATE_ENDED;排队中就不再重复计数。 */
+    private var liveReconnectPending = false
+
+    /**
+     * 直播一律 1×。
+     *
+     * UI 虽然藏了直播的倍速入口,但播放器在 startEpisode 里仍被设成用户默认的 1.25×;
+     * 主播/网关若把 HLS 当普通 VOD 报,播放器还会按这个倍速往前赶,越听越靠前、最终断流。
+     * 这里只在**播放器层**强制 1×,[speed] 那份用户偏好原样保留,点播继续用它。
+     */
+    private fun isLiveNow(): Boolean =
+        _liveStream.value || _current.value?.isLive == true || controller?.isCurrentMediaItemLive == true
+
+    private fun effectiveSpeed(live: Boolean = isLiveNow()): Float = if (live) 1.0f else _speed.value
+
+    /**
+     * 统一刷新直播判词。播放器晚一步才把当前项判成直播(HLS 清单要到 READY 才给 isLive)时,
+     * 起播那一刻按点播设进去的倍速要在这里纠正过来 —— 这就是"误判后的自救"。
+     */
+    private fun updateLiveFlag(c: MediaController?) {
+        val live = c?.isCurrentMediaItemLive == true
+        if (_liveStream.value == live) return
+        _liveStream.value = live
+        log.i(TAG, "live flag -> $live id=${_current.value?.id} speed=${effectiveSpeed(live)}")
+        c?.setPlaybackSpeed(effectiveSpeed(live))
+    }
+
+    /**
+     * 直播 ENDED = 断流信号。日志分成两句:**live ended** 是播放器报上来的事件,
+     * **live interrupted** 是重连耗尽后的用户可见状态 —— 前者是事实,后者是结论,不能混。
+     */
+    private fun onLiveEnded(reason: String) {
+        val ep = _current.value?.takeIf { it.isLive } ?: return
+        listenStats?.flush()
+        if (ep.id != liveReconnectEpisodeId) {
+            liveReconnectEpisodeId = ep.id
+            liveReconnects = 0
+        }
+        scheduleLiveReconnect(ep, reason)
+    }
+
+    private fun scheduleLiveReconnect(ep: Episode, reason: String) {
+        if (liveReconnectPending) {
+            log.i(TAG, "live ended($reason): 已有重连在排队,跳过重复计数 id=${ep.id}")
+            return
+        }
+        if (liveReconnects >= MAX_LIVE_RECONNECTS) {
+            _playbackError.value = PlaybackError(
+                ep.id, -1, "LIVE_INTERRUPTED", false, liveReconnects, liveInterrupted = true
+            )
+            log.w(TAG, "live interrupted: 重连 $MAX_LIVE_RECONNECTS 次耗尽 id=${ep.id} reason=$reason")
+            return
+        }
+        liveReconnects++
+        val delayMs = LIVE_RECONNECT_DELAYS[liveReconnects - 1]
+        _playbackError.value = PlaybackError(
+            ep.id, -1, "LIVE_RECONNECTING", true, liveReconnects, liveInterrupted = true
+        )
+        handler.removeCallbacks(liveReconnectRunnable)
+        liveReconnectPending = true
+        handler.postDelayed(liveReconnectRunnable, delayMs)
+        log.w(TAG, "live ended($reason): 第 $liveReconnects/$MAX_LIVE_RECONNECTS 次重连,${delayMs}ms 后 id=${ep.id}")
+    }
+
+    /** 用户点状态行「直播中断,点击重连」:清零后走同一条退避重连,不按历史进度 seek。 */
+    fun reconnectLive() {
+        val ep = _current.value?.takeIf { it.isLive } ?: return
+        log.i(TAG, "reconnectLive (user) id=${ep.id}")
+        handler.removeCallbacks(liveReconnectRunnable)
+        liveReconnectPending = false
+        liveReconnectEpisodeId = ""
+        liveReconnects = 0
+        _playbackError.value = null
+        scheduleLiveReconnect(ep, "user tap")
+    }
+
+    /**
+     * 重连本体:回到直播边缘即可;若播放器把这一项误判成非直播(`seekToDefaultPosition` 会落回 0),
+     * 就重建同一个直播 item 再 prepare —— mediaId 不变,不写历史、不续播。
+     */
+    private val liveReconnectRunnable = Runnable {
+        liveReconnectPending = false
+        val c = controller ?: return@Runnable
+        val ep = _current.value
+        if (ep == null || !ep.isLive || ep.id != liveReconnectEpisodeId) return@Runnable
+        runCatching {
+            if (c.isCurrentMediaItemLive) {
+                c.seekToDefaultPosition()
+            } else {
+                c.setMediaItem(buildMediaItem(ep, Uri.parse(ep.audioUrl)))
+                c.prepare()
+            }
+            c.setPlaybackSpeed(1.0f)
+            c.play()
+        }.onFailure { log.e(TAG, "live reconnect failed id=${ep.id}", it) }
+        log.w(TAG, "live reconnect #$liveReconnects 已执行 id=${ep.id} state=${c.playbackState} live=${c.isCurrentMediaItemLive}")
     }
 
     val speedSteps = listOf(0.8f, 1.0f, 1.25f, 1.5f, 1.75f, 2.0f)
@@ -658,13 +776,21 @@ object PlayerController {
                     // 不在这里清的话,自动重投成功后界面那份错误仍挂着,读起来像"还在失败",
                     // 而这一份状态将来是要点亮界面提示的 —— 见 REVIEW-2026-10-25 中-1。
                     _playbackError.value = null
+                    // 直播重连成功后清计数:下一次断流应当从 1s 那一档重新开始,而不是接着上次的 4s。
+                    if (_current.value?.isLive == true && liveReconnects > 0) {
+                        log.i(TAG, "live resumed after $liveReconnects reconnect(s) id=${_current.value?.id}")
+                        handler.removeCallbacks(liveReconnectRunnable)
+                        liveReconnectPending = false
+                        liveReconnects = 0
+                        liveReconnectEpisodeId = ""
+                    }
                     log.d(TAG, "state READY dur=${c?.duration} id=${_current.value?.id}")
                 }
                 Player.STATE_ENDED -> log.i(TAG, "state ENDED id=${_current.value?.id}")
                 Player.STATE_IDLE -> log.d(TAG, "state IDLE")
             }
             if (c != null && c.duration > 0) _duration.value = c.duration
-            _liveStream.value = c?.isCurrentMediaItemLive == true
+            updateLiveFlag(c)   // 播放器晚判直播时,在这里把误设的倍速纠正回 1×
 
             if (playbackState == Player.STATE_READY && pendingSeekMs > 0 && c != null) {
                 val dur = c.duration
@@ -691,11 +817,11 @@ object PlayerController {
                 pendingSeekMs = 0
             }
             if (playbackState == Player.STATE_ENDED) {
-                // 直播流的"结束"只意味着这一路断了或停播了:**不记已播、不接下一集**。
-                // 否则用户本来在听电台,流一断就被换成队列里另一集,听感上像被偷换了台。
+                // 直播的 ENDED 只意味着这一路断了:**不记已播、不接下一集、不进结束态**。
+                // 旧代码在这里记一句就 return,用户挂在无声页面上无从自救。现在走退避重连,
+                // 耗尽后把「直播中断,点击重连」摆到界面上(见 onLiveEnded)。
                 if (_current.value?.isLive == true) {
-                    log.i(TAG, "live ended, 不续播 id=${_current.value?.id}")
-                    listenStats?.flush()
+                    onLiveEnded("STATE_ENDED")
                     return
                 }
                 val stopAfterThis = _sleepEndOfEpisode.value // 睡眠「本集结束」优先于电台/队列续播
@@ -738,6 +864,12 @@ object PlayerController {
             //    那正是 [retryNow] / [togglePlayPause] 那条路;
             //  - PARSING_* / DECODER_* 是这一份流本身解不出来,重投也是白投。
             val ep = _current.value
+            // 直播的 IO 错误走断流重连,不走下面那套「seek 回历史位置再 prepare」的重投:
+            // 直播没有历史位置,那个 seek 会把流拉回 0,与"回到直播边缘"正好相反。
+            if (ep?.isLive == true) {
+                onLiveEnded("onPlayerError:${error.errorCodeName}")
+                return
+            }
             val transient = when (error.errorCode) {
                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED,
                 PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT,
@@ -1031,6 +1163,11 @@ object PlayerController {
             errorRetryEpisodeId = episode.id
             _playbackError.value = null
             handler.removeCallbacks(errorRetryRunnable)   // 上一集排着的自动重投作废
+            // 直播重连计数同样按"换集"清零:同一集的重投/重连不能借换集把自己清掉。
+            liveReconnectEpisodeId = ""
+            liveReconnects = 0
+            liveReconnectPending = false
+            handler.removeCallbacks(liveReconnectRunnable)
         }
         playbackStarted = false   // 换集即重新计数:见 saveProgress 那道地闸
         persistState()
@@ -1142,6 +1279,23 @@ object PlayerController {
         }
     }
 
+    /** 构造媒体项。抽出来给直播重连复用:重建时 mediaId 必须是同一集,否则界面按 id 判失败会错位。 */
+    private fun buildMediaItem(episode: Episode, uri: Uri): MediaItem = MediaItem.Builder()
+        .setUri(uri)
+        .setMediaId(episode.id)
+        .setMediaMetadata(
+            MediaMetadata.Builder()
+                .setTitle(episode.title)
+                .setArtist(episode.podcastTitle)
+                .apply {
+                    if (settings?.thirdPartyContentEnabled?.value == true && episode.artworkUrl.isNotBlank()) {
+                        setArtworkUri(Uri.parse(episode.artworkUrl))
+                    }
+                }
+                .build()
+        )
+        .build()
+
     /**
      * 装载并起播。抽出来是因为视频源的直链要**异步**现取([playEpisode] 那条分支),
      * 取回来之后剩下的步骤与普通单集一模一样 —— 复制一份就意味着以后改起播逻辑要改两处。
@@ -1157,23 +1311,7 @@ object PlayerController {
         localPath: String? = null
     ) {
         val uri = if (localPath != null) Uri.fromFile(File(localPath)) else Uri.parse(streamUrl)
-
-        val item = MediaItem.Builder()
-            .setUri(uri)
-            .setMediaId(episode.id)
-            .setMediaMetadata(
-                MediaMetadata.Builder()
-                    .setTitle(episode.title)
-                    .setArtist(episode.podcastTitle)
-                    .apply {
-                        if (settings?.thirdPartyContentEnabled?.value == true && episode.artworkUrl.isNotBlank()) {
-                            setArtworkUri(Uri.parse(episode.artworkUrl))
-                        }
-                    }
-                    .build()
-            )
-            .build()
-        c.setMediaItem(item)
+        c.setMediaItem(buildMediaItem(episode, uri))
         if (!autoplay) {
             // 恢复路径:装载到「就绪但没播」。**playWhenReady 必须在 prepare 之前按下去** ——
             // MediaController 的 playWhenReady 会保留上一次的值(默认 true),
@@ -1181,7 +1319,8 @@ object PlayerController {
             c.volume = 1f
             c.playWhenReady = false
             c.prepare()
-            c.setPlaybackSpeed(_speed.value)
+            // 直播强制 1×:用户默认倍速只留在 [speed] 偏好里,不写进播放器。
+            c.setPlaybackSpeed(effectiveSpeed(episode.isLive || c.isCurrentMediaItemLive))
             // 卡片上的图标要立刻翻回 ▶:这一条路径可能不触发 onIsPlayingChanged
             // (播放器此前就停在暂停态时没有"变化"可言)。
             appContext?.let { WidgetRuntime.writePlaying(it, false) }
@@ -1192,7 +1331,7 @@ object PlayerController {
             return
         }
         c.prepare()
-        c.setPlaybackSpeed(_speed.value)
+        c.setPlaybackSpeed(effectiveSpeed(episode.isLive || c.isCurrentMediaItemLive))
         c.volume = 0f
         c.play()
         fadeVolume(from = 0f, to = 1f, durationMs = fadeInMs)
@@ -1280,6 +1419,11 @@ object PlayerController {
             c.pause()
             c.stop()
         }
+        // 关掉播放条后,上一集排着的直播重连不该把声音重新拉起来。
+        handler.removeCallbacks(liveReconnectRunnable)
+        liveReconnectPending = false
+        liveReconnectEpisodeId = ""
+        liveReconnects = 0
         _playbackError.value = null
         _current.value = null
         _isPlaying.value = false
@@ -1362,6 +1506,12 @@ object PlayerController {
         handler.removeCallbacks(errorRetryRunnable)
         errorRetries = 0
         _playbackError.value = null
+        // 收起态按播放键(IDLE 分支)也会走到这里。直播不能按续播口径整集重投,
+        // 那会去读一个并不存在的历史进度;交给断流重连的同一条路。
+        if (ep.isLive) {
+            reconnectLive()
+            return true
+        }
         playEpisode(ep)
         return true
     }
@@ -1417,9 +1567,11 @@ object PlayerController {
     }
 
     fun setSpeed(s: Float) {
-        log.i(TAG, "setSpeed $s")
+        log.i(TAG, "setSpeed $s live=${isLiveNow()}")
+        // 偏好原样存:直播结束/切回点播之后,用户之前选的倍速应当还在。
+        // 播放器这一刻只吃 effectiveSpeed —— 直播即使点了倍速也仍是 1×。
         _speed.value = s
-        controller?.setPlaybackSpeed(s)
+        controller?.setPlaybackSpeed(effectiveSpeed())
     }
 
     // ---- 睡眠定时 ----
@@ -1506,7 +1658,7 @@ object PlayerController {
         _isPlaying.value = c.isPlaying
         _position.value = c.currentPosition.coerceAtLeast(0)
         if (c.duration > 0) _duration.value = c.duration
-        _liveStream.value = c.isCurrentMediaItemLive
+        updateLiveFlag(c)
         // 启动后第一次拿到真值:**用它覆盖盘上可能过期的 `playing`**
         // (上次进程被杀时停在播放中,卡片会一直画 ❚❚ 直到这里)。见 WidgetRuntime 的边界说明。
         appContext?.let { WidgetRuntime.writePlaying(it, c.isPlaying) }
@@ -1527,7 +1679,7 @@ object PlayerController {
             val c = controller ?: return
             _position.value = c.currentPosition.coerceAtLeast(0)
             if (c.duration > 0) _duration.value = c.duration
-            _liveStream.value = c.isCurrentMediaItemLive
+            updateLiveFlag(c)
             countListening()
             tickCount++
             if (tickCount % 10 == 0) saveProgress() // 每约 5 秒落一次进度

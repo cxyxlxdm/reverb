@@ -374,6 +374,12 @@ struct PlayerView: View {
 
     private func controls(_ ep: Episode) -> some View {
         VStack(spacing: 12) {
+            if player.liveReconnecting {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("直播重连中…").font(.callout).foregroundStyle(.secondary)
+                }
+            }
             if let err = player.playbackError {
                 HStack(spacing: 10) {
                     Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)

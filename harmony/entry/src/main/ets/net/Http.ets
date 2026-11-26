@@ -1,6 +1,7 @@
 import http from '@ohos.net.http';
 import { BusinessError } from '@ohos.base';
 import { Log } from '../util/Logger';
+import { looksLikeHtmlIntercept } from './FeedGuard';
 
 /// 统一 HTTP 封装(仿 macOS `HTTPClient.swift`,替代 Android 侧 5 处重复的 get())。
 /// 全链路零鉴权:所有接口都是公开免费的。
@@ -28,14 +29,25 @@ export class RedirectProbe {
 export class HttpResult {
   readonly code: number;
   readonly body: string;
+  /// 响应头里的 Content-Type 与最终地址。SDK 的 HttpResponse 不直接给 finalUrl:
+  /// 有 Location 就记跳转目标,没有就记请求地址(系统已自动跟随 3xx)。
+  readonly contentType: string;
+  readonly finalUrl: string;
 
-  constructor(code: number, body: string) {
+  constructor(code: number, body: string, contentType: string = '', finalUrl: string = '') {
     this.code = code;
     this.body = body;
+    this.contentType = contentType;
+    this.finalUrl = finalUrl;
   }
 
   get ok(): boolean {
     return this.code >= 200 && this.code <= 299;
+  }
+
+  /// 平台限制拦截页:200 也可能是 HTML(系统跟随了 302),必须先看这个再看 ok。
+  get platformBlocked(): boolean {
+    return looksLikeHtmlIntercept(this.code, this.contentType, this.body);
   }
 }
 
@@ -133,6 +145,12 @@ export class Http {
         if (!value.ok) {
           Log.w('Http', `host=${host} http=${value.code} 阶段=${stage} 耗时=${Date.now() - startedAt}ms`);
         }
+        // 平台拦截页通常是 200(系统已跟随 302),光靠 `!ok` 的日志看不见根因。
+        // 这里把 host / 状态码 / Content-Type / 最终 URL 一次打全,不进 XML 解析。
+        if (value.platformBlocked) {
+          Log.w('Http', `平台限制拦截 host=${host} http=${value.code} `
+            + `type=${value.contentType.length > 0 ? value.contentType : '?'} final=${value.finalUrl}`);
+        }
         resolve(value);
       };
 
@@ -146,7 +164,12 @@ export class Http {
           expectDataType: http.HttpDataType.STRING
         }).then((resp: http.HttpResponse) => {
           const body = typeof resp.result === 'string' ? resp.result as string : '';
-          finish(new HttpResult(resp.responseCode, body), '完成');
+          const hdr = J.asObj(resp.header);
+          const contentType = Http.header(hdr, 'content-type');
+          // 未跟随跳转时 Location 就是下一跳;已跟随时 header 没有 Location,退回请求 URL。
+          const location = Http.header(hdr, 'location');
+          finish(new HttpResult(resp.responseCode, body, contentType,
+            location.length > 0 ? location : url), '完成');
         }).catch((e: BusinessError) => {
           Log.w('Http', `host=${host} 请求异常 code=${e.code} msg=${e.message}`);
           finish(new HttpResult(0, ''), '请求异常');
@@ -171,6 +194,12 @@ export class Http {
     const keys = Object.keys(headers);
     for (let i = 0; i < keys.length; i++) h[keys[i]] = headers[keys[i]];
     return h;
+  }
+
+  /// 从响应头里取一个字符串字段。ARK 的 header 键大小写不统一,两种都试一次。
+  private static header(hdr: Record<string, Object> | null, key: string): string {
+    const lower = J.str(hdr, key.toLowerCase());
+    return lower.length > 0 ? lower : J.str(hdr, key);
   }
 
   /**

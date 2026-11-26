@@ -18,6 +18,9 @@ import { FeedCredential } from '../model/FeedCredential';
 export interface FeedOutcome {
   result: FeedResult | null;
   unauthorized: boolean;
+  /// 平台限制拦截页(302 → HTML)。与 unauthorized 一样是"别再重试"的终态,
+  /// 纯字段,可跨 taskpool 边界。
+  platformBlocked: boolean;
 }
 
 /**
@@ -46,14 +49,34 @@ export class RssParser {
     user: string, pass: string): Promise<FeedOutcome> {
     const auth = user.length > 0 ? new FeedCredential(user, pass) : null;
     const first = await Http.fetchText(feedUrl, RssParser.authHeaders(auth, false), timeoutMs);
-    if (first.ok) return { result: RssParser.parse(first.body, feedUrl), unauthorized: false };
-    if (first.code !== 401 || auth === null) {
-      return { result: null, unauthorized: first.code === 401 };
+    // 拦截页可能以 200 返回(系统自动跟随了 302),必须在 ok/parse 之前判掉 ——
+    // 一旦进 XML 解析就只剩一句「解析失败」,真因被埋掉(见 FeedGuard 注释)。
+    if (first.platformBlocked) {
+      RssParser.logBlocked(feedUrl, first.code, first.contentType, first.finalUrl);
+      return { result: null, unauthorized: false, platformBlocked: true };
     }
-    if (!auth.encodingDiffers) return { result: null, unauthorized: true };
+    if (first.ok) {
+      return { result: RssParser.parse(first.body, feedUrl), unauthorized: false, platformBlocked: false };
+    }
+    if (first.code !== 401 || auth === null) {
+      return { result: null, unauthorized: first.code === 401, platformBlocked: false };
+    }
+    if (!auth.encodingDiffers) return { result: null, unauthorized: true, platformBlocked: false };
     const second = await Http.fetchText(feedUrl, RssParser.authHeaders(auth, true), timeoutMs);
-    if (second.ok) return { result: RssParser.parse(second.body, feedUrl), unauthorized: false };
-    return { result: null, unauthorized: second.code === 401 };
+    if (second.platformBlocked) {
+      RssParser.logBlocked(feedUrl, second.code, second.contentType, second.finalUrl);
+      return { result: null, unauthorized: false, platformBlocked: true };
+    }
+    if (second.ok) {
+      return { result: RssParser.parse(second.body, feedUrl), unauthorized: false, platformBlocked: false };
+    }
+    return { result: null, unauthorized: second.code === 401, platformBlocked: false };
+  }
+
+  /// host / 状态码 / Content-Type / 最终 URL 一次打全,否则日志里只剩一句"解析失败"。
+  private static logBlocked(feedUrl: string, code: number, contentType: string, finalUrl: string): void {
+    Log.w('Rss', `平台限制拦截 host=${Http.host(feedUrl)} http=${code} `
+      + `type=${contentType.length > 0 ? contentType : '?'} final=${finalUrl}`);
   }
 
   private static authHeaders(auth: FeedCredential | null, utf8: boolean): Record<string, string> | undefined {

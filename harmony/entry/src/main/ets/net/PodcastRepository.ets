@@ -41,6 +41,10 @@ export class PodcastRepository {
   private static PROBE_TIMEOUT_MS = 8000;
   private static PROBE_FAILURE_TTL_MS = 2 * 60 * 1000;
   private static PROBE_CACHE_MAX = 64;
+  /// 抓 feed 的退避:1/2/4 秒。平台拦截是终态,不入这套重试。
+  private static FEED_RETRY_DELAYS_MS: number[] = [1000, 2000, 4000];
+  /// 平台级拦截(302 → HTML)的短期熔断时长。同域内不再连续立即重试。
+  private static PLATFORM_BLOCK_TTL_MS = 5 * 60 * 1000;
 
   private cache: PopularCacheStore;
   /// 随包内置的精选清单:缓存为空(首装/清缓存/无网)时给发现页兜底,避免首屏空白
@@ -67,6 +71,12 @@ export class PodcastRepository {
   private feedRequestGeneration: Map<string, number> = new Map();
   private feedCommittedGeneration: Map<string, number> = new Map();
   private feedActiveRequests: Map<string, number> = new Map();
+  /**
+   * 平台限制拦截的短期熔断,**按 host 而不是完整 URL** —— 同一个站的多个频道
+   * 被同一道墙拦住时,换一个 URL 重试只是再撞一次。值为拦截时刻(毫秒)。
+   * 用户手动重试(下拉刷新 / 错误页重试)传 force=true 可以绕过,否则熔断期内直接返回。
+   */
+  private platformBlocks: Map<string, number> = new Map();
   /**
    * 视频当播客听。播放前解析也走它(见 `PlayerController.resolvePseudoUrl`)——
    * 播放层与检索**共用这一个实例**,候选流缓存与探活游标才有意义。
@@ -226,7 +236,8 @@ export class PodcastRepository {
    * worker 返回 null 已经是一次完整网络尝试的正常失败终态,绝不能再在 UI 线程请求第二遍。
    * 只有 taskpool.execute 本身抛出调度/序列化/worker 初始化异常时才回落本线程一次。
    */
-  async feed(feedUrl: string, directoryToken: number | null = null): Promise<FeedResult | null> {
+  async feed(feedUrl: string, directoryToken: number | null = null,
+    force: boolean = false): Promise<FeedResult | null> {
     // 凭据/网址从同一处拆分:搜索页粘进来的带 userinfo 的地址,与订阅里存的那份
     // 必须收敛到同一个键 —— 否则缓存、凭据、备份会各认一个。(ArkTS 不支持解构声明)
     const split = FeedCredential.splitUrl(feedUrl);
@@ -243,8 +254,8 @@ export class PodcastRepository {
       return result;
     }
     const credential = inline !== null ? inline : this.authStore.get(url);
-    const outcome = await this.feedWithTimeout(url, PodcastRepository.RSS_TIMEOUT_MS, credential,
-      directoryToken);
+    const outcome = await this.feedWithRetry(url, PodcastRepository.RSS_TIMEOUT_MS, credential,
+      directoryToken, force);
     if (directoryToken !== null && !this.directoryCurrent(directoryToken)) return null;
     if (outcome.result !== null && inline !== null) this.authStore.save(url, inline);
     if (outcome.result === null && outcome.unauthorized) this.challenge(url);
@@ -360,16 +371,40 @@ export class PodcastRepository {
     return state === undefined ? FeedProbeState.UNCHECKED : state;
   }
 
+  /**
+   * 抓 feed 的退避重试。最多 4 次尝试(首发 + 1/2/4 秒三次重试),
+   * 平台拦截与 401 是终态,立刻停 —— 对同域连续立即重试只会再撞一次墙。
+   */
+  private async feedWithRetry(feedUrl: string, timeoutMs: number,
+    credential: FeedCredential | null, directoryToken: number | null,
+    force: boolean): Promise<FeedOutcome> {
+    let last: FeedOutcome = { result: null, unauthorized: false, platformBlocked: false };
+    const delays = PodcastRepository.FEED_RETRY_DELAYS_MS;
+    for (let attempt = 0; attempt <= delays.length; attempt++) {
+      // 非首轮按 force 走:用户手动重试必须能绕过熔断,后台自动重试不能。
+      const useForce = force || attempt > 0;
+      last = await this.feedWithTimeout(feedUrl, timeoutMs, credential, directoryToken, useForce);
+      if (last.result !== null || last.unauthorized || last.platformBlocked) return last;
+      if (directoryToken !== null && !this.directoryCurrent(directoryToken)) return last;
+      if (attempt === delays.length) break;
+      Log.w('Repo', `host=${Http.host(feedUrl)} 抓取失败,${delays[attempt]}ms 后重试 ${attempt + 1}/3`);
+      await new Promise<void>((resolve: () => void) => setTimeout(resolve, delays[attempt]));
+    }
+    return last;
+  }
+
   private async feedWithTimeout(feedUrl: string, timeoutMs: number,
-    credential: FeedCredential | null, directoryToken: number | null = null): Promise<FeedOutcome> {
+    credential: FeedCredential | null, directoryToken: number | null = null,
+    force: boolean = false): Promise<FeedOutcome> {
     // 目录代次也进单飞键:快速关/开不能复用关闭前那条 Promise 与它的缓存写入。
     const authKey = credential === null ? '' : credential.defaultHeader;
     const directoryKey = directoryToken === null ? 'feed' : `directory:${directoryToken}`;
-    const flightKey = `${timeoutMs}:${feedUrl}:${authKey}:${directoryKey}`;
+    const forceKey = force ? 'force' : 'normal';
+    const flightKey = `${timeoutMs}:${feedUrl}:${authKey}:${directoryKey}:${forceKey}`;
     const existing = this.feedInFlight.get(flightKey);
     if (existing !== undefined) return await existing;
 
-    const work = this.fetchFeedOnce(feedUrl, timeoutMs, credential, directoryToken);
+    const work = this.fetchFeedOnce(feedUrl, timeoutMs, credential, directoryToken, force);
     this.feedInFlight.set(flightKey, work);
     try {
       return await work;
@@ -379,14 +414,21 @@ export class PodcastRepository {
   }
 
   private async fetchFeedOnce(feedUrl: string, timeoutMs: number,
-    credential: FeedCredential | null, directoryToken: number | null): Promise<FeedOutcome> {
+    credential: FeedCredential | null, directoryToken: number | null,
+    force: boolean): Promise<FeedOutcome> {
+    const host = Http.host(feedUrl);
+    // 熔断期内直接返回终态,不再发请求;用户手动重试(force)才放行。
+    if (!force && this.platformBlocked(host)) {
+      Log.w('Repo', `host=${host} 平台拦截熔断中,跳过请求`);
+      return { result: null, unauthorized: false, platformBlocked: true };
+    }
     const requestGeneration = (this.feedRequestGeneration.get(feedUrl) ?? 0) + 1;
     this.feedRequestGeneration.set(feedUrl, requestGeneration);
     this.feedActiveRequests.set(feedUrl, (this.feedActiveRequests.get(feedUrl) ?? 0) + 1);
     const startedAt = Date.now();
     const user = credential === null ? '' : credential.username;
     const pass = credential === null ? '' : credential.password;
-    let outcome: FeedOutcome = { result: null, unauthorized: false };
+    let outcome: FeedOutcome = { result: null, unauthorized: false, platformBlocked: false };
     try {
       try {
         const out: Object = await taskpool.execute(fetchFeedConcurrent, feedUrl, timeoutMs, user, pass);
@@ -400,6 +442,8 @@ export class PodcastRepository {
         Log.w('Repo', `host=${Http.host(feedUrl)} 阶段=worker异常回落 耗时=${Date.now() - startedAt}ms`);
         outcome = await RssParser.fetchOutcome(feedUrl, timeoutMs, user, pass);
       }
+      // 平台拦截是终态:按 host 熔断一段时间,同域的其它频道也不会被连续重试。
+      if (outcome.platformBlocked) this.rememberPlatformBlock(host);
       const committed = this.feedCommittedGeneration.get(feedUrl) ?? 0;
       if (outcome.result !== null && requestGeneration > committed &&
           (directoryToken === null || this.directoryCurrent(directoryToken))) {
@@ -420,6 +464,24 @@ export class PodcastRepository {
         this.feedActiveRequests.set(feedUrl, active);
       }
     }
+  }
+
+  /// 该 feed 最近是否被判为平台拦截(UI 据此选「数据源暂不可用」文案)。
+  feedLastBlocked(feedUrl: string): boolean {
+    return this.platformBlocked(Http.host(feedUrl.trim()));
+  }
+
+  private platformBlocked(host: string): boolean {
+    const at = this.platformBlocks.get(host);
+    if (at === undefined) return false;
+    if (Date.now() - at < PodcastRepository.PLATFORM_BLOCK_TTL_MS) return true;
+    this.platformBlocks.delete(host);
+    return false;
+  }
+
+  private rememberPlatformBlock(host: string): void {
+    this.platformBlocks.set(host, Date.now());
+    Log.w('Repo', `host=${host} 记入平台拦截熔断 ${PodcastRepository.PLATFORM_BLOCK_TTL_MS / 1000}s`);
   }
 
   private validProbeFailure(feedUrl: string): ProbeFailure | null {

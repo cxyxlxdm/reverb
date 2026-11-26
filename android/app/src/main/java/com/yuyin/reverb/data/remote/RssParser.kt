@@ -22,11 +22,73 @@ class RssParser(private val client: OkHttpClient) {
 
     private val TAG = "Rss"
 
+    /**
+     * 抓取失败的分类。**只给上层区分「源暂时不可用」与「这一档确实没内容」用**,不进 UI 文案:
+     * 用户看到的是统一的"数据源暂不可用",细分留给日志定位(平台拦截 / 网络 / HTTP / 解析)。
+     *
+     * 为什么按 url 记账而不是让 `fetch` 返回 sealed:调用方有详情页、粘贴链接检索、后台巡检
+     * 好几路,改返回类型会把这条只在界面上需要的信号扩散到所有层。沿用 401 那一路的口径
+     * —— 用一次性事件旁路传递,调用方在 `fetch` 回 null 之后取走(见 PodcastRepository)。
+     */
+    sealed interface Failure {
+        /** 平台限制页:跳转后仍是 3xx、Content-Type 是 html、或正文开头是 HTML 标记。 */
+        data class Blocked(val host: String, val code: Int, val contentType: String) : Failure
+        data class HttpError(val code: Int) : Failure
+        data object NetworkError : Failure
+        data object ParseError : Failure
+        data object Unauthorized : Failure
+    }
+
+    private val failures = java.util.concurrent.ConcurrentHashMap<String, Failure>()
+
+    /** 一次性取走这个 url 最近一次失败分类,取走即清。 */
+    fun consumeFailure(feedUrl: String): Failure? = failures.remove(feedUrl)
+
+    /** 上层熔断期内直接跳过请求时,也要记一笔同样的分类,否则界面读不到"为什么没内容"。 */
+    fun recordBlocked(feedUrl: String, host: String, code: Int, contentType: String) {
+        failures[feedUrl] = Failure.Blocked(host, code, contentType)
+    }
+
     suspend fun fetch(feedUrl: String, auth: FeedCredential? = null,
                       onUnauthorized: (() -> Unit)? = null): FeedResult? = withContext(Dispatchers.IO) {
-        com.yuyin.reverb.util.Logger.d(TAG, "fetch endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}")
-        val xml = download(feedUrl, auth, onUnauthorized) ?: return@withContext null
-        parse(xml, feedUrl)
+        val endpoint = com.yuyin.reverb.util.Logger.endpoint(feedUrl)
+        com.yuyin.reverb.util.Logger.d(TAG, "fetch endpoint=$endpoint")
+        // 每次重新抓之前先清掉上一次的失败,免得这次成功之后上层还读到旧分类。
+        failures.remove(feedUrl)
+        val resp = download(feedUrl, auth, onUnauthorized)
+        if (resp == null) {
+            // 401 已经通过回调问过用户了;这里只记分类,让上层别把它当成普通失败去重试。
+            failures[feedUrl] = Failure.Unauthorized
+            return@withContext null
+        }
+        when {
+            resp.blocked -> {
+                val host = hostOf(feedUrl)
+                failures[feedUrl] = Failure.Blocked(host, resp.code, resp.contentType)
+                // 拦截页最容易被误读成"源里没有单集",日志必须带齐 host / 最终状态码 / Content-Type,
+                // 否则用户换网络再试仍然空列表,而排障时没有任何线索。
+                com.yuyin.reverb.util.Logger.e(
+                    TAG,
+                    "平台拦截/非 XML 响应 host=$host status=${resp.code} contentType='${resp.contentType}' endpoint=$endpoint"
+                )
+                return@withContext null
+            }
+            resp.code == 0 -> {
+                failures[feedUrl] = Failure.NetworkError
+                return@withContext null
+            }
+            resp.code !in 200..299 -> {
+                failures[feedUrl] = Failure.HttpError(resp.code)
+                return@withContext null
+            }
+            resp.body == null -> {
+                failures[feedUrl] = Failure.NetworkError
+                return@withContext null
+            }
+        }
+        val result = parse(resp.body!!, feedUrl)
+        if (result == null) failures[feedUrl] = Failure.ParseError
+        result
     }
 
     /**
@@ -41,9 +103,9 @@ class RssParser(private val client: OkHttpClient) {
      * 纯 ASCII 凭据不会多打一枪(见 H253)。
      */
     private fun download(feedUrl: String, auth: FeedCredential?,
-                         onUnauthorized: (() -> Unit)?): String? {
+                         onUnauthorized: (() -> Unit)?): Attempt? {
         val first = attempt(feedUrl, auth?.header(utf8 = false))
-        if (first.first != 401) return first.second
+        if (first.code != 401) return first
         // 401 只有两种可能:没带凭据,或凭据不对。两种都要交给界面问一次 ——
         // 静默失败在这里是最坏的结果,用户只会看到「加载失败」,然后以为链接坏了。
         if (auth == null) {
@@ -58,21 +120,38 @@ class RssParser(private val client: OkHttpClient) {
             return null
         }
         val second = attempt(feedUrl, auth.header(utf8 = true))
-        if (second.first == 401) onUnauthorized?.invoke()
-        return second.second
+        if (second.code == 401) {
+            onUnauthorized?.invoke()
+            return null
+        }
+        return second
     }
 
-    private fun attempt(feedUrl: String, authorization: String?): Pair<Int, String?> = try {
+    /** 一次 HTTP 尝试的完整结果。body 在失败时也留着:拦截页就藏在 3xx/200 的 HTML 正文里。 */
+    private class Attempt(
+        val code: Int,
+        val body: String?,
+        val contentType: String,
+        val blocked: Boolean
+    )
+
+    private fun attempt(feedUrl: String, authorization: String?): Attempt = try {
         val builder = Request.Builder()
             .url(feedUrl)
             .header("User-Agent", "Reverb/1.0 (Android podcast client)")
         if (authorization != null) builder.header("Authorization", authorization)
         client.newCall(builder.build()).execute().use { resp ->
-            if (!resp.isSuccessful) com.yuyin.reverb.util.Logger.w(
+            val code = resp.code
+            val contentType = resp.header("Content-Type").orEmpty()
+            // 即使状态码非 2xx 也把正文读出来:平台拦截常见形态是 302 跟到 200 + text/html,
+            // 也有直接 403 + HTML 验证页。不读正文就分不清「源坏了」和「被拦了」。
+            val body = runCatching { resp.body?.string() }.getOrNull()
+            val blocked = isBlocked(code, contentType, body)
+            if (!resp.isSuccessful || blocked) com.yuyin.reverb.util.Logger.w(
                 TAG,
-                "http ${resp.code} endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}"
+                "http status=$code contentType='$contentType' blocked=$blocked endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}"
             )
-            resp.code to (if (resp.isSuccessful) resp.body?.string() else null)
+            Attempt(code, body, contentType, blocked)
         }
     } catch (e: Exception) {
         com.yuyin.reverb.util.Logger.e(
@@ -80,7 +159,15 @@ class RssParser(private val client: OkHttpClient) {
             "download error endpoint=${com.yuyin.reverb.util.Logger.endpoint(feedUrl)}",
             e
         )
-        0 to null
+        Attempt(0, null, "", false)
+    }
+
+    private fun isBlocked(code: Int, contentType: String, body: String?): Boolean {
+        // OkHttp 默认跟随跳转;跟完之后还是 3xx 多半是跳转环或限流,按平台限制处理,
+        // 而不是把 HTML 正文交给 XmlPullParser 再报一次无意义的 parse error。
+        if (code in 300..399) return true
+        if (isHtmlContentType(contentType) && !looksLikeXml(body)) return true
+        return isHtmlInterception(body)
     }
 
     private fun parse(xml: String, feedUrl: String): FeedResult? {
@@ -366,5 +453,38 @@ class RssParser(private val client: OkHttpClient) {
         t = t.replace(Regex(" *\\n *"), "\n")
         t = t.replace(Regex("\\n{3,}"), "\n\n")
         return t.trim()
+    }
+
+    companion object {
+        /** 去掉 BOM 与开头空白再判断:有些网关在 XML/HTML 前塞一个 UTF-8 BOM。 */
+        private fun head(body: String?): String =
+            body?.trimStart('\uFEFF', ' ', '\t', '\r', '\n')?.lowercase().orEmpty()
+
+        /** 开头像 RSS/Atom 就是真 feed。只看开头,不做整文解析(这函数在 IO 层调用)。 */
+        private fun looksLikeXml(body: String?): Boolean {
+            val s = head(body)
+            return s.startsWith("<?xml") || s.startsWith("<rss") || s.startsWith("<feed")
+        }
+
+        /**
+         * 正文是否是 HTML 拦截页而不是 RSS/Atom。纯函数、不碰网络与 android.util.Xml,
+         * JVM 单测直接验。判据只取正文开头:`<!doctype html` / `<html` / `<head`,
+         * 且明确排除 `<rss` / `<feed` / `<?xml` 开头 —— 这三句正好是平台拦页面给的形状。
+         */
+        fun isHtmlInterception(body: String?): Boolean {
+            val s = head(body)
+            if (looksLikeXml(s)) return false
+            return s.startsWith("<!doctype html") || s.startsWith("<html") || s.startsWith("<head")
+        }
+
+        /** Content-Type 里带 html 即视为非 XML 响应。`application/xhtml+xml` 也算。 */
+        fun isHtmlContentType(contentType: String?): Boolean =
+            contentType?.contains("html", ignoreCase = true) == true
+
+        /** 日志只需要主机名,不要把可能带凭据的完整 URL 写进去。 */
+        private fun hostOf(url: String): String = runCatching {
+            java.net.URI(url).host
+        }.getOrNull()?.ifBlank { null }
+            ?: url.substringAfter("://").substringBefore('/').ifBlank { url }
     }
 }

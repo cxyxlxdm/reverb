@@ -9,7 +9,53 @@ final class RssParser {
     enum Outcome {
         case success(FeedResult)
         case unauthorized
+        /// 源被平台限制(302 到 HTML 拦截页 / Content-Type 不是 XML)。与 `failed`
+        /// 分开:界面要显示「数据源暂不可用」而不是「该节目暂无内容」(见 H308)。
+        case unavailable
         case failed
+    }
+
+    /// 平台级拦截的短期熔断表:host → 判定时刻。命中后 TTL 内不再发请求 ——
+    /// 频道页一次点击原本会连打 3 次,熔断后只打一次,也给上游留点余地。
+    private static let blockedLock = NSLock()
+    private static var blockedHosts: [String: Date] = [:]
+    private static let blockTtl: TimeInterval = 5 * 60
+
+    /// 供单测直接判定的纯函数:HTTP 响应是否像「平台拦截页」而不是 RSS/Atom。
+    /// 只把**明确**是 HTML 的响应判死:`application/octet-stream`、空 Content-Type
+    /// 一律放行,避免误伤用非常规 MIME 发 feed 的源。
+    static func looksBlocked(code: Int, mime: String, body: Data) -> Bool {
+        let lower = mime.lowercased()
+        let head = String(data: body.prefix(1024), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        let htmlByMime = lower.contains("text/html") || lower.contains("application/xhtml")
+        let htmlByBody = head.hasPrefix("<!doctype html") || head.hasPrefix("<html")
+            || head.hasPrefix("<head") || head.hasPrefix("<body")
+        let looksXml = head.hasPrefix("<?xml") || head.hasPrefix("<rss")
+            || head.hasPrefix("<feed") || head.hasPrefix("<rdf:")
+        return (htmlByMime || htmlByBody) && !looksXml
+    }
+
+    private static func hostOf(_ raw: String) -> String {
+        guard let u = URL(string: raw), let host = u.host else { return raw }
+        return host.lowercased()
+    }
+
+    private static func isBlocked(_ raw: String) -> Bool {
+        blockedLock.lock(); defer { blockedLock.unlock() }
+        let host = hostOf(raw)
+        guard let at = blockedHosts[host] else { return false }
+        if Date().timeIntervalSince(at) > blockTtl {
+            blockedHosts.removeValue(forKey: host)
+            return false
+        }
+        return true
+    }
+
+    private static func markBlocked(_ raw: String) {
+        blockedLock.lock()
+        blockedHosts[hostOf(raw)] = Date()
+        blockedLock.unlock()
     }
 
     /// 拉取并解析 feed。频道 id 与 feedUrl 均记为传入的 feedUrl。
@@ -17,8 +63,13 @@ final class RssParser {
     func fetch(_ feedUrl: String, auth: FeedCredential? = nil) async -> Outcome {
         let t0 = Date()
         Log.d("RSS", "fetch \(feedUrl)")
+        if Self.isBlocked(feedUrl) {
+            Log.w("RSS", "fetch 平台级拦截熔断中 \(Log.endpoint(feedUrl)) \(Log.ms(t0))")
+            return .unavailable
+        }
         let fetched = await download(feedUrl, auth: auth)
         if case .unauthorized = fetched { return .unauthorized }
+        if case .unavailable = fetched { return .unavailable }
         guard case .data(let data) = fetched, !data.isEmpty else {
             Log.w("RSS", "fetch 空数据 \(feedUrl) \(Log.ms(t0))")
             return .failed
@@ -93,6 +144,7 @@ final class RssParser {
     private enum Download {
         case data(Data)
         case unauthorized
+        case unavailable
         case failed
     }
 
@@ -102,11 +154,34 @@ final class RssParser {
     ///
     /// 401 只有两种可能:没带凭据,或凭据不对 —— 两种都要交给界面问一次。
     /// 静默失败在这里是最坏的结果,用户只会看到「加载失败」,然后以为链接坏了。
+    private struct Response {
+        let data: Data
+        let code: Int
+        let mime: String
+        let finalUrl: String
+    }
+
+    /// 把一次 HTTP 响应归类。拦截判定必须在 XMLParser 之前 ——
+    /// 一旦把 HTML 交给解析器,日志只剩 111 号错误,排查时看不出是平台限制。
+    private func classify(_ r: Response, feedUrl: String) -> Download {
+        if !(200...299).contains(r.code) {
+            Log.w("RSS", "http \(r.code) endpoint=\(Log.endpoint(feedUrl))")
+        }
+        guard Self.looksBlocked(code: r.code, mime: r.mime, body: r.data) else {
+            return (200...299).contains(r.code) ? .data(r.data) : .failed
+        }
+        Self.markBlocked(feedUrl)
+        Log.w("RSS", "源被平台限制 endpoint=\(Log.endpoint(feedUrl)) "
+            + "code=\(r.code) mime=\(r.mime) final=\(Log.endpoint(r.finalUrl))")
+        return .unavailable
+    }
+
     private func download(_ feedUrl: String, auth: FeedCredential?) async -> Download {
         let first = await attempt(feedUrl, authorization: auth?.header(utf8: false))
         guard let first else { return .failed }
-        if (200...299).contains(first.code) { return .data(first.data) }
-        guard first.code == 401 else { return .failed }
+        // 401 优先于拦截判定:私有源常回一张 HTML 登录页,但它仍是「要口令」,
+        // 不能被误判成平台限制 —— 用户会看到「数据源暂不可用」而没有输入框。
+        if first.code != 401 { return classify(first, feedUrl: feedUrl) }
         guard let auth, auth.encodingDiffers else { return .unauthorized }
         // 门槛是「两串字节真的不同」而不是「有非 Latin-1 字符」:`é` / `ß` 这类
         // Latin-1 表示得了的字符两串就不同,服务器按 UTF-8 解时只有第二发能过。
@@ -114,18 +189,15 @@ final class RssParser {
         // 不重复发同一个头。
         let second = await attempt(feedUrl, authorization: auth.header(utf8: true))
         guard let second else { return .failed }
-        if (200...299).contains(second.code) { return .data(second.data) }
-        return second.code == 401 ? .unauthorized : .failed
+        if second.code == 401 { return .unauthorized }
+        return classify(second, feedUrl: feedUrl)
     }
 
-    private func attempt(_ feedUrl: String, authorization: String?) async -> (data: Data, code: Int)? {
+    private func attempt(_ feedUrl: String, authorization: String?) async -> Response? {
         var headers: [String: String] = [:]
         if let authorization { headers["Authorization"] = authorization }
-        guard let r = await HTTP.fetch(feedUrl, headers: headers) else { return nil }
-        if !(200...299).contains(r.code) {
-            Log.w("RSS", "http \(r.code) endpoint=\(Log.endpoint(feedUrl))")
-        }
-        return r
+        guard let r = await HTTP.fetchMeta(feedUrl, headers: headers) else { return nil }
+        return Response(data: r.data, code: r.code, mime: r.mime, finalUrl: r.finalUrl)
     }
 
     // MARK: - 工具

@@ -43,6 +43,9 @@ export struct PodcastDetailPage {
   @State episodes: Episode[] = [];
   @State loading: boolean = false;
   @State failed: boolean = false;
+  /// 失败原因:是否为平台级拦截(302 → HTML)。无缓存时据此选「数据源暂不可用」文案,
+  /// 不能把被墙的源显示成「该节目暂无内容」——那会让用户以为源本身是空的。
+  @State blocked: boolean = false;
   /// 非 0 表示当前内容来自磁盘缓存、联网刷新还没成功(值为缓存落盘时刻),
   /// 据此显示「离线内容 · 上次更新 X」。刷新成功置 0。
   @State staleAt: number = 0;
@@ -125,7 +128,8 @@ export struct PodcastDetailPage {
     const generation = ++this.loadGeneration;
     let feed: FeedResult | null = null;
     try {
-      feed = await this.app.repository.feed(feedUrl);
+      // 下拉刷新是明确的用户动作:允许绕过平台拦截的短期熔断重试一次。
+      feed = await this.app.repository.feed(feedUrl, null, true);
     } catch (_e) {
       Log.w('Detail', `刷新异常 host=${Http.host(feedUrl)}`);
     } finally {
@@ -135,6 +139,7 @@ export struct PodcastDetailPage {
     if (feed === null) {
       this.staleAt = this.app.repository.feedCachedAt(feedUrl);
       this.failed = this.episodes.length === 0;
+      this.blocked = this.failed && this.app.repository.feedLastBlocked(feedUrl);
       // 失败必须有反馈,否则用户不知道这次下拉做成了没有;成功不加提示 ——
       // 列表内容更新本身可见(用户明确不要「已刷新」toast)
       this.showToast(L.s('refresh_failed'));
@@ -186,7 +191,7 @@ export struct PodcastDetailPage {
     return this.loaded === null ? this.seed : this.loaded;
   }
 
-  private async load(): Promise<void> {
+  private async load(force: boolean = false): Promise<void> {
     const seed = this.seed;
     const feedUrl = seed.feedUrl;
     const generation = ++this.loadGeneration;
@@ -194,6 +199,7 @@ export struct PodcastDetailPage {
     this.episodes = [];
     this.staleAt = 0;
     this.failed = false;
+    this.blocked = false;
     this.descExpanded = false;
     // 换频道(seed 切换 / 重新进入)时勾选集合一起清掉:留着会让「已选 N」指向上一档的单集
     this.picked = new Set<string>();
@@ -217,7 +223,7 @@ export struct PodcastDetailPage {
     this.loading = this.episodes.length === 0;
     let feed: FeedResult | null = null;
     try {
-      feed = await this.app.repository.feed(feedUrl);
+      feed = await this.app.repository.feed(feedUrl, null, force);
     } catch (_e) {
       Log.w('Detail', `加载异常 host=${Http.host(feedUrl)}`);
     } finally {
@@ -226,9 +232,12 @@ export struct PodcastDetailPage {
     }
     if (generation !== this.loadGeneration || feedUrl !== this.seed.feedUrl) return;
     if (feed === null) {
-      // 有缓存就继续展示缓存(仅标为陈旧),只有连缓存都没有才算失败
+      // 有缓存就继续展示缓存(仅标为陈旧),只有连缓存都没有才算失败。
+      // staleAt 在前面读缓存时已置好,离线提示行照常显示;这里只补失败原因。
       this.failed = this.episodes.length === 0;
-      Log.w('Detail', `解析失败 host=${Http.host(feedUrl)}${this.episodes.length > 0 ? ',沿用缓存' : ''}`);
+      this.blocked = this.failed && this.app.repository.feedLastBlocked(feedUrl);
+      Log.w('Detail', `抓取失败 host=${Http.host(feedUrl)} `
+        + `blocked=${this.blocked}${this.episodes.length > 0 ? ',沿用缓存' : ''}`);
       return;
     }
     this.staleAt = 0;
@@ -367,14 +376,15 @@ export struct PodcastDetailPage {
             if (this.failed && this.episodes.length === 0) {
               ListItem() {
                 Column({ space: 12 }) {
-                  Text(L.s('detail_network_unreachable'))
+                  Text(this.blocked ? L.s('feed_source_unavailable') : L.s('detail_network_unreachable'))
                     .fontSize(TypeScale.body * this.fontScale)
                     .fontColor(this.scheme.onSurfaceVariant)
                   Button(L.s('action_retry'))
                     .fontSize(TypeScale.label * this.fontScale)
                     .backgroundColor(this.scheme.primary)
                     .fontColor(this.scheme.onPrimary)
-                    .onClick(() => this.load())
+                    // 手动重试绕过熔断:熔断只挡自动/同域连续请求,不挡用户明确要求的那一次。
+                    .onClick(() => this.load(true))
                 }
                 .width('100%')
                 .padding(30)

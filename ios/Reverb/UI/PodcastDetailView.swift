@@ -14,6 +14,8 @@ struct PodcastDetailView: View {
     @State private var loading = false
     /// 非 nil = 当前内容来自磁盘缓存,联网刷新还没成功。
     @State private var staleAt: Date?
+    /// 源被平台限制时,空态写「数据源暂不可用」而不是「暂无单集」(见 H308)。
+    @State private var sourceUnavailable = false
     @State private var shareImage: UIImage?
     @State private var showShare = false
     @StateObject private var selection = EpisodeSelection()
@@ -35,7 +37,8 @@ struct PodcastDetailView: View {
                     StateView(loading: true, text: "").frame(minHeight: 240)
                 } else if episodes.isEmpty {
                     VStack(spacing: 14) {
-                        StateView(symbol: "waveform.slash", text: "暂无单集")
+                        StateView(symbol: sourceUnavailable ? "cloud.exclamation" : "waveform.slash",
+                                  text: sourceUnavailable ? "数据源暂不可用" : "该节目暂无内容")
                         Button("重试") { Task { await load(force: true) } }
                             .buttonStyle(.bordered)
                     }
@@ -234,13 +237,20 @@ struct PodcastDetailView: View {
             staleAt = env.repository.feedCachedAt(podcast.feedUrl)
         }
         loading = true
+        // 平台级拦截已被解析层短期熔断,这里不再连打;普通失败退避 1s / 2s / 4s。
         var result = await env.repository.feed(podcast.feedUrl)
+        var delayNs: UInt64 = 1_000_000_000
         var tries = 0
-        while (result == nil || result?.episodes.isEmpty == true) && tries < 2 {
-            try? await Task.sleep(nanoseconds: 500_000_000)
+        while (result == nil || result?.episodes.isEmpty == true),
+              env.repository.feedStatus(podcast.feedUrl) != .unavailable,
+              tries < 3 {
+            try? await Task.sleep(nanoseconds: delayNs)
             result = await env.repository.feed(podcast.feedUrl)
+            delayNs *= 2
             tries += 1
         }
+        sourceUnavailable = env.repository.feedStatus(podcast.feedUrl) == .unavailable
+                         && (result?.episodes.isEmpty ?? true)
         if let r = result {
             loaded = r.podcast
             if !r.episodes.isEmpty {

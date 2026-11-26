@@ -293,6 +293,10 @@
       "value": "直播中"
     },
     {
+      "name": "live_interrupted",
+      "value": "直播中斷，點擊重新連線"
+    },
+    {
       "name": "search_probe_checking",
       "value": "檢測中"
     },
@@ -375,6 +379,10 @@
     {
       "name": "detail_network_unreachable",
       "value": "目前網路無法存取此頻道"
+    },
+    {
+      "name": "feed_source_unavailable",
+      "value": "資料來源暫時不可用，可能受當前網路限制"
     },
     {
       "name": "refresh_failed",

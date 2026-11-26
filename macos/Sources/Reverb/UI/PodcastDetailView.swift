@@ -15,6 +15,9 @@ struct PodcastDetailView: View {
     @State private var shareCardURL: URL?
     /// 非 nil 表示当前内容来自磁盘缓存、联网刷新还没成功,据此显示「离线内容」提示
     @State private var staleAt: Date?
+    /// 源被平台限制(302→HTML / 非 XML)。空态要写「数据源暂不可用」,
+    /// 不能写成「暂无单集」—— 后者会让用户以为节目真的没有内容(见 H308)。
+    @State private var sourceUnavailable = false
     /// 多选批量加入待播(桌面形态:工具栏「选择」,与音阁 / 追更同一套,见 M5)。
     /// 状态放在 `EpisodeSelection` 里:推入下一个频道时本页重建,已选集合随之清空。
     @StateObject private var selection = EpisodeSelection()
@@ -38,7 +41,8 @@ struct PodcastDetailView: View {
                     StateView(loading: true, text: "").frame(minHeight: 280)
                 } else if episodes.isEmpty {
                     VStack(spacing: 14) {
-                        StateView(symbol: "waveform.slash", text: "暂无单集")
+                        StateView(symbol: sourceUnavailable ? "cloud.exclamation" : "waveform.slash",
+                                  text: sourceUnavailable ? "数据源暂不可用" : "该节目暂无内容")
                         Button("重试") { Task { await load(force: true) } }
                             .buttonStyle(.bordered)
                     }
@@ -234,14 +238,21 @@ struct PodcastDetailView: View {
             staleAt = env.repository.feedCachedAt(podcast.feedUrl)
         }
         loading = true
-        // 首次请求偶发失败(冷连接/重定向),重试至多 3 次再放弃
+        // 首次请求偶发失败(冷连接/重定向)才重试;平台级拦截解析层已短期熔断,
+        // 这里看到 unavailable 立即停手,不必连打 3 次。退避 1s / 2s / 4s。
         var result = await env.repository.feed(podcast.feedUrl)
+        var delayNs: UInt64 = 1_000_000_000
         var tries = 0
-        while (result == nil || result?.episodes.isEmpty == true) && tries < 2 {
-            try? await Task.sleep(nanoseconds: 500_000_000)
+        while (result == nil || result?.episodes.isEmpty == true),
+              env.repository.feedStatus(podcast.feedUrl) != .unavailable,
+              tries < 3 {
+            try? await Task.sleep(nanoseconds: delayNs)
             result = await env.repository.feed(podcast.feedUrl)
+            delayNs *= 2
             tries += 1
         }
+        sourceUnavailable = env.repository.feedStatus(podcast.feedUrl) == .unavailable
+                         && (result?.episodes.isEmpty ?? true)
         if let r = result {
             loaded = r.podcast
             if !r.episodes.isEmpty {

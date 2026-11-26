@@ -47,7 +47,12 @@ struct LibraryView: View {
     }
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
-    private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin, maximum: Metrics.cardMax),
+    /// 订阅网格列宽:adaptive 只给 minimum、**不给 maximum**。
+    /// 给了 maximum 后 SwiftUI 会按卡片内容的 intrinsic size 在 [min, max] 区间里挑列宽,
+    /// 首行那张 16:9 封面就把自己那一列顶宽约 36%,后面各行才等宽(见 H307)。
+    /// 去掉 maximum 后,列数由可用宽度与 minimum 决定,可用宽度再等分给各列:
+    /// 窗口缩放时列数可增减,但同一行的列宽始终相等,也不依赖封面像素尺寸。
+    private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin),
                                     spacing: Metrics.gridSpacing)]
 
     /// 收藏 / 下载两段的「列身份」。同一个串用在**两处**:分段行右端那颗模式按钮按它读写

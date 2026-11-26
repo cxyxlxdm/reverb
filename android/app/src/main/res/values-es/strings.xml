@@ -75,6 +75,8 @@
     <string name="discover_empty_category">Nada en «%s» — prueba otra categoría</string>
     <string name="empty_discover">Busca un pódcast y Reverb lo encontrará</string>
     <string name="load_failed">Sin resultados — prueba otra palabra o más tarde</string>
+    <string name="feed_unavailable">Fuente no disponible temporalmente, inténtalo de nuevo más tarde</string>
+    <string name="feed_empty">Este programa aún no tiene episodios</string>
     <string name="offline_cached_at">Copia sin conexión · actualizada %s</string>
     <string name="guide_title">Primeros pasos con Reverb</string>
     <string name="guide_desc">Introducción de 30 segundos incluida en la app. Se reproduce sin conexión.</string>
@@ -199,6 +201,8 @@
     <string name="player_not_playing">Nada en reproducción</string>
     <string name="player_err_retrying">Reproducción interrumpida. Reintento automático (intento %1$d)</string>
     <string name="player_err_failed">Reproducción fallida. Toca para reintentar</string>
+    <string name="player_err_live_reconnecting">Reconectando la transmisión en directo (intento %1$d)</string>
+    <string name="player_err_live_interrupted">Transmisión en directo interrumpida. Toca para reconectar</string>
     <string name="player_err_unplayable">Este episodio no se puede reproducir ahora</string>
     <string name="shownotes">Notas del episodio</string>
     <string name="shownotes_empty">Sin notas</string>

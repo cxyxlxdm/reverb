@@ -187,7 +187,8 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
         ) {
             when (val s = state) {
                 PodcastState.Loading -> LoadingBox()
-                PodcastState.Error -> EmptyHint(stringResource(R.string.load_failed))
+                // 没缓存又没拿到 = 源这一侧的问题；与下面"这一档没有单集"分开报。
+                PodcastState.Unavailable -> EmptyHint(stringResource(R.string.feed_unavailable))
                 is PodcastState.Loaded -> {
                     val subscribed = subs.any { it.feedUrl == s.podcast.feedUrl }
                     // 听歌时长存的是这个 key(既有口径,不能改)
@@ -213,6 +214,11 @@ fun PodcastDetailScreen(feedUrl: String, onBack: () -> Unit) {
                         // 展示的是缓存、刷新尚未成功 —— 明确告诉用户内容可能不是最新的
                         if (s.staleAt != 0L) {
                             item { OfflineNotice(s.staleAt) }
+                        }
+                        // 抓到了 feed 但里面确实一集都没有:说"暂无内容",不要说"加载失败"——
+                        // 这两种提示引导的下一步动作完全不同(等 vs 换行)。
+                        if (s.episodes.isEmpty()) {
+                            item { EmptyHint(stringResource(R.string.feed_empty)) }
                         }
                         item {
                             val listenedMs = listenStats.firstOrNull { it.key == channelKey }?.listenedMs ?: 0L

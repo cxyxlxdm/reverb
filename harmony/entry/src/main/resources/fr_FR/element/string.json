@@ -293,6 +293,10 @@
       "value": "EN DIRECT"
     },
     {
+      "name": "live_interrupted",
+      "value": "Flux interrompu, appuyez pour vous reconnecter"
+    },
+    {
       "name": "search_probe_checking",
       "value": "Vérification…"
     },
@@ -375,6 +379,10 @@
     {
       "name": "detail_network_unreachable",
       "value": "Cette chaîne est inaccessible sur le réseau actuel"
+    },
+    {
+      "name": "feed_source_unavailable",
+      "value": "Source temporairement indisponible, peut-être bloquée par le réseau actuel"
     },
     {
       "name": "refresh_failed",

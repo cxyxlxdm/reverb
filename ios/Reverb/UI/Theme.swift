@@ -115,9 +115,13 @@ struct RemoteImage<Placeholder: View>: View {
     var body: some View {
         Group {
             if let image {
+                // scaledToFill 按较短边铺满,非方形封面(16:9 / 4:3 / 竖图)必然溢出视图边界。
+                // 不 clipped 时溢出的像素会沿视图树把 intrinsic size 报给网格,
+                // 于是首行那张宽封面的列被顶宽,后面各行才等宽(见 H307)。
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
+                    .clipped()
             } else {
                 placeholder()
             }
@@ -159,6 +163,8 @@ struct Artwork: View {
 }
 
 /// 自适应方形封面:随容器宽度铺满,保持正方形。用于网格卡片。
+/// 所有网格(订阅 / 发现 / 频道)共用这一个组件 —— 修在这里就覆盖所有用到封面的页面,
+/// 不要去各页面里另加局部 clipped:漏一处就复发(见 H307)。
 struct SquareArtwork: View {
     let url: String
     var corner: CGFloat = 14
@@ -170,8 +176,13 @@ struct SquareArtwork: View {
                 Image(systemName: "waveform").font(.system(size: 26)).foregroundStyle(.tertiary)
             }
         }
-        .aspectRatio(1, contentMode: .fit)
+        // 原先是 .fit:方形边长由封面的 intrinsic size 决定,16:9 那张把首行列宽顶宽约 36%。
+        // 改 .fill 后由容器边决定取景,宽度交给 frame(maxWidth:.infinity) 铺满列,
+        // 高度由 1:1 推出 —— 16:9 / 4:3 / 竖图都不会改变列宽,也不会被拉伸。
+        .aspectRatio(1, contentMode: .fill)
         .frame(maxWidth: .infinity)
+        // fill 为铺满短边必然溢出,clipped 裁掉溢出并阻断 intrinsic size 回传布局。
+        .clipped()
         .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
     }
 }

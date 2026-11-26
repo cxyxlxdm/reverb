@@ -293,6 +293,10 @@
       "value": "LIVE"
     },
     {
+      "name": "live_interrupted",
+      "value": "Live stream interrupted, tap to reconnect"
+    },
+    {
       "name": "search_probe_checking",
       "value": "Checking"
     },
@@ -375,6 +379,10 @@
     {
       "name": "detail_network_unreachable",
       "value": "This feed is unavailable on the current network"
+    },
+    {
+      "name": "feed_source_unavailable",
+      "value": "Source temporarily unavailable, possibly restricted by the current network"
     },
     {
       "name": "refresh_failed",

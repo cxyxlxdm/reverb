@@ -17,6 +17,11 @@ import java.io.File
  *
  * 容量有意收紧（RSS 是这个 App 里最大的数据）：最多 [MAX_FEEDS] 个频道，每个频道最多
  * [MAX_EPISODES] 集，超出按最近访问时间淘汰。整体量级 ~1-2MB，计入设置页的缓存大小。
+ *
+ * [MAX_EPISODES] 从 60 放宽到 120：实测有档节目单频道就有 87 集，60 会把尾部 27 集直接
+ * 截掉 —— 用户看到的是「这一档只有 60 集」，而不是「缓存有限额」，而且眼前的缓存还没法
+ * 自救（详情页不提供清单频道缓存的入口）。120 留出余量；这只是放宽上限、不改 JSON 结构，
+ * 旧缓存照常读取，所以不动持久化版本号（硬规矩 11 只管口径变化）。
  */
 class FeedCacheStore(context: Context) {
 
@@ -123,7 +128,7 @@ class FeedCacheStore(context: Context) {
 
     private companion object {
         const val MAX_FEEDS = 30
-        const val MAX_EPISODES = 60
+        const val MAX_EPISODES = 120
         const val TAG = "FeedCache"
     }
 }

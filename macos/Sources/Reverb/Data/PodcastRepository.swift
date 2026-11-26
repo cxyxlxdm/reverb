@@ -12,6 +12,16 @@ struct FeedAuthChallenge: Identifiable, Equatable {
     var id: String { feedUrl }
 }
 
+/// 一次 feed 抓取的结局。界面据此区分「源被限制」与「这个节目确实没有单集」
+/// (见 H308)。类本身 @MainActor,这张表只在主actor读写,不需要额外加锁。
+enum FeedFetchStatus {
+    case ok
+    case unauthorized
+    /// 平台级拦截(302→HTML / 非 XML 响应)。文案用「数据源暂不可用」。
+    case unavailable
+    case failed
+}
+
 /// 播客数据仓库:聚合各数据源,提供搜索、榜单、订阅源解析与随机一集。
 /// 镜像 Android 版行为。标记 @MainActor 便于 SwiftUI 直接调用。
 @MainActor
@@ -36,6 +46,18 @@ final class PodcastRepository {
     /// 视频当播客听。播放前解析也走它(见 `PlayerController.resolvePseudoUrl`)——
     /// 播放层与检索**共用这一个实例**,候选流缓存与探活游标才有意义。
     let bilibili = BilibiliSource()
+
+    /// 每个 feed 最近一次的抓取结局。只给详情页选文案用,不落盘 ——
+    /// 进程重启后按「没有记录」走通用文案即可,不该把一次网络失败带过重启。
+    private var feedStatuses: [String: FeedFetchStatus] = [:]
+
+    func feedStatus(_ feedUrl: String) -> FeedFetchStatus {
+        feedStatuses[cleanUrl(feedUrl)] ?? .failed
+    }
+
+    private func setFeedStatus(_ status: FeedFetchStatus, for feedUrl: String) {
+        feedStatuses[cleanUrl(feedUrl)] = status
+    }
 
     init() {
         charts = AppleChartsSource(itunes: itunes)
@@ -94,6 +116,11 @@ final class PodcastRepository {
                 return ([result.podcast], "RSS")
             case .unauthorized:
                 challenge(url)
+                return ([], "")
+            case .unavailable:
+                // 平台拦截的源不该在搜索里显示成「没搜到」,但仍不能假装命中。
+                Log.w("Repo", "搜索的 RSS 源被平台限制 endpoint=\(Log.endpoint(url))")
+                setFeedStatus(.unavailable, for: url)
                 return ([], "")
             case .failed:
                 return ([], "")
@@ -188,18 +215,25 @@ final class PodcastRepository {
         // 所以在这里分叉。落盘缓存照写 —— 存的同样只有伪地址,不含会过期的直链。
         if BilibiliSource.isPseudo(url) {
             let result = await bilibili.feedOf(url)
+            setFeedStatus(result?.episodes.isEmpty == false ? .ok : .failed, for: url)
             if let result, !result.episodes.isEmpty { feedCache.put(url, result) }
             return result
         }
         switch await rss.fetch(url, auth: inline ?? authStore.get(url)) {
         case .success(let result):
+            setFeedStatus(.ok, for: url)
             if let inline { authStore.save(url, inline) }
             if !result.episodes.isEmpty { feedCache.put(url, result) }
             return result
         case .unauthorized:
+            setFeedStatus(.unauthorized, for: url)
             challenge(url)
             return nil
+        case .unavailable:
+            setFeedStatus(.unavailable, for: url)
+            return nil
         case .failed:
+            setFeedStatus(.failed, for: url)
             return nil
         }
     }

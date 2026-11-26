@@ -77,6 +77,8 @@
     <string name="discover_empty_category">「%s」暂无内容，换个分类看看</string>
     <string name="empty_discover">搜索你想听的播客，余音为你循声而来</string>
     <string name="load_failed">没能取到声音，换个词或稍后再试</string>
+    <string name="feed_unavailable">数据源暂不可用，稍后再试</string>
+    <string name="feed_empty">这一档节目暂无内容</string>
     <string name="offline_cached_at">离线内容 · 上次更新 %s</string>
     <string name="guide_title">余音使用引导</string>
     <string name="guide_desc">随应用内置的 30 秒引导音频，无需联网即可播放。</string>
@@ -207,6 +209,8 @@
     <string name="player_not_playing">未在播放</string>
     <string name="player_err_retrying">播放中断，正在自动重试（第 %1$d 次）</string>
     <string name="player_err_failed">播放失败，点按重试</string>
+    <string name="player_err_live_reconnecting">直播重连中（第 %1$d 次）</string>
+    <string name="player_err_live_interrupted">直播中断，点击重连</string>
     <string name="player_err_unplayable">这一集暂时播不了</string>
     <string name="shownotes">节目笔记</string>
     <string name="shownotes_empty">暂无节目笔记</string>

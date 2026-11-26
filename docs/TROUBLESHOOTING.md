@@ -14881,3 +14881,107 @@ Android 单测与 release 编译、鸿蒙单测与 debug HAP 编译按最终源�
 **代价 / 边界**。H234 当初要解决的「同版本重出包要让在野用户知道」从此不再成立 ——
 这是维护者明确选的口径反转:**本机重包优先于远端同 tag 资产**。以后要补发同版本修复,
 只能升 versionName / versionCode 发新版本;商店侧不受这次改动影响。
+
+### H307. 音阁订阅首行有一列比别的宽 36% —— 封面 intrinsic size 不能进布局,网格列宽不能带 maximum
+
+**现象**(PDF 报告 macOS 1.1.0 音阁「订阅」)。首行 4 张卡片里,B站视频封面 2000×1125(16:9)
+那一格比其余格宽约 36%,从第二行起才等宽。两端代码核查为同构缺陷。
+
+**根因**。`Theme.swift` 的 `SquareArtwork` 用 `.aspectRatio(1, contentMode: .fit)`,
+`RemoteImage` 里的 `Image.resizable().aspectRatio(contentMode: .fill)`(macOS)/
+`.scaledToFill()`(iOS)又没有 `.clipped()`:fill 按较短边铺满,非方形封面必然溢出,
+溢出的像素把 intrinsic size 沿视图树上报。`LibraryView` 网格又用
+`GridItem(.adaptive(minimum:cardMin, maximum:cardMax))`,列宽在 [min, max] 区间内按内容挑,
+于是首行那张宽封面把自己那列顶到上限。Android(`fillMaxWidth().aspectRatio(1f).clip()`)与
+鸿蒙(固定 1fr + `aspectRatio(1).objectFit(Cover).clip(true)`)都没有这条路径。
+
+**修法**。两端 `SquareArtwork` 改为 `.aspectRatio(1, contentMode: .fill)` +
+`.frame(maxWidth: .infinity)` + `.clipped()`(在 `clipShape` 之前),`RemoteImage` 的 fill 图片也补
+`.clipped()`:宽度取列宽、高度由 1:1 推出,溢出被裁掉,intrinsic size 不再回传布局。
+两端 `LibraryView` 订阅网格去掉 `adaptive` 的 `maximum:`,列数由可用宽度与 minimum 决定,
+可用宽度再等分给各列 —— 缩放窗口/换屏宽时列数可增减,同一行内始终等宽。
+`SquareArtwork` 是共享组件,订阅 / 发现 / 频道等所有用到它的页面一并覆盖,不要各页面另加局部 clipped。
+本轮只做视图层的 A 方案,缓存裁方图的 B 方案未做(见 PDF 报告)。
+
+**验收**。macOS `swift test` / `swift build -c release`、iOS 编译门实跑结果见本轮对话报告;
+真正的界面判据是订阅与发现网格里 16:9 / 4:3 / 竖图混排时首行与后续行等宽、封面居中裁切不变形,
+需在出包那台机器上按实际界面确认(本机只过编译门,没跑 UI)。
+
+**教训 / 可复用的规律**。
+① `aspectRatio(... .fill)` / `scaledToFill()` 必须配 `.clipped()`,否则图片按短边铺满的溢出会参与布局。
+② 自适应网格一旦给 `maximum:`,列宽就可能跟着内容 intrinsic size 漂;要「等宽 + 等比缩放」就只给 `minimum:`。
+③ 同类缺陷先查共享组件,一次改完所有调用页;只在出问题的那一页打补丁必然漏掉别的页。
+
+### H308. 小宇宙 feed 被 CDN IP 白名单拦成 HTML,客户端却报 111 号解析错 —— 拦截判定必须在解析之前
+
+**现象**(PDF 实测 macOS 1.1.0(7),四端代码同构)。点开岩中花述等频道,标题封面正常、单集区显示
+「暂无单集」;日志每次点击约 3 次 `NSXMLParserErrorDomain Code=111`。`curl -D-` 看到
+`302` + `X-Tengine-Error: denied by IP ACL = not in whitelist`,跟进后是 `200 text/html` 静态拦截页。
+
+**根因**。URLSession / OkHttp / ArkUI HTTP 默认跟随跳转;跟随之后的状态码是 200,抓取层只看
+`resp.isSuccessful` / `HttpResult.ok` / `code in 200..299`,于是把 HTML 交给 XML 解析器。
+报告另称「频道页既不写也不读 `feed_cache`」,与代码不符 —— 四端早就实现了缓存秒开与失败回落;
+真正让 87 集不可见的是 `FeedCacheStore` 每频道只留 60(鸿蒙 50)集,以及解析失败后没有把
+「源被限制」与「这个节目没内容」分开。
+
+**修法**(四端)。1) 解析前按状态码 / Content-Type / 正文开头判定 HTML 拦截,日志带 host、
+最终状态码、Content-Type、最终 URL;401 优先于拦截判定,别把私有源的 HTML 登录页误判。
+2) 对判定为拦截的域名短期熔断(macOS / iOS 5 分钟,Android 1 分钟),普通失败退避 1s / 2s / 4s。
+3) 缓存容量放到 120 集。4) 空态拆成「数据源暂不可用」与「该节目暂无内容」;有缓存时继续显示快照。
+
+**验收**。纯函数判据有 JVM / XCTest 单测(HTML 头、RSS / Atom、`octet-stream` 不误伤);
+真实拦截恢复要看四个示例频道在受限网络下显示缓存 + 「数据源暂不可用」,普通 RSS 追更不变。
+本轮没有接 Apple 目录兜底 —— `amp-api` 是非公开接口且要轮换 JWT,需单独决策。
+
+**教训 / 可复用的规律**。
+① 网络跟随重定向后状态码会变成 200,「状态码正常」不等于「拿到的是目标格式」, Content-Type 必须看。
+② 空态文案要区分「没有内容」与「没拿到内容」,否则用户会把平台限制当成节目下架。
+③ 失败分类只要界面用,别改各层返回类型:按 url 记一次性状态,比把 sealed 类型扩散到所有调用方便宜。
+
+### H309. 直播起播几秒就停 —— 1.25× 让 CoreMedia 提前报 DidPlayToTheEnd,应用按「结束」停掉
+
+**现象**(PDF 实测 macOS,四端代码同构)。CCTV-13 约 5.7s、CNR-3 约 0.1~0.4s、AsiaFM 约 1.5s
+后停止,日志「播放结束 → 直播结束,不续播」;系统日志 `qrate = 1.250`,且播完时缓冲里还有 30s。
+对照实验只改倍速:1.0× 全部正常。
+
+**根因**。直播 HLS 在 1.25× 下被 CoreMedia 提前判完并发 `DidPlayToTheEnd`。四端虽已隐藏直播倍速
+入口(鸿蒙还不把倍速发给直播),但播放器层仍按用户默认倍速设 rate(Android / 苹果端直接写
+`setPlaybackSpeed` / `player.rate`),且四端的结束回调都把直播当「结束」停掉,没有自愈。
+
+**修法**(四端)。1) 播放器层直播恒 1×,用户默认倍速偏好不改写,点播不受影响;日志补 rate。
+2) 结束回调不再进入结束态:重建 item 回到直播边缘(苹果端 seek 到 seekableRange 末尾减 3 秒),
+最多 3 次、退避 1s / 2s / 4s,耗尽后显示「直播中断,点击重连」并给手动重连入口。
+3) 不写历史、不标已播、不接下一集;苹果端额外隔离旧 item 迟到的结束通知。
+看门狗与完整状态机(P2)本轮没做。
+
+**验收**。纯逻辑单测覆盖不了播放器时序;真正判据是 11 个内置电台各连续播放 30 分钟不中断、
+Wi-Fi / 热点切换 10 秒内恢复、锁屏唤醒后仍出声。这些必须装机跑,本轮只过编译门,不算验过。
+
+**教训 / 可复用的规律**。
+① 「隐藏入口」不等于「代码层不会走到」:默认倍速仍会在起播路径上写进播放器。
+② 直播的「播完」几乎总是断流信号,不该沿用点播的结束语义(记已播 / 接下一集)。
+③ 日志没有倍速字段时这类问题极难定位,补日志本身就是修复的一部分。
+
+### H310. 发现页搜索框点一下就失焦 —— 搜索条与正文分支挂在同一视图,分支切换把它整段换掉
+
+**现象**(PDF 实测 macOS 1.1.0(7);iOS 同构)。点顶部搜索框出现一次明显刷新,占位文案不动、
+光标不出现,键入无反应;同进程电台页搜索框完全正常。无障碍树在点击前后从元素 2~47 整体变成
+74~107,说明从搜索框到「每日热门」整段被替换。
+
+**根因**。`DiscoverView.body` 里 `Group { if isSearchActive / else if showingHistory / else popularContent }`
+与 `.safeAreaInset(edge:.top) { searchBar }` 挂在同一视图。点击 → `.focused($searchFocused)` →
+`showingHistory` 翻转 → 分支切换 → inset 里的 TextField 被销毁重建,`@FocusState` 随之失效。
+PDF 猜的是榜单刷新导致,实际与榜单无关;电台页正常是因为它用系统 `.searchable`,输入框由工具栏持有。
+Android / 鸿蒙的搜索框本来就在分支之外,没有这个缺陷。
+
+**修法**(macOS / iOS)。把搜索条拆成独立 `SearchBarView`,固定为外层容器的第一个子视图;
+正文三分支放到第二个子视图里切换。`@FocusState` 由不会被重建的父视图持有,经
+`FocusState.Binding` 接给输入框;不加变化的 `.id()`、不把输入框放进 if/else。清空与提交路径保留。
+
+**验收**。判据是点击后光标立即出现、连打 20 字符不丢、中文候选正常、输入时「继续收听」/「每日热门」
+不重排、电台页搜索框保持正常。仓库没有 UI 测试,这些需要在出包机器上手工过;本轮只过编译门。
+
+**教训 / 可复用的规律**。
+① 「控件坏了」先查视图身份:句柄立刻失效 + 整段 AX 编号变化,指向的是重建而不是输入法或权限。
+② `.safeAreaInset` / 修饰器挂在同一视图上时,里面内容会随视图 body 的分支切换一起重建。
+③ 高频状态隔离(鸿蒙 H64 那种)适用于榜单;焦点问题则是「低频但会换分支」的状态同样能毁掉控件。

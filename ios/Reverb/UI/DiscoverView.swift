@@ -112,17 +112,16 @@ struct DiscoverView: View {
     }
 
     private var page: some View {
-        Group {
-            if isSearchActive { searchContent }
-            else if showingHistory { historyContent }
-            else { popularContent }
+        // 固定外壳:搜索条是第一个子视图,正文分支是第二个,两者的位置与类型永远不变。
+        // 正文内部再怎么切分支,也只更新第二个子视图,不会重建搜索条(见 `SearchBarView` 头注)。
+        VStack(spacing: 0) {
+            searchBar
+            branchContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .navigationTitle("余音")
         // 标题与右侧按钮同处工具栏一行,不再另起一行大标题(四个 tab 同口径)。
         .toolbarTitleDisplayMode(.inlineLarge)
-        // 自绘搜索条替代 `.searchable`:.searchable 的搜索框里放不进麦克风按钮,
-        // 也挂不出「最近搜索」面板。safeAreaInset 让它常驻在导航栏下方,行为与原来一致。
-        .safeAreaInset(edge: .top, spacing: 0) { searchBar }
         .onChange(of: searchText) { _, v in
             // `-search` 验收钩子设进去的查询词会被 `.searchable` 的初始绑定复位成空串;
             // 那一轮空串不能把已提交的查询也清掉(否则跑完搜索又退回榜单页)。
@@ -195,6 +194,15 @@ struct DiscoverView: View {
         .onChange(of: settings.regionOverride) { _, _ in
             Task { await loadPopular(initial: false) }
         }
+    }
+
+    /// 正文三分支:榜单 / 最近搜索 / 搜索结果。它自身是固定外壳里的第二个子视图,
+    /// 内部切分支不会波及第一个子视图(搜索条),这正是原先失焦的根因所在。
+    @ViewBuilder
+    private var branchContent: some View {
+        if isSearchActive { searchContent }
+        else if showingHistory { historyContent }
+        else { popularContent }
     }
 
     private func showToast(_ text: String) {
@@ -368,33 +376,14 @@ struct DiscoverView: View {
 
     // MARK: - 搜索
 
-    /// 搜索条:放大镜 + 输入框 + 清除 + 麦克风。
-    /// 历史记录只在「聚焦且输入为空」时顶替正文(见 `showingHistory`),不额外弹层 ——
-    /// 键盘弹起时再叠一层浮层会挡住前几条记录。
+    /// 搜索条:固定外壳里的第一个子视图,身份不随正文分支与榜单刷新变化。
+    /// 自绘搜索条替代 `.searchable`:.searchable 的搜索框里放不进麦克风按钮,
+    /// 也挂不出「最近搜索」面板;这里改为常驻在正文上方,行为与原来一致。
     private var searchBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-            TextField("搜索播客/视频或粘贴 RSS、直播流、视频链接", text: $searchText)
-                .focused($searchFocused)
-                .submitLabel(.search)
-                .autocorrectionDisabled()
-                .textInputAutocapitalization(.never)
-                .onSubmit {
-                    searchFocused = false
-                    runSearch()
-                }
-            if !searchText.isEmpty {
-                Button {
-                    searchText = ""
-                    searchFocused = false
-                } label: {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
-                }
-                .buttonStyle(.borderless)
-                .accessibilityLabel(Text("清除"))
-            }
-            voiceButton
-        }
+        SearchBarView(query: $searchText, focus: $searchFocused,
+                      onSubmit: { runSearch() },
+                      onClear: { searchText = ""; searchFocused = false },
+                      trailing: voiceButton)
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
@@ -705,6 +694,49 @@ struct DiscoverView: View {
             } else {
                 playerRef.stopRadio()
             }
+        }
+    }
+}
+
+/// 独立搜索条:固定为发现页 body 的第一个子视图,身份不随正文三分支切换而重建。
+///
+/// 为什么必须独立成视图:原先它是 `.safeAreaInset` 的内容,与 `Group { if … else if … }`
+/// 挂在同一视图上。点输入框 → `showingHistory` 翻转 → 正文分支切换 → inset 内容连同
+/// TextField 被整体换掉(AX 编号从 2~47 跳到 74~107),`@FocusState` 随之重建,
+/// 表现就是输入框闪一下后失焦、再也输不进字(键盘还会收起)。拆成独立视图并固定为
+/// 外层 `VStack` 的第一个子视图后,它的身份只由自身类型与位置决定,正文分支与
+/// 榜单刷新都碰不到它。焦点由不会被重建的父视图持有(`@FocusState searchFocused`),
+/// 这里只通过 `FocusState.Binding` 把输入框接上去;不另加会变化的 `.id(...)`,
+/// 也不把输入框放进任何 if/else 分支。
+private struct SearchBarView<Trailing: View>: View {
+    @Binding var query: String
+    /// 父视图持有的焦点绑定,这里是透传端点;父视图不随正文分支重建,焦点得以保留。
+    var focus: FocusState<Bool>.Binding
+    var onSubmit: () -> Void
+    var onClear: () -> Void
+    /// 语音按钮作为尾随内容传入,避免把 `VoiceSearchController` 的状态耦合成搜索条参数。
+    var trailing: Trailing
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+            TextField("搜索播客/视频或粘贴 RSS、直播流、视频链接", text: $query)
+                .focused(focus)
+                .submitLabel(.search)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+                .onSubmit {
+                    focus.wrappedValue = false
+                    onSubmit()
+                }
+            if !query.isEmpty {
+                Button(action: onClear) {
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(Text("清除"))
+            }
+            trailing
         }
     }
 }

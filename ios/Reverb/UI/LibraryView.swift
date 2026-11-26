@@ -33,7 +33,12 @@ struct LibraryView: View {
     @StateObject private var selection = EpisodeSelection()
 
     private var accent: Color { Theme.accent(settings.accentIndex) }
-    private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin, maximum: 220),
+    /// 订阅网格列宽:adaptive 只给 minimum、**不给 maximum**。
+    /// 给了 maximum 后 SwiftUI 会按卡片内容的 intrinsic size 在 [min, max] 区间里挑列宽,
+    /// 首行那张 16:9 封面就把自己那一列顶宽约 36%,后面各行才等宽(见 H307)。
+    /// 去掉 maximum 后,列数由可用宽度与 minimum 决定,可用宽度再等分给各列:
+    /// 屏幕/窗口宽度变化时列数可增减,但同一行的列宽始终相等,也不依赖封面像素尺寸。
+    private let columns = [GridItem(.adaptive(minimum: Metrics.cardMin),
                                     spacing: Metrics.gridSpacing)]
 
     /// 当前分段可多选的那些集(全选与入队都以它为准 —— 被 Lazy 容器回收的行不参与)。
