@@ -82,6 +82,13 @@ export struct DiscoverPage {
   @ObjectLink player: PlayerController;
   /// 搜索历史(只在本机留存)。**必须是 @ObjectLink**:删一条 / 清空之后面板要当场少一行。
   @ObjectLink searchHistory: SearchHistoryStore;
+  /// 与设置页跨页实时同步;开启后还要主动拉一次分类,因为 aboutToAppear 不会重跑。
+  @StorageLink(SettingsStore.THIRD_PARTY_KEY) @Watch('onThirdPartyChanged')
+  thirdPartyContentEnabled: boolean = false;
+  /// 设置页在发现页留在栈里时也会改地区;只观察 settings 不会触发一次新的目录请求。
+  @StorageLink(SettingsStore.REGION_KEY) @Watch('onRegionChanged')
+  regionOverride: string = '';
+  private categoryGeneration: number = 0;
   onOpenPodcast: (p: Podcast) => void = () => {};
   /**
    * 单集行**点封面**进频道页(与上面那颗不同:那颗拿的是已经有的 Podcast,这一颗只拿
@@ -196,10 +203,27 @@ export struct DiscoverPage {
     this.app.repository.authChallenge = claim;
     // `CATALOG=false` 的降级渠道**不拉榜单** —— 那是内容目录请求,而且界面上压根不展示它。
     // 漏了这一句的后果不是报错,是"看不见的目录请求"仍然在发,抓包一看就露。
-    if (Features.CATALOG) this.loadCategory(0, false);
-    // 反过来,`CATALOG=false` 的降级渠道的首屏主体是「最新」,进页就得按需刷一次。
-    // refreshIfStale 自带订阅集签名判断与防重入,和音阁那边同时调用不会重复拉。
+    if (Features.CATALOG && this.thirdPartyContentEnabled) this.loadCategory(0, false);
+    // 运行时开关关闭时,首屏主体同样是用户自己的「最新」,不再产生任何目录请求。
     else this.refreshInbox(false);
+  }
+
+  private onThirdPartyChanged(enabled: boolean): void {
+    this.categoryGeneration++;
+    if (!enabled) {
+      this.radio.stop();
+      this.initSlots(this.cats.length);
+    } else {
+      this.loadCategory(Math.min(this.catIndex, this.cats.length - 1), false);
+    }
+    this.refreshInbox(false);
+  }
+
+  private onRegionChanged(): void {
+    this.categoryGeneration++;
+    if (Features.CATALOG && this.thirdPartyContentEnabled) {
+      this.loadCategory(Math.min(this.catIndex, this.cats.length - 1), false);
+    }
   }
 
   aboutToDisappear(): void {
@@ -260,7 +284,7 @@ export struct DiscoverPage {
       } else {
         this.searchEpisodesScroller.scrollEdge(Edge.Top);
       }
-    } else if (!Features.CATALOG) {
+    } else if (!Features.CATALOG || !this.thirdPartyContentEnabled) {
       if (this.subscriptions.subscriptions.length === 0) this.starterScroller.scrollEdge(Edge.Top);
       else this.homeScroller.scrollEdge(Edge.Top);
     } else {
@@ -392,8 +416,10 @@ export struct DiscoverPage {
 
   /// 先取缓存秒显,再后台刷新。force=true 为下拉刷新(跳过缓存直接刷)。
   private async loadCategory(idx: number, force: boolean): Promise<void> {
+    if (!Features.CATALOG || !this.thirdPartyContentEnabled || idx < 0 || idx >= this.cats.length) return;
     const cat: DiscoverCategory = this.cats[idx];
     const region = this.app.region();
+    const generation = this.categoryGeneration;
     let hadCache = false;
     if (!force) {
       // 缓存为空时 cachedPopular 给出内置清单,同样能秒显,首屏不空
@@ -406,6 +432,7 @@ export struct DiscoverPage {
     }
     if (!hadCache) this.setLoading(idx, true);
     const fresh = await this.app.repository.refreshPopular(cat.genreId, region);
+    if (generation !== this.categoryGeneration || !this.thirdPartyContentEnabled) return;
     if (!hadCache) this.setLoading(idx, false);
     if (fresh.length > 0) {
       this.setList(idx, fresh);
@@ -708,9 +735,8 @@ export struct DiscoverPage {
           && this.searchHistory.items.length > 0) {
           // 搜索历史:输入框获得焦点且查询为空时铺开(规则见 historyVisible 注释)
           this.searchHistoryPanel()
-        } else if (!Features.CATALOG) {
-          // 无内容目录:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
-          // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
+        } else if (!Features.CATALOG || !this.thirdPartyContentEnabled) {
+          // 目录运行时关闭与编译期降级共用无目录首屏:不展示分类、随机电台或远程推荐清单。
           this.subscribeStarter()
         } else {
           // 玻璃分段条悬浮在内容上,内容从条下滚过(与底部玻璃栏同思路);
@@ -983,7 +1009,7 @@ export struct DiscoverPage {
   /// 顶部右侧动作。有内容目录时是电台按钮;没有则留空(不能整块删掉 —— ScreenHeader 要求这个插槽)。
   @Builder
   headerAction() {
-    if (Features.CATALOG) {
+    if (Features.CATALOG && this.thirdPartyContentEnabled) {
       this.radioButton()
     }
   }
@@ -1032,19 +1058,21 @@ export struct DiscoverPage {
             .fontWeight(FontWeight.Medium)
             .fontColor(this.scheme.onBackground)
             .width('100%')
-          Text(L.s('starter_desc'))
+          Text(L.s(this.thirdPartyContentEnabled ? 'starter_desc' : 'starter_desc_local'))
             .fontSize(TypeScale.caption * this.fontScale)
             .fontColor(this.scheme.onSurfaceVariant)
             .lineHeight(TypeScale.caption * this.fontScale * 1.6)
             .width('100%')
-          Button(this.importing ? L.s('importing') : L.s('import_recommended'))
-            .fontSize(TypeScale.label * this.fontScale)
-            .fontColor(this.scheme.onPrimary)
-            .backgroundColor(this.scheme.primary)
-            .width('100%')
-            .enabled(!this.importing)
-            .margin({ top: 8 })
-            .onClick(() => this.doImportRecommended())
+          if (this.thirdPartyContentEnabled) {
+            Button(this.importing ? L.s('importing') : L.s('import_recommended'))
+              .fontSize(TypeScale.label * this.fontScale)
+              .fontColor(this.scheme.onPrimary)
+              .backgroundColor(this.scheme.primary)
+              .width('100%')
+              .enabled(!this.importing)
+              .margin({ top: 8 })
+              .onClick(() => this.doImportRecommended())
+          }
           if (this.importHint.length > 0) {
             Text(this.importHint)
               .fontSize(TypeScale.caption * this.fontScale)
@@ -1131,8 +1159,10 @@ export struct DiscoverPage {
             }
           }
         }
-        ListItem() {
-          this.addMoreFooter()
+        if (this.thirdPartyContentEnabled) {
+          ListItem() {
+            this.addMoreFooter()
+          }
         }
       }
       .scrollBar(BarState.Off)
@@ -1173,10 +1203,12 @@ export struct DiscoverPage {
   }
 
   private async doImportRecommended(): Promise<void> {
-    if (this.importing) return;
+    if (this.importing || !Features.CATALOG || !this.thirdPartyContentEnabled) return;
+    const token = this.app.repository.directoryToken();
+    if (token === null) return;
     this.importHint = '';
     this.importing = true;
-    const n = await Recommended.importAll(this.app);
+    const n = await Recommended.importAll(this.app, token);
     this.importing = false;
     if (n > 0) {
       this.importHint = L.f('import_done', n);

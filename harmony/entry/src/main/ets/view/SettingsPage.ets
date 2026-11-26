@@ -15,6 +15,9 @@ import { formatDecimal } from '../util/NumberFmt';
 import { Log } from '../util/Logger';
 import deviceInfo from '@ohos.deviceInfo';
 import type common from '@ohos.app.ability.common';
+import { RadioStation } from '../playback/RadioStation';
+import { AvSessionBridge } from '../playback/AvSessionBridge';
+import { WidgetUpdater } from '../widget/WidgetUpdater';
 
 /// 开发者邮箱。**与 Android 是同一个地址**(Android 那份写在 `SettingsScreen.kt` 的
 /// `mailLog()` 里,`EXTRA_EMAIL`)。本端必须把它显示出来:ShareKit 的 `SharedRecord`
@@ -185,27 +188,27 @@ export struct SettingsPage {
           // 「地区」只作用于分类榜单、关键词检索与电台的取材范围;
           // 与电台模式一起受 CATALOG 门控,合规要求降级时两项会同步隐藏。
           if (Features.CATALOG) {
-            this.choiceRow(L.s('set_region'), () => '', REGIONS.map((r: RegionOption) => regionLabel(r)),
+            this.choiceRow(L.s('set_region'), () => '', () => this.regionOptions().map((r: RegionOption) => regionLabel(r)),
               () => this.regionIndex(),
-              (i: number) => { this.settings.setRegionOverride(REGIONS[i].code); this.onChanged(); })
+              (i: number) => { this.settings.setRegionOverride(this.regionOptions()[i].code); this.onChanged(); })
           }
           // 听觉足迹:Android 也是放在这一段的一条,不在音阁页头
           this.actionRow(L.s('set_footprint'), () => L.s('set_footprint_sub'), () => this.onOpenFootprint())
           // 电台模式管的是首页那个随机 / 情境电台,与底栏「电台」那格(直播流)无关,
           // 所以功能开关里关掉「电台」时这一行照旧在。
           if (Features.CATALOG) {
-            this.choiceRow(L.s('set_radio_mode'), () => '', [L.s('radio_random'), L.s('radio_contextual')],
+            this.choiceRow(L.s('set_radio_mode'), () => '', () => [L.s('radio_random'), L.s('radio_contextual')],
               () => this.settings.contextualRadio ? 1 : 0,
               (i: number) => { this.settings.setContextualRadio(i === 1); this.onChanged(); })
           }
 
           this.sectionLabel(L.s('sec_appearance'))
-          this.choiceRow(L.s('set_theme'), () => '', this.themeLabels(), () => this.settings.themeMode,
+          this.choiceRow(L.s('set_theme'), () => '', () => this.themeLabels(), () => this.settings.themeMode,
             (i: number) => { this.settings.setThemeMode(i); this.onChanged(); })
-          this.choiceRow(L.s('set_font'), () => '', this.fontLabels(), () => this.settings.fontIndex,
+          this.choiceRow(L.s('set_font'), () => '', () => this.fontLabels(), () => this.settings.fontIndex,
             (i: number) => { this.settings.setFontIndex(i); this.onChanged(); })
           this.accentRow()
-          this.choiceRow(L.s('set_language'), () => '', this.langLabels(), () => this.langIndex(),
+          this.choiceRow(L.s('set_language'), () => '', () => this.langLabels(), () => this.langIndex(),
             (i: number) => { this.settings.setLanguage(this.langCodes[i]); this.onChanged(); })
           // 真实频谱:鸿蒙**没有**这一项。Android 靠 Visualizer(0) 抓系统输出混音,
           // 鸿蒙的 SOURCE_TYPE_PLAYBACK_CAPTURE 自 API 12 废弃、改用需录屏授权的
@@ -217,17 +220,17 @@ export struct SettingsPage {
           // 鸿蒙侧 `setSpeed` 只在 playing 时下发速率(AVPlayer 的限制,见 PlayerController
           // 的 applyRate 注释),暂停态改的是待用的 `speed` 字段,恢复播放时补上。
           this.choiceRow(L.s('set_default_speed'), () => '',
-            this.speeds.map((s: number) => `${formatDecimal(s)}×`),
+            () => this.speeds.map((s: number) => `${formatDecimal(s)}×`),
             () => this.speedIndex(),
             (i: number) => {
               this.settings.setDefaultSpeed(this.speeds[i]);
               this.app.player.setSpeed(this.speeds[i]);
               this.onChanged();
             })
-          this.choiceRow(L.s('set_skip_back'), () => '', this.skipBackOpts.map((s: number) => L.f('unit_seconds', s)),
+          this.choiceRow(L.s('set_skip_back'), () => '', () => this.skipBackOpts.map((s: number) => L.f('unit_seconds', s)),
             () => this.optIndex(this.skipBackOpts, this.settings.skipBackSec),
             (i: number) => { this.settings.setSkipBackSec(this.skipBackOpts[i]); this.onChanged(); })
-          this.choiceRow(L.s('set_skip_forward'), () => '', this.skipFwdOpts.map((s: number) => L.f('unit_seconds', s)),
+          this.choiceRow(L.s('set_skip_forward'), () => '', () => this.skipFwdOpts.map((s: number) => L.f('unit_seconds', s)),
             () => this.optIndex(this.skipFwdOpts, this.settings.skipForwardSec),
             (i: number) => { this.settings.setSkipForwardSec(this.skipFwdOpts[i]); this.onChanged(); })
           this.switchRow(L.s('set_wifi_only'), () => L.s('set_wifi_only_sub'),
@@ -335,7 +338,7 @@ export struct SettingsPage {
           onDismiss: () => { this.backup = null; }
         })
       }
-      // 功能聚合开关:五项勾选直接写设置(没有"确定/取消"),故状态由它自己读 store。
+      // 功能聚合开关:六项勾选直接写设置(没有"确定/取消"),故状态由它自己读 store。
       if (this.features) {
         FeatureSwitchDialog({
           scheme: this.scheme,
@@ -442,12 +445,13 @@ export struct SettingsPage {
   }
 
   /**
-   * 聚合开关的一项被改。五项都是**当场生效**;其中电台/投播/同步还要收尾:
+   * 聚合开关的一项被改。六项都是**当场生效**;其中电台/投播/同步/三方内容还要收尾:
    * - 关电台:正在播的直播流直接 `close()` —— 它没有"整段"边界,留着只会持续耗流量;
    *   普通播客/下载音频不动。
    * - 关投播:本端播放页的投播是系统 `AVCastPicker`,会话归系统管,关掉入口即不再发起;
    *   已在投的那台由系统面板自己停(应用侧没有可调用的断开接口)。
    * - 关同步:把已经打开的面板收起。
+   * - 关三方内容:停掉依赖榜单的随机 / 情境电台,并让封面与桌面卡片立即退回占位图。
    */
   private applyFeature(idx: number, on: boolean): void {
     if (idx === 0) {
@@ -460,10 +464,22 @@ export struct SettingsPage {
       this.settings.setRadioFullEnabled(on);
     } else if (idx === 3) {
       this.settings.setCastEnabled(on);
-    } else {
+    } else if (idx === 4) {
       this.settings.setLanSyncEnabled(on);
       if (!on) this.lanSync = false;
-    }
+    } else {
+        if (on) {
+          const selected = this.settings.regionOverride.toLowerCase();
+          if (selected.length === 0 || selected === 'hk' || selected === 'tw' || selected === 'mo') {
+            // 开关回调会立刻拉榜,必须先把它将看到的有效地区落成 us。
+            this.settings.setRegionOverride('us');
+          }
+        }
+        this.settings.setThirdPartyContentEnabled(on);
+        if (!on) RadioStation.get().stop();
+        AvSessionBridge.get().sync(this.app.player);
+        WidgetUpdater.request(this.settings, true);
+      }
     this.onChanged();
   }
 
@@ -472,9 +488,15 @@ export struct SettingsPage {
     return i < 0 ? 0 : i;
   }
 
+  private regionOptions(): RegionOption[] {
+    if (!this.settings.thirdPartyContentEnabled) return REGIONS;
+    return REGIONS.filter((r: RegionOption) => r.code !== '' && r.code !== 'hk' && r.code !== 'tw' && r.code !== 'mo');
+  }
+
   private regionIndex(): number {
     const code = this.settings.regionOverride;
-    const i = REGIONS.findIndex((r: RegionOption) => r.code === code);
+    const regions = this.regionOptions();
+    const i = regions.findIndex((r: RegionOption) => r.code === code);
     return i < 0 ? 0 : i;
   }
 
@@ -565,20 +587,20 @@ export struct SettingsPage {
   }
 
   /// 一行设置:标题 + 当前值 + 下拉菜单选择。
-  /// 注意:当前值用**闭包**取而不是值参数 —— ArkUI 的 @Builder 值参数是一次性的,
-  /// 状态变化后不会重新求值,会导致改了设置但显示的值不变。
+  /// 当前值与选项都用闭包取 —— ArkUI 的 @Builder 值参数是一次性的,
+  /// 三方内容开关会同时改变地区选项集合和选中下标,只闭包化下标会让新下标落到旧标签上。
   @Builder
-  choiceRow(title: string, subOf: () => string, options: string[], selectedOf: () => number, onPick: (i: number) => void) {
+  choiceRow(title: string, subOf: () => string, optionsOf: () => string[], selectedOf: () => number, onPick: (i: number) => void) {
     Row() {
       this.rowText(title, subOf)
-      Text(this.valueLabel(options, selectedOf()))
+      Text(this.valueLabel(optionsOf(), selectedOf()))
         .fontSize(TypeScale.label * this.fontScale)
         .fontColor(this.scheme.onSurfaceVariant)
     }
     .width('100%')
     .padding({ left: Metrics.pagePadding, right: Metrics.pagePadding, top: 14, bottom: 14 })
     .onClick(() => {
-      this.picker = new PickerSpec(title, options, selectedOf(), onPick);
+      this.picker = new PickerSpec(title, optionsOf(), selectedOf(), onPick);
     })
   }
 
@@ -1015,10 +1037,10 @@ struct BackupSectionDialog {
 /**
  * 功能聚合开关(Android `FeatureSwitchDialog` 的同构体)。
  *
- * 与 BackupSectionDialog 的差别:**没有确认按钮**。五项都是勾上/取消即写设置、立即生效,
+ * 与 BackupSectionDialog 的差别:**没有确认按钮**。六项都是勾上/取消即写设置、立即生效,
  * 所以勾选状态的真值在 `SettingsStore` 里,本组件只读不存 —— `@ObjectLink` 保证
  * store 任一字段被赋值时这棵子树重跑 build(H7 那条对象级观察此刻正好帮上忙,
- * 因为这里关心的本来就是"五项里任意一项变了")。
+ * 因为这里关心的本来就是"六项里任意一项变了")。
  *
  * 仍是独立子组件而不是页面里的 `@Builder`:它要在打开期间连点多次并随 store 刷新,
  * 而 `@Builder` 的值参数一次性(H6/H19/H27/H139),挂在页面上不会更新。
@@ -1038,7 +1060,8 @@ struct FeatureSwitchDialog {
       new FeatureRow(L.s('nav_radio'), this.settings.radioEnabled),
       new FeatureRow(L.s('radio_full_title'), this.settings.radioFullEnabled),
       new FeatureRow(L.s('a11y_cast'), this.settings.castEnabled),
-      new FeatureRow(L.s('set_lan_sync'), this.settings.lanSyncEnabled)
+      new FeatureRow(L.s('set_lan_sync'), this.settings.lanSyncEnabled),
+      new FeatureRow(L.s('third_party_content_title'), this.settings.thirdPartyContentEnabled)
     ];
   }
 
@@ -1050,51 +1073,61 @@ struct FeatureSwitchDialog {
         .backgroundColor(withAlpha('#000000', 0.45))
         .onClick(() => { this.onDismiss(); })
 
-      Column() {
-        Text(L.s('dlg_features_title'))
-          .fontSize(TypeScale.titleMedium * this.fontScale)
-          .fontColor(this.scheme.onBackground)
-          .margin({ bottom: 8 })
-          .alignSelf(ItemAlign.Start)
-        Text(L.s('set_features_sub'))
-          .fontSize(TypeScale.label * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-          .margin({ bottom: 12 })
-          .alignSelf(ItemAlign.Start)
+      Scroll() {
+        Column() {
+          Text(L.s('dlg_features_title'))
+            .fontSize(TypeScale.titleMedium * this.fontScale)
+            .fontColor(this.scheme.onBackground)
+            .margin({ bottom: 8 })
+            .alignSelf(ItemAlign.Start)
+          Text(L.s('set_features_sub'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .margin({ bottom: 12 })
+            .alignSelf(ItemAlign.Start)
 
-        ForEach(this.rows(), (row: FeatureRow, idx: number) => {
-          Row({ space: 14 }) {
-            Toggle({ type: ToggleType.Checkbox, isOn: row.on })
-              .selectedColor(this.scheme.primary)
-              // 勾选只由整行 onClick 改(同 BackupSectionDialog)。
-              .hitTestBehavior(HitTestMode.None)
-            Text(row.label)
-              .fontSize(TypeScale.body * this.fontScale)
-              .fontColor(this.scheme.onBackground)
-              .layoutWeight(1)
-          }
-          .width('100%')
-          .padding({ top: 14, bottom: 14 })
-          .onClick(() => { this.onToggle(idx, !row.on); })
-        }, (row: FeatureRow, idx: number) => `${idx}-${row.on ? 1 : 0}`)
+          ForEach(this.rows(), (row: FeatureRow, idx: number) => {
+            Row({ space: 14 }) {
+              Toggle({ type: ToggleType.Checkbox, isOn: row.on })
+                .selectedColor(this.scheme.primary)
+                // 勾选只由整行 onClick 改(同 BackupSectionDialog)。
+                .hitTestBehavior(HitTestMode.None)
+              Text(row.label)
+                .fontSize(TypeScale.body * this.fontScale)
+                .fontColor(this.scheme.onBackground)
+                .layoutWeight(1)
+            }
+            .width('100%')
+            .padding({ top: 14, bottom: 14 })
+            .onClick(() => { this.onToggle(idx, !row.on); })
+          }, (row: FeatureRow, idx: number) => `${idx}-${row.on ? 1 : 0}`)
 
-        Text(L.s('radio_full_hint'))
-          .fontSize(TypeScale.label * this.fontScale)
-          .fontColor(this.scheme.onSurfaceVariant)
-          .margin({ top: 10 })
-          .alignSelf(ItemAlign.Start)
+          Text(L.s('radio_full_hint'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .margin({ top: 10 })
+            .alignSelf(ItemAlign.Start)
 
-        Text(L.s('action_done'))
-          .fontSize(TypeScale.label * this.fontScale)
-          .fontColor(this.scheme.primary)
-          .margin({ top: 8 })
-          .alignSelf(ItemAlign.End)
-          .onClick(() => { this.onDismiss(); })
+          Text(L.s('third_party_content_hint'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.onSurfaceVariant)
+            .margin({ top: 10 })
+            .alignSelf(ItemAlign.Start)
+
+          Text(L.s('action_done'))
+            .fontSize(TypeScale.label * this.fontScale)
+            .fontColor(this.scheme.primary)
+            .margin({ top: 8 })
+            .alignSelf(ItemAlign.End)
+            .onClick(() => { this.onDismiss(); })
+        }
+        .width('100%')
+        .padding({ left: 22, right: 22, top: 22, bottom: 16 })
+        .backgroundColor(this.scheme.surface)
+        .borderRadius(18)
       }
       .width('78%')
-      .padding({ left: 22, right: 22, top: 22, bottom: 16 })
-      .backgroundColor(this.scheme.surface)
-      .borderRadius(18)
+      .height('86%')
     }
     .width('100%')
     .height('100%')

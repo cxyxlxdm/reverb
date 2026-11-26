@@ -1,6 +1,7 @@
 import { Scheme, TypeScale, withAlpha, Metrics } from '../theme/Theme';
 import { L } from '../util/L';
 import { ArtworkCache } from '../store/ArtworkCache';
+import { SettingsStore } from '../store/SettingsStore';
 
 /// 通用小部件:图标 / 页头 / 返回顶栏 / 空态 / 加载态 / 封面。
 /// 对应 Android `ui/screens/Widgets.kt` + 部分 `ui/components/Components.kt`。
@@ -308,7 +309,7 @@ export struct LoadingBox {
  * 渲染路径上落一次磁盘读就是硬规矩 6 那条老账。
  */
 function artworkSource(url: string, onHit: (uri: string) => void): string {
-  if (url.length === 0) return '';
+  if (url.length === 0 || AppStorage.get<boolean>(SettingsStore.THIRD_PARTY_KEY) !== true) return '';
   const cache = ArtworkCache.get();
   const have = cache.uriFor(url);
   cache.ensure(url, have === null ? onHit : null);
@@ -321,6 +322,8 @@ export struct Artwork {
   @Prop scheme: Scheme;
   /** `@Watch`:列表复用 / 换台时 url 会变,本地副本必须跟着重解,否则显示的是上一张的本地图。 */
   @Prop @Watch('onUrlChange') url: string;
+  @StorageLink(SettingsStore.THIRD_PARTY_KEY) @Watch('onArtworkPolicyChanged')
+  thirdPartyContentEnabled: boolean = false;
   @Prop dim: number = 56;
   @Prop corner: number = 12;
   /**
@@ -334,6 +337,11 @@ export struct Artwork {
   }
 
   onUrlChange(): void {
+    this.resolveLocal();
+  }
+
+  onArtworkPolicyChanged(): void {
+    this.localUri = '';
     this.resolveLocal();
   }
 
@@ -362,7 +370,7 @@ export struct Artwork {
       // 图标**不按 url 是否为空来分支**:地址失效时 Image 是透明的,垫在底下的图标正好顶上来,
       // 不会留下一个空色块。图片加载成功后整张盖住它。
       Glyph({ symbol: Sym.playing, dim: Math.max(14, this.dim * 0.42), color: this.scheme.primary })
-      if (this.url.length > 0) {
+      if (this.thirdPartyContentEnabled && this.url.length > 0) {
         Image(this.localUri.length > 0 ? this.localUri : this.url)
           .width(this.dim).height(this.dim)
           .objectFit(ImageFit.Cover)
@@ -380,6 +388,8 @@ export struct Artwork {
 export struct SquareArtwork {
   @Prop scheme: Scheme;
   @Prop @Watch('onUrlChange') url: string;
+  @StorageLink(SettingsStore.THIRD_PARTY_KEY) @Watch('onArtworkPolicyChanged')
+  thirdPartyContentEnabled: boolean = false;
   @Prop corner: number = Metrics.cardCorner;
   /// 同 `Artwork.localUri`:宫格是「已加载过的列表」断网后最主要的受害界面,必须走本地副本
   @State localUri: string = '';
@@ -389,6 +399,11 @@ export struct SquareArtwork {
   }
 
   onUrlChange(): void {
+    this.resolveLocal();
+  }
+
+  onArtworkPolicyChanged(): void {
+    this.localUri = '';
     this.resolveLocal();
   }
 
@@ -407,10 +422,10 @@ export struct SquareArtwork {
         .width('100%')
         .aspectRatio(1)
         .backgroundColor(withAlpha(this.scheme.primary, 0.18))
-      if (this.url.length === 0) {
+      if (!this.thirdPartyContentEnabled || this.url.length === 0) {
         Glyph({ symbol: Sym.playing, dim: 30, color: this.scheme.primary })
       }
-      if (this.url.length > 0) {
+      if (this.thirdPartyContentEnabled && this.url.length > 0) {
         /**
          * `draggable(false)` 不是防"拖出去",是**把外层卡片的长按让回来**。
          * Image 自带一注册就是开着的长按-拖拽识别器(约 350ms 起缩略图),

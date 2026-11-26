@@ -40,7 +40,7 @@ export default class FeedUpdateExtension extends WorkSchedulerExtensionAbility {
       // (不读 rawfile,省掉后台进程的一次 IO)。
       // 频道缓存同理给未装载的空实例:**不能**让后台进程写 feed_cache.json ——
       // JsonFile 是整份覆盖写,与 UI 进程并发会互相丢数据(Prefs 已经踩过一次,见 H28)。
-      const repo = new PodcastRepository(cache, new SeedCatalog(), new FeedCacheStore());
+      const repo = new PodcastRepository(cache, new SeedCatalog(), new FeedCacheStore(), () => false);
       await UpdateNotifier.checkNow(subs.subscriptions, repo);
     } catch (e) {
       Log.e('Update', `后台检查失败 ${(e as Error).message}`);

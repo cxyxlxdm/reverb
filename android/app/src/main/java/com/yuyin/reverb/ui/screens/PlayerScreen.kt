@@ -163,7 +163,7 @@ fun PlayerScreen(onBack: () -> Unit, onOpenChannel: (String) -> Unit = {}, onOpe
     }
     // 换集就收尾:投出去的那一路没有跟随换集的能力,继续留着会让「界面 A、电视 B」。
     LaunchedEffect(episode.id) { container.cast.onEpisodeChanged(episode.id) }
-    val saveImage = rememberImageSaver()
+    val saveImage = rememberImageSaver { container.settingsStore.thirdPartyContentEnabled.value }
     var sealDialogOpen by remember { mutableStateOf(false) }
     /**
      * 批注弹层。**时间是按下那一刻的快照,不是跟随播放器的实时值**:

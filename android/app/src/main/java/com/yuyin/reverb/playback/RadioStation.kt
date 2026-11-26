@@ -19,6 +19,12 @@ object RadioStation {
     private var repo: PodcastRepository? = null
     private var region: String = "us"
     private var userGenreIds: List<Int?> = emptyList()
+    private var contentEnabled: () -> Boolean = { false }
+
+    @Volatile
+    private var requestGeneration = 0L
+    @Volatile
+    private var preparingGeneration = -1L
 
     // 最近播过的单集 id,避免短期内重复(容量有限,超出丢最旧)
     private val recent = ArrayDeque<String>()
@@ -33,21 +39,30 @@ object RadioStation {
     val mode: StateFlow<Mode?> = _mode
 
     /** 每次开台/换台前用最新的地区与分类刷新配置。 */
-    fun configure(repo: PodcastRepository, region: String, genreIds: List<Int?>) {
+    fun configure(
+        repo: PodcastRepository,
+        region: String,
+        genreIds: List<Int?>,
+        contentEnabled: () -> Boolean = { false }
+    ) {
         this.repo = repo
         this.region = region
         this.userGenreIds = genreIds
+        this.contentEnabled = contentEnabled
     }
 
     private const val TAG = "Radio"
 
     /** 开台:抓第一首并播放;成功返回 true,抓不到返回 false(不进入电台模式)。 */
     suspend fun start(mode: Mode): Boolean {
+        if (!contentEnabled()) return false
+        val generation = ++requestGeneration
         com.yuyin.reverb.util.Logger.i(TAG, "start mode=$mode region='$region'")
         _mode.value = mode
         // 先登记 provider 并进入电台模式(会清空上次历史),再抓首集播放
-        PlayerController.startRadio { fetchNext() }
-        val ep = fetchNext()
+        PlayerController.startRadio { fetchNext(generation) }
+        val ep = fetchNext(generation)
+        if (!isCurrent(generation, mode)) return false
         if (ep == null) {
             com.yuyin.reverb.util.Logger.w(TAG, "start failed, no episode mode=$mode")
             PlayerController.stopRadio()
@@ -62,9 +77,16 @@ object RadioStation {
     fun skip() = PlayerController.next()
 
     fun stop() {
+        requestGeneration++
+        preparingGeneration = -1
+        _preparingMode.value = null
         PlayerController.stopRadio()
         _mode.value = null
     }
+
+    private fun isCurrent(generation: Long, mode: Mode): Boolean =
+        generation == requestGeneration && _mode.value == mode &&
+            PlayerController.radioMode.value && contentEnabled()
 
     /** 情境电台:按当前时段挑选贴合心境的分类(Apple genreId)。 */
     private fun contextualGenreIds(): List<Int?> {
@@ -83,16 +105,23 @@ object RadioStation {
         if (_mode.value == Mode.CONTEXTUAL) contextualGenreIds() else userGenreIds
 
     /** 抓一首没在最近列表里的随机单集(同时记录进最近列表)。 */
-    private suspend fun fetchNext(): Episode? {
+    private suspend fun fetchNext(generation: Long): Episode? {
         val r = repo ?: return null
+        if (!isCurrent(generation, _mode.value ?: return null)) return null
+        preparingGeneration = generation
         _preparingMode.value = _mode.value
         return try {
-            r.randomEpisode(region, effectiveGenreIds(), recent.toSet())?.also { remember(it.id) }
+            val episode = r.randomEpisode(region, effectiveGenreIds(), recent.toSet())
+            if (!isCurrent(generation, _mode.value ?: return null)) null
+            else episode?.also { remember(it.id) }
         } catch (e: Exception) {
             com.yuyin.reverb.util.Logger.e(TAG, "fetchNext failed", e)
             null
         } finally {
-            _preparingMode.value = null
+            if (preparingGeneration == generation) {
+                preparingGeneration = -1
+                _preparingMode.value = null
+            }
         }
     }
 

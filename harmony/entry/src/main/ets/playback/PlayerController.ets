@@ -251,6 +251,7 @@ export class PlayerController {
 
   // 电台:下一首从哪来由 RadioStation 提供,是否在台/自动续播由本类统一持有
   private radioNext: (() => Promise<Episode | null>) | null = null;
+  private radioGeneration = 0;
   private radioAdvancing = false;
   private radioHistory: Episode[] = [];
   private radioPos = -1;
@@ -1543,6 +1544,8 @@ export class PlayerController {
 
   startRadio(next: () => Promise<Episode | null>): void {
     Log.i('Radio', '开台');
+    this.radioGeneration++;
+    this.radioAdvancing = false;
     this.radioNext = next;
     this.radioHistory = [];
     this.radioPos = -1;
@@ -1552,6 +1555,8 @@ export class PlayerController {
 
   stopRadio(): void {
     if (this.radioMode) Log.i('Radio', `停台 历史=${this.radioHistory.length}`);
+    this.radioGeneration++;
+    this.radioAdvancing = false;
     this.radioNext = null;
     this.radioMode = false;
     this.updateNavFlags();
@@ -1620,10 +1625,12 @@ export class PlayerController {
       return;
     }
     this.radioAdvancing = true;
+    const generation = this.radioGeneration;
     Log.i('Radio', '抓下一首…');
     try {
       const e = await next();
-      if (e !== null && this.radioMode) this.playRadioEpisode(e);
+      if (generation !== this.radioGeneration || !this.radioMode || this.radioNext !== next) return;
+      if (e !== null) this.playRadioEpisode(e);
       else {
         Log.w('Radio', '无下一首,停台');
         this.stopRadio();
@@ -1631,12 +1638,13 @@ export class PlayerController {
         this.deactivateAudioSession();
       }
     } catch (e) {
+      if (generation !== this.radioGeneration || !this.radioMode || this.radioNext !== next) return;
       Log.w('Radio', `抓下一首失败 ${(e as Error).message}`);
       this.stopRadio();
       this.playbackDesiredPlaying = false;
       this.deactivateAudioSession();
     } finally {
-      this.radioAdvancing = false;
+      if (generation === this.radioGeneration) this.radioAdvancing = false;
     }
   }
 

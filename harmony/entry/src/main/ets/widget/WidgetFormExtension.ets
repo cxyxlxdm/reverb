@@ -10,6 +10,7 @@ import { L } from '../util/L';
 import { WidgetFormBuilder } from './WidgetFormBuilder';
 import { WidgetFormNames } from './WidgetFormData';
 import { Log } from '../util/Logger';
+import { SettingsStore, WidgetContentPolicy } from '../store/SettingsStore';
 
 /**
  * 「继续收听」服务卡片的提供方。
@@ -36,12 +37,33 @@ export default class WidgetFormExtension extends FormExtensionAbility {
     // 尺寸不在回调参数里,只能反查(三档各是一个 form 条目,见 WidgetFormNames)。
     const dark = WidgetFormExtension.initStatics(this.context);
     formProvider.getPublishedRunningFormInfoById(formId)
-      .then((info: formInfo.RunningFormInfo) => {
-        const built = WidgetFormBuilder.build(WidgetFormNames.dimOfDimension(info.dimension), dark);
-        return formProvider.updateForm(formId, built.data)
-          .then(() => Log.i('Widget', `卡片定时刷新 formId=${formId}`))
-          .catch((e: Error) => Log.w('Widget', `卡片定时刷新失败 formId=${formId} ${e.message}`))
-          .then(() => { built.release(); });
+      .then(async (info: formInfo.RunningFormInfo | null): Promise<void> => {
+        if (info === null) {
+          Log.w('Widget', `卡片信息为空 formId=${formId}`);
+          return;
+        }
+        const dimension = WidgetFormNames.dimOfDimension(info.dimension);
+        const publish = async (policy: WidgetContentPolicy): Promise<void> => {
+          const built = WidgetFormBuilder.build(dimension, dark);
+          try {
+            const current = SettingsStore.readThirdPartyPolicyForWidget();
+            if (current.revision !== policy.revision) {
+              await publish(current);
+              return;
+            }
+            try {
+              await formProvider.updateForm(formId, built.data);
+              const after = SettingsStore.readThirdPartyPolicyForWidget();
+              if (after.revision !== policy.revision) await publish(after);
+              else Log.i('Widget', `卡片定时刷新 formId=${formId}`);
+            } catch (e) {
+              Log.w('Widget', `卡片定时刷新失败 formId=${formId} ${(e as Error).message}`);
+            }
+          } finally {
+            built.release();
+          }
+        };
+        await publish(SettingsStore.readThirdPartyPolicyForWidget());
       })
       .catch((e: Error) => Log.w('Widget', `卡片信息查询失败 formId=${formId} ${e.message}`));
   }

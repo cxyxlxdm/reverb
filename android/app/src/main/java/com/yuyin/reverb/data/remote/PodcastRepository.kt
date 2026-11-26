@@ -23,7 +23,8 @@ class PodcastRepository(
     private val cache: com.yuyin.reverb.data.local.PopularCacheStore,
     private val seed: com.yuyin.reverb.data.local.SeedCatalog,
     private val feedCache: com.yuyin.reverb.data.local.FeedCacheStore,
-    private val authStore: com.yuyin.reverb.data.local.FeedAuthStore
+    private val authStore: com.yuyin.reverb.data.local.FeedAuthStore,
+    private val thirdPartyContentEnabled: () -> Boolean = { false }
 ) {
     private val itunes = ITunesSource(client)
     private val fyyd = FyydSource(client)
@@ -47,6 +48,25 @@ class PodcastRepository(
 
     private val log = com.yuyin.reverb.util.Logger
     private val TAG = "Repo"
+
+    @Volatile
+    private var directoryGeneration = 0L
+
+    /** 开关变化或恢复备份时调用,让已经发出的目录请求在返回后失效。 */
+    fun invalidateDirectory() {
+        directoryGeneration++
+    }
+
+    fun directoryToken(): Long? {
+        if (!directoryEnabled()) {
+            invalidateDirectory()
+            return null
+        }
+        return directoryGeneration
+    }
+
+    fun directoryCurrent(token: Long): Boolean =
+        token == directoryGeneration && directoryEnabled()
 
     data class SearchOutcome(
         val podcasts: List<Podcast>,
@@ -140,27 +160,40 @@ class PodcastRepository(
      * 则回退到随包内置清单，保证首屏不空。种子**只读不写缓存**，联网刷新成功即被真数据取代。
      */
     fun cachedPopular(genreId: Int? = null, region: String = "us"): List<Podcast> {
+        if (!directoryEnabled()) return emptyList()
         val real = cache.get(cacheKey(genreId, region))
         if (real.isNotEmpty()) return real
         return seed.get(genreId, region)
     }
 
     /** 当前展示的是内置清单（而非联网取回的真榜单）——UI 据此把标题标成「内置精选」。 */
-    fun isSeedList(genreId: Int? = null, region: String = "us"): Boolean =
-        cache.get(cacheKey(genreId, region)).isEmpty() && seed.get(genreId, region).isNotEmpty()
+    fun isSeedList(genreId: Int? = null, region: String = "us"): Boolean {
+        if (!directoryEnabled()) return false
+        return cache.get(cacheKey(genreId, region)).isEmpty() && seed.get(genreId, region).isNotEmpty()
+    }
 
     /** 内置清单的生成日期（yyyy-MM-dd）。 */
-    fun seedGeneratedAt(): String = seed.generatedAt()
+    fun seedGeneratedAt(): String = if (directoryEnabled()) seed.generatedAt() else ""
 
     /** 拉取最新榜单，成功则回写磁盘缓存并返回；失败返回空（保留旧缓存）。 */
     suspend fun refreshPopular(genreId: Int? = null, region: String = "us"): List<Podcast> {
-        // 同上:`CATALOG=false` 那一档压根不该发榜单请求。编译期常量门 → R8 连 AppleChartsSource 一起剔掉。
-        if (!com.yuyin.reverb.BuildConfig.CATALOG) return emptyList()
+        val token = directoryToken() ?: return emptyList()
         log.i(TAG, "refreshPopular genre=${genreId ?: "all"} region='$region'")
-        var list = if (genreId == null) charts.top(region, 30) else charts.topByGenre(region, genreId, 30)
+        var list = if (genreId == null) {
+            charts.top(region, 30)
+        } else {
+            charts.topByGenre(region, genreId, 30)
+        }
+        if (!directoryCurrent(token)) return emptyList()
         if (list.isEmpty() && genreId == null) {
-            if (region != "us") list = charts.top("us", 30)
-            if (list.isEmpty()) list = fyyd.hot(30)
+            if (region != "us") {
+                list = charts.top("us", 30)
+                if (!directoryCurrent(token)) return emptyList()
+            }
+            if (list.isEmpty()) {
+                list = fyyd.hot(30)
+                if (!directoryCurrent(token)) return emptyList()
+            }
         }
         if (list.isNotEmpty()) cache.put(cacheKey(genreId, region), list)
         log.i(TAG, "refreshPopular result count=${list.size} genre=${genreId ?: "all"} region='$region'")
@@ -171,7 +204,7 @@ class PodcastRepository(
      * 解析某个 feed。成功则回写磁盘缓存；失败返回 null（旧缓存保留，由调用方决定是否用）。
      * 与 [cachedFeed] 配合成「先缓存秒开、再后台刷新、刷新失败退回缓存」。
      */
-    suspend fun feed(feedUrl: String): FeedResult? {
+    suspend fun feed(feedUrl: String, directoryToken: Long? = null): FeedResult? {
         // 兜底:OPML 导入 / 旧数据 / 界面里手工拼出来的地址都可能带着 userinfo。
         // 缓存键与实际请求都用**去掉凭据**的那一份 —— 否则同一个源会因为"带没带口令"
         // 变成两份缓存,而带口令的那份键会跟着导出备份走。
@@ -182,7 +215,7 @@ class PodcastRepository(
         if (result == null) log.w(TAG, "feed empty/failed url=$url")
         else {
             log.i(TAG, "feed ok episodes=${result.episodes.size} title='${result.podcast.title}' url=$url")
-            feedCache.put(url, result)
+            if (directoryToken == null || directoryCurrent(directoryToken)) feedCache.put(url, result)
         }
         return result
     }
@@ -236,6 +269,7 @@ class PodcastRepository(
         genreIds: List<Int?>,
         exclude: Set<String> = emptySet()
     ): Episode? = withContext(Dispatchers.IO) {
+        val token = directoryToken() ?: return@withContext null
         // 1) 组建候选节目池:各分类榜单去重(按 feedUrl)。
         //    走 cachedPopular 而非裸缓存 —— 首次安装时缓存为空,内置清单能直接组出池子,
         //    省掉一次榜单往返,冷启动点「随机」不必先等榜单。
@@ -247,6 +281,7 @@ class PodcastRepository(
         if (pool.size < 10) {
             refreshPopular(null, region).forEach { if (it.feedUrl.isNotBlank()) pool.putIfAbsent(it.feedUrl, it) }
         }
+        if (!directoryCurrent(token)) return@withContext null
         // 付费节目分集常为会员专享、拉不到直链,优先排除;全付费时再放开兜底
         val all = pool.values.toList()
         val candidates = all.filterNot { it.isPaid }.ifEmpty { all }
@@ -255,7 +290,9 @@ class PodcastRepository(
 
         // 3) 随机挑节目 → 解析 RSS → 随机取一集,重试若干档兜底(某档拉不到就换下一档)
         for (p in candidates.shuffled().take(6)) {
-            val feed = feed(p.feedUrl) ?: continue
+            if (!directoryCurrent(token)) return@withContext null
+            val feed = feed(p.feedUrl, token) ?: continue
+            if (!directoryCurrent(token)) return@withContext null
             val playable = feed.episodes.filter { it.audioUrl.isNotBlank() && it.id !in exclude }
             if (playable.isNotEmpty()) {
                 val picked = playable.random()
@@ -265,5 +302,24 @@ class PodcastRepository(
         }
         log.w(TAG, "randomEpisode none playable after retries")
         null
+    }
+
+    private fun directoryEnabled(): Boolean =
+        com.yuyin.reverb.BuildConfig.CATALOG && thirdPartyContentEnabled()
+
+    companion object {
+        /**
+         * 三方目录的有效地区。关闭时保留原来的设备 / 覆盖值供关键词搜索使用;
+         * 开启后默认美国,只有明确选择 cn 才保留中文地区,hk/tw/mo 及其它未明确项回落 us。
+         */
+        fun catalogRegion(enabled: Boolean, override: String?, systemCountry: String): String {
+            val selected = com.yuyin.reverb.data.local.RegionStore.normalize(override).orEmpty()
+            if (!enabled) return (selected.ifBlank { systemCountry.lowercase() }).ifBlank { "us" }
+            return if (selected == "cn" || (selected.isNotEmpty() && selected !in setOf("hk", "tw", "mo"))) {
+                selected
+            } else {
+                "us"
+            }
+        }
     }
 }

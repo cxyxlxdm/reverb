@@ -879,8 +879,9 @@ export struct PlayerPage {
     if (e === null) return;
     const ui = this.getUIContext();
     const ctx = ui.getHostContext() as common.UIAbilityContext;
+    const artworkRequested = this.settings.thirdPartyContentEnabled;
     await this.armMomentCard();
-    const png = await snapshotToPng(ui, ctx, 'reverb-moment-card', 'reverb-moment.png');
+    const png = await snapshotToPng(ui, ctx, 'reverb-moment-card', 'reverb-moment.png', artworkRequested);
     if (png === null) {
       this.momentHint = L.s('moment_failed');
       return;
@@ -894,8 +895,9 @@ export struct PlayerPage {
     if (e === null) return;
     const ui = this.getUIContext();
     const ctx = ui.getHostContext() as common.UIAbilityContext;
+    const artworkRequested = this.settings.thirdPartyContentEnabled;
     await this.armMomentCard();
-    const png = await snapshotToPng(ui, ctx, 'reverb-moment-card', 'reverb-moment.png');
+    const png = await snapshotToPng(ui, ctx, 'reverb-moment-card', 'reverb-moment.png', artworkRequested);
     if (png === null) {
       this.momentHint = L.s('moment_failed');
       return;

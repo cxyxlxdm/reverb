@@ -77,7 +77,14 @@ export class AppContainer {
   readonly radio: RadioStation = RadioStation.get();
 
   private constructor() {
-    this.repository = new PodcastRepository(this.popularCache, this.seedCatalog, this.feedCache);
+    this.repository = new PodcastRepository(this.popularCache, this.seedCatalog, this.feedCache,
+      () => this.settings.thirdPartyContentEnabled);
+    this.artwork.configureContentPolicy(() => this.settings.thirdPartyContentEnabled);
+    SettingsStore.onThirdPartyContentChanged = (enabled: boolean) => {
+      this.repository.invalidateDirectory();
+      this.artwork.onContentPolicyChanged();
+      if (!enabled) this.radio.stop();
+    };
   }
 
   static get(): AppContainer {
@@ -234,7 +241,8 @@ export class AppContainer {
     this.player.bindListen(
       (e: Episode, delta: number) => { this.listenStats.add(e, delta); },
       () => { this.listenStats.flush(); });
-    this.radio.configure(this.repository, this.player, () => this.region());
+    this.radio.configure(this.repository, this.player, () => this.region(),
+      () => this.settings.thirdPartyContentEnabled);
     const bridge = AvSessionBridge.get();
     bridge.setup(ctx, this.player);
     this.player.onStateChanged = () => { bridge.sync(this.player); };
@@ -249,19 +257,19 @@ export class AppContainer {
     this.player.restoreFromState();
   }
 
-  /// 当前生效地区:设置覆盖优先;自动模式跟随设备地区,无地区信息时才回落 us。
+  /// 当前生效地区:三方目录开启后默认美国,只有明确选择中国内地才保留中文地区。
   region(): string {
-    const override = this.settings.regionOverride;
-    if (override.length > 0) return override.toLowerCase();
+    let systemCountry = '';
     try {
       const parts = i18n.System.getSystemLocaleInstance().toString().split('-');
       if (parts.length >= 2) {
         const country = parts[parts.length - 1];
-        if (country.length === 2) return country.toLowerCase();
+        if (country.length === 2) systemCountry = country.toLowerCase();
       }
     } catch (e) {
       Log.w('App', `读取设备地区失败:${(e as Error).message}`);
     }
-    return 'us';
+    return PodcastRepository.catalogRegion(this.settings.thirdPartyContentEnabled,
+      this.settings.regionOverride, systemCountry);
   }
 }

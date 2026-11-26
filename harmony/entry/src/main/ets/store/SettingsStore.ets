@@ -1,6 +1,12 @@
 import i18n from '@ohos.i18n';
 import { Prefs } from './Prefs';
+import { JsonFile } from './JsonFile';
 import { Log } from '../util/Logger';
+
+export interface WidgetContentPolicy {
+  enabled: boolean;
+  revision: number;
+}
 
 /// 应用设置。与 Android SettingsStore / macOS SettingsStore 的键位对齐。
 /// 用 @Observed 让界面直接观察;每个 setter 立即落盘。
@@ -48,6 +54,45 @@ export class SettingsStore {
    * 改这个数之后**必须重新打包两端**,并同步更新 docs/PRIVACY.md 与 reverb/privacy.html。
    */
   static readonly PRIVACY_VERSION: number = 7;
+  /// 跨 ArkUI 组件同步三方内容开关;持久化键与 Android 保持一致。
+  static readonly THIRD_PARTY_KEY: string = 'third_party_content_enabled';
+  /// 地区选择要通知已经留在页面栈里的发现页重拉榜单,不能只依赖 preferences。
+  static readonly REGION_KEY: string = 'region_override';
+  /// 卡片扩展进程每次从磁盘重读的原子标志,不能依赖 preferences 的跨进程内存快照。
+  static readonly THIRD_PARTY_FILE: string = 'third_party_content.flag';
+  private static readonly REGION_CODES: string[] =
+    ['cn', 'hk', 'tw', 'mo', 'us', 'jp', 'kr', 'gb', 'sg', 'au', 'ca', 'de'];
+
+  static normalizeRegionOverride(v: string): string {
+    const normalized = v.trim().toLowerCase();
+    return SettingsStore.REGION_CODES.indexOf(normalized) >= 0 ? normalized : '';
+  }
+
+  static readThirdPartyPolicyForWidget(): WidgetContentPolicy {
+    return SettingsStore.parseThirdPartyPolicyForWidget(
+      JsonFile.readText(SettingsStore.THIRD_PARTY_FILE) ?? '');
+  }
+
+  static parseThirdPartyPolicyForWidget(value: string): WidgetContentPolicy {
+    const raw = value.trim();
+    const split = raw.indexOf(':');
+    if (split < 0) return { enabled: raw === '1', revision: 0 };
+    const revision = Number.parseInt(raw.substring(split + 1), 10);
+    return {
+      enabled: raw.substring(0, split) === '1',
+      revision: Number.isFinite(revision) ? revision : 0
+    };
+  }
+
+  static readThirdPartyContentForWidget(): boolean {
+    return SettingsStore.readThirdPartyPolicyForWidget().enabled;
+  }
+
+  private static writeThirdPartyContentForWidget(v: boolean): void {
+    const previous = SettingsStore.readThirdPartyPolicyForWidget().revision;
+    const revision = Math.max(Date.now(), previous + 1);
+    JsonFile.writeText(SettingsStore.THIRD_PARTY_FILE, `${v ? '1' : '0'}:${revision}`);
+  }
 
   /// 0 跟随系统 / 1 浅色(宣纸) / 2 深色(水墨) / 3 纯白
   /// **默认 2(水墨)**,与 Android `theme_mode` 的默认值一致 —— 品牌主观感是水墨,
@@ -125,6 +170,12 @@ export class SettingsStore {
   /// 局域网同步(默认开):设置里的入口。关闭即隐藏入口并收起已打开的面板。
   lanSyncEnabled: boolean = true;
   /**
+   * 三方内容目录与封面(默认关):同时控制播客榜单、随包种子与三方封面。
+   * 开启后目录默认走美国地区,只有用户明确选择中国内地才使用中文种子。
+   * 关键词搜索与用户主动粘贴的 RSS / 视频链接不属于这个开关的裁剪范围。
+   */
+  thirdPartyContentEnabled: boolean = false;
+  /**
    * 逐字高亮:跟读时**逐字点亮**,而不是整句一起亮。与 Android `wordHighlight` 对齐。
    *
    * 本端的词级时间只有一个来源:**发布方的逐字稿本身带不带**(JSON 格式的稿一词一条,
@@ -153,7 +204,8 @@ export class SettingsStore {
     // 老版本(1.0.x)存的是 zh-Hans / zh-Hant,不归一的话升级后设置页会显示「跟随系统」。
     // 归一放在读盘这一侧(硬规矩 10:不变式在数据出口保证),下面 applyLanguage 拿到的就只能是新标签。
     this.language = SettingsStore.langTag(Prefs.getString('app_language', ''));
-    this.regionOverride = Prefs.getString('region_override', '');
+    this.regionOverride = SettingsStore.normalizeRegionOverride(Prefs.getString('region_override', ''));
+    AppStorage.setOrCreate(SettingsStore.REGION_KEY, this.regionOverride);
     this.defaultSpeed = Prefs.getNumber('default_speed', 1.0);
     this.skipBackSec = Prefs.getNumber('skip_back', 10);
     this.skipForwardSec = Prefs.getNumber('skip_fwd', 30);
@@ -168,6 +220,9 @@ export class SettingsStore {
     this.radioFullEnabled = Prefs.getBool('radio_full_enabled', false);
     this.castEnabled = Prefs.getBool('cast_enabled', true);
     this.lanSyncEnabled = Prefs.getBool('lan_sync_enabled', true);
+    this.thirdPartyContentEnabled = Prefs.getBool(SettingsStore.THIRD_PARTY_KEY, false);
+    SettingsStore.writeThirdPartyContentForWidget(this.thirdPartyContentEnabled);
+    AppStorage.setOrCreate(SettingsStore.THIRD_PARTY_KEY, this.thirdPartyContentEnabled);
     this.wordHighlight = Prefs.getBool('word_highlight', true);
     this.privacyAccepted = this.loadPrivacyAccepted();
     SettingsStore.applyLanguage(this.language);
@@ -193,6 +248,8 @@ export class SettingsStore {
   ///     没有任何信号会触发它们重建。
   /// 与 Android「切换语言重建界面」同一策略。播放层是树外单例,重建不打断播放。
   static onLanguageChanged: (() => void) | null = null;
+  /// 三方内容变化时由容器注入:作废在途目录请求,并停止尚未开始的封面下载。
+  static onThirdPartyContentChanged: ((enabled: boolean) => void) | null = null;
 
   /// 设置界面语言。"" = 跟随系统。写入应用级偏好语言,资源随即按新语言解析。
   setLanguage(v: string): void {
@@ -251,8 +308,9 @@ export class SettingsStore {
     }
   }
   setRegionOverride(v: string): void {
-    this.regionOverride = v;
-    Prefs.put('region_override', v);
+    this.regionOverride = SettingsStore.normalizeRegionOverride(v);
+    Prefs.put('region_override', this.regionOverride);
+    AppStorage.setOrCreate(SettingsStore.REGION_KEY, this.regionOverride);
   }
   setDefaultSpeed(v: number): void {
     this.defaultSpeed = v;
@@ -327,6 +385,14 @@ export class SettingsStore {
   setLanSyncEnabled(v: boolean): void {
     this.lanSyncEnabled = v;
     Prefs.put('lan_sync_enabled', v);
+  }
+  setThirdPartyContentEnabled(v: boolean): void {
+    this.thirdPartyContentEnabled = v;
+    SettingsStore.writeThirdPartyContentForWidget(v);
+    Prefs.put(SettingsStore.THIRD_PARTY_KEY, v);
+    AppStorage.setOrCreate(SettingsStore.THIRD_PARTY_KEY, v);
+    const changed = SettingsStore.onThirdPartyContentChanged;
+    if (changed !== null) changed(v);
   }
   setWordHighlight(v: boolean): void {
     this.wordHighlight = v;

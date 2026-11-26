@@ -29,7 +29,7 @@ import kotlinx.coroutines.withContext
  * 9 及以下先申请写外存权限。保存在后台线程完成,结果以 Toast 反馈。
  */
 @Composable
-fun rememberImageSaver(): (Bitmap, String) -> Unit {
+fun rememberImageSaver(canExport: () -> Boolean = { true }): (Bitmap, String) -> Unit {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var pending by remember { mutableStateOf<Pair<Bitmap, String>?>(null) }
@@ -44,12 +44,16 @@ fun rememberImageSaver(): (Bitmap, String) -> Unit {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val p = pending
         pending = null
-        if (granted && p != null) persist(p.first, p.second)
+        if (granted && p != null && canExport()) persist(p.first, p.second)
         else Toast.makeText(context, context.getString(R.string.saved_fail), Toast.LENGTH_SHORT).show()
     }
 
     // 真正落盘(先过权限);由确认弹窗的「保存」触发
     fun proceed(bmp: Bitmap, name: String) {
+        if (!canExport()) {
+            Toast.makeText(context, context.getString(R.string.saved_fail), Toast.LENGTH_SHORT).show()
+            return
+        }
         val ok29 = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
         if (ok29 || granted) persist(bmp, name)

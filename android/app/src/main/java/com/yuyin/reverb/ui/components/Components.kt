@@ -182,6 +182,9 @@ val LocalGlassBottomPad = staticCompositionLocalOf { 0.dp }
  */
 val LocalOpenPodcastChannel = compositionLocalOf<((String) -> Unit)?> { null }
 
+/// 三方封面总闸由根组合提供;默认 false,避免任何旁路组件在未装配时误联网。
+val LocalThirdPartyContentEnabled = compositionLocalOf { false }
+
 /**
  * 派生「点封面进频道页」的回调,三条门任一不满足就返回 null —— 返回 null 时封面**不加**
  * clickable,点击照旧落到整行(起播),不会出现"看着能点、点了没反应"。
@@ -452,6 +455,7 @@ fun formatListenDuration(sec: Long): String {
 
 @Composable
 fun Artwork(url: String, size: Int, corner: Int = 12) {
+    val thirdPartyEnabled = LocalThirdPartyContentEnabled.current
     val shape = RoundedCornerShape(corner.dp)
     // 默认图标垫在底下:地址为空、还在加载、或者地址失效(封面 404)时都露出它。
     // 图片成功加载后会盖住 —— 不给 AsyncImage 设 error/placeholder,正是为了失败时不留空白。
@@ -467,7 +471,7 @@ fun Artwork(url: String, size: Int, corner: Int = 12) {
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary
         )
-        if (url.isNotBlank()) {
+        if (thirdPartyEnabled && url.isNotBlank()) {
             AsyncImage(
                 model = url,
                 contentDescription = null,
@@ -483,8 +487,9 @@ fun Artwork(url: String, size: Int, corner: Int = 12) {
 /** 填满单元格宽度的方形封面(宫格用)。无封面时以主色频谱图标占位。 */
 @Composable
 fun SquareArtwork(url: String, corner: Int = 14) {
+    val thirdPartyEnabled = LocalThirdPartyContentEnabled.current
     val shape = RoundedCornerShape(corner.dp)
-    if (url.isBlank()) {
+    if (!thirdPartyEnabled || url.isBlank()) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()

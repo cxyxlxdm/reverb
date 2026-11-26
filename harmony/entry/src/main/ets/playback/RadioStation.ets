@@ -30,6 +30,7 @@ export class RadioStation {
   private repo: PodcastRepository | null = null;
   private player: PlayerController | null = null;
   private regionProvider: (() => string) | null = null;
+  private contentEnabled: () => boolean = () => false;
   private activeRegion = 'us';
   private requestGeneration = 0;
   private preparingGeneration = -1;
@@ -39,23 +40,30 @@ export class RadioStation {
   /// 随机模式只用分类榜;综合榜可能含跨地区回退,不能进电台候选池。
   private readonly randomGenreIds: number[] = [1489, 1321, 1318, 1324, 1533, 1303, 1512, 1310];
 
-  configure(repo: PodcastRepository, player: PlayerController, regionProvider: () => string): void {
+  configure(repo: PodcastRepository, player: PlayerController, regionProvider: () => string,
+    contentEnabled: () => boolean = () => false): void {
     this.repo = repo;
     this.player = player;
     this.regionProvider = regionProvider;
+    this.contentEnabled = contentEnabled;
   }
 
   /// 开台并立刻起播一首。返回是否成功。
   async start(mode: RadioMode, region: string): Promise<boolean> {
     const p = this.player;
-    if (p === null) return false;
+    if (p === null || !this.contentEnabled()) return false;
     this.mode = mode;
     this.activeRegion = region.toLowerCase();
     const generation = ++this.requestGeneration;
     Log.i('Radio', `开台 mode=${mode === RadioMode.CONTEXTUAL ? '情境' : '随机'} region=${this.activeRegion}`);
     p.startRadio(() => this.fetchNext());
     const first = await this.fetchNextFor(generation, this.activeRegion);
-    if (generation !== this.requestGeneration || this.mode !== mode) return false;
+    if (generation !== this.requestGeneration || this.mode !== mode || !this.contentEnabled()) return false;
+    // 抓首集期间用户可能已关掉播放条:radioMode 已假,不能再把声音拉回来。
+    if (!p.radioMode) {
+      this.stop();
+      return false;
+    }
     if (first === null) {
       Log.w('Radio', `首次抓取失败 region=${this.activeRegion},停台`);
       this.stop();
@@ -86,7 +94,7 @@ export class RadioStation {
   private async fetchNext(): Promise<Episode | null> {
     const p = this.player;
     const provider = this.regionProvider;
-    if (p === null || provider === null) return null;
+    if (p === null || provider === null || !this.contentEnabled()) return null;
     this.applyRegion(provider(), p);
     const generation = this.requestGeneration;
     return this.fetchNextFor(generation, this.activeRegion);
@@ -94,12 +102,13 @@ export class RadioStation {
 
   private async fetchNextFor(generation: number, region: string): Promise<Episode | null> {
     const r = this.repo;
-    if (r === null || this.mode === null) return null;
+    if (r === null || this.mode === null || !this.contentEnabled()) return null;
     this.preparing = this.mode;
     this.preparingGeneration = generation;
     try {
       const e = await r.randomEpisode(region, this.effectiveGenreIds(), this.recent);
-      if (generation !== this.requestGeneration || region !== this.activeRegion || this.mode === null) return null;
+      if (generation !== this.requestGeneration || region !== this.activeRegion ||
+        this.mode === null || !this.contentEnabled()) return null;
       if (e !== null) this.remember(e.id);
       return e;
     } catch (err) {
@@ -119,7 +128,9 @@ export class RadioStation {
     Log.i('Radio', `地区切换 ${this.activeRegion} → ${current},清空电台导航历史`);
     this.activeRegion = current;
     this.requestGeneration += 1;
-    p.startRadio(() => this.fetchNext());
+    // 只作废 RadioStation 自己的抓取代次并清导航历史,不能重启 PlayerController 的 provider:
+    // advanceRadio 调用本方法后仍持着旧 generation,重启会让这次正常回包被当成旧任务丢弃。
+    p.resetRadioHistory();
   }
 
   private effectiveGenreIds(): number[] {

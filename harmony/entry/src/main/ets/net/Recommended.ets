@@ -18,10 +18,11 @@ export class Recommended {
    * @returns 成功订阅的条数;网络或解析失败返回 -1(由调用方给出可见提示 —— 这是用户
    *          主动触发的动作,静默失败不可接受)。
    */
-  static async importAll(app: AppContainer): Promise<number> {
+  static async importAll(app: AppContainer, token: number): Promise<number> {
+    if (!app.repository.directoryCurrent(token)) return -1;
     const url = L.s('recommended_opml_url');
     const opml = await Http.text(url);
-    if (opml === null || opml.length === 0) {
+    if (opml === null || opml.length === 0 || !app.repository.directoryCurrent(token)) {
       Log.w('Recommended', `拉取清单失败 host=${Http.host(url)}`);
       return -1;
     }
@@ -35,9 +36,12 @@ export class Recommended {
     // 推荐清单里冒出一条以 URL 为名的条目,比少一条更糟。
     const list: Podcast[] = [];
     for (let i = 0; i < urls.length; i++) {
-      const feed = await app.repository.feed(urls[i]);
+      if (!app.repository.directoryCurrent(token)) return -1;
+      const feed = await app.repository.feed(urls[i], token);
+      if (!app.repository.directoryCurrent(token)) return -1;
       if (feed !== null) list.push(feed.podcast);
     }
+    if (!app.repository.directoryCurrent(token)) return -1;
     if (list.length > 0) app.subscriptions.addAll(list);
     Log.i('Recommended', `导入推荐订阅 ${list.length}/${urls.length}`);
     return list.length;

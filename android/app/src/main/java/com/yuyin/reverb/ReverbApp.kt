@@ -51,6 +51,7 @@ class AppContainer(app: Application) {
         .build()
 
     val popularCache = PopularCacheStore(app)
+    val settingsStore = SettingsStore(app)
     // 随包内置的精选清单：缓存为空（首装/清缓存/无网）时给发现页兜底，避免首屏空白
     val seedCatalog = SeedCatalog(app)
     // 频道详情（解析后的 RSS）缓存：详情页秒开，且断网时仍能看已访问过的频道
@@ -64,7 +65,17 @@ class AppContainer(app: Application) {
     val feedAuthStore = com.yuyin.reverb.data.local.FeedAuthStore(app)
 
     // (私有源是用户自己带凭据的那一类,不改变"公共目录零配置"这条。)
-    val repository = PodcastRepository(httpClient, popularCache, seedCatalog, feedCache, feedAuthStore)
+    val repository = PodcastRepository(
+        httpClient, popularCache, seedCatalog, feedCache, feedAuthStore,
+        thirdPartyContentEnabled = { settingsStore.thirdPartyContentEnabled.value }
+    )
+
+    init {
+        SettingsStore.onThirdPartyContentChanged = { enabled ->
+            repository.invalidateDirectory()
+            if (!enabled) com.yuyin.reverb.playback.RadioStation.stop()
+        }
+    }
 
     val subscriptionStore = SubscriptionStore(app).also { sub ->
         // 退订即丢弃这个源的凭据(见 SubscriptionStore.onRemoved 的注释)
@@ -85,7 +96,9 @@ class AppContainer(app: Application) {
      * DLNA 投播:SSDP 发现 + AVTransport。自研,不引三方 SDK;状态放进程里,
      * 关掉播放页后电视那边仍在播(见 `cast/CastController` 头注)。
      */
-    val cast = com.yuyin.reverb.cast.CastController(app, httpClient)
+    val cast = com.yuyin.reverb.cast.CastController(
+        app, httpClient, settingsStore
+    )
     val inboxStore = InboxStore(app)
     val categoryStore = CategoryStore(app)
     val downloadStore = DownloadStore(app)
@@ -104,7 +117,6 @@ class AppContainer(app: Application) {
     val playbackStateStore = PlaybackStateStore(app)
     val updateStore = UpdateStore(app)
     val regionStore = RegionStore(app)
-    val settingsStore = SettingsStore(app)
 
     // 转写:先取发布方自己的逐字稿,取不到才在引擎可用时走本机识别(见 asrEngine 那条注释)
     val transcriptFetcher = TranscriptFetcher(httpClient) { url -> feedAuthStore.headerForUrl(url) }

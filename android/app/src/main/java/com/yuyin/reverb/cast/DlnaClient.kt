@@ -3,7 +3,10 @@ package com.yuyin.reverb.cast
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.util.Logger
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.Call
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -18,10 +21,20 @@ import okhttp3.RequestBody.Companion.toRequestBody
  * 判断成败**看 HTTP 码 + body 里的 `UPnPError`**,不看"200 就算成功":
  * 不少电视对不支持的格式返回 200 再在 body 里塞 errorCode(700 一类)。
  */
-class DlnaClient(private val client: OkHttpClient) {
+class DlnaClient(
+    private val client: OkHttpClient,
+    private val artworkEnabled: () -> Boolean = { false }
+) {
+    private val setUriMutex = Mutex()
+    @Volatile private var activeSetUri: Call? = null
 
-    suspend fun setUri(device: CastDevice, episode: Episode) {
-        soap(device, "SetAVTransportURI", setUriArgs(episode))
+    suspend fun setUri(device: CastDevice, episode: Episode) = setUriMutex.withLock {
+        soap(device, "SetAVTransportURI", setUriArgs(episode, artworkEnabled()), trackCall = true)
+    }
+
+    /** 协程取消不会中断已进入 OkHttp execute 的阻塞调用,策略切换时显式取消它。 */
+    fun cancelSetUri() {
+        activeSetUri?.cancel()
     }
 
     suspend fun play(device: CastDevice) {
@@ -36,16 +49,23 @@ class DlnaClient(private val client: OkHttpClient) {
         soap(device, "Stop", "<InstanceID>0</InstanceID>")
     }
 
-    private suspend fun soap(device: CastDevice, action: String, args: String): Unit =
-        withContext(Dispatchers.IO) {
-            val req = Request.Builder()
-                .url(device.controlUrl)
-                .header("SOAPACTION", "\"$SERVICE_TYPE#$action\"")
-                .header("Content-Type", "text/xml; charset=\"utf-8\"")
-                .header("User-Agent", "Reverb/1.0 (Android DLNA)")
-                .post(envelope(action, args).toRequestBody(XML_MEDIA))
-                .build()
-            client.newCall(req).execute().use { resp ->
+    private suspend fun soap(
+        device: CastDevice,
+        action: String,
+        args: String,
+        trackCall: Boolean = false
+    ): Unit = withContext(Dispatchers.IO) {
+        val req = Request.Builder()
+            .url(device.controlUrl)
+            .header("SOAPACTION", "\"$SERVICE_TYPE#$action\"")
+            .header("Content-Type", "text/xml; charset=\"utf-8\"")
+            .header("User-Agent", "Reverb/1.0 (Android DLNA)")
+            .post(envelope(action, args).toRequestBody(XML_MEDIA))
+            .build()
+        val call = client.newCall(req)
+        if (trackCall) activeSetUri = call
+        try {
+            call.execute().use { resp ->
                 val body = resp.body?.string().orEmpty()
                 if (!resp.isSuccessful) {
                     Logger.w(TAG, "$action http ${resp.code}")
@@ -58,7 +78,10 @@ class DlnaClient(private val client: OkHttpClient) {
                 }
                 Logger.i(TAG, "$action ok")
             }
+        } finally {
+            if (trackCall && activeSetUri === call) activeSetUri = null
         }
+    }
 
     companion object {
         private const val TAG = "DLNA"
@@ -76,20 +99,20 @@ class DlnaClient(private val client: OkHttpClient) {
                 "<s:Body><u:$action xmlns:u=\"$SERVICE_TYPE\">$args</u:$action></s:Body>" +
                 "</s:Envelope>"
 
-        internal fun setUriArgs(episode: Episode): String =
+        internal fun setUriArgs(episode: Episode, artworkEnabled: Boolean = false): String =
             "<InstanceID>0</InstanceID>" +
                 "<CurrentURI>${escape(episode.audioUrl)}</CurrentURI>" +
-                "<CurrentURIMetaData>${escape(didl(episode))}</CurrentURIMetaData>"
+                "<CurrentURIMetaData>${escape(didl(episode, artworkEnabled))}</CurrentURIMetaData>"
 
         /**
          * DIDL-Lite 元数据:很多电视不认这个也能播,但给了之後遥控器 / 屏幕上的标题才有内容。
          * 直播条目的 class 用 `audioBroadcast`,点播用 `musicTrack` —— 这是接收端决定
          * "能不能拖进度"的提示之一。
          */
-        internal fun didl(episode: Episode): String {
+        internal fun didl(episode: Episode, artworkEnabled: Boolean = false): String {
             val cls = if (episode.isLive) "object.item.audioItem.audioBroadcast"
             else "object.item.audioItem.musicTrack"
-            val art = if (episode.artworkUrl.isBlank()) ""
+            val art = if (!artworkEnabled || episode.artworkUrl.isBlank()) ""
             else "<upnp:albumArtURI>${escape(episode.artworkUrl)}</upnp:albumArtURI>"
             return "<DIDL-Lite xmlns=\"urn:schemas-upnp-org:metadata-1-0/DIDL-Lite/\" " +
                 "xmlns:dc=\"http://purl.org/dc/elements/1.1/\" " +
