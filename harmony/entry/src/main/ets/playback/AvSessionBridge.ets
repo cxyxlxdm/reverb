@@ -3,7 +3,9 @@ import backgroundTaskManager from '@ohos.resourceschedule.backgroundTaskManager'
 import wantAgent from '@ohos.app.ability.wantAgent';
 import type common from '@ohos.app.ability.common';
 import { PlayerController } from './PlayerController';
+import { Episode } from '../model/Models';
 import { Log } from '../util/Logger';
+import { SettingsStore } from '../store/SettingsStore';
 
 /**
  * 系统媒体会话 + 长时任务保活。
@@ -34,7 +36,13 @@ export class AvSessionBridge {
   private bgFailed = false;
   private ctx: common.UIAbilityContext | null = null;
   private lastAssetId = '';
+  private lastArtwork = '';
   private lastDuration = 0;
+  private lastMetadataSig = '';
+  private metadataGeneration = 0;
+  private metadataTask: Promise<void> = Promise.resolve();
+  private metadataPending = false;
+  private metadataPendingSig = '';
   /// 上一次推给系统的播放状态签名与位置锚点(用于跳过无意义的重复同步,见 sync 注释)
   private lastStateSig = '';
   private lastPushedPosMs = -1;
@@ -87,19 +95,7 @@ export class AvSessionBridge {
     try {
       // 元信息在换集时写;时长是异步到达的(durationUpdate),首次拿到后必须补写一次,
       // 否则锁屏/控制中心的进度会一直显示 --:--(duration=0)。
-      const durKnown = player.durationMs > 0;
-      if (e.id !== this.lastAssetId || (durKnown && this.lastDuration !== player.durationMs)) {
-        this.lastAssetId = e.id;
-        this.lastDuration = player.durationMs;
-        await s.setAVMetadata({
-          assetId: e.id,
-          title: e.title,
-          artist: e.podcastTitle,
-          mediaImage: e.artworkUrl,
-          duration: player.durationMs
-        });
-        Log.i('AVSession', `元信息已写 duration=${player.durationMs} title="${e.title}"`);
-      }
+      this.queueMetadata(s, e, player);
       // 只在**真的有变化**时才推播放状态。
       //
       // 系统自己会按 `elapsedTime + (now − updateTime) × speed` 外推位置,所以
@@ -140,6 +136,51 @@ export class AvSessionBridge {
     // 换集那一跳里旧播放器已 completed、新音源还在装,`isPlaying` 会假 0.8~1.2 秒 ——
     // 原先跟着它走会先把长时任务放了再重新申请,系统在那段空窗里就把它回收了(见 H125)。
     this.setBackgroundWanted(player.wantsPlayback());
+  }
+
+  /**
+   * 元信息写入串行化,并且只在系统调用成功后提交签名。关闭三方内容时旧带图调用可能仍在飞,
+   * 若让两路并发,晚到的旧调用会把锁屏封面重新盖回来;下一代回包后也必须补发一次无图元信息。
+   */
+  private queueMetadata(s: avSession.AVSession, e: Episode, player: PlayerController): void {
+    const artwork = AppStorage.get<boolean>(SettingsStore.THIRD_PARTY_KEY) === true
+      ? e.artworkUrl : '';
+    const duration = player.durationMs;
+    const sig = `${e.id}|${artwork}|${duration}`;
+    if (!this.metadataPending && sig === this.lastMetadataSig) return;
+    if (this.metadataPending && sig === this.metadataPendingSig) return;
+
+    const generation = ++this.metadataGeneration;
+    this.metadataPending = true;
+    this.metadataPendingSig = sig;
+    const task = this.metadataTask.then(async (): Promise<void> => {
+      if (generation !== this.metadataGeneration) return;
+      try {
+        await s.setAVMetadata({
+          assetId: e.id,
+          title: e.title,
+          artist: e.podcastTitle,
+          mediaImage: artwork,
+          duration: duration
+        });
+        if (generation !== this.metadataGeneration) return;
+        this.lastAssetId = e.id;
+        this.lastArtwork = artwork;
+        this.lastDuration = duration;
+        this.lastMetadataSig = sig;
+        Log.i('AVSession', `元信息已写 duration=${duration} title="${e.title}"`);
+      } catch (err) {
+        if (generation === this.metadataGeneration) {
+          Log.w('AVSession', `元信息写入失败 ${(err as Error).message}`);
+        }
+      } finally {
+        if (generation === this.metadataGeneration) {
+          this.metadataPending = false;
+          this.metadataPendingSig = '';
+        }
+      }
+    });
+    this.metadataTask = task;
   }
 
   /**

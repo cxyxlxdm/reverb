@@ -84,6 +84,7 @@ import com.yuyin.reverb.ui.components.GlassNavBar
 import com.yuyin.reverb.ui.components.GlassTabSpec
 import com.yuyin.reverb.ui.components.LocalGlassBottomPad
 import com.yuyin.reverb.ui.components.LocalOpenPodcastChannel
+import com.yuyin.reverb.ui.components.LocalThirdPartyContentEnabled
 import com.yuyin.reverb.ui.components.MINI_GAP
 import com.yuyin.reverb.ui.components.MINI_H
 import com.yuyin.reverb.ui.components.MINI_MORPH_DAMP
@@ -112,6 +113,9 @@ import com.yuyin.reverb.update.SelfUpdateHost
 fun ReverbRoot(openPlayerSignal: Int = 0, openEpisodeId: String? = null) {
     val rootNav = rememberNavController()
     val context = LocalContext.current
+    val thirdPartyContentEnabled by
+        (context.applicationContext as ReverbApp).container.settingsStore
+            .thirdPartyContentEnabled.collectAsStateWithLifecycle()
 
     // 这里**不再**申请通知权限。原先是一进来就无条件弹,与隐私政策写明的
     // 「仅在你主动开启『订阅更新提醒』时征求你的同意」不符,也属于"启动即申请非必要权限"。
@@ -187,7 +191,10 @@ fun ReverbRoot(openPlayerSignal: Int = 0, openEpisodeId: String? = null) {
         { feed -> rootNav.navigate("podcast/${Uri.encode(feed)}") }
     }
 
-    CompositionLocalProvider(LocalOpenPodcastChannel provides openPodcastChannel) {
+    CompositionLocalProvider(
+        LocalOpenPodcastChannel provides openPodcastChannel,
+        LocalThirdPartyContentEnabled provides thirdPartyContentEnabled
+    ) {
     Box(Modifier.fillMaxSize()) {
     NavHost(navController = rootNav, startDestination = "main") {
         composable("main") { MainShell(rootNav, onOpenPlayer = { openPlayerInApp() }) }

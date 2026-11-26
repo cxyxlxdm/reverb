@@ -32,10 +32,14 @@ export class WidgetUpdater {
   private static lastRunAt: number = 0;
   private static timer: number = -1;
   private static busy: boolean = false;
+  private static pending: boolean = false;
+  private static pendingForce: boolean = false;
 
   /// 推一次。`force=false` 时按 5 秒节流(到点补推一次,不丢最后一次)。
   static request(settings: SettingsStore, force: boolean = false): void {
     if (force) {
+      WidgetUpdater.pending = true;
+      WidgetUpdater.pendingForce = true;
       WidgetUpdater.schedule(settings, WidgetUpdater.FORCE_DELAY_MS);
       return;
     }
@@ -57,9 +61,18 @@ export class WidgetUpdater {
   }
 
   private static async run(settings: SettingsStore, now: number): Promise<void> {
+    if (WidgetUpdater.timer >= 0) {
+      clearTimeout(WidgetUpdater.timer);
+      WidgetUpdater.timer = -1;
+    }
+    // 上一轮还在等系统回包:记下待办, finally 后必须补跑,不能假设后面一定还有 force。
+    if (WidgetUpdater.busy) {
+      WidgetUpdater.pending = true;
+      return;
+    }
     WidgetUpdater.lastRunAt = now;
-    // 上一轮还在等系统回包就跳过:紧接着还会有 force,不会把最后一次变化丢掉。
-    if (WidgetUpdater.busy) return;
+    WidgetUpdater.pending = false;
+    WidgetUpdater.pendingForce = false;
     WidgetUpdater.busy = true;
     try {
       const infos: formInfo.RunningFormInfo[] = await formProvider.getPublishedRunningFormInfos();
@@ -80,6 +93,14 @@ export class WidgetUpdater {
       Log.w('Widget', `取卡片列表失败 ${(e as Error).message}`);
     } finally {
       WidgetUpdater.busy = false;
+      if (WidgetUpdater.pending) {
+        WidgetUpdater.pending = false;
+        const force = WidgetUpdater.pendingForce;
+        WidgetUpdater.pendingForce = false;
+        const delay = force ? WidgetUpdater.FORCE_DELAY_MS
+          : Math.max(0, WidgetUpdater.MIN_MS - (Date.now() - WidgetUpdater.lastRunAt));
+        WidgetUpdater.schedule(settings, delay);
+      }
     }
   }
 

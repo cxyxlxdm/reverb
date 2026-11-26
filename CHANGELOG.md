@@ -48,6 +48,71 @@
   `radio_stations.json`;鸿蒙资源内 `CNR-` / `CCTV-` / `qtfm` / `myalicdn` 命中数分别为
   2 / 2 / 12 / 2。Android 关闭态还核过 `radio_full_enabled=false` 且 `stations.json` 原账本保留。
 
+### Android / 鸿蒙:「三方内容」默认关闭,开启后默认美国地区
+
+- 2026-11-25 按维护者决定新增一个运行时开关,**默认关闭**,同时控制播客分类榜单、随包种子与三方封面。
+  关闭时不请求或不展示榜单、不读取种子、不下载三方封面(界面、分享图、桌面卡片、系统媒体与
+  Android DLNA 元数据均使用应用占位图或不带封面),并隐藏依赖榜单的首页随机 / 情境电台与远程推荐订阅入口。
+- 关键词搜索、直接粘贴 RSS / 视频链接、设置页本地 OPML 导入、已有订阅与最新更新、内置引导音频不受影响;
+  主动搜索仍可能返回知名或中文节目。macOS / iOS 没有这个开关,保持原行为。
+- 开启时榜单有效地区默认 `us`;只有明确选择 `cn` 才用中文种子与中文地区内容,`hk` / `tw` / `mo` 不再映射中文,
+  其它受支持的明确地区保留。关闭时保留原地区偏好供主动搜索使用,但不用于榜单。
+- 地区偏好与备份恢复共用白名单;目录与远程推荐导入请求带代次,关闭后返回的在途结果不得写榜缓存、
+  随机 feed 缓存或继续添加订阅。鸿蒙封面队列与在途 HTTP 可取消;关闭时保留用户已有磁盘缓存,
+  旧任务只清理自己的独立临时文件,清空缓存会先等旧任务收尾。桌面卡片扩展每次构建从
+  `third_party_content.flag` 重新读取带 revision 的策略,不依赖跨进程 preferences 快照;
+  文件采用临时文件替换,SDK 不支持覆盖 rename 时会短暂先删后 rename,不把它描述成严格原子写。
+- 代码、Android 种子与资源仍随包;这里说的是**运行时默认关闭**,不是包内裁剪,也不是审核专用模式。
+- 本轮只重打 Android 与 HarmonyOS 市场包:版本名仍为 `1.1.0`,Android `versionCode 11`、鸿蒙 `1000010`
+  均不提升;macOS / iOS 源码与产物不动,GitHub `reverb-cast` 的 tag / Release 不改。市场若拒收未提升的 versionCode,
+  按实情报告,不擅自升号。
+- 静态验收:Android 21 个 suite / 129 条测试全绿(0 failure / 0 error),release 编译通过;
+  鸿蒙 78 条测试全绿(0 failure / 0 error),debug HAP 编译通过。五语种体检、鸿蒙 JSON 严格解析与
+  `git diff --check` 均通过。
+- Android 真机(Pixel 3,最终 Release APK):默认关闭态首页无分类热门、随机电台与远程推荐入口;
+  已有订阅封面全部回落应用占位图,清空 logcat 后进入首页未命中榜单请求、目录域名或 Coil;
+  `dumpsys media_session` 的 artwork URI 为 null。开启后首帧为美国榜单,手动选「中国大陆」才出现
+  中文榜单与中文种子;HK / TW / MO 不再作为开启态选项。关键词搜索 `science` 仍返回 66 条单集、
+  50 条节目。截图结束后已从完整备份恢复原始 9 个订阅、历史、地区「中国大陆」与功能设置,
+  虚构订阅未残留,「三方内容」保持默认关闭。
+- 鸿蒙真机(H305 后 debug HAP):默认关闭态首页无分类热门、随机 / 情境电台与远程推荐入口;
+  关键词搜索 `science` 仍返回 66 条单集。已有订阅服务卡片开启时显示三方封面,关闭后立即变应用占位图,
+  force-stop 所有进程再启动仍为占位图;关闭态播放的 AVSession 元数据已写入,通知栏使用系统音乐占位图。
+  地区热切换已覆盖美国 ↔ 中国大陆、关闭态选香港再开启立即回落美国,以及明确选择日本保留 `region=jp`;
+  对应设置标签与请求日志一致(见 H304 / H305)。截图使用完全虚构的 9 个本机 RSS 源,追更页实际刷新出
+  27 条单集;结束后已清理夹具并恢复原始备份,10 个原订阅、1 个电台、历史与设置均写回,虚构订阅无残留。
+- 仍未验证:鸿蒙 WorkScheduler 的已有订阅后台更新被系统 `EAWorkers` 限额挡在 JS 执行前;进行中封面取消、
+  快速关 / 开、自动续播中改地区、同 URL 新旧 feed 与连续 next 竞态、旧封面任务不删新 target 缺直接运行证据。
+  Android 桌面卡片未绑定实例、DLNA 无接收设备、在途随机电台关闭竞态也未实跑;这些不能算真机通过。
+- 最终市场包(2026-11-26 重打,源码 `-newer` 检查为空):
+  - Android `android/dist/reverb.apk` **270,355,732 B / 01:01:10**,
+    sha256 `100fc44052800f7ed4424fde608c1b62bce7e61e134767755b67c186ece4ff8e`;
+    mapping 50,928,094 B,sha256 `686a365e9dad40ee75099730d8db14a364c5a5c1a6be442c943920138df50df2`。
+    解包审计处理量为 1 个 dex / 7,144,960 B、147 个 zip 条目、16 行权限输出;目录 URL 14、
+    native/model 2、种子 asset 1、`RECORD_AUDIO` 1、`REQUEST_INSTALL_PACKAGES` 1,发布签名 DN
+    `CN=Yuyin Reverb, OU=Reverb, O=Reverb, L=Hangzhou, ST=Zhejiang, C=CN`,全部 PASS;
+    阳性对照把 native 期望拧成 0 后报 FAIL 并 exit 1。装机 base APK 与发布包 SHA-256 逐字相同。
+  - HarmonyOS `harmony/dist/reverb.app` **182,079,522 B / 11:23:22**,
+    sha256 `08c199be9d4a6d3093c912eddf4dbfb8c9acc791c60e4ed447d378db5b4677a1`;
+    `reverb-symbol.zip` 14,979,352 B,sha256 `c8adf172f49282a20b0eb8103b51d7d33747b69c48a4239b420612189cf2fdca`。
+    嵌套 `entry-default.hap` 为 release、1.1.0(1000010);模型 239,233,841 B、词表 315,894 B、
+    arm64 native 3、`radio_stations.json` 1(16 个电台,`CNR-` / `CCTV-` / `qtfm` / `myalicdn`
+    命中 2 / 2 / 12 / 2)、`seed_podcasts.json` 0(鸿蒙实际不打包种子);外层 `debugKey` 命中 0。
+  - 重打前产物分别归档到 `android/dist/_backup-1.1.0-content-gate-prebuild-20261126-010012/` 与
+    `harmony/dist/_backup-1.1.0-content-gate-prebuild-20261126-010013/`;H305 后的旧鸿蒙 release 另归档到
+    `harmony/dist/_backup-1.1.0-content-gate-pre-h305-20261126-112254/`,均带 SHA-256。
+- 两端首页图均已按关闭态重拍,只使用虚构节目与应用占位图。Android master 1080×2160、商店图 1080×1920:
+  `android/dist/store/01-start.png` sha256
+  `04bd2b2e90fa5b7697b70dfcaedf0a7cf4481922e32cf05aa4e49ed059cce7c1`,master sha256
+  `f17e48d7cdcb7cd5ab8533232958697f6656fb29a0758f7f22942ee1eb74ae76`。鸿蒙 master 1216×2688、
+  商店图 1080×1920:`harmony/dist/store/01-start.png` sha256
+  `536d63761f5df57a567a388037335805c104babeeb39f30b4ab4e9ed2be9a087`,master sha256
+  `d2c4e85ea77ab0d7bef4a603297556cee217d956d90e1f584db0378f3a161437`。官网同源小图统一为
+  `site/reverb/shots/01-discover.jpg` 407×900,当前落位为鸿蒙版,sha256
+  `45f83673afe093136656bf7e50b0f8e1526a0dc3dd59b6439c2a719e4b5b175c`;Android 版导出读数
+  `a73c1a2d2ae50d41a5e3067bdd39991b4e56cb179a1c6540c4d07ef73fa4cb28` 已记入本地运营手册。
+  未部署官网,未重拍其余商店图,未重建 kit。
+
 ### macOS 设置页
 
 - 设置窗口可以自由拉大缩小(最小 460×560,上限到屏幕)。1.1.0 开发期间发现的坑:`Settings`

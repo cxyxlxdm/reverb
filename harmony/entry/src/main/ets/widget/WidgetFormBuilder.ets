@@ -2,6 +2,7 @@ import formBindingData from '@ohos.app.form.formBindingData';
 import fs from '@ohos.file.fs';
 import { JsonFile } from '../store/JsonFile';
 import { ArtworkCache } from '../store/ArtworkCache';
+import { SettingsStore } from '../store/SettingsStore';
 import { ConfigKeys, WidgetFormData, WidgetFormFields } from './WidgetFormData';
 import { WidgetRuntime } from './WidgetRuntime';
 import { Log } from '../util/Logger';
@@ -44,6 +45,8 @@ export class WidgetBuilt {
  *
  * **图片必须走 `formImages`**:卡片渲染在桌面进程里,`file://` 沙箱路径它读不到。
  * 封面优先用 App 已经落好的 `artwork_cache/` 那一份,没有就把 `art` 传空串,卡片退回应用图标。
+ * 三方封面受同一运行时开关控制:关闭时不携带地址、不打开缓存文件、不触发下载;
+ * 扩展进程每次从独立原子文件重读同一开关,不能依赖 UI 进程的 AppStorage 或 preferences 快照。
  */
 export class WidgetFormBuilder {
   static build(dim: string, dark: boolean, forceImage: boolean = false): WidgetBuilt {
@@ -61,7 +64,8 @@ export class WidgetFormBuilder {
     obj[ConfigKeys.PLAYING] = WidgetRuntime.readPlaying();
     obj[ConfigKeys.ART] = '';
     let fd = -1;
-    if (f.artUrl.length > 0) {
+    if (f.artUrl.length > 0 &&
+        SettingsStore.readThirdPartyContentForWidget()) {
       /**
        * 卡片侧是 `Image('memory://' + 键)`。**两件事都不能省**,它们是同一个 bug 的两面(见 H266):
        *  - 少了 `memory://` 前缀,卡片会把它当成资源路径去解析,结果是一张都不显示;

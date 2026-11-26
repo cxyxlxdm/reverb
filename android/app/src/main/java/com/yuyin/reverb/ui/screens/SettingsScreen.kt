@@ -63,6 +63,8 @@ import com.yuyin.reverb.data.remote.OpmlSupport
 import com.yuyin.reverb.playback.AudioCacheManager
 import com.yuyin.reverb.playback.DownloadManager
 import com.yuyin.reverb.playback.PlayerController
+import com.yuyin.reverb.playback.RadioStation
+import com.yuyin.reverb.widget.ReverbWidgetProvider
 import com.yuyin.reverb.playback.asr.AsrFactory
 import com.yuyin.reverb.ui.REGION_OPTIONS
 import com.yuyin.reverb.update.SelfUpdate
@@ -107,9 +109,15 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     val radioFullEnabled by settings.radioFullEnabled.collectAsStateWithLifecycle()
     val castEnabled by settings.castEnabled.collectAsStateWithLifecycle()
     val lanSyncEnabled by settings.lanSyncEnabled.collectAsStateWithLifecycle()
+    val thirdPartyContentEnabled by settings.thirdPartyContentEnabled.collectAsStateWithLifecycle()
     val wordHighlight by settings.wordHighlight.collectAsStateWithLifecycle()
     val contextualRadio by settings.contextualRadio.collectAsStateWithLifecycle()
     val regionOverride by regionStore.override.collectAsStateWithLifecycle()
+    val regionChoices = if (thirdPartyContentEnabled) {
+        REGION_OPTIONS.filter { it.code !in setOf(null, "hk", "tw", "mo") }
+    } else {
+        REGION_OPTIONS
+    }
     // 应用内更新的状态机(SelfUpdate.state)。这一行只**读**它,不写:
     // 需要用户决定的状态由 SelfUpdateHost 的弹窗承担,这里只留「读数」。
     val updateState by SelfUpdate.state.collectAsStateWithLifecycle()
@@ -394,7 +402,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             }
 
             // 功能聚合开关放在维护区(日志之前),不进页首:它是"改应用形态"的元设置,
-            // 一进设置先看到它会把内容/外观这些高频项压到下面。五项逐项即时生效。
+            // 一进设置先看到它会把内容/外观这些高频项压到下面。六项逐项即时生效。
             SectionLabel(stringResource(R.string.sec_features))
             SettingRow(
                 stringResource(R.string.set_features),
@@ -464,9 +472,9 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
     when (dlg) {
         Dlg.REGION -> ChoiceDialog(
             stringResource(R.string.dlg_region_title),
-            REGION_OPTIONS.map { stringResource(it.labelRes) },
-            REGION_OPTIONS.indexOfFirst { it.code == regionOverride }.coerceAtLeast(0),
-            onPick = { i -> regionStore.setOverride(REGION_OPTIONS[i].code); dlg = Dlg.NONE }, onDismiss = dismiss
+            regionChoices.map { stringResource(it.labelRes) },
+            regionChoices.indexOfFirst { it.code == regionOverride }.coerceAtLeast(0),
+            onPick = { i -> regionStore.setOverride(regionChoices[i].code); dlg = Dlg.NONE }, onDismiss = dismiss
         )
         Dlg.THEME -> ChoiceDialog(
             stringResource(R.string.dlg_theme_title), THEME_LABEL_RES.map { stringResource(it) }, themeMode,
@@ -513,6 +521,7 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             radioFull = radioFullEnabled,
             cast = castEnabled,
             lanSync = lanSyncEnabled,
+            thirdPartyContent = thirdPartyContentEnabled,
             onTranscription = { settings.setTranscriptionEnabled(it) },
             onRadio = { on ->
                 settings.setRadioEnabled(on)
@@ -529,6 +538,18 @@ fun SettingsScreen(onBack: () -> Unit, onOpenAbout: () -> Unit, onOpenLicenses: 
             onLanSync = { on ->
                 settings.setLanSyncEnabled(on)
                 if (!on) showLanSync = false
+            },
+            onThirdPartyContent = { on ->
+                if (on) {
+                    val selected = regionOverride?.lowercase()
+                    if (selected.isNullOrBlank() || selected in setOf("hk", "tw", "mo")) {
+                        // 先落地区再开开关:回调会立刻拉榜,反过来会让第一帧用旧地区发请求。
+                        regionStore.setOverride("us")
+                    }
+                }
+                settings.setThirdPartyContentEnabled(on)
+                if (!on) RadioStation.stop()
+                ReverbWidgetProvider.renderAll(context)
             },
             onDismiss = dismiss
         )
@@ -847,7 +868,7 @@ private fun SettingSwitch(title: String, subtitle: String?, checked: Boolean, on
 }
 
 /**
- * 功能聚合开关:五项各一个复选框,**勾一下即生效**(没有确定/取消)。
+ * 功能聚合开关:六项各一个复选框,**勾一下即生效**(没有确定/取消)。
  *
  * 为什么不做成"改完点确定":这些开关的效果都是"入口当场出现/消失"——
  * 电台撤的是底栏一格、完整直播电台撤的是页内管理面、投播撤的是播放页一颗控件。
@@ -860,11 +881,13 @@ private fun FeatureSwitchDialog(
     radioFull: Boolean,
     cast: Boolean,
     lanSync: Boolean,
+    thirdPartyContent: Boolean,
     onTranscription: (Boolean) -> Unit,
     onRadio: (Boolean) -> Unit,
     onRadioFull: (Boolean) -> Unit,
     onCast: (Boolean) -> Unit,
     onLanSync: (Boolean) -> Unit,
+    onThirdPartyContent: (Boolean) -> Unit,
     onDismiss: () -> Unit
 ) {
     val rows: List<Triple<String, Boolean, (Boolean) -> Unit>> = listOf(
@@ -872,13 +895,14 @@ private fun FeatureSwitchDialog(
         Triple(stringResource(R.string.nav_radio), radio, onRadio),
         Triple(stringResource(R.string.radio_full_title), radioFull, onRadioFull),
         Triple(stringResource(R.string.a11y_cast), cast, onCast),
-        Triple(stringResource(R.string.set_lan_sync), lanSync, onLanSync)
+        Triple(stringResource(R.string.set_lan_sync), lanSync, onLanSync),
+        Triple(stringResource(R.string.third_party_content_title), thirdPartyContent, onThirdPartyContent)
     )
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.dlg_features_title)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 rows.forEach { (label, checked, onChange) ->
                     Row(
                         Modifier
@@ -895,6 +919,11 @@ private fun FeatureSwitchDialog(
                 Spacer(Modifier.height(8.dp))
                 Text(
                     stringResource(R.string.radio_full_hint),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    stringResource(R.string.third_party_content_hint),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

@@ -113,6 +113,7 @@ import androidx.compose.material3.Button
 import com.yuyin.reverb.AppContainer
 import com.yuyin.reverb.data.remote.BilibiliSource
 import com.yuyin.reverb.data.remote.OpmlSupport
+import com.yuyin.reverb.data.remote.PodcastRepository
 import com.yuyin.reverb.BuildConfig
 import com.yuyin.reverb.ReverbApp
 import com.yuyin.reverb.data.model.Episode
@@ -150,8 +151,17 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0, visible: 
     val container = (LocalContext.current.applicationContext as ReverbApp).container
 
     val regionOverride by container.regionStore.override.collectAsStateWithLifecycle()
-    val region = remember(regionOverride) {
-        (regionOverride ?: Locale.getDefault().country).lowercase().ifBlank { "us" }
+    val thirdPartyContentEnabled by container.settingsStore.thirdPartyContentEnabled.collectAsStateWithLifecycle()
+    val region = remember(regionOverride, thirdPartyContentEnabled) {
+        PodcastRepository.catalogRegion(
+            thirdPartyContentEnabled,
+            regionOverride,
+            Locale.getDefault().country
+        )
+    }
+    val showRecommended = BuildConfig.CATALOG && thirdPartyContentEnabled
+    LaunchedEffect(thirdPartyContentEnabled) {
+        if (!thirdPartyContentEnabled) RadioStation.stop()
     }
 
     val categories = vm.orderedCategories
@@ -243,7 +253,7 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0, visible: 
             action = {
                 // 电台受 `BuildConfig.CATALOG` 门控。原先它是渠道差异(商店那份也开着),
                 // 现在是合规降级的备用闸:若被判定为「内容推荐」需许可证,改这一行为 false 即整块隐藏。
-                if (BuildConfig.CATALOG) {
+                if (BuildConfig.CATALOG && thirdPartyContentEnabled) {
                 val mode = if (contextualRadio) RadioStation.Mode.CONTEXTUAL else RadioStation.Mode.RANDOM
                 val label = stringResource(if (contextualRadio) R.string.radio_contextual else R.string.radio_start)
                 val stopped = stringResource(R.string.radio_stopped)
@@ -255,7 +265,10 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0, visible: 
                     active = radioMode,
                     preparing = radioPreparingMode != null,
                     onShort = {
-                        RadioStation.configure(container.repository, region, categories.map { it.genreId })
+                        RadioStation.configure(
+                            container.repository, region, categories.map { it.genreId },
+                            { container.settingsStore.thirdPartyContentEnabled.value }
+                        )
                         if (radioMode && radioKind == mode) {
                             RadioStation.skip() // 已在同模式电台:下一首
                         } else scope.launch {
@@ -360,12 +373,12 @@ fun DiscoverScreen(onOpen: (Podcast) -> Unit, scrollTopToken: Int = 0, visible: 
                 onDelete = { container.searchHistoryStore.remove(it) },
                 onClearAll = { showClearSearchHistory = true }
             )
-        } else if (browsing && !BuildConfig.CATALOG) {
-            // `CATALOG=false` 那一档:首屏就是「导入推荐订阅」+ 继续收听 + 引导卡,
-            // 不出现任何可浏览的节目目录(分类榜 / 电台 / 内置清单一律没有)。
+        } else if (browsing && (!BuildConfig.CATALOG || !thirdPartyContentEnabled)) {
+            // 三方内容关闭:保留搜索、继续收听、已有订阅与内置引导音频,不展示任何节目目录。
             SubscribeStarter(
                 continueEntries = inProgress,
                 showGuide = firstRun,
+                showRecommended = showRecommended,
                 scrollTopToken = scrollTopToken
             )
         } else if (browsing) {
@@ -687,13 +700,14 @@ private fun ReorderCategoriesDialog(
 private fun SubscribeStarter(
     continueEntries: List<HistoryEntry>,
     showGuide: Boolean,
+    showRecommended: Boolean,
     scrollTopToken: Int = 0
 ) {
     val container = (LocalContext.current.applicationContext as ReverbApp).container
     val subs by container.subscriptionStore.subscriptions.collectAsStateWithLifecycle()
 
-    if (subs.isEmpty()) StarterOnboarding(continueEntries, showGuide, scrollTopToken)
-    else HomeFeed(continueEntries, scrollTopToken)
+    if (subs.isEmpty()) StarterOnboarding(continueEntries, showGuide, showRecommended, scrollTopToken)
+    else HomeFeed(continueEntries, showRecommended, scrollTopToken)
 }
 
 /** 零订阅时的引导：说明 + 通栏导入按钮 + 内置引导音频卡。 */
@@ -701,6 +715,7 @@ private fun SubscribeStarter(
 private fun StarterOnboarding(
     continueEntries: List<HistoryEntry>,
     showGuide: Boolean,
+    showRecommended: Boolean,
     scrollTopToken: Int = 0
 ) {
     val context = LocalContext.current
@@ -726,34 +741,38 @@ private fun StarterOnboarding(
                 )
                 Spacer(Modifier.height(6.dp))
                 Text(
-                    stringResource(R.string.starter_desc),
+                    stringResource(
+                        if (showRecommended) R.string.starter_desc else R.string.starter_desc_local
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(Modifier.height(14.dp))
-                Button(
-                    onClick = {
-                        if (importing) return@Button
-                        importing = true
-                        scope.launch {
-                            val n = importRecommended(context, container)
-                            importing = false
-                            Toast.makeText(context, importMessage(context, n), Toast.LENGTH_SHORT).show()
+                if (showRecommended) {
+                    Button(
+                        onClick = {
+                            if (importing) return@Button
+                            importing = true
+                            scope.launch {
+                                val n = importRecommended(context, container)
+                                importing = false
+                                Toast.makeText(context, importMessage(context, n), Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        enabled = !importing,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        if (importing) {
+                            CircularProgressIndicator(
+                                Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(stringResource(R.string.importing))
+                        } else {
+                            Text(stringResource(R.string.import_recommended))
                         }
-                    },
-                    enabled = !importing,
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (importing) {
-                        CircularProgressIndicator(
-                            Modifier.size(18.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                        Spacer(Modifier.width(10.dp))
-                        Text(stringResource(R.string.importing))
-                    } else {
-                        Text(stringResource(R.string.import_recommended))
                     }
                 }
             }
@@ -784,7 +803,7 @@ private const val HOME_LATEST_MAX = 20
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HomeFeed(continueEntries: List<HistoryEntry>, scrollTopToken: Int = 0) {
+private fun HomeFeed(continueEntries: List<HistoryEntry>, showRecommended: Boolean, scrollTopToken: Int = 0) {
     val context = LocalContext.current
     val container = (context.applicationContext as ReverbApp).container
     val scope = rememberCoroutineScope()
@@ -866,7 +885,7 @@ private fun HomeFeed(continueEntries: List<HistoryEntry>, scrollTopToken: Int = 
                 if (firstLoading) LoadingBox()
                 else EmptyHint(stringResource(R.string.inbox_empty_no_updates))
             }
-            item {
+            if (showRecommended) item {
                 // 底部导入入口：刻意是文字按钮而非通栏大按钮 —— 对已有订阅的人，
                 // 这是个偶尔才用一次的东西。
                 Column(
@@ -928,15 +947,20 @@ private fun importMessage(context: Context, n: Int): String = when {
  * 与设置页的 importOpml 是同一套流程，只是来源从本地文件换成官网 URL。
  */
 private suspend fun importRecommended(context: Context, container: AppContainer): Int {
+    val token = container.repository.directoryToken() ?: return -1
     val url = context.getString(R.string.recommended_opml_url)
     val text = container.repository.httpText(url) ?: return -1
+    if (!container.repository.directoryCurrent(token)) return -1
     val urls = OpmlSupport.extractFeedUrls(text)
     if (urls.isEmpty()) return -1
     val podcasts = ArrayList<Podcast>()
     for (u in urls) {
-        val fr = runCatching { container.repository.feed(u) }.getOrNull()
+        if (!container.repository.directoryCurrent(token)) return -1
+        val fr = runCatching { container.repository.feed(u, token) }.getOrNull()
+        if (!container.repository.directoryCurrent(token)) return -1
         if (fr != null) podcasts.add(fr.podcast)
     }
+    if (!container.repository.directoryCurrent(token)) return -1
     if (podcasts.isNotEmpty()) container.subscriptionStore.addAll(podcasts)
     com.yuyin.reverb.util.Logger.i("Starter", "导入推荐订阅 ${podcasts.size}/${urls.size}")
     return podcasts.size

@@ -52,6 +52,12 @@ class SettingsStore(context: Context) {
     /** 局域网同步(默认**开**):设置里的「局域网同步」入口。关掉即隐藏入口并收起已打开的面板。 */
     val lanSyncEnabled = MutableStateFlow(prefs.getBoolean("lan_sync_enabled", true))
     /**
+     * 三方内容目录与封面(默认**关**):同时控制播客榜单、随包种子与三方封面。
+     * 开启后目录默认走美国地区,只有用户明确选择中国内地才使用中文种子。
+     * 关键词搜索与用户主动粘贴的 RSS / 视频链接不属于这个开关的裁剪范围。
+     */
+    val thirdPartyContentEnabled = MutableStateFlow(prefs.getBoolean("third_party_content_enabled", false))
+    /**
      * 逐字高亮(默认开)。它管两件事:
      * - 界面:当前句是**逐字**上色,还是整句一个颜色;
      * - 本机识别:whisper 要不要额外算 DTW 词级时间戳 —— 那会**多花约 70% 时间**
@@ -161,6 +167,11 @@ class SettingsStore(context: Context) {
     fun setRadioFullEnabled(v: Boolean) { prefs.edit().putBoolean("radio_full_enabled", v).apply(); radioFullEnabled.value = v }
     fun setCastEnabled(v: Boolean) { prefs.edit().putBoolean("cast_enabled", v).apply(); castEnabled.value = v }
     fun setLanSyncEnabled(v: Boolean) { prefs.edit().putBoolean("lan_sync_enabled", v).apply(); lanSyncEnabled.value = v }
+    fun setThirdPartyContentEnabled(v: Boolean) {
+        prefs.edit().putBoolean("third_party_content_enabled", v).apply()
+        thirdPartyContentEnabled.value = v
+        onThirdPartyContentChanged?.invoke(v)
+    }
     fun setWordHighlight(v: Boolean) { prefs.edit().putBoolean("word_highlight", v).apply(); wordHighlight.value = v }
     fun setContextualRadio(v: Boolean) { prefs.edit().putBoolean("contextual_radio", v).apply(); contextualRadio.value = v }
     fun setSubsGrid(v: Boolean) { prefs.edit().putBoolean("subs_grid", v).apply(); subsGrid.value = v }
@@ -176,6 +187,9 @@ class SettingsStore(context: Context) {
     }
 
     companion object {
+        /** 开关变化时让在途目录请求与封面投播元数据立即失效;由应用容器注入。 */
+        var onThirdPartyContentChanged: ((Boolean) -> Unit)? = null
+
         /**
          * 四档字号**倍率**。从 `ui/screens/SettingsScreen.kt` 下移到数据层,原因是
          * `BackupManager` 也要用它:跨端备份里字号有 `fontScale`(倍率,契约)和

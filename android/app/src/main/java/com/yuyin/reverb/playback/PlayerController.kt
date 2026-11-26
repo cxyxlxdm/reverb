@@ -21,9 +21,11 @@ import com.yuyin.reverb.widget.WidgetRefresh
 import com.yuyin.reverb.widget.WidgetRuntime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -114,6 +116,8 @@ object PlayerController {
 
     // 随机电台:开启后本集播完自动接下一首(下一首由外部 provider 提供,与数据层解耦)
     private var radioNext: (suspend () -> Episode?)? = null
+    private var radioGeneration = 0L
+    private var radioAdvanceJob: Job? = null
     private val _radioMode = MutableStateFlow(false)
     val radioMode: StateFlow<Boolean> = _radioMode
 
@@ -487,6 +491,26 @@ object PlayerController {
         // 生效值先取**回落值**:此刻还没有任何列在播。
         refreshPlayModes()
         _playMode.value = _playModes.value.getValue("")
+        scope.launch {
+            s.thirdPartyContentEnabled.collect { refreshArtworkPolicy() }
+        }
+    }
+
+    /// 播放中切换三方内容开关时同步系统媒体元数据;不重建会话或改播放位置。
+    private fun refreshArtworkPolicy() {
+        val c = controller ?: return
+        val item = c.currentMediaItem ?: return
+        val episode = _current.value ?: return
+        val desired = if (settings?.thirdPartyContentEnabled?.value == true && episode.artworkUrl.isNotBlank()) {
+            Uri.parse(episode.artworkUrl)
+        } else {
+            null
+        }
+        if (item.mediaMetadata.artworkUri == desired) return
+        val metadata = item.mediaMetadata.buildUpon()
+            .apply { if (desired == null) setArtworkUri(null) else setArtworkUri(desired) }
+            .build()
+        c.replaceMediaItem(c.currentMediaItemIndex, item.buildUpon().setMediaMetadata(metadata).build())
     }
 
     fun skipForward() = seekBy((settings?.skipForwardSec?.value ?: 30) * 1000L)
@@ -1142,7 +1166,9 @@ object PlayerController {
                     .setTitle(episode.title)
                     .setArtist(episode.podcastTitle)
                     .apply {
-                        if (episode.artworkUrl.isNotBlank()) setArtworkUri(Uri.parse(episode.artworkUrl))
+                        if (settings?.thirdPartyContentEnabled?.value == true && episode.artworkUrl.isNotBlank()) {
+                            setArtworkUri(Uri.parse(episode.artworkUrl))
+                        }
                     }
                     .build()
             )
@@ -1210,6 +1236,9 @@ object PlayerController {
     /** 开启电台:登记「下一首」provider 并进入电台模式,清空上次电台历史。 */
     fun startRadio(next: suspend () -> Episode?) {
         log.i(TAG, "radio start")
+        radioGeneration++
+        radioAdvanceJob?.cancel()
+        radioAdvanceJob = null
         radioNext = next
         radioHistory.clear()
         radioPos = -1
@@ -1218,6 +1247,9 @@ object PlayerController {
 
     fun stopRadio() {
         log.i(TAG, "radio stop")
+        radioGeneration++
+        radioAdvanceJob?.cancel()
+        radioAdvanceJob = null
         radioNext = null
         _radioMode.value = false
         updateNavFlags()
@@ -1263,12 +1295,26 @@ object PlayerController {
     /** 本集播完:抓下一首随机节目续播;抓不到则自动关台。 */
     private fun advanceRadio() {
         val next = radioNext ?: return
+        if (!_radioMode.value || radioAdvanceJob?.isActive == true) return
+        val generation = radioGeneration
         log.i(TAG, "radio advance")
-        scope.launch {
-            val ep = try { next() } catch (e: Exception) { log.e(TAG, "radio advance fetch failed", e); null }
-            if (ep != null && _radioMode.value) playRadioEpisode(ep)
-            else { log.w(TAG, "radio advance no episode, stopping"); stopRadio() }
+        val job = scope.launch {
+            try {
+                val ep = next()
+                if (generation != radioGeneration || !_radioMode.value || radioNext !== next) return@launch
+                if (ep != null) playRadioEpisode(ep)
+                else { log.w(TAG, "radio advance no episode, stopping"); stopRadio() }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (generation != radioGeneration || !_radioMode.value || radioNext !== next) return@launch
+                log.e(TAG, "radio advance fetch failed", e)
+                stopRadio()
+            } finally {
+                if (radioGeneration == generation) radioAdvanceJob = null
+            }
         }
+        radioAdvanceJob = job
     }
 
     /**

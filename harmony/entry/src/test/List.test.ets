@@ -7,6 +7,8 @@ import transcriptSearchExportTest from './TranscriptSearchExport.test';
 import senseVoiceTextTest from './SenseVoiceText.test';
 import lanSyncLiveTest from './LanSyncLive.test';
 import radioStationsTest from './RadioStations.test';
+import catalogRegionTest from './CatalogRegion.test';
+import contentGateTest from './ContentGate.test';
 
 /**
  * 本地单测入口。`hvigorw test` 会生成 `.test/testability/pages/Index.ets`,
@@ -25,4 +27,6 @@ export default function testsuite(): void {
   senseVoiceTextTest();
   lanSyncLiveTest();
   radioStationsTest();
+  catalogRegionTest();
+  contentGateTest();
 }

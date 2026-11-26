@@ -8,6 +8,7 @@ import { Episode, Podcast } from '../model/Models';
 import { Artwork } from './Widgets';
 import { formatTime } from './Components';
 import { Log } from '../util/Logger';
+import { SettingsStore } from '../store/SettingsStore';
 
 /// 剪藏卡:封面 + 标题 + 频道 + 时间点 + 水墨底。
 /// 用 componentSnapshot 把这个真实组件截成 PixelMap,再 ImagePacker 编码落盘。
@@ -112,7 +113,8 @@ export struct ChannelShareCard {
 
 /// 把某个组件(按 id)截图并存成 PNG。返回文件路径;失败返回 null。
 export async function snapshotToPng(ui: UIContext, ctx: common.UIAbilityContext,
-                                    componentId: string, name: string): Promise<string | null> {
+                                    componentId: string, name: string,
+                                    artworkRequested: boolean = false): Promise<string | null> {
   let pm: image.PixelMap | null = null;
   try {
     // 旧的全局 componentSnapshot.get 已废弃,改用 UIContext 上的实例
@@ -121,7 +123,17 @@ export async function snapshotToPng(ui: UIContext, ctx: common.UIAbilityContext,
     Log.e('Moment', `截图失败 ${(e as Error).message}`);
     return null;
   }
-  return await packPng(pm, ctx, name);
+  const png = await packPng(pm, ctx, name);
+  if (png !== null && artworkRequested &&
+      AppStorage.get<boolean>(SettingsStore.THIRD_PARTY_KEY) !== true) {
+    try {
+      await fs.unlink(png);
+    } catch (e) {
+      // 文件没生成或已清掉都无所谓,关键是不要把它交给分享/相册。
+    }
+    return null;
+  }
+  return png;
 }
 
 /**

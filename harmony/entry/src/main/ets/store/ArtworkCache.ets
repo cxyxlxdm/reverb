@@ -50,10 +50,16 @@ export class ArtworkCache {
   private dir = '';
   /// 文件名 → 内存条目(存在性判据)。界面每次都查这张表,所以**不能有同步 IO**。
   private entries: Map<string, Entry> = new Map();
-  private pending: Set<string> = new Set();
+  private pending: Map<string, number> = new Map();
   /// 待办队列 [文件名, URL];并发上限见 pump()。
   private queue: string[][] = [];
   private active = 0;
+  private transferGeneration = 0;
+  private activeJobs: Set<number> = new Set();
+  private activeTasks: Map<number, Promise<void>> = new Map();
+  private activeRequests: Map<number, http.HttpRequest> = new Map();
+  private contentEnabled: () => boolean = () => false;
+  private clearing = false;
   /**
    * 失败冷却表 文件名 → 失败时刻(ms)。
    *
@@ -86,6 +92,32 @@ export class ArtworkCache {
     this.scan();
   }
 
+  configureContentPolicy(enabled: () => boolean): void {
+    this.contentEnabled = enabled;
+    if (!enabled()) this.cancelTransfers();
+  }
+
+  /** 只取消传输,不删用户已有缓存;重新开启后仍可离线显示旧封面。 */
+  onContentPolicyChanged(): void {
+    if (!this.contentEnabled()) this.cancelTransfers();
+  }
+
+  private cancelTransfers(): void {
+    this.gen++;
+    this.queue = [];
+    this.pending.clear();
+    this.waiters.clear();
+    // 保留 activeJobs / activeRequests 直到任务自己的 finally 收尾;clearAll 要据此等待旧任务,
+    // 快速关闭再开启也不能在旧传输尚未结束时突破并发上限。
+    this.activeRequests.forEach((req: http.HttpRequest) => {
+      try {
+        req.destroy();
+      } catch (e) {
+        // 请求可能已经自行结束
+      }
+    });
+  }
+
   /// 已有本地副本时返回可直接交给 `Image()` 的沙箱 uri,否则 null。
   /**
    * 命中时做一次 **url 回验**(见 REVIEW-2026-10-25 低·族A ②):文件名是 url 的 int32 哈希,
@@ -95,7 +127,7 @@ export class ArtworkCache {
    * 回验不过就按未命中处理:返回 null,让调用方去 `ensure()` 重新下一份正确的覆盖回来,能自愈。
    */
   uriFor(url: string): string | null {
-    if (url.length === 0 || this.dir.length === 0) return null;
+    if (!this.contentEnabled() || url.length === 0 || this.dir.length === 0) return null;
     const e = this.entries.get(ArtworkCache.nameOf(url));
     if (e === undefined) return null;
     if (e.url.length > 0 && e.url !== url) {
@@ -114,7 +146,7 @@ export class ArtworkCache {
    * 图反而被自己挤慢。
    */
   ensure(url: string, onReady: ((uri: string) => void) | null): void {
-    if (url.length === 0 || this.dir.length === 0) return;
+    if (!this.contentEnabled() || this.clearing || url.length === 0 || this.dir.length === 0) return;
     const name = ArtworkCache.nameOf(url);
     const have = this.entries.get(name);
     // 与 `uriFor` 同一道回验(低·族A ②):这里如果只判"名字在不在",撞名时会把别人的封面
@@ -132,22 +164,32 @@ export class ArtworkCache {
       else list.push(onReady);
     }
     if (this.pending.has(name)) return;
-    this.pending.add(name);
+    this.pending.set(name, 0);
     this.queue.push([name, url]);
     this.pump();
   }
 
   private pump(): void {
-    while (this.active < ArtworkCache.MAX_CONCURRENT && this.queue.length > 0) {
+    while (this.contentEnabled() && !this.clearing &&
+      this.active < ArtworkCache.MAX_CONCURRENT && this.queue.length > 0) {
       const job = this.queue.shift();
       if (job === undefined) break;
       const name = job[0];
       const url = job[1];
+      const jobId = ++this.transferGeneration;
+      this.pending.set(name, jobId);
       this.active++;
-      this.fetch(url, name).then((ok: number) => {
-        this.active--;
-        this.pending.delete(name);
-        // 2 = 被「清除缓存」拦下的,不记失败(那次传输本身是好的,只是落盘时机不对)
+      this.activeJobs.add(jobId);
+      const myGen = this.gen;
+      const task = this.fetch(url, name, jobId).then((ok: number) => {
+        const current = this.activeJobs.delete(jobId);
+        if (current) this.active--;
+        if (this.pending.get(name) === jobId) this.pending.delete(name);
+        if (!current || myGen !== this.gen) {
+          this.pump();
+          return;
+        }
+        // 2 = 被「清除缓存」或关闭三方内容拦下的,不记失败
         if (ok !== 0) {
           if (ok === 1) this.failWaiters(name);
           else this.waiters.delete(name);
@@ -171,27 +213,33 @@ export class ArtworkCache {
         if (this.total > ArtworkCache.BUDGET_BYTES) this.evict();
         this.pump();
       }).catch((err: Error) => {
-        this.active--;
-        this.pending.delete(name);
-        this.failWaiters(name);
+        const current = this.activeJobs.delete(jobId);
+        if (current) this.active--;
+        if (this.pending.get(name) === jobId) this.pending.delete(name);
+        if (current && myGen === this.gen) this.failWaiters(name);
         Log.w('Artwork', `缓存失败 ${err.message}`);
         this.pump();
       });
+      this.activeTasks.set(jobId, task);
+      task.then((): void => { this.activeTasks.delete(jobId); });
     }
   }
 
   /// 「清除缓存」用:整目录清空 + 内存表作废(队列里没开始的那些也别再跑)。
   async clearAll(): Promise<void> {
-    this.gen++;
+    this.clearing = true;
+    this.cancelTransfers();
     this.entries.clear();
-    this.waiters.clear();
     this.failedAt.clear();
-    this.queue = [];
     this.total = 0;
-    // **不清 pending**:里面是正在传输的那些,它们会在 rename 前被 gen 拦下。
-    // 清了反而让同一个 URL 被再排一份,两份写同一个 `.part`。
-    if (this.dir.length === 0) return;
+    if (this.dir.length === 0) {
+      this.clearing = false;
+      return;
+    }
     try {
+      // 先等被 destroy 的旧请求与 rename 收尾,再列目录;否则旧任务可能在 list 之后把 target 写回来。
+      const active = Array.from(this.activeTasks.values());
+      if (active.length > 0) await Promise.all(active);
       const names = await fs.listFile(this.dir);
       for (let i = 0; i < names.length; i++) {
         try {
@@ -203,6 +251,9 @@ export class ArtworkCache {
       Log.i('Artwork', `清空 ${names.length} 个文件`);
     } catch (e) {
       Log.w('Artwork', `清目录失败 ${(e as Error).message}`);
+    } finally {
+      this.clearing = false;
+      this.pump();
     }
   }
 
@@ -245,10 +296,12 @@ export class ArtworkCache {
   }
 
   /** 0 = 落盘成功;1 = 这次没成;2 = 中途被「清除缓存」作废(别记进失败冷却)。 */
-  private async fetch(url: string, name: string): Promise<number> {
+  private async fetch(url: string, name: string, jobId: number): Promise<number> {
     const target = `${this.dir}/${name}`;
-    const part = `${target}.part`;
+    // 每个任务独立临时文件,旧任务清理时不会误删重新开启后下载中的同名图片。
+    const part = `${target}.${jobId}.part`;
     const req = http.createHttp();
+    this.activeRequests.set(jobId, req);
     const myGen = this.gen;
     let file: fs.File | null = null;
     try {
@@ -258,6 +311,7 @@ export class ArtworkCache {
       let written = 0;
       let writeFailed = '';
       req.on('dataReceive', (chunk: ArrayBuffer) => {
+        if (myGen !== this.gen) return;
         chain = chain.then((): Promise<void> => {
           if (writeFailed.length > 0) return Promise.resolve();
           return fs.write(fd, chunk).then((n: number) => { written += n; })
@@ -273,6 +327,10 @@ export class ArtworkCache {
       await chain;
       await fs.close(file);
       file = null;
+      if (myGen !== this.gen) {
+        await this.unlinkQuiet(part);
+        return 2;
+      }
       if (code !== 200 || writeFailed.length > 0 || written === 0) {
         await this.unlinkQuiet(part);
         return 1;
@@ -285,13 +343,29 @@ export class ArtworkCache {
         await this.unlinkQuiet(part);
         return 1;
       }
-      // 传输期间用户按了「清除缓存」:目录已经空了,这张不能再 rename 回去(见 gen)
-      if (myGen !== this.gen) {
+      // 传输期间用户按了「清除缓存」或关闭三方内容:旧任务只能丢自己的 part。
+      if (myGen !== this.gen || !this.contentEnabled()) {
         await this.unlinkQuiet(part);
         return 2;
       }
-      await this.unlinkQuiet(target);
-      await fs.rename(part, target);
+      // 代次检查与 target 替换之间不能有 await:否则关闭再开启能插进来,让旧任务删掉新一代文件。
+      // renameSync 先试原子覆盖;SDK 不支持覆盖时,删目标与 rename 也必须在同一同步段完成。
+      try {
+        fs.renameSync(part, target);
+      } catch (e) {
+        if (myGen !== this.gen || !this.contentEnabled()) {
+          await this.unlinkQuiet(part);
+          return 2;
+        }
+        try {
+          if (fs.accessSync(target)) fs.unlinkSync(target);
+        } catch (e2) {
+          // 目标不存在或删不掉都交给 rename 判定
+        }
+        fs.renameSync(part, target);
+      }
+      // 改名完成后代次仍可能变化;此时不删 target,它可能已属于更新一代的任务。
+      if (myGen !== this.gen) return 2;
       return 0;
     } catch (e) {
       if (file !== null) {
@@ -304,6 +378,7 @@ export class ArtworkCache {
       await this.unlinkQuiet(part);
       return 1;
     } finally {
+      this.activeRequests.delete(jobId);
       try {
         req.off('dataReceive');
         req.destroy();

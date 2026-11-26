@@ -13,6 +13,7 @@ import { Log } from '../util/Logger';
 import { CatalogFeedFilter } from './CatalogFeedFilter';
 import { BilibiliSource } from './BilibiliSource';
 import { Features } from '../Features';
+import { SettingsStore } from '../store/SettingsStore';
 
 export enum FeedProbeState {
   UNCHECKED = 0,
@@ -46,6 +47,10 @@ export class PodcastRepository {
   private seed: SeedCatalog;
   /// 频道详情(解析后的 RSS)缓存:详情页秒开,且断网时仍能看已访问过的频道
   private feedCache: FeedCacheStore;
+  /// 三方内容目录与封面的运行时总开关;后台订阅更新传入 false,不影响已有 feed 解析。
+  private readonly catalogEnabled: () => boolean;
+  /// 开关每次变化都递增;在途请求返回后必须同时核对代次与开关,快速关再开也不能复用旧结果。
+  private directoryGeneration = 0;
   /// 私有订阅源的凭据账本。与 `feedCache` 一样由仓库持有 —— 但**只在本机**,
   /// 不随订阅列表导出,也不进备份(见 `FeedAuthStore` 类注释)。
   readonly authStore: FeedAuthStore = new FeedAuthStore();
@@ -58,6 +63,10 @@ export class PodcastRepository {
   /// 同一 URL + 超时策略只允许一条真实网络/解析链；预检成功后详情直接复用 FeedCache。
   /// 键里带凭据指纹 —— 用户改了口令之后,"上一次的失败链"不能被当成这一轮的结果复用。
   private feedInFlight: Map<string, Promise<FeedOutcome>> = new Map<string, Promise<FeedOutcome>>();
+  /// 同一 URL 的普通请求与目录请求可能并发;回包只允许较新的成功结果写缓存。
+  private feedRequestGeneration: Map<string, number> = new Map();
+  private feedCommittedGeneration: Map<string, number> = new Map();
+  private feedActiveRequests: Map<string, number> = new Map();
   /**
    * 视频当播客听。播放前解析也走它(见 `PlayerController.resolvePseudoUrl`)——
    * 播放层与检索**共用这一个实例**,候选流缓存与探活游标才有意义。
@@ -72,10 +81,12 @@ export class PodcastRepository {
   private probeFailures: Map<string, ProbeFailure> = new Map<string, ProbeFailure>();
   private probeFailureOrder: string[] = [];
 
-  constructor(cache: PopularCacheStore, seed: SeedCatalog, feedCache: FeedCacheStore) {
+  constructor(cache: PopularCacheStore, seed: SeedCatalog, feedCache: FeedCacheStore,
+    catalogEnabled: () => boolean) {
     this.cache = cache;
     this.seed = seed;
     this.feedCache = feedCache;
+    this.catalogEnabled = catalogEnabled;
   }
 
   /// 搜索频道:URL 只按 RSS 直连处理；关键词按 Apple → fyyd → gpodder 降级。
@@ -165,6 +176,7 @@ export class PodcastRepository {
   /// 秒返可展示列表(零 IO),供 UI 立即渲染。优先真实缓存;缓存为空(首装/清过缓存/一直无网)
   /// 则回退到随包内置清单,保证首屏不空。种子**只读不写缓存**,联网刷新成功即被真数据取代。
   cachedPopular(genreId: number, region: string): Podcast[] {
+    if (!this.directoryEnabled()) return [];
     const real = CatalogFeedFilter.keepPodcasts(this.cache.get(this.cacheKey(genreId, region)));
     if (real.length > 0) return real;
     return CatalogFeedFilter.keepPodcasts(this.seed.get(genreId, region));
@@ -172,24 +184,34 @@ export class PodcastRepository {
 
   /// 当前展示的是内置清单(而非联网取回的真榜单)——UI 据此把标题标成「内置精选」。
   isSeedList(genreId: number, region: string): boolean {
+    if (!this.directoryEnabled()) return false;
     return CatalogFeedFilter.keepPodcasts(this.cache.get(this.cacheKey(genreId, region))).length === 0
       && CatalogFeedFilter.keepPodcasts(this.seed.get(genreId, region)).length > 0;
   }
 
   /// 内置清单的生成日期(yyyy-MM-dd)。
   seedGeneratedAt(): string {
-    return this.seed.generatedAt();
+    return this.directoryEnabled() ? this.seed.generatedAt() : '';
   }
 
   /// 刷新热门榜:分类榜/地区综合榜 → 美国综合榜 → fyyd 热门;失败保留旧缓存。
   async refreshPopular(genreId: number, region: string): Promise<Podcast[]> {
+    const token = this.directoryToken();
+    if (token === null) return [];
     Log.i('Repo', `刷新榜单 genre=${genreId > 0 ? `${genreId}` : 'all'} region=${region}`);
     let list = CatalogFeedFilter.keepPodcasts(genreId > 0
       ? await AppleChartsSource.topByGenre(region, genreId, 30)
       : await AppleChartsSource.top(region, 30));
+    if (!this.directoryCurrent(token)) return [];
     if (list.length === 0 && genreId <= 0) {
-      if (region !== 'us') list = CatalogFeedFilter.keepPodcasts(await AppleChartsSource.top('us', 30));
-      if (list.length === 0) list = CatalogFeedFilter.keepPodcasts(await FyydSource.hot(30));
+      if (region !== 'us') {
+        list = CatalogFeedFilter.keepPodcasts(await AppleChartsSource.top('us', 30));
+        if (!this.directoryCurrent(token)) return [];
+      }
+      if (list.length === 0) {
+        list = CatalogFeedFilter.keepPodcasts(await FyydSource.hot(30));
+        if (!this.directoryCurrent(token)) return [];
+      }
     }
     if (list.length > 0) this.cache.put(this.cacheKey(genreId, region), list);
     Log.i('Repo', `榜单刷新完成 count=${list.length}`);
@@ -204,7 +226,7 @@ export class PodcastRepository {
    * worker 返回 null 已经是一次完整网络尝试的正常失败终态,绝不能再在 UI 线程请求第二遍。
    * 只有 taskpool.execute 本身抛出调度/序列化/worker 初始化异常时才回落本线程一次。
    */
-  async feed(feedUrl: string): Promise<FeedResult | null> {
+  async feed(feedUrl: string, directoryToken: number | null = null): Promise<FeedResult | null> {
     // 凭据/网址从同一处拆分:搜索页粘进来的带 userinfo 的地址,与订阅里存的那份
     // 必须收敛到同一个键 —— 否则缓存、凭据、备份会各认一个。(ArkTS 不支持解构声明)
     const split = FeedCredential.splitUrl(feedUrl);
@@ -216,11 +238,14 @@ export class PodcastRepository {
     // 落盘缓存照写 —— 存的同样只有伪地址,不含会过期的直链(见 BilibiliSource 类注释第 2 条)。
     if (BilibiliSource.isPseudo(url)) {
       const result = await this.bilibili.feedOf(url);
+      if (directoryToken !== null && !this.directoryCurrent(directoryToken)) return null;
       if (result !== null && result.episodes.length > 0) this.feedCache.put(url, result);
       return result;
     }
     const credential = inline !== null ? inline : this.authStore.get(url);
-    const outcome = await this.feedWithTimeout(url, PodcastRepository.RSS_TIMEOUT_MS, credential);
+    const outcome = await this.feedWithTimeout(url, PodcastRepository.RSS_TIMEOUT_MS, credential,
+      directoryToken);
+    if (directoryToken !== null && !this.directoryCurrent(directoryToken)) return null;
     if (outcome.result !== null && inline !== null) this.authStore.save(url, inline);
     if (outcome.result === null && outcome.unauthorized) this.challenge(url);
     return outcome.result;
@@ -336,15 +361,15 @@ export class PodcastRepository {
   }
 
   private async feedWithTimeout(feedUrl: string, timeoutMs: number,
-    credential: FeedCredential | null): Promise<FeedOutcome> {
-    // 8s 预检与 12s 正式加载不能互相继承截止时间；相同策略的并发调用仍严格单飞。
-    // 键里带凭据指纹:用户改完口令重试时,不能复用上一把口令那条已失败的链。
+    credential: FeedCredential | null, directoryToken: number | null = null): Promise<FeedOutcome> {
+    // 目录代次也进单飞键:快速关/开不能复用关闭前那条 Promise 与它的缓存写入。
     const authKey = credential === null ? '' : credential.defaultHeader;
-    const flightKey = `${timeoutMs}:${feedUrl}:${authKey}`;
+    const directoryKey = directoryToken === null ? 'feed' : `directory:${directoryToken}`;
+    const flightKey = `${timeoutMs}:${feedUrl}:${authKey}:${directoryKey}`;
     const existing = this.feedInFlight.get(flightKey);
     if (existing !== undefined) return await existing;
 
-    const work = this.fetchFeedOnce(feedUrl, timeoutMs, credential);
+    const work = this.fetchFeedOnce(feedUrl, timeoutMs, credential, directoryToken);
     this.feedInFlight.set(flightKey, work);
     try {
       return await work;
@@ -354,30 +379,47 @@ export class PodcastRepository {
   }
 
   private async fetchFeedOnce(feedUrl: string, timeoutMs: number,
-    credential: FeedCredential | null): Promise<FeedOutcome> {
+    credential: FeedCredential | null, directoryToken: number | null): Promise<FeedOutcome> {
+    const requestGeneration = (this.feedRequestGeneration.get(feedUrl) ?? 0) + 1;
+    this.feedRequestGeneration.set(feedUrl, requestGeneration);
+    this.feedActiveRequests.set(feedUrl, (this.feedActiveRequests.get(feedUrl) ?? 0) + 1);
     const startedAt = Date.now();
     const user = credential === null ? '' : credential.username;
     const pass = credential === null ? '' : credential.password;
     let outcome: FeedOutcome = { result: null, unauthorized: false };
     try {
-      const out: Object = await taskpool.execute(fetchFeedConcurrent, feedUrl, timeoutMs, user, pass);
-      // null 是 worker 已完成请求后的正常失败结果,这里直接结束,不可回落后二次请求。
-      if (out === null || out === undefined) {
-        Log.w('Repo', `host=${Http.host(feedUrl)} 阶段=worker返回空 耗时=${Date.now() - startedAt}ms`);
-        return outcome;
+      try {
+        const out: Object = await taskpool.execute(fetchFeedConcurrent, feedUrl, timeoutMs, user, pass);
+        // null 是 worker 已完成请求后的正常失败结果,这里直接结束,不可回落后二次请求。
+        if (out === null || out === undefined) {
+          Log.w('Repo', `host=${Http.host(feedUrl)} 阶段=worker返回空 耗时=${Date.now() - startedAt}ms`);
+          return outcome;
+        }
+        outcome = out as FeedOutcome;
+      } catch (_e) {
+        Log.w('Repo', `host=${Http.host(feedUrl)} 阶段=worker异常回落 耗时=${Date.now() - startedAt}ms`);
+        outcome = await RssParser.fetchOutcome(feedUrl, timeoutMs, user, pass);
       }
-      outcome = out as FeedOutcome;
-    } catch (_e) {
-      Log.w('Repo', `host=${Http.host(feedUrl)} 阶段=worker异常回落 耗时=${Date.now() - startedAt}ms`);
-      outcome = await RssParser.fetchOutcome(feedUrl, timeoutMs, user, pass);
+      const committed = this.feedCommittedGeneration.get(feedUrl) ?? 0;
+      if (outcome.result !== null && requestGeneration > committed &&
+          (directoryToken === null || this.directoryCurrent(directoryToken))) {
+        if (outcome.result.episodes.length > 0) this.feedCache.put(feedUrl, outcome.result);
+        // 正式详情或后台刷新成功也要清掉较早的短期负缓存,否则搜索仍会错误显示不可达。
+        this.clearProbeFailure(feedUrl);
+        this.rememberProbeState(feedUrl, FeedProbeState.AVAILABLE);
+        this.feedCommittedGeneration.set(feedUrl, requestGeneration);
+      }
+      return outcome;
+    } finally {
+      const active = (this.feedActiveRequests.get(feedUrl) ?? 1) - 1;
+      if (active <= 0) {
+        this.feedActiveRequests.delete(feedUrl);
+        this.feedRequestGeneration.delete(feedUrl);
+        this.feedCommittedGeneration.delete(feedUrl);
+      } else {
+        this.feedActiveRequests.set(feedUrl, active);
+      }
     }
-    if (outcome.result !== null) {
-      if (outcome.result.episodes.length > 0) this.feedCache.put(feedUrl, outcome.result);
-      // 正式详情或后台刷新成功也要清掉较早的短期负缓存,否则搜索仍会错误显示不可达。
-      this.clearProbeFailure(feedUrl);
-      this.rememberProbeState(feedUrl, FeedProbeState.AVAILABLE);
-    }
-    return outcome;
   }
 
   private validProbeFailure(feedUrl: string): ProbeFailure | null {
@@ -440,6 +482,8 @@ export class PodcastRepository {
 
   /// 随机取一集(随机/情境电台用)。电台严格当前地区,不读可能含跨区回退的综合榜缓存。
   async randomEpisode(region: string, genreIds: number[], exclude: string[]): Promise<Episode | null> {
+    const token = this.directoryToken();
+    if (token === null) return null;
     const pool: Podcast[] = [];
     const seen = new Set<string>();
     for (let i = 0; i < genreIds.length; i++) {
@@ -459,6 +503,7 @@ export class PodcastRepository {
         const cached = CatalogFeedFilter.keepPodcasts(this.cache.get(this.cacheKey(genreId, region)));
         if (genreId <= 0 || cached.length > 0) continue;
         const extra = await this.refreshPopular(genreId, region);
+        if (!this.directoryCurrent(token)) return null;
         for (let j = 0; j < extra.length; j++) {
           const p = extra[j];
           if (p.feedUrl.length === 0 || seen.has(p.feedUrl)) continue;
@@ -469,7 +514,7 @@ export class PodcastRepository {
       }
     }
     Log.i('Repo', `电台候选 region=${region} count=${pool.length}`);
-    if (pool.length === 0) return null;
+    if (pool.length === 0 || !this.directoryCurrent(token)) return null;
 
     // 付费源常拿不到直链;全付费则放开
     let candidates = pool.filter((p: Podcast) => !p.isPaid);
@@ -478,8 +523,10 @@ export class PodcastRepository {
     const picked = shuffle(candidates).slice(0, 6);
     const excludeSet = new Set<string>(exclude);
     for (let i = 0; i < picked.length; i++) {
+      if (!this.directoryCurrent(token)) return null;
       const podcast = picked[i];
-      const feed = await this.feed(podcast.feedUrl);
+      const feed = await this.feed(podcast.feedUrl, token);
+      if (!this.directoryCurrent(token)) return null;
       if (feed === null) continue;
       const usable = feed.episodes.filter((e: Episode) => e.audioUrl.length > 0 && !excludeSet.has(e.id));
       if (usable.length === 0) continue;
@@ -488,6 +535,37 @@ export class PodcastRepository {
       return usable[idx];
     }
     return null;
+  }
+
+  private directoryEnabled(): boolean {
+    return Features.CATALOG && this.catalogEnabled();
+  }
+
+  invalidateDirectory(): void {
+    this.directoryGeneration++;
+  }
+
+  directoryToken(): number | null {
+    if (!this.directoryEnabled()) {
+      this.invalidateDirectory();
+      return null;
+    }
+    return this.directoryGeneration;
+  }
+
+  directoryCurrent(token: number): boolean {
+    return token === this.directoryGeneration && this.directoryEnabled();
+  }
+
+  /**
+   * 三方目录的有效地区。关闭时保留原来的设备 / 覆盖值供关键词搜索使用;
+   * 开启后默认美国,只有明确选择 cn 才保留中文地区,hk/tw/mo 及其它未明确项回落 us。
+   */
+  static catalogRegion(enabled: boolean, override: string, systemCountry: string): string {
+    const selected = SettingsStore.normalizeRegionOverride(override);
+    if (!enabled) return (selected.length > 0 ? selected : systemCountry.toLowerCase()) || 'us';
+    return (selected === 'cn' || (selected.length > 0 && selected !== 'hk' && selected !== 'tw' && selected !== 'mo'))
+      ? selected : 'us';
   }
 }
 

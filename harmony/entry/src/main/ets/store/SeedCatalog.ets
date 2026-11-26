@@ -78,10 +78,10 @@ export class SeedCatalog {
     return this.generated;
   }
 
-  /// 种子只打包 cn / us 两份榜单(12 个地区全打进去没必要,它只是没网时的兜底)。
-  /// 中文区落到 cn,其余一律落到 us。
+  /// 种子只打包 cn / us 两份榜单。只有用户明确选择中国内地才落到 cn,
+  /// 香港 / 台湾 / 澳门及其它地区一律落到 us,不再把繁体地区自动当中文内容。
   private static seedRegion(region: string): string {
     const r = region.toLowerCase();
-    return (r === 'cn' || r === 'hk' || r === 'tw' || r === 'mo') ? 'cn' : 'us';
+    return r === 'cn' ? 'cn' : 'us';
   }
 }

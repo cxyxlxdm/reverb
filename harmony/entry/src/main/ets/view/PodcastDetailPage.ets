@@ -305,9 +305,10 @@ export struct PodcastDetailPage {
     try {
       // 卡片常驻离屏;让出两帧,确保刚刷新的频道标题与封面已落到组件树再截图。
       await new Promise<void>((resolve: () => void) => setTimeout(resolve, 48));
+      const artworkRequested = this.app.settings.thirdPartyContentEnabled;
       const ui = this.getUIContext();
       const ctx = ui.getHostContext() as common.UIAbilityContext;
-      const png = await snapshotToPng(ui, ctx, 'reverb-moments-card', 'reverb-moments.png');
+      const png = await snapshotToPng(ui, ctx, 'reverb-moments-card', 'reverb-moments.png', artworkRequested);
       if (png === null || !await Files.shareImage(ctx, L.s('moments_poster'), png)) {
         this.showToast(L.s('share_failed'));
       }

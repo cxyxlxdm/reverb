@@ -17,6 +17,7 @@ import android.widget.RemoteViews
 import com.yuyin.reverb.MainActivity
 import com.yuyin.reverb.R
 import com.yuyin.reverb.ReverbApp
+import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.playback.PlayerController
 import com.yuyin.reverb.util.Logger
 import java.util.Locale
@@ -172,7 +173,11 @@ class ReverbWidgetProvider : AppWidgetProvider() {
             // 播放态来自独立的 `widget_state.json`(见 WidgetRuntime):两份播放数据文件
             // 里都没有「正在播」这一位,不能靠有进度来推。
             val playing = WidgetRuntime.readPlaying(app)
-            val artKey = state?.artworkUrl.orEmpty()
+            val artKey = if (SettingsStore(app).thirdPartyContentEnabled.value) {
+                state?.artworkUrl.orEmpty()
+            } else {
+                ""
+            }
             var art: android.graphics.Bitmap? = null
             var artTried = false
             for (id in ids) {

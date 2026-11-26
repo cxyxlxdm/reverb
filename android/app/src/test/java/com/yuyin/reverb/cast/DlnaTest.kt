@@ -98,6 +98,17 @@ class DlnaTest {
     }
 
     @Test
+    fun `三方封面关闭时不进投播元数据开启时才携带`() {
+        val ep = episode(artwork = "https://example.com/art.jpg?a=1&b=2")
+        assertTrue(DlnaClient.didl(ep, artworkEnabled = false).contains("albumArtURI").not())
+        assertTrue(DlnaClient.setUriArgs(ep, artworkEnabled = false).contains("albumArtURI").not())
+
+        val enabled = DlnaClient.didl(ep, artworkEnabled = true)
+        assertTrue(enabled.contains("<upnp:albumArtURI>"))
+        assertTrue(enabled.contains("https://example.com/art.jpg?a=1&amp;b=2"))
+    }
+
+    @Test
     fun `SOAP 信封带 action 与 service 命名空间`() {
         val env = DlnaClient.envelope("Play", "<InstanceID>0</InstanceID><Speed>1</Speed>")
         assertTrue(env.contains("<u:Play xmlns:u=\"${DlnaClient.SERVICE_TYPE}\">"))

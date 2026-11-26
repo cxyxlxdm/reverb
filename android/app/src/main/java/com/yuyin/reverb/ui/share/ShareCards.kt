@@ -15,6 +15,7 @@ import android.text.TextUtils
 import androidx.core.content.FileProvider
 import coil.imageLoader
 import coil.request.ImageRequest
+import com.yuyin.reverb.data.local.SettingsStore
 import com.yuyin.reverb.data.model.Episode
 import com.yuyin.reverb.data.model.Podcast
 import kotlinx.coroutines.Dispatchers
@@ -37,10 +38,11 @@ object ShareCards {
     private const val DIM = 0xFF95A3A0.toInt()
 
     private suspend fun loadArtwork(context: Context, url: String): Bitmap? {
-        if (url.isBlank()) return null
+        if (url.isBlank() || !SettingsStore(context).thirdPartyContentEnabled.value) return null
         return try {
             val req = ImageRequest.Builder(context).data(url).allowHardware(false).build()
             val result = context.imageLoader.execute(req)
+            if (!SettingsStore(context).thirdPartyContentEnabled.value) return null
             (result.drawable as? android.graphics.drawable.BitmapDrawable)?.bitmap
         } catch (e: Exception) {
             null
