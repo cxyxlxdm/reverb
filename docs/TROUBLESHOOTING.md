@@ -14846,3 +14846,38 @@ Android 单测与 release 编译、鸿蒙单测与 debug HAP 编译按最终源�
 ① 动态选项列表与当前选中值是一对状态,任何一侧被快照都会制造“下标对、标签错”的假象。
 ② ArkUI `@Builder` 的值参数不会自动跟随状态变化;需要动态求值的数组也必须显式包成闭包。
 ③ 真机看到“请求正确、界面错误”时先查两侧取值是否同代,不要急着改持久化或网络逻辑。
+### H306. 同版本重打的包被自更新按「重出包」判回旧资产 —— 口径改回 versionCode 相同就不提示
+
+**现象**(2026-11-27)。安装本机 `android/dist/reverb.apk`(`versionCode=11 / versionName=1.1.0`)后启动,
+应用内更新自动提示并下载 GitHub `1.1.0` release 里的 `reverb.apk`,把刚装的新包覆盖回旧字节。
+用户预期是:versionCode 一样就不该触发更新。
+
+**现场读数**:
+- 本机 dist 包 SHA-256 `100fc44052800f7ed4424fde608c1b62bce7e61e134767755b67c186ece4ff8e`;
+  GitHub `1.1.0` 资产 SHA-256 `7c18e84c12ae7399ab920fd59c446fc7424584e96c3aefba227146d39e67da73`
+  (270327060 B)。两者字节不同。
+- 自更新不看 versionCode(H234 记过当初"读不到"的原因):`isNewer(versionName)` 已是 false 时,
+  `isRepublished()` 仍因「版本名相同 + digest 不同」判真,进入下载 —— 这就是覆盖发生的路径。
+- 旧仓名 `revert-cast` 会重定向到 `reverb-cast`(H302),不是本条的原因。
+
+**根因**。H234 为「1.0.6 一天重打三次却没有老设备被提示」加的 digest 兜底,与这次的诉求正好相反:
+本机重打同版本包时,发布页同 tag 的旧资产反而成了"更该装的那一份"。两个场景不能靠同一条判据兼顾。
+
+**修法**(2026-11-27):
+- `checkOnce()` 收敛为一条判据:`newer = isNewer(rel.tag, BuildConfig.VERSION_NAME)`;
+  `!newer` 直接回 `UpToDate`(手动)或 `Idle`(自动),日志带上本机 versionCode。
+- 删除 `isRepublished()` / `localApkSha256()` / `KEY_LOCAL_DIGEST`,不再读 `sourceDir` 算本机包哈希。
+  `Release.republished` 作为历史字段保留且恒为 false,UI 的「重新发布过安装包」文案分支不再触发。
+- 摘要保留三处用途:下载完校验字节、落盘文件名后缀、「以后再说」的静音键;
+  **不再**参与「是否提示」的判断。
+- 等价性依据:发版约定 versionName 递增时 versionCode 同步递增(AGENTS「版本号一共四处」),
+  而公开 Release 只有 tag、没有机器可读的 versionCode,所以「同 versionCode」落地为「同版本名」。
+
+**验收**。`./gradlew --offline :app:compileReleaseKotlin :app:testDebugUnitTest -q` exit 0,
+134 条单测全绿。本轮按 1.1.0 原版本号重打,产物仍是 `versionCode=11 / versionName=1.1.0`。
+**未验**:装新包后冷启动对着真实 GitHub release 的观察(需真机长时间看 24h 内不再出现更新提示);
+本条只到代码与单测层。
+
+**代价 / 边界**。H234 当初要解决的「同版本重出包要让在野用户知道」从此不再成立 ——
+这是维护者明确选的口径反转:**本机重包优先于远端同 tag 资产**。以后要补发同版本修复,
+只能升 versionName / versionCode 发新版本;商店侧不受这次改动影响。
