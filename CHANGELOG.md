@@ -63,7 +63,15 @@
 - iOS：整包编译门在本机 exit 65，同一批 `TranscriptPage.swift` / `LanSyncView.swift`
   报错在**未改动的 master 基线工作树**上逐条复现，属环境与宏插件故障，不是本轮改动引入；
   iOS 侧共享层已被 macOS 测试覆盖，界面改动只过 `swiftc -parse` 与同构对照。
-- 未装机：播放稳定性、焦点、界面对齐都要在出包机器上按 `docs/TROUBLESHOOTING.md` 的判据实跑。
+- 补跑真机（问题二）：Android Pixel 3 以用户偏好 1.25× 播 HLS，媒体会话实测 `speed=1.0`；
+  拖到末尾后日志出现 `STATE_ENDED → live ended → live reconnect #1 → live resumed`。
+  Harmony 真机同样以偏好 1.25× 起播，日志出现 `直播起播锁速 rate=1.0 用户倍速偏好=1.25`
+  与 `直播自动重连 1/3`。测试源是有限时长 HLS，鸿蒙在 seekable 边缘重连后会再次 completed，
+  这不代表真实直播台行为，仅证明「结束回调不再停播、会按退避重连」。
+- 问题一补查：四个 xyzfm 源仍落到 HTML 拦截页，本机缓存未命中；修复后分类为
+  `unavailable` 并显示「数据源暂不可用」，没有 Apple 目录兜底，不能声称已恢复单集加载。
+- 未实跑：Apple 端问题 2/3/4 的 GUI 与播放路径仍待出包机器验证；本机 macOS 自动化被系统权限
+  拒绝（System Events -10004），iOS 编译门也不可用。焦点、界面对齐不要在本文里写成已验过。
 
 ### 本轮明确没做
 
