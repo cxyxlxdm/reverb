@@ -32,14 +32,17 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * 发布物只有一个:仓库 GitHub Releases 上那份 `reverb.apk`。这里做三件事 ——
  * ① 启动后查一次发布页的 release **列表**(不是 `releases/latest` 那根指针),设置页「检查更新」
- *    走同一条代码路径、只是必须给个读数;② 版本比本机新就下载(仅蜂窝网络先征求同意);
+ *    走同一条代码路径、只是必须给个读数;② 远端版本比本机新才下载(仅蜂窝网络先征求同意);
  * ③ 下载完把文件交给系统安装器。**没有任何自建后端**:这一条与「零后端」约束不冲突,
  * 因为读的是**公开发布页的公开 API**,不带任何标识用户的参数,也不上传任何数据。
  *
- * ⚠️ 「版本比本机新」按 **versionName** 比,另有 [isRepublished] 那条**同版本名 + 不同字节**的兜底 ——
- * 光比版本名会漏掉"同版本号重出包"(1.0.6 一天重打三次,老设备一次都没被提示),见 H234。
- * 这里**读不到 versionCode**:公开仓的 release 只有 tag(tag 里就是版本名),
- * 而三端版本号是三处手改、没有单一来源(见 AGENTS「版本号一共三处」),要让 tag 带 versionCode 就得改发版流程。
+ * ⚠️ 口径(2026-11-27 改):**同 versionCode 一律不提示、不下载**。
+ * 公开仓的 release 只有 tag(tag 里就是版本名),读不到远端 APK 的 versionCode;
+ * 而发版约定是 versionName 递增时 versionCode 同步递增(见 AGENTS「版本号一共四处」),
+ * 所以"远端比本机新"按 versionName 的数字段比 [isNewer],等价于按 versionCode 比。
+ * 原先还有一条 `isRepublished`:**同版本名 + 不同字节**也会触发下载 ——
+ * 那条已停用。本机重打一个同版本包时,GitHub 上同 tag 的旧资产会把刚装的新包覆盖回去,
+ * 正是这次要堵的行为;远端字节就算与本机不同,只要版本号不高于本机就当已是最新。
  *
  * **它在 `src/main`(2026-10-18 起)**
  * 原先只有自分发渠道带这个功能:商店那份是同名空壳,权限与文案都不进那个包(见 H70 的隔离手法)。
@@ -52,8 +55,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * **为什么"以后再说"必须落盘**
  * 检测点在每次冷启动。若用户点了「以后再说」而不记版本,下次启动同一个弹窗会再来一次,
  * 于是这个功能变成每启动一次的骚扰。记的是**被跳过那一版的「版本名 + 包体摘要」**:
- * 只对**那一份字节**静音 —— 同一版本名后来重出包(摘要变了)会重新问一次,
- * 这正是 1.0.6 一天重打三次、老设备却永不提示那个缺口的补法(见 H203 的代价与 H234)。
+ * 只对**那一份发布物**静音;下一版 tag 不同,会照常提示(见 H203 的代价)。
  */
 object SelfUpdate {
 
@@ -63,10 +65,11 @@ object SelfUpdate {
      * 公开发布页的 **release 列表**接口(不是 `releases/latest`)。
      *
      * 换掉的理由有两条,都是这轮踩过的:
-     * ① `latest` 那个指针靠"发版时把 latest 移过来"才指向对的那一版 —— 同版本号重出包时
-     *    指针不动,一旦哪天手滑没移,检测就永远问的是一版旧的;列表接口自己排序,不依赖指针。
+     * ① `latest` 那个指针靠"发版时把 latest 移过来"才指向对的那一版 ——
+     *    一旦哪天手滑没移,检测就永远问的是一版旧的;列表接口自己排序,不依赖指针。
      * ② 列表一次就把每个 release 的资产名、字节数与 `digest` 全带回来了,
-     *    而 `digest` 正是"同版本重出包"唯一能拿得出手的判据;`latest` 只有一份,拿不到"上一版"。
+     *    `digest` 用于下载完校验字节与落盘文件名(避免把旧字节递给安装器);
+     *    `latest` 只有一份,拿不到历史 release。
      * `per_page=20`:本仓库至今 6 个 release,20 条够扩好几年,且一次调用不翻页
      * (GitHub 未带 token 是**每 IP 每小时 60 次**,检测必须始终只占 1 次)。
      * draft 与 prerelease 在解析里自己滤掉 —— 滤完这两类,口径与 `latest` 完全一致。
@@ -88,7 +91,7 @@ object SelfUpdate {
     private const val ASSET_API_URL = "https://api.github.com/repos/cxyxlxdm/revert-cast/releases/assets/"
 
     /// Atom 发布流:检测主路的兜底。不需要 token,也不占 REST API 的每 IP 60 次限额。
-    /// 2026-11-23 起 macOS 已把它当主路;Android 仍先走 API(要 digest 判同版本重出包),
+    /// 2026-11-23 起 macOS 已把它当主路;Android 仍先走 API(要 digest 校验下载字节),
     /// 限额用尽(403 / remaining=0)时再用它把「有新版本」这件事问出来。
     private const val ATOM_URL = "https://github.com/cxyxlxdm/revert-cast/releases.atom"
 
@@ -106,9 +109,6 @@ object SelfUpdate {
     private const val DIR = "update"
     private const val PREFS = "reverb_update"
     private const val KEY_SKIPPED = "skipped_tag"
-
-    /// 本机这份安装包的 sha256 的**缓存**。键里带版本名与安装时间,所以覆盖安装后自动失效。
-    private const val KEY_LOCAL_DIGEST = "local_digest"
 
 
     private val _state = MutableStateFlow<UpdateState>(UpdateState.Idle)
@@ -193,13 +193,15 @@ object SelfUpdate {
         }
         val local = BuildConfig.VERSION_NAME
         val newer = isNewer(rel.tag, local)
-        val republished = !newer && isRepublished(rel, local)
-        if (!newer && !republished) {
-            Logger.i(TAG, "update check up-to-date local=$local remote=${rel.tag}")
+        if (!newer) {
+            // 同 versionCode(= 同版本名)一律不提示、不下载。远端资产摘要就算与本机不同,
+            // 也不再按"同版本重出包"处理 —— 否则本机临时重打的同版本包会被 GitHub 上
+            // 同 tag 的旧资产覆盖回去。
+            Logger.i(TAG, "update check up-to-date local=$local(${BuildConfig.VERSION_CODE}) remote=${rel.tag}")
             _state.value = if (manual) UpdateState.UpToDate(rel.tag) else UpdateState.Idle
             return
         }
-        val target = rel.copy(republished = republished)
+        val target = rel
         if (!manual && target.muteKey() == prefs.getString(KEY_SKIPPED, null)) {
             // 自动那一轮:这一版(这一份字节)之前跳过过,回到静默。
             // 这里**不能**写成 UpToDate —— 设置那一行会跟着显示"已是最新",而其实是有更新、只是被跳过的
@@ -207,7 +209,7 @@ object SelfUpdate {
             _state.value = UpdateState.Idle
             return
         }
-        Logger.i(TAG, "update available remote=${rel.tag} local=$local size=${rel.size} republished=$republished manual=$manual")
+        Logger.i(TAG, "update available remote=${rel.tag} local=$local(${BuildConfig.VERSION_CODE}) size=${rel.size} manual=$manual")
         val file = apkFile(rel)
         if (rel.size > 0L && file.exists() && file.length() == rel.size) {
             // 上次下完没装(或装完又启动了一次):不再走一遍网络,直接给安装。
@@ -218,72 +220,8 @@ object SelfUpdate {
         if (metered()) _state.value = UpdateState.AskCellular(target) else beginDownload(appCtx, target)
     }
 
-    /**
-     * 「同一版本名,但发布页那份字节不是我装的这一份」—— 同版本号重出包的判据。
-     *
-     * 为什么必须有:1.0.6 一天里重打过三次(H231 付费视频过滤 / H232 失败不切条 / H233 接口补试),
-     * 版本号一个字没动,而**已装 1.0.6 的设备按版本名比较永远不会提示** —— 那三刀对老用户等于没发。
-     * GitHub 每个资产自带 `digest`(sha256),本机这一份也能算(读自己安装来的 APK),两者一比就够。
-     *
-     * 四道闸,少一道都会假提示(顺序不能调,前两道是省下那次 65 MB 哈希的):
-     * ① `!BuildConfig.DEBUG` —— 调试包从来不会等于发布页那份字节,不加这道闸每个开发者都会被天天问;
-     * ② **版本名逐字相等**(不是 [isNewer] 那种"数字段相等"):版本名带 `-debug` 之类的后缀时
-     *    数字段虽相等、字节却必然不同,同样会假提示;
-     * ③ 发布页那条 release 真给了 `digest`(老 release 没有这字段,没有就不判);
-     * ④ 算得出本机这一份的 sha256(算不出按"不比它新"处理 —— 与整份功能一致的保守取向)。
-     *
-     * ⚠️ **已知会假提示一次的情形**:应用市场那侧在架的 APK 与 GitHub 上那份**字节不同**(签名/重打的时间戳差异),
-     * 商店装的版本名又与发布页相同 ⇒ 这里会判成"重出包"、问一次。处置是点「以后再说」,
-     * 静音记的是**版本名 + 那一份摘要**,所以只问这一次,下一次重出包(摘要变了)才会再问。
-     */
-    private fun isRepublished(rel: Release, local: String): Boolean {
-        if (BuildConfig.DEBUG) return false
-        if (rel.tag.trim().removePrefix("v").removePrefix("V") !=
-            local.trim().removePrefix("v").removePrefix("V")
-        ) return false
-        val published = rel.sha256 ?: return false
-        val mine = localApkSha256() ?: return false
-        return mine != published
-    }
-
-    /**
-     * 本机这份安装包的 sha256,**按「版本名 + 安装时间」缓存**。
-     *
-     * 读的是 `applicationInfo.sourceDir` —— 系统装进设备的那份 APK 本体,与发布页那份资产同源同字节
-     * (安装过程不改包体)。⚠️ 前提是这个应用**没有 split APK**(`sourceDir` 只是 base 那一份);
-     * 本仓库从来是一份单体 apk,若哪天启用 split 或 App Bundle 分发,这个判据要连 splits 一起哈希,
-     * 否则商店侧会稳定假提示。
-     *
-     * 65 MB 的哈希不是免费的(百毫秒级),所以只在 IO 线程、每个安装一次:`lastUpdateTime`
-     * 覆盖安装/升级都会变,缓存键里带上它就等于"换包自动失效",不需要额外的清理入口。
-     */
-    private fun localApkSha256(): String? {
-        return try {
-            val info = appCtx.packageManager.getPackageInfo(appCtx.packageName, 0)
-            val cacheKey = "${BuildConfig.VERSION_NAME}@${info.lastUpdateTime}"
-            val cached = prefs.getString(KEY_LOCAL_DIGEST, null)
-            if (cached != null && cached.startsWith("$cacheKey|")) return cached.substringAfter("|")
-            val src = File(appCtx.applicationInfo.sourceDir)
-            if (!src.isFile) return null
-            val md = MessageDigest.getInstance("SHA-256")
-            var bytes = 0L
-            src.inputStream().use { input ->
-                val buf = ByteArray(8192)
-                var n: Int
-                while (input.read(buf).also { n = it } != -1) {
-                    md.update(buf, 0, n)
-                    bytes += n
-                }
-            }
-            val digest = md.digest().joinToString("") { "%02x".format(it) }
-            Logger.i(TAG, "local apk hashed bytes=$bytes key=$cacheKey")
-            prefs.edit().putString(KEY_LOCAL_DIGEST, "$cacheKey|$digest").apply()
-            digest
-        } catch (e: Exception) {
-            Logger.w(TAG, "local apk digest failed: ${e.javaClass.simpleName}")
-            null
-        }
-    }
+    // 「同版本重出包」的 digest 兜底已停用(2026-11-27):同 versionCode 一律不提示、不下载,
+    // 本机重打的同版本包不应被 GitHub 上同 tag 的旧资产覆盖回去。
 
 
     /**
@@ -654,8 +592,8 @@ object SelfUpdate {
     }
 
     /**
-     * 取消下载 / 以后再说:回到静默,并把**这一版的那一份字节**记成已跳过(下次冷启动不再自动问)。
-     * 记的是 [Release.muteKey] 而不是裸版本名 —— 否则同版本重出包会被永久静音,
+     * 取消下载 / 以后再说:回到静默,并把**这一版的那一份发布物**记成已跳过(下次冷启动不再自动问)。
+     * 记的是 [Release.muteKey](版本名 + 摘要)而不是裸版本名 —— 下一版 tag 不同就不会被静音,
      * 而主动点「检查更新」时这一条不构成限制(见 [checkNow])。
      */
     fun dismiss(rel: Release) {
@@ -684,7 +622,7 @@ object SelfUpdate {
         return atomLatest()
     }
 
-    /// REST 列表(主路):要 digest 判同版本重出包,API 一次就带回来了。
+    /// REST 列表(主路):要 digest 校验下载字节并给落盘文件取名,API 一次就带回来了。
     /// 限额用尽时它回 403 —— 那只是**降级信号**,不是检测失败,交给 [atomLatest]。
     private fun apiLatest(): Release? = try {
         val req = Request.Builder()
@@ -802,8 +740,8 @@ object SelfUpdate {
      * `latest` 在服务端就滤过了),再要求它挂着可用的 apk 资产,最后按版本名取最大的那一个。
      *
      * ⚠️ **数组顺序不是契约**(GitHub 当前按时间倒序给,但那是碰巧),所以这里必须自己比版本;
-     * 而两个 release 版本名相同时取先遇到的那个,不追求"那一份最新字节" —— 同版本名的情形交给
-     * [isRepublished] 的 digest 判据去管,顺序在这里不重要。见 H234。
+     * 而两个 release 版本名相同时取先遇到的那个 —— 同版本一律不提示、不下载,
+     * 所以取哪一份都不会改变检测结论。见 H234。
      */
     private fun parse(json: String?): Release? {
         if (json.isNullOrBlank()) return null
@@ -893,7 +831,7 @@ object SelfUpdate {
         /// 检测请求在飞(自动那一轮也会经过这里,但只有主动查才把它显示出来)
         object Checking : UpdateState()
 
-        /// 主动查过、且发布页那一版不比本机新也没有重出包 —— 只给设置那一行看
+        /// 主动查过、且发布页那一版版本名不高于本机(同 versionCode) —— 只给设置那一行看
         data class UpToDate(val tag: String) : UpdateState()
 
         /// 主动查而没问到东西(HTTP 失败 / 网络不通 / 响应里没有一个可用 release) —— 也只给设置那一行看。
@@ -914,7 +852,8 @@ object SelfUpdate {
 
     /**
      * [apkUrls] 是**按优先级排的候选地址**,不是列表 UI 能选的东西 —— 见 [ASSET_API_URL] 的注释。
-     * [republished] = 「版本名与本机相同,但发布页那份字节不是本机这一份」,只影响弹窗标题的措辞。
+     * [republished] 是历史字段(原「同版本名不同字节」的弹窗措辞开关),口径改后恒为 false;
+     * 字段留着只为不动 UI 分支,不再参与任何检测判断。
      */
     data class Release(
         val tag: String,
@@ -924,9 +863,8 @@ object SelfUpdate {
         val republished: Boolean = false
     ) {
         /**
-         * 「以后再说」记的那把键。版本名 + 摘要前 12 位:
-         * 同一版本重出包(摘要变)会重新问一次,而被跳过的那一份字节不会再反复问 ——
-         * 只记版本名的话,今天这种一天重打三次的场景会把提示永久静音。
+         * 「以后再说」记的那把键:版本名 + 摘要前 12 位。
+         * 下一版 tag 不同就不会被静音;同一版只静音那一份发布物。
          */
         fun muteKey(): String = tag + "@" + (sha256?.take(12) ?: "nodigest")
     }

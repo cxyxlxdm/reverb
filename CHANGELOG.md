@@ -168,6 +168,18 @@
   (鸿蒙自本版起为语音搜索声明 MICROPHONE;iOS 使用系统麦克风授权)。五语种同步,
   `docs/PRIVACY.md` 与官网 `privacy.html` 一并更新。
 
+### Android 自更新口径:同 versionCode 不提示、不下载(2026-11-27)
+
+- 安装本机重打的 `dist/reverb.apk`(`versionCode 11` / `versionName 1.1.0`)后,冷启动不再因为
+  「GitHub 上同 tag 的资产字节不同」而提示并下载更新 —— 旧行为会把刚装的新包覆盖回旧资产。
+  本轮**不升版**,仍按 1.1.0 发布。
+- 判据收敛为一条:远端 release tag 的版本号**高于**本机 versionName 才提示。发版约定里 versionName
+  递增与 versionCode 同步递增,所以「同版本名」等价于「同 versionCode」;公开 Release 只有 tag,
+  拿不到远端 APK 的 versionCode。原先按资产摘要判「同版本重出包」的 `isRepublished` 已停用。
+- 摘要仍留在三处用途:下载完校验字节、给落盘文件取名、「以后再说」的静音键;不再参与「是否提示」。
+- 验收:`compileReleaseKotlin` exit 0、`testDebugUnitTest` 134 条全绿;真机冷启动对着真实 release
+  的观察未做(见 TROUBLESHOOTING H306)。
+
 ### 版本号
 
 - 四端同步到 1.1.0:Android `versionCode 11`、鸿蒙 `1000010`、macOS `CFBundleVersion 7`、iOS `CURRENT_PROJECT_VERSION 4`。
