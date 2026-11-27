@@ -251,6 +251,9 @@
   递增与 versionCode 同步递增,所以「同版本名」等价于「同 versionCode」;公开 Release 只有 tag,
   拿不到远端 APK 的 versionCode。原先按资产摘要判「同版本重出包」的 `isRepublished` 已停用。
 - 摘要仍留在三处用途:下载完校验字节、给落盘文件取名、「以后再说」的静音键;不再参与「是否提示」。
+- **release 资产已替换**:公开仓 `reverb-cast` 的 `1.1.0` tag 与其余 5 个资产不动,只把 `reverb.apk`
+  换成新包(远端 digest 与本地一致);旧资产已下载留档。**已装旧 1.1.0 的用户不会收到这次修复**
+  —— 新口径下他们本机也是 `versionCode=11`,要升到 1.1.1 才能收到。
 - 验收:`compileReleaseKotlin` exit 0、`testDebugUnitTest` 134 条全绿;真机冷启动对着真实 release
   的观察未做(见 TROUBLESHOOTING H306)。
 
