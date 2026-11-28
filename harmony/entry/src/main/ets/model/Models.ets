@@ -12,6 +12,7 @@ export interface Podcast {
   isPaid: boolean;
   fundingUrl: string;
   fundingLabel: string;
+  altFeeds: string[];  // 同节目备用 RSS 源（可达优先、小宇宙垫底，见 H311）
 }
 
 /// 播客中的一集。audioUrl 为 RSS enclosure 中发布方的原始直链。
@@ -140,7 +141,7 @@ export interface SearchOutcome {
 export function emptyPodcast(): Podcast {
   return {
     id: '', title: '', author: '', artworkUrl: '', feedUrl: '',
-    description: '', genre: '', isPaid: false, fundingUrl: '', fundingLabel: ''
+    description: '', genre: '', isPaid: false, fundingUrl: '', fundingLabel: '', altFeeds: []
   };
 }
 

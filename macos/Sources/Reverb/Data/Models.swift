@@ -12,6 +12,30 @@ struct Podcast: Codable, Identifiable, Hashable {
     var isPaid: Bool = false
     var fundingUrl: String = ""
     var fundingLabel: String = ""
+    /// 同一节目的备用 RSS 地址,按优先级排序(非小宇宙源在前,小宇宙垫底)。
+    /// 由种子清单的 `altFeeds` 读入;主源被判定为平台拦截时按此顺序逐个重试(见 H311)。
+    /// 默认空数组,旧缓存/备份解码仍兼容(见下方自定义 init(from:))。
+    var altFeeds: [String] = []
+}
+
+// 自定义解码放在 extension:写在类型体内会吞掉成员初始化器(H86 同一个坑)。
+// 每个键都 decodeIfPresent —— Podcast 会被写进订阅/备份/榜单缓存/推荐缓存,
+// 旧文件没有 altFeeds,缺一个键就整份解码失败会让老用户冷启动丢订阅。
+extension Podcast {
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? ""
+        title = try c.decodeIfPresent(String.self, forKey: .title) ?? ""
+        author = try c.decodeIfPresent(String.self, forKey: .author) ?? ""
+        artworkUrl = try c.decodeIfPresent(String.self, forKey: .artworkUrl) ?? ""
+        feedUrl = try c.decodeIfPresent(String.self, forKey: .feedUrl) ?? ""
+        description = try c.decodeIfPresent(String.self, forKey: .description) ?? ""
+        genre = try c.decodeIfPresent(String.self, forKey: .genre) ?? ""
+        isPaid = try c.decodeIfPresent(Bool.self, forKey: .isPaid) ?? false
+        fundingUrl = try c.decodeIfPresent(String.self, forKey: .fundingUrl) ?? ""
+        fundingLabel = try c.decodeIfPresent(String.self, forKey: .fundingLabel) ?? ""
+        altFeeds = try c.decodeIfPresent([String].self, forKey: .altFeeds) ?? []
+    }
 }
 
 /// 播客中的一集。audioUrl 为 RSS enclosure 中发布方的原始直链。

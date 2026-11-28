@@ -23,13 +23,20 @@
 import argparse
 import json
 import os
+import re
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 
 UA = "Reverb/1.0 (podcast client; seed generator)"
 TIMEOUT = 20
+
+# 小宇宙的 feed 有 IP ACL:不在白名单的网络会被 302 到 HTML 拦截页,客户端拿不到 RSS。
+# 这些 host 在候选排序里**永远垫底** —— 即使探测显示"可达"也不优先,因为它们随时可能翻脸。
+# 注意:这里不是"剔除",只是降到最后一位;其他源全挂时仍会试它(见 H311)。
+LOW_PRIO_FEED_HOSTS = ("feed.xyzfm.space",)
 
 # 只种子化「发现」页前几个分类 —— 首屏能横滑到的那几屏。genreId 0 = 综合推荐。
 # 与 Android DISCOVER_CATEGORIES / 鸿蒙 Genres 的 genreId 保持一致。
@@ -169,6 +176,133 @@ def chart_ids(region, genre_id):
         return []
 
 
+def host_of(url):
+    """取 URL 的 host(小写,去掉端口),用于来源优先级判定。"""
+    return (urllib.parse.urlsplit(url).hostname or "").lower()
+
+
+def is_low_priority_feed(url):
+    """小宇宙源:候选排序里永远垫底。"""
+    return host_of(url) in LOW_PRIO_FEED_HOSTS
+
+
+def same_show(title, author):
+    """归一化节目名/作者名,用于判断两个 Apple 条目是不是同一档节目。"""
+    return re.sub(r"[\s　]+", "", (title or "")).lower(), re.sub(r"[\s　]+", "", (author or "")).lower()
+
+
+def collect_candidates(entry, region="cn"):
+    """
+    给一个节目收集**同一档节目的所有 Apple 目录条目 feedUrl**作为候选。
+
+    为什么需要:Apple 目录里同一个中文节目常有多个条目,各自的 feedUrl 由作者/平台提交,
+    可能一个在小宇宙(有 IP ACL)、一个在喜马拉雅(可访问)。用户要的是"小宇宙垫底、
+    其他源优先",所以要在**构建期**把候选找齐,运行时按序尝试 —— 单看第一枪命中哪个源
+    是靠运气(实测"忽左忽右"全名搜 Apple 会漏,缩写/作者名才出现两条)。
+
+    只接受**标题严格一致**的条目,作者名只做搜索词 —— 同一个词搜出来的同名节目可能是
+    不同语言/不同地区的另一档,作者名一致才敢认。付费条目排除,口径与 lookup() 一致。
+    """
+    title = (entry.get("title") or "").strip()
+    author = (entry.get("author") or "").strip()
+    if not title:
+        return []
+    terms = []
+    for t in (author, title):
+        t = t.strip()
+        if len(t) >= 2 and t not in terms:
+            terms.append(t)
+    want_title, want_author = same_show(title, author)
+    found = {}
+    for term in terms:
+        url = ("https://itunes.apple.com/search?media=podcast&term="
+               + urllib.parse.quote(term) + "&limit=50")
+        # iTunes Search 对短时间密集请求会回 429/403(实测连续跑 32 个节目时大面积触发),
+        # 而且 403 重试只会让限流更严重 —— 所以这里**不重试**,只做 1 秒节流。
+        # 漏掉的候选在下一次 enrich 时还能补上,不该把限流误判成"这个节目没有替代源"。
+        body = get(url)
+        time.sleep(1.0)
+        if not body:
+            continue
+        try:
+            results = json.loads(body).get("results", [])
+        except Exception:
+            continue
+        for o in results:
+            feed = (o.get("feedUrl") or "").strip()
+            if not feed:
+                continue
+            # 与 lookup() 同一口径:Apple 少量条目回明文 feedUrl,这里升 https,
+            # 免得内置清单成为 App 需要全局明文流量的理由(见 H120)。
+            if feed.startswith("http://"):
+                probe = "https://" + feed[len("http://"):]
+                if _probe_looks_rss(probe):
+                    feed = probe
+            got_title, got_author = same_show(o.get("collectionName"), o.get("artistName"))
+            if got_title != want_title:
+                continue
+            # 作者名不一致时只在同一作者缺失(空)时放行:避免把"同名不同节目"并进来
+            if want_author and got_author and got_author != want_author:
+                continue
+            if (o.get("collectionPrice") or 0) > 0 or (o.get("trackPrice") or 0) > 0:
+                continue
+            # 主条目自己就是小宇宙:仍保留它垫底,别丢
+            found.setdefault(feed, o)
+        if len(found) >= 4:
+            break
+    return list(found.keys())
+
+
+def selftest():
+    """纯逻辑自检,不打网络(CI/提交前用)。验证候选排序的核心不变量。"""
+    assert is_low_priority_feed("https://feed.xyzfm.space/cv4bkgpuglwp")
+    assert is_low_priority_feed("http://FEED.XYZFM.SPACE/x")
+    assert not is_low_priority_feed("https://www.ximalaya.com/album/12817863.xml")
+    assert not is_low_priority_feed("https://feed.xyzfm.space.evil.com/x")
+    # 模拟排序键:小宇宙即使"看起来可达",也永远排在其他源之后
+    def key(i_url):
+        i, url = i_url
+        return (1 if is_low_priority_feed(url) else 0, i)
+    feeds = ["https://feed.xyzfm.space/a", "https://www.ximalaya.com/b",
+             "https://bojilab.com/c", "https://feed.xyzfm.space/d"]
+    ranked = [url for _, url in sorted(enumerate(feeds), key=key)]
+    assert ranked == ["https://www.ximalaya.com/b", "https://bojilab.com/c",
+                      "https://feed.xyzfm.space/a", "https://feed.xyzfm.space/d"], ranked
+    # 同优先级内保持原顺序(稳定排序:可达性相同时不重新洗牌)
+    assert same_show("忽左忽右", "JustPod") == ("忽左忽右", "justpod")
+    assert same_show(" 忽左 忽右 ", "JustPod")[0] == "忽左忽右"
+    print("✓ 候选源优先级自检通过(小宇宙垫底 / 稳定排序 / host 精确匹配)")
+
+
+def rank_candidates(feeds):
+    """
+    候选排序:可达的非小宇宙源在前,小宇宙一律最后。
+
+    可达性用 `_probe` 判 —— 但它对 302→HTML 会误判成 ok(2xx/3xx 都算活着),
+    所以这里额外要求**正文开头像 RSS/Atom**,不满足的降到最后但保留(供人工核对)。
+    排序键:(是否小宇宙, 是否疑似被拦, 原始顺序),稳定排序保证同优先级不动。
+    """
+    def key(item):
+        i, url = item
+        looks_rss = _probe_looks_rss(url)
+        return (1 if is_low_priority_feed(url) else 0, 0 if looks_rss else 1, i)
+    return [url for _, url in sorted(enumerate(feeds), key=key)]
+
+
+def _probe_looks_rss(url):
+    """GET 取头部,判断响应正文开头是否是 XML/RSS 或 Content-Type 是 XML。"""
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    try:
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            ctype = (r.headers.get("Content-Type") or "").lower()
+            head = r.read(512).lstrip().lower()
+            if "xml" in ctype:
+                return True
+            return head.startswith(b"<?xml") or head.startswith(b"<rss") or head.startswith(b"<feed")
+    except Exception:
+        return False
+
+
 def lookup(ids, region):
     """批量换 feedUrl / 高清封面 / 作者 / 分类,字段映射与 ITunesSource.parsePodcasts 一致。"""
     if not ids:
@@ -252,6 +386,50 @@ def build(previous):
 # 这类结果**不能判成源失效** —— 踩过一次:13 个 feedUrl 被代理挡了 403,
 # 差点当成死链把节目从清单里删掉。
 BLOCK_MARKERS = ("不在安全策略", "not allowed by", "blocked by", "proxy")
+
+
+def enrich(path):
+    """
+    给现有清单里**主 feed 是小宇宙**的节目补 `altFeeds` 候选列表。
+    不重抓榜单、不改其他字段 —— 这是"现有清单升级"的入口,diff 最小。
+    返回 (改动条数, 找到候选的条数)。
+    """
+    with open(path, encoding="utf-8") as f:
+        data = json.load(f)
+    touched = enriched = 0
+    cache = {}   # title|author → 候选,避免同一节目跨榜单重复搜
+    for key, entries in data["lists"].items():
+        for e in entries:
+            feed = (e.get("feedUrl") or "")
+            if not is_low_priority_feed(feed):
+                continue
+            # 已有 altFeeds 时只做 https 升级,不再打 iTunes(避免密集请求触发 429/403)。
+            existing = e.get("altFeeds") or []
+            if existing:
+                upgraded = [u.replace("http://", "https://", 1) if u.startswith("http://") else u
+                            for u in existing]
+                e["altFeeds"] = upgraded
+                print(f"  {key}/{e.get('title','')}: 已有 {len(upgraded)} 个候选(升级 https)")
+                continue
+            cache_key = (e.get("title", ""), e.get("author", ""))
+            if cache_key not in cache:
+                raw = collect_candidates(e)
+                # 去重;主 feed 固定在候选里,且排序后仍在最后(小宇宙垫底)
+                raw = list(dict.fromkeys([feed] + [u for u in raw if u != feed]))
+                cache[cache_key] = rank_candidates(raw)
+            alts = cache[cache_key]
+            if len(alts) > 1:
+                e["altFeeds"] = alts
+                enriched += 1
+                print(f"  {key}/{e['title']}: {len(alts)} 个候选 → {alts[0]}")
+            elif "altFeeds" in e:
+                e.pop("altFeeds")
+            touched += 1
+    if touched:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=1, sort_keys=True)
+            f.write("\n")
+    return touched, enriched
 
 
 def check(path, prune=False):
@@ -355,15 +533,19 @@ def build_opml(path_out, catalog):
         for e in entries:
             if len(picked) >= OPML_COUNT or taken >= quota:
                 break
-            if e["feedUrl"] in seen or not e["title"]:
+            # 主源是小宇宙且有替代源时,OPML 直接输出可达源(H311):推荐订阅是给用户在
+            # 任何网络下导入都能听的,不该把已知会被拦的小宇宙地址写进官网清单。
+            alts = e.get("altFeeds") or []
+            out_feed = alts[0] if is_low_priority_feed(e["feedUrl"]) and alts else e["feedUrl"]
+            if out_feed in seen or not e["title"]:
                 continue
             # 手工精选条目**不**流入 OPML:种子清单是自分发渠道/离线兜底的面,
             # OPML 是大陆商店渠道「导入推荐订阅」的功能面,两者收录口径从此分离,
             # 商店渠道要不要收某档节目是单独的决策,不随种子清单自动带过去
             if e["feedUrl"] in MANUAL_FEEDURLS:
                 continue
-            seen.add(e["feedUrl"])
-            picked.append(e)
+            seen.add(out_feed)
+            picked.append(dict(e, feedUrl=out_feed))
             taken += 1
         if len(picked) >= OPML_COUNT:
             break
@@ -404,7 +586,20 @@ def main():
                     help="校验后剔除**确认失效**(404/410)的条目;受限/无法判定的一律保留")
     ap.add_argument("--manual-only", action="store_true",
                     help="不重抓榜单,只把 MANUAL_PODCASTS 合并进现有清单(generatedAt 原样保留)")
+    ap.add_argument("--enrich", action="store_true",
+                    help="只给现有清单里的小宇宙源补 altFeeds 候选(可达优先、小宇宙垫底),不重抓榜单")
+    ap.add_argument("--selftest", action="store_true", help="纯逻辑自检,不打网络")
     args = ap.parse_args()
+
+    if args.selftest:
+        selftest()
+        sys.exit(0)
+
+    if args.enrich:
+        touched, enriched = enrich(OUT)
+        print(f"\n✓ {touched} 条小宇宙源已处理,其中 {enriched} 条找到替代候选")
+        print("  接着跑 ./sync.sh 分发到三端")
+        sys.exit(0)
 
     if args.manual_only:
         # 重抓榜单会刷新整份快照(榜单位次、generatedAt 全变),只想动手工条目时用这个,

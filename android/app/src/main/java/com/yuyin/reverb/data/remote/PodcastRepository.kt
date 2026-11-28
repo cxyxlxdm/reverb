@@ -302,12 +302,34 @@ class PodcastRepository(
         // 缓存键与实际请求都用**去掉凭据**的那一份 —— 否则同一个源会因为"带没带口令"
         // 变成两份缓存,而带口令的那份键会跟着导出备份走。
         val (url, inline) = FeedCredential.splitUrl(feedUrl)
-        val result = if (BilibiliSource.isPseudo(url)) {
+        var result = if (BilibiliSource.isPseudo(url)) {
             bilibili.feedOf(url).also {
                 if (it == null) feedFailures[url] = FeedFailure(FeedFailure.Kind.PARSE, hostOf(url))
             }
         } else {
             fetchWithRetry(url, inline ?: authStore.get(url)) { _authRequired.tryEmit(url) }
+        }
+
+        // 主源被平台拦截时,按种子清单里的备用源(可达优先、小宇宙垫底)逐个重试(H311)。
+        // 只对 PLATFORM_BLOCKED 换源:网络抖动/解析失败是另一类问题,换源只会白等一次超时;
+        // 401 是用户凭据问题,也不该悄悄换到另一个源。
+        if (result == null && !BilibiliSource.isPseudo(url)) {
+            val failure = feedFailures[url]
+            if (failure?.kind == FeedFailure.Kind.PLATFORM_BLOCKED) {
+                val alts = seed.altFeeds(url)
+                for (alt in alts) {
+                    log.i(TAG, "feed 主源被拦,尝试备用源 endpoint=${alt.substringBefore('?')}")
+                    val altResult = fetchWithRetry(
+                        alt, inline ?: authStore.get(alt)
+                    ) { _authRequired.tryEmit(alt) }
+                    if (altResult != null) {
+                        log.i(TAG, "feed 备用源成功 episodes=${altResult.episodes.size} endpoint=${alt.substringBefore('?')}")
+                        result = altResult
+                        feedFailures.remove(url)   // 换源成功不该把失败挂到这一页上
+                        break
+                    }
+                }
+            }
         }
         if (result != null && inline != null) authStore.save(url, inline)
         if (result == null) log.w(TAG, "feed empty/failed url=$url")

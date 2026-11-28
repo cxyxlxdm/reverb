@@ -23,6 +23,17 @@ final class SeedCatalog {
         return generated
     }
 
+    /// 按主 feedUrl 反查该节目的备用源列表(H311)。榜单/搜索解析出来的 Podcast 不带
+    /// altFeeds,所以换源时统一从这份内置清单查 —— 它按 feedUrl 索引,与来源无关。
+    func altFeeds(for feedUrl: String) -> [String] {
+        for entries in load().values {
+            for p in entries where p.feedUrl == feedUrl {
+                return p.altFeeds
+            }
+        }
+        return []
+    }
+
     // MARK: - 私有
 
     /// 种子只打包 cn / us 两份榜单(12 个地区全打进去没必要,它只是没网时的兜底)。
@@ -61,7 +72,9 @@ final class SeedCatalog {
                     author: (o["author"] as? String) ?? "",
                     artworkUrl: (o["artworkUrl"] as? String) ?? "",
                     feedUrl: feed,
-                    genre: (o["genre"] as? String) ?? ""
+                    genre: (o["genre"] as? String) ?? "",
+                    // 同一节目的备用 RSS 源(可达优先、小宇宙垫底),主源被拦时按顺序重试
+                    altFeeds: (o["altFeeds"] as? [String]) ?? []
                     // 生成脚本已排除付费节目(点开播不了比空白更糟),故无需 isPaid
                 )
             }

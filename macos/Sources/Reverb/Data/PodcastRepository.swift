@@ -219,23 +219,39 @@ final class PodcastRepository {
             if let result, !result.episodes.isEmpty { feedCache.put(url, result) }
             return result
         }
-        switch await rss.fetch(url, auth: inline ?? authStore.get(url)) {
-        case .success(let result):
-            setFeedStatus(.ok, for: url)
-            if let inline { authStore.save(url, inline) }
-            if !result.episodes.isEmpty { feedCache.put(url, result) }
-            return result
-        case .unauthorized:
-            setFeedStatus(.unauthorized, for: url)
-            challenge(url)
-            return nil
-        case .unavailable:
-            setFeedStatus(.unavailable, for: url)
-            return nil
-        case .failed:
-            setFeedStatus(.failed, for: url)
-            return nil
+        // 候选顺序:主源在前,其后是种子清单里同一节目的备用源(可达优先、小宇宙垫底,见 H311)。
+        // 只有**主源**被判平台拦截才换源 —— 网络失败/解析失败不换,那是另一类问题,换源只会
+        // 白等一次超时;401 也不换,那是用户凭据问题。
+        let candidates = [url] + seed.altFeeds(for: url)
+        for (index, candidate) in candidates.enumerated() {
+            switch await rss.fetch(candidate, auth: inline ?? authStore.get(candidate)) {
+            case .success(let result):
+                setFeedStatus(.ok, for: url)
+                if let inline { authStore.save(candidate, inline) }
+                if !result.episodes.isEmpty { feedCache.put(url, result) }
+                if index > 0 {
+                    Log.i("Repo", "feed 主源被拦,换用备用源 #\(index) 成功 episodes=\(result.episodes.count) endpoint=\(Log.endpoint(candidate))")
+                }
+                return result
+            case .unauthorized:
+                setFeedStatus(.unauthorized, for: url)
+                challenge(candidate)
+                return nil
+            case .unavailable:
+                // 平台拦截:试下一个候选;全都不行才落 .unavailable。
+                Log.w("Repo", "feed 备用源 #\(index) 被平台限制 endpoint=\(Log.endpoint(candidate))")
+                continue
+            case .failed:
+                // 主源失败不换源;备用源失败则继续试下一个。
+                if index == 0 {
+                    setFeedStatus(.failed, for: url)
+                    return nil
+                }
+                continue
+            }
         }
+        setFeedStatus(.unavailable, for: url)
+        return nil
     }
 
     /// 界面在 401 弹框里点「保存」之后调用,然后自己重新拉一次。

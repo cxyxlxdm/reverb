@@ -15,6 +15,9 @@ import { Log } from '../util/Logger';
 /// 读 rawfile 是同步的(getRawFileContentSync),50KB 量级,放在 boot 里一次读完即可。
 export class SeedCatalog {
   private lists: Record<string, Podcast[]> = {};
+  /// 主 feedUrl → 备用源数组。来自 rawfile/feed_alternates.json(只有映射、无内容元数据,
+  /// 不构成"内置内容目录"),供主源被平台拦截时换源(H311)。与 lists 分开:鸿蒙不打完整清单。
+  private alternates: Record<string, string[]> = {};
   private generated: string = '';
   private loaded: boolean = false;
   private ctx: common.UIAbilityContext | null = null;
@@ -63,6 +66,21 @@ export class SeedCatalog {
       // rawfile 缺失或格式变化不该让发现页崩
       Log.w('Seed', `内置清单装载失败 ${(e as Error).message}`);
     }
+    // 候选源映射是另一份独立文件 —— 即使完整清单缺失,换源能力仍要在。
+    try {
+      const bytes = ctx.resourceManager.getRawFileContentSync('feed_alternates.json');
+      const text = new util.TextDecoder('utf-8').decodeToString(bytes);
+      const root = JSON.parse(text) as Record<string, Object>;
+      for (const key of Object.keys(root)) {
+        const v = root[key];
+        if (Array.isArray(v)) {
+          this.alternates[key] = v.filter((s: Object) => typeof s === 'string') as string[];
+        }
+      }
+      Log.i('Seed', `候选源映射就绪 ${Object.keys(this.alternates).length} 条`);
+    } catch (e) {
+      Log.w('Seed', `候选源映射缺失或装载失败 ${(e as Error).message}`);
+    }
   }
 
   /// 该地区+分类的内置清单;没有则空。genreId 为 0 表示综合推荐(与 repository 一致)。
@@ -76,6 +94,14 @@ export class SeedCatalog {
   generatedAt(): string {
     this.load();
     return this.generated;
+  }
+
+  /// 按主 feedUrl 反查同节目备用源列表(H311)。榜单/搜索解析出的 Podcast 不带 altFeeds,
+  /// 换源时统一从这份内置清单查 —— 按 feedUrl 匹配,与数据来源无关。
+  altFeeds(forFeed: string): string[] {
+    this.load();
+    const direct = this.alternates[forFeed];
+    return direct === undefined ? [] : direct;
   }
 
   /// 种子只打包 cn / us 两份榜单。只有用户明确选择中国内地才落到 cn,

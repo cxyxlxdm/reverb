@@ -20,7 +20,10 @@ SRC="seed_podcasts.json"
 [ -f "$SRC" ] || { echo "✗ 缺 $SRC,先跑 python3 gen-seed.py"; exit 1; }
 
 # 目标路径:各端的「随包资源」约定位置
-# 目标为 Android / macOS / iOS 三个。鸿蒙那份**完全不打这个文件**。
+# 完整清单(含标题/封面/分类)给 Android / macOS / iOS 三个。鸿蒙**不打这份完整清单** ——
+# 它是"内置内容目录",合规口径见下。但鸿蒙需要一份**候选源映射**(只有主 feedUrl → 备用
+# feedUrl 数组,没有任何节目名/封面/分类,不构成可浏览目录),用于主源被平台拦截时换源,
+# 由 gen-seed.py --sync-harmony-map 生成到 rawfile/。
 #
 # 合规口径的背景(2026-10-18 之前的写法):应用市场把「内置内容目录 / 分类浏览 /
 # 内容推荐」判定为提供视听节目服务(需前置审批,个人主体拿不到),而「用户自行添加
@@ -58,6 +61,26 @@ for t in "${TARGETS[@]}"; do
     echo "→ $rel"
   fi
 done
+
+# 鸿蒙专用:候选源映射。只有 "主 feedUrl → 备用源数组",**没有**节目标题/封面/分类,
+# 不构成"内置内容目录"(合规口径见上),仅用于主源被平台拦截时换源(H311)。
+HM_MAP="$ROOT/harmony/entry/src/main/resources/rawfile/feed_alternates.json"
+python3 - "$SRC" "$HM_MAP" <<'PY'
+import json, sys
+src, out = sys.argv[1], sys.argv[2]
+with open(src, encoding="utf-8") as f:
+    data = json.load(f)
+m = {}
+for entries in data.get("lists", {}).values():
+    for e in entries:
+        alts = e.get("altFeeds") or []
+        if alts:
+            m[e["feedUrl"]] = alts
+with open(out, "w", encoding="utf-8") as f:
+    json.dump(m, f, ensure_ascii=False, indent=1, sort_keys=True)
+    f.write("\n")
+print(f"→ 鸿蒙候选源映射 {len(m)} 条: {out}")
+PY
 
 if [ "$CHECK" = "1" ]; then
   [ "$FAIL" = "0" ] && echo "✓ 各端副本与 shared/seed/$SRC 一致" || {

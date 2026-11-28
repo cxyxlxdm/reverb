@@ -55,8 +55,8 @@
 
 ### 验证边界
 
-- macOS：`swift test --disable-sandbox` 116 条全绿、`swift build -c release` exit 0。
-- Android：`--offline` release 编译 exit 0、134 条 JVM 单测全绿、五语种体检通过
+- macOS：`swift test --disable-sandbox` 119 条全绿、`swift build -c release` exit 0。
+- Android：`--offline` release 编译 exit 0、136 条 JVM 单测全绿、五语种体检通过
   （在线编译因 Compose 插件依赖解析失败，未进 Kotlin 编译）。
 - 鸿蒙：`hvigorw test` 与 `assembleHap` 都 exit 0，88 条单测全绿（新增 FeedGuard 10 条）、
   debug HAP 构建成功；五语种资源键集一致。
@@ -68,10 +68,27 @@
   Harmony 真机同样以偏好 1.25× 起播，日志出现 `直播起播锁速 rate=1.0 用户倍速偏好=1.25`
   与 `直播自动重连 1/3`。测试源是有限时长 HLS，鸿蒙在 seekable 边缘重连后会再次 completed，
   这不代表真实直播台行为，仅证明「结束回调不再停播、会按退避重连」。
-- 问题一补查：四个 xyzfm 源仍落到 HTML 拦截页，本机缓存未命中；修复后分类为
-  `unavailable` 并显示「数据源暂不可用」，没有 Apple 目录兜底，不能声称已恢复单集加载。
+- 问题一补查：四个 xyzfm 源仍落到 HTML 拦截页，本机缓存未命中；拦截识别生效后分类为
+  `unavailable` 并显示「数据源暂不可用」。随后按 H311 补了候选源换源，实测「忽左忽右」已从
+  喜马拉雅源恢复加载（见下），但另外几个源在 Apple 目录里本就没有第二个条目，只能显示不可用。
 - 未实跑：Apple 端问题 2/3/4 的 GUI 与播放路径仍待出包机器验证；本机 macOS 自动化被系统权限
   拒绝（System Events -10004），iOS 编译门也不可用。焦点、界面对齐不要在本文里写成已验过。
+
+### 候选源换源：可达优先、小宇宙垫底（四端，H311）
+
+- 背景：Apple Podcasts 只是目录索引，`feedUrl` 由作者提交。中文节目在目录里常只有一个小宇宙
+  条目，换网络就被 IP ACL 拦成 HTML。公开 API 用全名搜「忽左忽右」搜不到，缩写/作者名才出现
+  两条（小宇宙 + 喜马拉雅）；App 用的内部 `amp-api` 需鉴权，不可走。因此口径定为
+  **可达优先、小宇宙垫底**，不是"全部换成非国内厂商源"——后者在中文播客上无源可用。
+- `gen-seed.py --enrich` 构建期收集同节目多个 Apple 条目的 feedUrl，探测可达性后排序；
+  `--selftest` 验优先级断言。32 条小宇宙源里只有 2 条在 Apple 有第二个不同 host 的条目
+  （忽左忽右 → 喜马拉雅、自我进化论 → bojilab），这是目录覆盖上限，不是漏做。
+- 四端 `Podcast` 加 `altFeeds`（旧数据解码为空）；三端种子随包带候选，鸿蒙单独打一份
+  `rawfile/feed_alternates.json`（只有映射、无内容元数据，不算内置内容目录）。
+  `recommended.opml` 优先输出可达源，9 条小宇宙源降到 8 条。
+- 四端 `feed()` 仅在**主源被判平台拦截**时按 altFeeds 换源；网络失败/解析失败/401 都不换。
+- 验证：真实网络下 `PodcastRepository.feed(小宇宙 URL)` 返回喜马拉雅源 584 集「忽左忽右」，
+  全链路打通。macOS 119 / Android 136 / 鸿蒙 88 条单测全绿（各 +3/+2）。
 
 ### 本轮明确没做
 

@@ -27,6 +27,10 @@
     "title": "声动早咖啡"
    },
    {
+    "altFeeds": [
+     "https://bojilab.com/feeds/podcast_1780665345410_21a0b465.xml",
+     "https://feed.xyzfm.space/artr8kfmlmxh"
+    ],
     "artworkUrl": "https://is1-ssl.mzstatic.com/image/thumb/Podcasts125/v4/7e/9f/2c/7e9f2c84-e756-b687-391e-83a27724645d/mza_1150423139010350989.jpg/600x600bb.jpg",
     "author": "颜晓静Athena",
     "feedUrl": "https://feed.xyzfm.space/artr8kfmlmxh",
@@ -345,6 +349,10 @@
     "title": "Round Table China"
    },
    {
+    "altFeeds": [
+     "https://www.ximalaya.com/album/12817863.xml",
+     "https://feed.xyzfm.space/cv4bkgpuglwp"
+    ],
     "artworkUrl": "https://is1-ssl.mzstatic.com/image/thumb/Podcasts126/v4/57/ff/ae/57ffae55-7f91-adfe-b34b-e5621f6a4f75/mza_14365442965271077171.png/600x600bb.jpg",
     "author": "JustPod",
     "feedUrl": "https://feed.xyzfm.space/cv4bkgpuglwp",

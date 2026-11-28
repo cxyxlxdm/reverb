@@ -16,6 +16,7 @@ object PodcastJson {
         .put("isPaid", p.isPaid)
         .put("fundingUrl", p.fundingUrl)
         .put("fundingLabel", p.fundingLabel)
+        .put("altFeeds", org.json.JSONArray().apply { p.altFeeds.forEach { put(it) } })
 
     fun fromJson(o: JSONObject): Podcast = Podcast(
         id = o.optString("id"),
@@ -27,6 +28,9 @@ object PodcastJson {
         genre = o.optString("genre"),
         isPaid = o.optBoolean("isPaid", false),
         fundingUrl = o.optString("fundingUrl"),
-        fundingLabel = o.optString("fundingLabel")
+        fundingLabel = o.optString("fundingLabel"),
+        altFeeds = o.optJSONArray("altFeeds")?.let { arr ->
+            (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
+        } ?: emptyList()
     )
 }

@@ -30,6 +30,15 @@ class SeedCatalog(private val context: Context) {
         return generated
     }
 
+    /** 按主 feedUrl 反查同节目备用源列表（H311）。榜单/搜索解析出的 Podcast 不带 altFeeds，
+     *  换源时统一从这份内置清单查 —— 它按 feedUrl 匹配，与数据来源无关。 */
+    fun altFeeds(forFeed: String): List<String> {
+        for (list in load().values) {
+            for (p in list) if (p.feedUrl == forFeed) return p.altFeeds
+        }
+        return emptyList()
+    }
+
     private var generated: String = ""
 
     /**
@@ -72,7 +81,11 @@ class SeedCatalog(private val context: Context) {
                             author = o.optString("author"),
                             artworkUrl = o.optString("artworkUrl"),
                             feedUrl = feed,
-                            genre = o.optString("genre")
+                            genre = o.optString("genre"),
+                            // 同节目备用源（可达优先、小宇宙垫底），主源被拦时按顺序重试
+                            altFeeds = o.optJSONArray("altFeeds")?.let { arr ->
+                                (0 until arr.length()).mapNotNull { arr.optString(it).takeIf { s -> s.isNotBlank() } }
+                            } ?: emptyList()
                             // 生成脚本已排除付费节目（点开播不了比空白更糟），故无需 isPaid
                         )
                     )

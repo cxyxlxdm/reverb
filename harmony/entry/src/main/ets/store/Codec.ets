@@ -10,7 +10,8 @@ export class Codec {
     return {
       'id': p.id, 'title': p.title, 'author': p.author, 'artworkUrl': p.artworkUrl,
       'feedUrl': p.feedUrl, 'description': p.description, 'genre': p.genre,
-      'isPaid': p.isPaid, 'fundingUrl': p.fundingUrl, 'fundingLabel': p.fundingLabel
+      'isPaid': p.isPaid, 'fundingUrl': p.fundingUrl, 'fundingLabel': p.fundingLabel,
+      'altFeeds': p.altFeeds
     };
   }
 
@@ -28,6 +29,8 @@ export class Codec {
     p.isPaid = typeof paid === 'boolean' ? paid : false;
     p.fundingUrl = J.str(o, 'fundingUrl');
     p.fundingLabel = J.str(o, 'fundingLabel');
+    const alts = o['altFeeds'];
+    p.altFeeds = Array.isArray(alts) ? alts.filter((s: Object) => typeof s === 'string' && (s as string).length > 0) as string[] : [];
     return p;
   }
 

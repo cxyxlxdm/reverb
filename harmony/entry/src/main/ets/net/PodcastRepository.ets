@@ -254,8 +254,26 @@ export class PodcastRepository {
       return result;
     }
     const credential = inline !== null ? inline : this.authStore.get(url);
-    const outcome = await this.feedWithRetry(url, PodcastRepository.RSS_TIMEOUT_MS, credential,
+    let outcome = await this.feedWithRetry(url, PodcastRepository.RSS_TIMEOUT_MS, credential,
       directoryToken, force);
+    // 主源被平台拦截时,按种子清单里的备用源(可达优先、小宇宙垫底)逐个重试(H311)。
+    // 只对 platformBlocked 换源:网络/解析失败是另一类问题,换源只会白等一次超时;
+    // 401 是用户凭据问题,也不该悄悄换源。force=true 让备用源绕过它自己 host 的熔断。
+    if (outcome.result === null && outcome.platformBlocked && !outcome.unauthorized) {
+      const alts = this.seed.altFeeds(url);
+      for (const alt of alts) {
+        Log.i('Repo', `feed 主源被拦,尝试备用源 endpoint=${Log.endpoint(alt)}`);
+        const altOutcome = await this.feedWithRetry(
+          alt, PodcastRepository.RSS_TIMEOUT_MS,
+          inline !== null ? inline : this.authStore.get(alt), directoryToken, true);
+        if (directoryToken !== null && !this.directoryCurrent(directoryToken)) return null;
+        if (altOutcome.result !== null) {
+          Log.i('Repo', `feed 备用源成功 episodes=${altOutcome.result.episodes.length} endpoint=${Log.endpoint(alt)}`);
+          outcome = altOutcome;
+          break;
+        }
+      }
+    }
     if (directoryToken !== null && !this.directoryCurrent(directoryToken)) return null;
     if (outcome.result !== null && inline !== null) this.authStore.save(url, inline);
     if (outcome.result === null && outcome.unauthorized) this.challenge(url);

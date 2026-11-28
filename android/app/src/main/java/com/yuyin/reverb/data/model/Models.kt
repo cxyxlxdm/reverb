@@ -11,7 +11,8 @@ data class Podcast(
     val genre: String = "",  // 分类（Apple primaryGenreName 或 RSS itunes:category）
     val isPaid: Boolean = false,     // 付费节目（Apple 价格 > 0）
     val fundingUrl: String = "",     // 会员/购买/支持页链接（RSS podcast:funding）
-    val fundingLabel: String = ""    // 该链接的文案
+    val fundingLabel: String = "",   // 该链接的文案
+    val altFeeds: List<String> = emptyList()  // 同节目备用 RSS 源（可达优先、小宇宙垫底，见 H311）
 )
 
 /** 播客中的一集。audioUrl 为 RSS enclosure 中发布方的原始直链，播放时直接流式拉取。 */
